@@ -17,7 +17,7 @@
  * - Registry existence is validated before any sync operations
  */
 
-import { readFile, writeFile, mkdir, unlink, access, readdir, rename, copyFile } from "node:fs/promises";
+import { readFile, writeFile, mkdir, unlink, access, lstat, readdir, rename, copyFile } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import { execSync } from "node:child_process";
 import path from "node:path";
@@ -725,6 +725,144 @@ export interface MergeHookRegistrationsResult {
   dryRun: boolean;
 }
 
+/** The opt-in policy that permits observation-only boundary registration. */
+export interface ObservationPolicy {
+  enabled: boolean;
+}
+
+/** Result of the policy-gated runtime observation boundary registration. */
+export interface MergeObservationBoundaryRegistrationResult {
+  added: Array<{ event: string; matcher: string; file: string }>;
+  skipped: Array<{ event: string; matcher: string; file: string }>;
+  dryRun: boolean;
+  status:
+    | "REGISTERED"
+    | "NOT_CONFIGURED"
+    | "FAILED_UTILITY_MISSING"
+    | "FAILED_SETTINGS_MALFORMED"
+    | "FAILED_SETTINGS_READ";
+  reason?: string;
+}
+
+const OBSERVATION_BOUNDARY_FILE = "runtime-host-boundary.js";
+const OBSERVATION_BOUNDARY_MATCHER = "Agent|SendMessage";
+const OBSERVATION_BOUNDARY_EVENTS = [
+  "PreToolUse",
+  "PostToolUse",
+  "PostToolUseFailure",
+] as const;
+
+function isJsonObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function hasValidHookStructure(hooks: unknown): hooks is SettingsHooks {
+  if (!isJsonObject(hooks)) return false;
+  return Object.values(hooks).every((eventBlocks) =>
+    Array.isArray(eventBlocks) && eventBlocks.every((block) =>
+      isJsonObject(block) &&
+      typeof block.matcher === "string" &&
+      Array.isArray(block.hooks) &&
+      block.hooks.every((hook) => isJsonObject(hook) && typeof hook.command === "string"),
+    ),
+  );
+}
+
+/**
+ * Add the observation-only boundary hook only when the caller explicitly
+ * enables the observation policy. This path deliberately differs from the
+ * unconditional L0 enforcement merge: malformed settings are never replaced
+ * and a missing boundary utility is never registered by reference.
+ */
+export async function mergeObservationBoundaryRegistration(
+  projectRoot: string,
+  options: { observationPolicy?: ObservationPolicy | null; dryRun?: boolean } = {},
+): Promise<MergeObservationBoundaryRegistrationResult> {
+  const dryRun = options.dryRun === true;
+  const result: MergeObservationBoundaryRegistrationResult = {
+    added: [],
+    skipped: [],
+    dryRun,
+    status: "NOT_CONFIGURED",
+  };
+
+  if (options.observationPolicy?.enabled !== true) {
+    return result;
+  }
+
+  const claudeDir = path.join(projectRoot, ".claude");
+  const settingsPath = path.join(claudeDir, "settings.json");
+  const utilityPath = path.join(claudeDir, "hooks", OBSERVATION_BOUNDARY_FILE);
+
+  try {
+    const utility = await lstat(utilityPath);
+    if (!utility.isFile() || utility.isSymbolicLink()) {
+      throw new Error("runtime-host-boundary.js must be a regular non-symlink file");
+    }
+  } catch (err) {
+    result.status = "FAILED_UTILITY_MISSING";
+    result.reason = err instanceof Error ? err.message : String(err);
+    return result;
+  }
+
+  let settings: ClaudeSettings;
+  try {
+    const raw = await readFile(settingsPath, "utf-8");
+    try {
+      const parsed: unknown = JSON.parse(raw);
+      if (!isJsonObject(parsed)) throw new Error("settings root is not an object");
+      if (parsed.hooks !== undefined && !hasValidHookStructure(parsed.hooks)) {
+        throw new Error("settings hooks has malformed event arrays or matcher blocks");
+      }
+      settings = parsed as ClaudeSettings;
+    } catch (err) {
+      result.status = "FAILED_SETTINGS_MALFORMED";
+      result.reason = err instanceof Error ? err.message : String(err);
+      return result;
+    }
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code !== "ENOENT") {
+      result.status = "FAILED_SETTINGS_READ";
+      result.reason = err instanceof Error ? err.message : String(err);
+      return result;
+    }
+    settings = { hooks: {} };
+  }
+
+  if (!settings.hooks) settings.hooks = {};
+  const command = `node "$CLAUDE_PROJECT_DIR"/.claude/hooks/${OBSERVATION_BOUNDARY_FILE}`;
+
+  for (const event of OBSERVATION_BOUNDARY_EVENTS) {
+    if (settings.hooks[event] === undefined) settings.hooks[event] = [];
+    const blocks = settings.hooks[event];
+    let block = blocks.find((candidate) => candidate.matcher === OBSERVATION_BOUNDARY_MATCHER);
+    if (!block) {
+      block = { matcher: OBSERVATION_BOUNDARY_MATCHER, hooks: [] };
+      blocks.push(block);
+    }
+
+    if (!Array.isArray(block.hooks)) {
+      result.status = "FAILED_SETTINGS_MALFORMED";
+      result.reason = `${event}/${OBSERVATION_BOUNDARY_MATCHER} hooks is not an array`;
+      return result;
+    }
+    if (block.hooks.some((hook) => typeof hook.command === "string" && hook.command.includes(OBSERVATION_BOUNDARY_FILE))) {
+      result.skipped.push({ event, matcher: OBSERVATION_BOUNDARY_MATCHER, file: OBSERVATION_BOUNDARY_FILE });
+    } else {
+      block.hooks.push({ type: "command", command, timeout: 5 });
+      result.added.push({ event, matcher: OBSERVATION_BOUNDARY_MATCHER, file: OBSERVATION_BOUNDARY_FILE });
+    }
+  }
+
+  if (!dryRun && result.added.length > 0) {
+    await mkdir(claudeDir, { recursive: true });
+    await writeFile(settingsPath, JSON.stringify(settings, null, 2) + "\n", "utf-8");
+  }
+  result.status = "REGISTERED";
+  return result;
+}
+
 /**
  * Additively merge L0 enforcement hook registrations into a downstream project's
  * .claude/settings.json.
@@ -796,6 +934,217 @@ export async function mergeHookRegistrations(
   if (!dryRun && result.added.length > 0) {
     await mkdir(path.dirname(settingsPath), { recursive: true });
     await writeFile(settingsPath, JSON.stringify(settings, null, 2) + '\n', 'utf-8');
+  }
+
+  return result;
+}
+
+// ---------------------------------------------------------------------------
+// I-BIND boundary registration -- Task|SendMessage registry matcher
+// (P1-I/A RED Block B2). Separate seam from mergeObservationBoundaryRegistration
+// above: same owned utility file (runtime-host-boundary.js), same three
+// genuine hook events, but the registry/matcher surface is "Task|SendMessage".
+// "Agent" is never folded into the matcher string -- it is reported
+// separately as payloadToolName, preserving the accepted G1 boundary
+// semantics that this registration only observes/adjudicates the already
+// host-enforced I-BIND evidence and creates no authority of its own.
+// ---------------------------------------------------------------------------
+
+const IBIND_BOUNDARY_FILE = "runtime-host-boundary.js";
+const IBIND_BOUNDARY_MATCHER = "Task|SendMessage";
+const IBIND_BOUNDARY_STALE_MATCHER = "Agent|SendMessage";
+const IBIND_BOUNDARY_PAYLOAD_TOOL = "Agent";
+const IBIND_BOUNDARY_EVENTS = [
+  "PreToolUse",
+  "PostToolUse",
+  "PostToolUseFailure",
+] as const;
+
+/** A single added/skipped I-BIND boundary registration entry. */
+export interface IbindBoundaryEntry {
+  event: string;
+  matcher: string;
+  payloadToolName: string;
+  file: string;
+}
+
+/** An upgraded entry — also records which matcher the extra/stale owned command(s) were removed from. */
+export interface IbindBoundaryUpgradedEntry extends IbindBoundaryEntry {
+  removedFromMatcher: string;
+}
+
+/** Result of the Task|SendMessage I-BIND boundary registration/migration merge. */
+export interface MergeIbindBoundaryRegistrationResult {
+  added: IbindBoundaryEntry[];
+  skipped: IbindBoundaryEntry[];
+  upgraded: IbindBoundaryUpgradedEntry[];
+  status: "REGISTERED" | "FAILED_SETTINGS_MALFORMED" | "FAILED_UTILITY_MISSING";
+}
+
+/**
+ * Register (or migrate) the owned runtime-host-boundary.js command under the
+ * "Task|SendMessage" registry matcher for PreToolUse, PostToolUse and
+ * PostToolUseFailure.
+ *
+ * Ownership is decided by EXACT string equality against the canonical
+ * command — never substring/`includes` — so a hostile or unrelated command
+ * that merely contains "runtime-host-boundary.js" is left untouched and
+ * never mistaken for the owned registration.
+ *
+ * Every block matching either the canonical "Task|SendMessage" matcher or
+ * the stale "Agent|SendMessage" matcher is inspected for the event (not just
+ * the first one found), so duplicate owned hooks and duplicate matcher
+ * blocks converge correctly. An event already holding exactly one exact
+ * owned command under Task|SendMessage and none under the stale matcher is
+ * left completely untouched and reported as skipped — guaranteeing
+ * byte-for-byte idempotence. Otherwise every exact owned hook found under
+ * either matcher is removed (a block is dropped only when that removal
+ * empties it, so co-located unrelated commands and unrelated duplicate
+ * matcher blocks always survive untouched and are never merged), a single
+ * owned entry is (re)inserted under Task|SendMessage, and the event is
+ * reported as an upgrade (removedFromMatcher names the stale matcher when
+ * any stale copy was removed, else the canonical matcher itself for a
+ * same-matcher dedup). A genuinely absent registration is reported as added.
+ *
+ * Fails closed with no writes whatsoever when settings.json cannot be safely
+ * parsed as well-formed JSON (including any non-ENOENT read failure), or
+ * when the boundary utility is missing, not a regular file, or a symlink.
+ */
+export async function mergeIbindBoundaryRegistration(
+  projectRoot: string,
+): Promise<MergeIbindBoundaryRegistrationResult> {
+  const result: MergeIbindBoundaryRegistrationResult = {
+    added: [],
+    skipped: [],
+    upgraded: [],
+    status: "REGISTERED",
+  };
+
+  const claudeDir = path.join(projectRoot, ".claude");
+  const settingsPath = path.join(claudeDir, "settings.json");
+  const utilityPath = path.join(claudeDir, "hooks", IBIND_BOUNDARY_FILE);
+
+  try {
+    const utility = await lstat(utilityPath);
+    if (!utility.isFile() || utility.isSymbolicLink()) {
+      throw new Error(`${IBIND_BOUNDARY_FILE} must be a regular non-symlink file`);
+    }
+  } catch {
+    result.status = "FAILED_UTILITY_MISSING";
+    return result;
+  }
+
+  let settings: ClaudeSettings;
+  try {
+    const raw = await readFile(settingsPath, "utf-8");
+    try {
+      const parsed: unknown = JSON.parse(raw);
+      if (!isJsonObject(parsed)) throw new Error("settings root is not an object");
+      if (parsed.hooks !== undefined && !hasValidHookStructure(parsed.hooks)) {
+        throw new Error("settings hooks has malformed event arrays or matcher blocks");
+      }
+      settings = parsed as ClaudeSettings;
+    } catch {
+      result.status = "FAILED_SETTINGS_MALFORMED";
+      return result;
+    }
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code !== "ENOENT") {
+      // Any non-ENOENT read failure (e.g. settings.json is a directory) is
+      // treated the same as malformed input — fail closed without writing.
+      result.status = "FAILED_SETTINGS_MALFORMED";
+      return result;
+    }
+    settings = {};
+  }
+
+  if (!settings.hooks) settings.hooks = {};
+  const command = `node "$CLAUDE_PROJECT_DIR"/.claude/hooks/${IBIND_BOUNDARY_FILE}`;
+
+  for (const event of IBIND_BOUNDARY_EVENTS) {
+    if (!settings.hooks[event]) settings.hooks[event] = [];
+    const blocks: MatcherBlock[] = settings.hooks[event];
+
+    // Locate every EXACT owned hook under either the canonical or stale
+    // matcher, across every block sharing that matcher — never just the
+    // first block found, never a substring match.
+    type OwnedLoc = { blockIndex: number; hookIndex: number };
+    const taskOwned: OwnedLoc[] = [];
+    const staleOwned: OwnedLoc[] = [];
+    blocks.forEach((block, blockIndex) => {
+      if (block.matcher !== IBIND_BOUNDARY_MATCHER && block.matcher !== IBIND_BOUNDARY_STALE_MATCHER) {
+        return;
+      }
+      block.hooks.forEach((hook, hookIndex) => {
+        if (hook.command !== command) return;
+        (block.matcher === IBIND_BOUNDARY_MATCHER ? taskOwned : staleOwned).push({ blockIndex, hookIndex });
+      });
+    });
+
+    if (taskOwned.length === 1 && staleOwned.length === 0) {
+      result.skipped.push({
+        event,
+        matcher: IBIND_BOUNDARY_MATCHER,
+        payloadToolName: IBIND_BOUNDARY_PAYLOAD_TOOL,
+        file: IBIND_BOUNDARY_FILE,
+      });
+      continue;
+    }
+
+    const wasAdd = taskOwned.length === 0 && staleOwned.length === 0;
+
+    // Strip every exact owned hook from wherever it was found (highest
+    // hookIndex first per block, so splicing never shifts a pending
+    // index), then drop any block that removal left with zero hooks
+    // (highest blockIndex first, same reason). Unrelated hooks and
+    // unrelated duplicate matcher blocks are never touched or merged.
+    const hookIndicesByBlock = new Map<number, number[]>();
+    for (const loc of [...taskOwned, ...staleOwned]) {
+      const list = hookIndicesByBlock.get(loc.blockIndex) ?? [];
+      list.push(loc.hookIndex);
+      hookIndicesByBlock.set(loc.blockIndex, list);
+    }
+    for (const [blockIndex, hookIndices] of hookIndicesByBlock) {
+      const block = blocks[blockIndex];
+      for (const hookIndex of hookIndices.slice().sort((a, b) => b - a)) {
+        block.hooks.splice(hookIndex, 1);
+      }
+    }
+    for (const blockIndex of [...hookIndicesByBlock.keys()].sort((a, b) => b - a)) {
+      if (blocks[blockIndex].hooks.length === 0) {
+        blocks.splice(blockIndex, 1);
+      }
+    }
+
+    let target = blocks.find((b) => b.matcher === IBIND_BOUNDARY_MATCHER);
+    if (!target) {
+      target = { matcher: IBIND_BOUNDARY_MATCHER, hooks: [] };
+      blocks.push(target);
+    }
+    target.hooks.push({ type: "command", command, timeout: 5 });
+
+    if (wasAdd) {
+      result.added.push({
+        event,
+        matcher: IBIND_BOUNDARY_MATCHER,
+        payloadToolName: IBIND_BOUNDARY_PAYLOAD_TOOL,
+        file: IBIND_BOUNDARY_FILE,
+      });
+    } else {
+      result.upgraded.push({
+        event,
+        matcher: IBIND_BOUNDARY_MATCHER,
+        payloadToolName: IBIND_BOUNDARY_PAYLOAD_TOOL,
+        file: IBIND_BOUNDARY_FILE,
+        removedFromMatcher: staleOwned.length > 0 ? IBIND_BOUNDARY_STALE_MATCHER : IBIND_BOUNDARY_MATCHER,
+      });
+    }
+  }
+
+  if (result.added.length > 0 || result.upgraded.length > 0) {
+    await mkdir(claudeDir, { recursive: true });
+    await writeFile(settingsPath, JSON.stringify(settings, null, 2) + "\n", "utf-8");
   }
 
   return result;

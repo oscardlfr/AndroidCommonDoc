@@ -6948,3 +6948,155 @@ test('M7-CAPABILITY-EXPECTED-BACKING-PIN (exact-positive control): admitClaudeAu
     fs.rmSync(dir, { recursive: true, force: true });
   }
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Sequence 72 (WAVE1-FUNCTIONAL-CLOSEOUT-REALISTIC-20260822) standalone Phase A
+// scanner repair: findLiveRootSourceActionsForRole used to full-validate EVERY
+// historical root-source-spawn record (validateRootSourceAction, which
+// dereferences the CURRENT on-disk PLAN via decodeRootSourceBootstrapIntent
+// FromAction) before ever checking whether that record's own worktree_id/
+// plan_digest even matches the scope the caller asked for. A structurally
+// valid action minted against an OLDER plan digest therefore produced
+// root-source-bootstrap-scope-mismatch and aborted the WHOLE scan, hiding a
+// genuinely live current-plan action behind stale history (empirically
+// reproduced against this very repo's own real host-private registry: 14 real
+// historical root-source-spawn records exist for this repo, and at least one
+// of them alone was enough to make findLiveRootSourceActionsForRole fail
+// closed for the CURRENT toolkit-specialist/worktree/PLAN scope before this
+// fix). The fix envelope-validates every record first (shape/union/
+// identifiers/payload/timestamps only, never dereferencing PLAN), skips a
+// structurally valid record whose scope differs from the request, and only
+// full-validates (including the PLAN-dereferencing bootstrap decode) records
+// that actually match the requested worktree_id+plan_digest.
+// ─────────────────────────────────────────────────────────────────────────────
+
+test('SEQ72-ROOT-SOURCE-HISTORICAL-PLAN-IGNORED (RED): a structurally valid root-source action minted against an OLDER plan digest is ignored by findLiveRootSourceActionsForRole for a query against the CURRENT plan digest -- never surfaced as current authority, and never blocking the scan', () => {
+  const dir = makeGitProject();
+  const sessionId = 'seq72-historical-plan-session';
+  try {
+    const { action } = mintPendingRootSourceActionAndContext(dir, sessionId, 'seq72-historical-plan');
+    const planBefore = rll.discoverPlan(dir);
+    assert.strictEqual(planBefore.ok, true, 'fixture: PLAN must be discoverable right after mint: ' + JSON.stringify(planBefore));
+    assert.strictEqual(planBefore.planDigest, action.plan_digest, 'fixture sanity: the action must be minted against the plan digest that is CURRENT at mint time');
+
+    // Rewrite the SAME PLAN.md file's bytes in place (still exactly one
+    // wave-*/PLAN.md, so discoverPlan still resolves cleanly) so its digest
+    // changes -- the minted action above is now HISTORICAL relative to the
+    // new current plan, exactly the sequence-72 defect scenario.
+    fs.writeFileSync(planBefore.planPath, '# SEQ72 rewritten PLAN.md content -- forces a NEW current plan digest so the action minted above becomes historical\n');
+    const planAfter = rll.discoverPlan(dir);
+    assert.strictEqual(planAfter.ok, true, 'fixture: PLAN must still be discoverable after rewriting its bytes: ' + JSON.stringify(planAfter));
+    assert.notStrictEqual(planAfter.planDigest, action.plan_digest, 'fixture sanity: rewriting PLAN.md bytes must change its digest');
+
+    const worktreeId = rll.computeWorktreeId(dir);
+    assert.strictEqual(worktreeId, action.worktree_id, 'fixture sanity: worktree is unchanged by the plan rewrite');
+
+    const result = rll.findLiveRootSourceActionsForRole(dir, 'toolkit-specialist', worktreeId, planAfter.planDigest);
+    assert.strictEqual(result.ok, true, 'a historical action for a DIFFERENT plan digest must never block a scan of the CURRENT plan digest: ' + JSON.stringify(result));
+    assert.deepStrictEqual(result.actions, [], 'a historical, different-plan-digest action must never be returned as current authority');
+  } finally {
+    fs.rmSync(rll.registryRepoDir(dir), { recursive: true, force: true });
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('SEQ72-ROOT-SOURCE-MALFORMED-HISTORICAL-FAILS-CLOSED: a malformed root-source envelope still fails the scan closed even when its own worktree/plan scope differs from the request -- a scope mismatch alone must never be the reason a genuinely malformed record gets silently skipped', () => {
+  const dir = makeGitProject();
+  try {
+    const actionsDir = path.dirname(rll.actionPathFor(dir, 'x'.repeat(32)));
+    const dirResult = rll.ensureSecureRegistryDir(actionsDir);
+    assert.strictEqual(dirResult.ok, true, 'fixture: could not create the actions/ registry dir: ' + JSON.stringify(dirResult));
+
+    const malformedActionId = crypto.randomBytes(16).toString('hex');
+    const malformedWorktreeId = rc.sha256String('seq72-malformed-envelope-record-worktree');
+    const malformedPlanDigest = rc.sha256String('seq72-malformed-envelope-record-plan');
+    const malformed = {
+      schema: 'coordination/role-lifecycle-action/v1',
+      action_id: malformedActionId,
+      kind: 'root-source-spawn',
+      runtime: 'claude-native',
+      repo_id: rc.sha256String('seq72-malformed-envelope-record-repo'),
+      worktree_id: malformedWorktreeId,
+      plan_digest: malformedPlanDigest,
+      policy_digest: rc.sha256String('seq72-malformed-envelope-record-policy'),
+      session_generation_id: crypto.randomBytes(16).toString('hex'),
+      role: 'toolkit-specialist',
+      expires_at: canonicalIsoAt(Date.now() + 3600000),
+      payload: {
+        agent_type: 'toolkit-specialist',
+        bootstrap_message: 'a plausible-looking but never-decodable placeholder bootstrap message body',
+        name: 'toolkit-specialist',
+        plan_ref: '.planning/wave-seq72-malformed/PLAN.md',
+        reporting_architect: 'arch-platform',
+        request_expiry: canonicalIsoAt(Date.now() + 3600000),
+        subject_bundle_ref: 'seq72-malformed-subject-ref',
+        subject_scope_digest: rc.sha256String('seq72-malformed-envelope-record-subject-bytes'),
+      },
+      // The one deliberate defect: an extra, unrecognized top-level key.
+      // Everything else above is shaped to look otherwise plausible so this
+      // is unambiguously an envelope-shape failure, not some other check.
+      unrecognized_extra_field: 'SEQ72-DELIBERATE-SHAPE-DEFECT',
+    };
+    const malformedPath = rll.actionPathFor(dir, malformedActionId);
+    fs.writeFileSync(malformedPath, JSON.stringify(malformed), { mode: 0o600 });
+    fs.chmodSync(malformedPath, 0o600);
+
+    // Query scope is DELIBERATELY different from the malformed record's own
+    // worktree_id/plan_digest above.
+    const queryWorktreeId = rc.sha256String('seq72-malformed-envelope-query-worktree');
+    const queryPlanDigest = rc.sha256String('seq72-malformed-envelope-query-plan');
+    assert.notStrictEqual(queryWorktreeId, malformedWorktreeId);
+    assert.notStrictEqual(queryPlanDigest, malformedPlanDigest);
+
+    const result = rll.findLiveRootSourceActionsForRole(dir, 'toolkit-specialist', queryWorktreeId, queryPlanDigest);
+    assert.strictEqual(result.ok, false, 'a malformed root-source envelope must fail the scan closed even when its scope differs from the request, never be silently skipped as merely out-of-scope: ' + JSON.stringify(result));
+    assert.strictEqual(result.reason, 'root-source-action-shape-invalid');
+  } finally {
+    fs.rmSync(rll.registryRepoDir(dir), { recursive: true, force: true });
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('SEQ72-ROOT-SOURCE-CURRENT-SCOPE-UNCHANGED (regression control): live/ambiguous/expired classification for a MATCHING current-scope action is unchanged by the historical-scope fix', () => {
+  const dir = makeGitProject();
+  const sessionId = 'seq72-current-scope-session';
+  try {
+    const { action } = mintPendingRootSourceActionAndContext(dir, sessionId, 'seq72-current-scope');
+    const worktreeId = action.worktree_id;
+    const planDigest = action.plan_digest;
+
+    const liveResult = rll.findLiveRootSourceActionsForRole(dir, 'toolkit-specialist', worktreeId, planDigest);
+    assert.strictEqual(liveResult.ok, true, 'a single live matching action must scan cleanly: ' + JSON.stringify(liveResult));
+    assert.strictEqual(liveResult.actions.length, 1);
+    assert.strictEqual(liveResult.actions[0].action_id, action.action_id);
+
+    // A second, independently-valid action for the exact same scope (a
+    // byte-identical clone under a fresh action_id -- validateRootSourceAction
+    // never ties to action_id uniqueness) makes the scan ambiguous.
+    const secondActionId = crypto.randomBytes(16).toString('hex');
+    const secondAction = Object.assign({}, action, { action_id: secondActionId });
+    const secondPath = rll.actionPathFor(dir, secondActionId);
+    fs.writeFileSync(secondPath, JSON.stringify(secondAction), { mode: 0o600 });
+    fs.chmodSync(secondPath, 0o600);
+    const ambiguousResult = rll.findLiveRootSourceActionsForRole(dir, 'toolkit-specialist', worktreeId, planDigest);
+    assert.strictEqual(ambiguousResult.ok, false, 'two live matching actions must be reported ambiguous, never silently pick one: ' + JSON.stringify(ambiguousResult));
+    assert.strictEqual(ambiguousResult.reason, 'root-source-action-ambiguous');
+
+    // Aging BOTH matching actions past their own expires_at (never deleting
+    // them) must classify as expired HISTORY, not live/ambiguous/absent.
+    const firstPath = rll.actionPathFor(dir, action.action_id);
+    const pastIso = canonicalIsoAt(Date.now() - 60000);
+    const agedFirst = Object.assign({}, action, { expires_at: pastIso });
+    const agedSecond = Object.assign({}, secondAction, { expires_at: pastIso });
+    fs.writeFileSync(firstPath, JSON.stringify(agedFirst), { mode: 0o600 });
+    fs.chmodSync(firstPath, 0o600);
+    fs.writeFileSync(secondPath, JSON.stringify(agedSecond), { mode: 0o600 });
+    fs.chmodSync(secondPath, 0o600);
+    const expiredResult = rll.findLiveRootSourceActionsForRole(dir, 'toolkit-specialist', worktreeId, planDigest);
+    assert.strictEqual(expiredResult.ok, false, 'two matching actions aged past expires_at must classify as expired history, never live: ' + JSON.stringify(expiredResult));
+    assert.strictEqual(expiredResult.reason, 'root-source-action-expired');
+  } finally {
+    fs.rmSync(rll.registryRepoDir(dir), { recursive: true, force: true });
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});

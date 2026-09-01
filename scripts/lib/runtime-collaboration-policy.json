@@ -1,6 +1,6 @@
 {
-  "schema": "runtime-collaboration-policy/v1",
-  "version": 1,
+  "schema": "runtime-collaboration-policy/v2",
+  "version": 2,
   "mode": "auto",
   "support_plane": ["arch-platform", "arch-testing", "arch-integration", "context-provider", "doc-updater"],
   "wave_scoped_roles": "derive-from-wave-class-and-scope",
@@ -11,5 +11,12 @@
   "max_persistent_roles": 5,
   "max_respawns_per_role": 1,
   "routing_ref": "scripts/lib/runtime-routing.json",
-  "documentation_workflow": {"pattern_gap_ingestion": true, "user_approval_required": true}
+  "documentation_workflow": {"pattern_gap_ingestion": true, "user_approval_required": true},
+  "selection": {
+    "requested_host": "claude",
+    "requested_role_engine": "claude",
+    "required_continuity": "session-persistent",
+    "model_profile_ref": ".claude/model-profiles.json#current",
+    "fallback": {"mode": "deny", "allowed": []}
+  }
 }

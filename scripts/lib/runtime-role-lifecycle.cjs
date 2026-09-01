@@ -455,6 +455,63 @@ function isValidPolicy(obj) {
 }
 
 /**
+ * Validates the closed policy successor used by the shared collaboration
+ * entrypoints. The v1 validator above deliberately remains unchanged.
+ * @param {unknown} obj
+ * @returns {boolean}
+ */
+function isValidPolicyV2(obj) {
+  if (obj === null || typeof obj !== 'object' || Array.isArray(obj)) return false;
+  const expectedKeys = [...POLICY_REQUIRED_KEYS, 'selection'];
+  if (Object.keys(obj).length !== expectedKeys.length) return false;
+  if (!expectedKeys.every((key) => Object.prototype.hasOwnProperty.call(obj, key))) return false;
+
+  const projected = {};
+  for (const key of POLICY_REQUIRED_KEYS) projected[key] = obj[key];
+  projected.schema = 'runtime-collaboration-policy/v1';
+  projected.version = 1;
+  if (!isValidPolicy(projected)) return false;
+
+  const selection = obj.selection;
+  if (selection === null || typeof selection !== 'object' || Array.isArray(selection)) return false;
+  const selectionKeys = [
+    'requested_host',
+    'requested_role_engine',
+    'required_continuity',
+    'model_profile_ref',
+    'fallback',
+  ];
+  if (Object.keys(selection).length !== selectionKeys.length) return false;
+  if (!selectionKeys.every((key) => Object.prototype.hasOwnProperty.call(selection, key))) return false;
+  if (selection.requested_host !== 'claude') return false;
+  if (selection.requested_role_engine !== 'claude') return false;
+  if (selection.required_continuity !== 'session-persistent') return false;
+  if (selection.model_profile_ref !== '.claude/model-profiles.json#current') return false;
+
+  const fallback = selection.fallback;
+  if (fallback === null || typeof fallback !== 'object' || Array.isArray(fallback)) return false;
+  if (Object.keys(fallback).length !== 2
+      || !Object.prototype.hasOwnProperty.call(fallback, 'mode')
+      || !Object.prototype.hasOwnProperty.call(fallback, 'allowed')
+      || !Array.isArray(fallback.allowed)) return false;
+  return fallback.mode === 'deny' && fallback.allowed.length === 0;
+}
+
+/**
+ * Projects a validated v2 policy to the exact v1 closed shape.
+ * @param {unknown} policy
+ * @returns {object}
+ */
+function projectPolicyV2ToV1(policy) {
+  if (!isValidPolicyV2(policy)) throw new TypeError('invalid-policy-v2');
+  const projected = {};
+  for (const key of POLICY_REQUIRED_KEYS) projected[key] = policy[key];
+  projected.schema = 'runtime-collaboration-policy/v1';
+  projected.version = 1;
+  return projected;
+}
+
+/**
  * @param {unknown} value
  * @param {number} min
  * @param {number} max
@@ -519,11 +576,16 @@ function resolvePolicyPair(projectRoot) {
   const routingPath = useProjectPair ? projectRoutingPath : toolkitRoutingPath;
 
   const policy = loadJSON(policyPath);
-  if (!isValidPolicy(policy)) return { ok: false };
+  const policyIsV1 = isValidPolicy(policy);
+  const policyIsV2 = isValidPolicyV2(policy);
+  if (!policyIsV1 && !policyIsV2) return { ok: false };
 
   const routing = loadJSON(routingPath);
   if (!isValidRouting(routing)) return { ok: false };
 
+  if (policyIsV2) {
+    return { ok: true, policy, policyV1: projectPolicyV2ToV1(policy), routing };
+  }
   return { ok: true, policy, routing };
 }
 
@@ -1573,27 +1635,27 @@ function rebindMainOrchestratorBindingForNewPlan(projectRoot, oldBinding, newPla
  * @param {string} planDigest
  * @returns {boolean}
  */
-function hasLiveMainOrchestratorBindingForScope(projectRootOrRepoDescriptor, worktreeId, planDigest) {
+function findLiveMainOrchestratorBindingForScope(projectRootOrRepoDescriptor, worktreeId, planDigest) {
   const bindingsDir = path.join(registryRepoDir(projectRootOrRepoDescriptor), 'orchestrator-bindings');
   let entries;
   try {
     entries = fs.readdirSync(bindingsDir, { withFileTypes: true });
   } catch (err) {
-    return false; // absent/unreadable directory -- no live binding possible.
+    return { ok: false, reason: 'main-binding-scope-none' }; // absent/unreadable directory -- no live binding possible.
   }
-  if (entries.length > MAIN_ORCHESTRATOR_BINDING_HOOK_SCAN_CAP) return false; // scan-cap exceeded -- fail closed.
+  if (entries.length > MAIN_ORCHESTRATOR_BINDING_HOOK_SCAN_CAP) return { ok: false, reason: 'main-binding-scope-invalid' }; // scan-cap exceeded -- fail closed.
   const matches = [];
   for (const entry of entries) {
     if (entry.name.startsWith('.') || !entry.name.endsWith('.json')) continue; // not a candidate at all -- benign skip.
-    if (!entry.isFile()) return false; // R2-EXACT-CLAUDE-HOST: a `.json`-named symlink/non-regular entry is a structural anomaly -- fail the whole scan closed, never silently skip it.
+    if (!entry.isFile()) return { ok: false, reason: 'main-binding-scope-invalid' }; // R2-EXACT-CLAUDE-HOST: a `.json`-named symlink/non-regular entry is a structural anomaly -- fail the whole scan closed, never silently skip it.
     const candidateId = entry.name.slice(0, -'.json'.length);
     let bindingRead;
     try {
       bindingRead = readRegistryRecord(mainOrchestratorBindingPathFor(projectRootOrRepoDescriptor, candidateId));
     } catch (err) {
-      return false; // unexpected throw is never routine -- fail the whole scan closed.
+      return { ok: false, reason: 'main-binding-scope-invalid' }; // unexpected throw is never routine -- fail the whole scan closed.
     }
-    if (!bindingRead.ok) return false; // durability/tamper anomaly (incl. 'pending') -- fail closed.
+    if (!bindingRead.ok) return { ok: false, reason: 'main-binding-scope-invalid' }; // durability/tamper anomaly (incl. 'pending') -- fail closed.
     if (bindingRead.absent) continue; // benign race: unlinked between readdir and read.
     const binding = bindingRead.obj;
     if (
@@ -1607,7 +1669,7 @@ function hasLiveMainOrchestratorBindingForScope(projectRootOrRepoDescriptor, wor
       || !isHexDigest64(binding.worktree_id) || !isHexDigest64(binding.plan_digest)
       || !isCanonicalIsoUtc(binding.created_at) || !isCanonicalIsoUtc(binding.expiry)
     ) {
-      return false; // structural corruption -- fail the whole scan closed, never skip past it.
+      return { ok: false, reason: 'main-binding-scope-invalid' }; // structural corruption -- fail the whole scan closed, never skip past it.
     }
     // R2-A (M6-M7-R2-INTEGRITY-CLOSURE-20260820): chronology is a STRUCTURAL
     // property of the entry itself -- it must be validated for EVERY entry,
@@ -1621,9 +1683,9 @@ function hasLiveMainOrchestratorBindingForScope(projectRootOrRepoDescriptor, wor
     // elsewhere" outcome this function's own fail-closed contract forbids.
     const createdAtMs = isoToMsForRegistry(binding.created_at);
     const expiryMs = isoToMsForRegistry(binding.expiry);
-    if (!Number.isFinite(createdAtMs) || !Number.isFinite(expiryMs) || createdAtMs > expiryMs) return false; // structural corruption.
+    if (!Number.isFinite(createdAtMs) || !Number.isFinite(expiryMs) || createdAtMs > expiryMs) return { ok: false, reason: 'main-binding-scope-invalid' }; // structural corruption.
     const nowMs = currentClockMsForRegistry();
-    if (createdAtMs > nowMs) return false; // structural corruption (binding minted "in the future").
+    if (createdAtMs > nowMs) return { ok: false, reason: 'main-binding-scope-invalid' }; // structural corruption (binding minted "in the future").
     if (binding.runtime !== 'claude-hook' || binding.worktree_id !== worktreeId || binding.plan_digest !== planDigest) {
       continue; // routine mismatch -- wrong runtime, or a different worktree/plan's own binding.
     }
@@ -1645,12 +1707,20 @@ function hasLiveMainOrchestratorBindingForScope(projectRootOrRepoDescriptor, wor
     });
     if (!genResult.ok) {
       if (genResult.reason === 'session-generation-absent' || genResult.reason === 'session-generation-expired') continue;
-      return false; // structural anomaly -- fail the whole scan closed, never skip past it.
+      return { ok: false, reason: 'main-binding-scope-invalid' }; // structural anomaly -- fail the whole scan closed, never skip past it.
     }
 
-    matches.push(binding); // genuine, current, unexpired, scope-matched, session-live candidate.
+    matches.push({ binding, generation: genResult }); // genuine, current, unexpired, scope-matched, session-live candidate.
   }
-  return matches.length === 1; // zero or more than one -- never guess, never select on ambiguity.
+  if (matches.length === 0) return { ok: false, reason: 'main-binding-scope-none' }; // zero -- never guess.
+  if (matches.length > 1) return { ok: false, reason: 'main-binding-scope-ambiguous' }; // more than one -- never select on ambiguity.
+  return { ok: true, binding: matches[0].binding, generation: matches[0].generation };
+}
+
+function hasLiveMainOrchestratorBindingForScope(projectRootOrRepoDescriptor, worktreeId, planDigest) {
+  return findLiveMainOrchestratorBindingForScope(
+    projectRootOrRepoDescriptor, worktreeId, planDigest,
+  ).ok;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -2539,7 +2609,24 @@ function decodeRootSourceBootstrapIntentForBinding(projectRootOrRepoDescriptor, 
   return { ok: true, intent: decoded.intent };
 }
 
-function validateRootSourceAction(action) {
+// Sequence 72 (WAVE1-FUNCTIONAL-CLOSEOUT-REALISTIC-20260822) standalone Phase
+// A scanner repair: split out of validateRootSourceAction's own former
+// single body. This envelope half checks ONLY the action's own
+// self-contained shape -- exact key set, the one supported
+// (schema/kind/runtime/role) union member, every identifier/digest format,
+// the payload's own exact key set/types, and canonical timestamps -- and
+// deliberately never dereferences the CURRENT on-disk PLAN or decodes the
+// bootstrap intent. findLiveRootSourceActionsForRole below calls ONLY this
+// half for every historical record it scans, so a structurally valid
+// action minted against an OLDER plan digest can be recognized (and
+// skipped, once its worktree/plan scope is seen not to match the request)
+// without ever running decodeRootSourceBootstrapIntentFromAction's
+// PLAN-dereferencing checks against a plan digest that record was never
+// minted against. validateRootSourceAction itself stays fully strict and
+// behaviorally unchanged: it always calls this envelope check FIRST, then
+// the same bootstrap decoder as before, for any caller that still wants
+// the complete, PLAN-dereferencing validation of one specific action.
+function validateRootSourceActionEnvelope(action) {
   if (!action || !hasExactKeys(action, ROLE_LIFECYCLE_ACTION_KEYS_SORTED)) return { ok: false, reason: 'root-source-action-shape-invalid' };
   if (action.schema !== 'coordination/role-lifecycle-action/v1' || action.kind !== 'root-source-spawn'
       || action.runtime !== 'claude-native' || action.role !== 'toolkit-specialist') return { ok: false, reason: 'root-source-action-union-invalid' };
@@ -2554,6 +2641,12 @@ function validateRootSourceAction(action) {
       || typeof p.plan_ref !== 'string' || p.plan_ref.length === 0
       || typeof p.subject_bundle_ref !== 'string' || p.subject_bundle_ref.length === 0
       || !isHexDigest64(p.subject_scope_digest) || !isCanonicalIsoUtc(p.request_expiry)) return { ok: false, reason: 'root-source-action-payload-invalid' };
+  return { ok: true };
+}
+
+function validateRootSourceAction(action) {
+  const envelope = validateRootSourceActionEnvelope(action);
+  if (!envelope.ok) return envelope;
   const bootstrap = decodeRootSourceBootstrapIntentFromAction(action);
   if (!bootstrap.ok) return bootstrap;
   return { ok: true };
@@ -3135,13 +3228,25 @@ function findLiveRootSourceActionsForRole(projectRootOrRepoDescriptor, role, wor
     const read = readRegistryRecord(path.join(dir, entry.name));
     if (!read.ok || read.absent) return { ok: false, reason: 'root-source-action-registry-malformed' };
     if (read.obj && read.obj.kind !== 'root-source-spawn') continue;
+    // Sequence 72 scanner repair: envelope-validate every record BEFORE
+    // ever looking at scope. A structurally invalid record still fails the
+    // whole scan closed regardless of scope (never silently skipped as
+    // merely out-of-scope). A structurally valid record whose worktree/plan
+    // does not match the requested scope is history for a DIFFERENT scope
+    // -- skip it without ever running the PLAN-dereferencing full validator
+    // against it, so it can no longer block a scan of the CURRENT scope
+    // just because it was minted against a different one. Only a record
+    // that both envelope-validates AND matches the requested scope is worth
+    // the full validateRootSourceAction call (and its resulting
+    // live/expired classification below), exactly as before.
+    const envelope = validateRootSourceActionEnvelope(read.obj);
+    if (!envelope.ok) return { ok: false, reason: envelope.reason };
+    if (read.obj.worktree_id !== worktreeId || read.obj.plan_digest !== planDigest) continue;
     const checked = validateRootSourceAction(read.obj);
     if (!checked.ok) return { ok: false, reason: checked.reason };
-    if (read.obj.worktree_id === worktreeId && read.obj.plan_digest === planDigest) {
-      if (nowMs >= isoToMsForRegistry(read.obj.expires_at)) { sawExpiredHistory = true; continue; }
-      if (nowMs >= isoToMsForRegistry(read.obj.payload.request_expiry)) return { ok: false, reason: 'root-source-request-expired' };
-      actions.push(read.obj);
-    }
+    if (nowMs >= isoToMsForRegistry(read.obj.expires_at)) { sawExpiredHistory = true; continue; }
+    if (nowMs >= isoToMsForRegistry(read.obj.payload.request_expiry)) return { ok: false, reason: 'root-source-request-expired' };
+    actions.push(read.obj);
   }
   if (actions.length > 1) return { ok: false, reason: 'root-source-action-ambiguous' };
   if (actions.length === 0 && sawExpiredHistory) return { ok: false, reason: 'root-source-action-expired' };
@@ -4501,6 +4606,433 @@ function checkClaudeId01ProofComplete(projectRootOrRepoDescriptor, sessionId, wo
   return checkClaudeId01RuntimeCapability(
     projectRootOrRepoDescriptor, sessionId, worktreeId, planDigest,
   );
+}
+
+// P3 U0A1A: host-private Claude peer schema and lookup
+const CLAUDE_PEER_BINDING_SCHEMA = 'runtime/claude-peer-binding/v1';
+const CLAUDE_PEER_BINDING_KEYS = Object.freeze([
+  'actor_binding_id', 'agent_id', 'binding_id', 'created_at', 'expiry',
+  'plan_digest', 'role', 'schema', 'session', 'teammate_name', 'worktree_id',
+]);
+
+function claudePeerBindingPathFor(projectRootOrRepoDescriptor, bindingId) {
+  return path.join(registryRepoDir(projectRootOrRepoDescriptor), 'claude-peer-bindings', bindingId + '.json');
+}
+
+function validateClaudePeerBindingRecord(record, bindingId) {
+  if (!isHexActionId(bindingId)) return { ok: false, reason: 'INVALID' };
+  if (!record || !hasExactKeys(record, CLAUDE_PEER_BINDING_KEYS)) return { ok: false, reason: 'INVALID' };
+  if (record.schema !== CLAUDE_PEER_BINDING_SCHEMA) return { ok: false, reason: 'INVALID' };
+  if (!isHexActionId(record.binding_id) || record.binding_id !== bindingId) return { ok: false, reason: 'INVALID' };
+  if (!isHexActionId(record.actor_binding_id)) return { ok: false, reason: 'INVALID' };
+  if (typeof record.agent_id !== 'string' || record.agent_id.length === 0) return { ok: false, reason: 'INVALID' };
+  if (typeof record.session !== 'string' || record.session.length === 0) return { ok: false, reason: 'INVALID' };
+  if (typeof record.role !== 'string' || record.role.length === 0) return { ok: false, reason: 'INVALID' };
+  if (typeof record.teammate_name !== 'string' || record.teammate_name.length === 0) return { ok: false, reason: 'INVALID' };
+  if (!CANONICAL_ROLES.includes(record.role)) return { ok: false, reason: 'INVALID' };
+  if (record.teammate_name !== record.role) return { ok: false, reason: 'INVALID' };
+  if (!isHexDigest64(record.worktree_id) || !isHexDigest64(record.plan_digest)) return { ok: false, reason: 'INVALID' };
+  if (!isCanonicalIsoUtc(record.created_at) || !isCanonicalIsoUtc(record.expiry)) return { ok: false, reason: 'INVALID' };
+  const createdAtMs = isoToMsForRegistry(record.created_at);
+  const expiryMs = isoToMsForRegistry(record.expiry);
+  if (!Number.isFinite(createdAtMs) || !Number.isFinite(expiryMs) || createdAtMs > expiryMs) {
+    return { ok: false, reason: 'INVALID' };
+  }
+  const nowMs = currentClockMsForRegistry();
+  if (createdAtMs > nowMs) return { ok: false, reason: 'INVALID' };
+  if (nowMs >= expiryMs) return { ok: false, reason: 'INVALID' };
+  return { ok: true, record };
+}
+
+function readClaudePeerBinding(projectRootOrRepoDescriptor, bindingId) {
+  if (!isHexActionId(bindingId)) return { ok: false, reason: 'INVALID' };
+  let read;
+  try {
+    read = readRegistryRecord(claudePeerBindingPathFor(projectRootOrRepoDescriptor, bindingId));
+  } catch {
+    return { ok: false, reason: 'INVALID' };
+  }
+  if (!read.ok) return { ok: false, reason: 'INVALID' };
+  if (read.absent) return { ok: false, reason: 'UNAVAILABLE' };
+  const validated = validateClaudePeerBindingRecord(read.obj, bindingId);
+  if (!validated.ok) return { ok: false, reason: 'INVALID' };
+  return validated;
+}
+
+// P3 U0A1B1A: lookup-only observed actor authority
+const CLAUDE_PEER_BINDING_SCAN_CAP = 1024;
+
+function findUniqueClaudePeerRoleActorBinding(projectRoot, expected) {
+  try {
+    const expectedKeys = ['generationId', 'planDigest', 'role', 'worktreeId'];
+    if (!expected || typeof expected !== 'object' || Array.isArray(expected) || !hasExactKeys(expected, expectedKeys)) {
+      return { ok: false, reason: 'INVALID' };
+    }
+    if (!CANONICAL_ROLES.includes(expected.role)) return { ok: false, reason: 'INVALID' };
+    if (!isHexDigest64(expected.worktreeId) || !isHexDigest64(expected.planDigest)) return { ok: false, reason: 'INVALID' };
+    if (!isHexCsprng32(expected.generationId)) return { ok: false, reason: 'INVALID' };
+
+    const bindingsDir = path.join(registryRepoDir(projectRoot), 'role-actor-bindings');
+    let entries;
+    try {
+      entries = fs.readdirSync(bindingsDir, { withFileTypes: true });
+    } catch (err) {
+      if (err && err.code === 'ENOENT') {
+        entries = [];
+      } else {
+        return { ok: false, reason: 'INVALID' };
+      }
+    }
+    if (entries.length > CLAUDE_PEER_BINDING_SCAN_CAP) return { ok: false, reason: 'INVALID' };
+    const sorted = entries.slice().sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+
+    const matches = [];
+    for (const entry of sorted) {
+      if (entry.name.startsWith('.')) continue;
+      if (!entry.name.endsWith('.json')) continue;
+      if (!entry.isFile()) return { ok: false, reason: 'INVALID' };
+      const id = entry.name.slice(0, -5);
+      if (!isHexCsprng32(id)) return { ok: false, reason: 'INVALID' };
+      const read = readRegistryRecord(roleActorBindingPathFor(projectRoot, id));
+      if (!read.ok || read.absent || !read.obj) return { ok: false, reason: 'INVALID' };
+      const record = read.obj;
+      if (
+        !hasExactKeys(record, ROLE_ACTOR_BINDING_KEYS)
+        || record.schema !== ROLE_ACTOR_BINDING_SCHEMA
+        || record.binding_id !== id
+      ) {
+        return { ok: false, reason: 'INVALID' };
+      }
+      const validated = validateRoleActorBindingFor(projectRoot, id, record.role, record.worktree_id, record.plan_digest);
+      if (!validated.ok) return { ok: false, reason: 'INVALID' };
+      const binding = validated.binding;
+      if (
+        binding.role === expected.role && binding.worktree_id === expected.worktreeId
+        && binding.plan_digest === expected.planDigest && binding.session_generation_id === expected.generationId
+      ) {
+        matches.push(binding);
+      }
+    }
+    if (matches.length === 0) return { ok: false, reason: 'UNAVAILABLE' };
+    if (matches.length !== 1) return { ok: false, reason: 'INVALID' };
+    return { ok: true, binding: matches[0] };
+  } catch (err) {
+    return { ok: false, reason: 'INVALID' };
+  }
+}
+
+function resolveClaudePeerObservedActorAuthority(projectRoot, event) {
+  try {
+    const eventKeys = ['agentId', 'agentType', 'sessionId'];
+    if (!event || typeof event !== 'object' || Array.isArray(event) || !hasExactKeys(event, eventKeys)) {
+      return { ok: false, reason: 'INVALID' };
+    }
+    if (
+      typeof event.sessionId !== 'string' || event.sessionId.length === 0
+      || typeof event.agentId !== 'string' || event.agentId.length === 0
+      || typeof event.agentType !== 'string' || event.agentType.length === 0
+      || !CANONICAL_ROLES.includes(event.agentType)
+    ) {
+      return { ok: false, reason: 'INVALID' };
+    }
+
+    const worktreeId = computeWorktreeId(projectRoot);
+    const planResult = discoverPlan(projectRoot);
+    if (!planResult.ok) return { ok: false, reason: 'INVALID' };
+    const planDigest = planResult.planDigest;
+
+    const generation = peekSessionGeneration(projectRoot, { provider: 'claude-hook', runtime_session_key: event.sessionId });
+    if (!generation.ok) {
+      if (generation.reason === 'session-generation-absent' || generation.reason === 'session-generation-expired') {
+        return { ok: false, reason: 'UNAVAILABLE' };
+      }
+      return { ok: false, reason: 'INVALID' };
+    }
+    const generationId = generation.generationId;
+
+    let proof;
+    try {
+      proof = checkClaudeId01ProofComplete(projectRoot, event.sessionId, worktreeId, planDigest, event.agentType, event.agentId);
+    } catch (err) {
+      return { ok: false, reason: 'UNAVAILABLE' };
+    }
+    if (!proof.ok) return { ok: false, reason: 'UNAVAILABLE' };
+
+    const fenceRead = readClaudeAuthorityFence(
+      projectRoot, computeClaudeAuthorityIdentityId(projectRoot, 'claude-hook', event.sessionId, event.agentId),
+    );
+    if (!fenceRead.ok || !fenceRead.absent) return { ok: false, reason: 'INVALID' };
+
+    const found = findUniqueClaudePeerRoleActorBinding(projectRoot, {
+      role: event.agentType, worktreeId, planDigest, generationId,
+    });
+    if (!found.ok) return found;
+
+    return {
+      ok: true,
+      authority: {
+        sessionId: event.sessionId,
+        agentId: event.agentId,
+        role: event.agentType,
+        worktreeId,
+        planDigest,
+        generationId,
+        generationExpiresAt: generation.expiresAt,
+        actorBinding: found.binding,
+      },
+    };
+  } catch (err) {
+    return { ok: false, reason: 'INVALID' };
+  }
+}
+
+// P3 Claude peer custody: correlates one exact live claude-native
+// role-spawn/role-rebind action to one observed {session,agent,role} actor and
+// mints/returns exactly one durable runtime/claude-peer-binding/v1 record.
+const CLAUDE_PEER_EXPECTED_KEYS = Object.freeze(['planDigest', 'sessionDigest', 'targetRole', 'worktreeId']);
+const CLAUDE_PEER_ACTION_KEYS = Object.freeze([
+  'action_id', 'expires_at', 'kind', 'payload', 'plan_digest', 'policy_digest',
+  'repo_id', 'role', 'runtime', 'schema', 'session_generation_id', 'worktree_id',
+]);
+const CLAUDE_PEER_SPAWN_PAYLOAD_KEYS = Object.freeze([
+  'agent_type', 'bootstrap_artifact_ref', 'bootstrap_message', 'team_name', 'teammate_name',
+]);
+const CLAUDE_PEER_REBIND_PAYLOAD_KEYS = Object.freeze([
+  'binding_id', 'bootstrap_artifact_ref', 'bootstrap_message', 'teammate_name',
+]);
+
+function validateClaudePeerExpected(expected) {
+  if (!expected || typeof expected !== 'object' || Array.isArray(expected)
+      || !hasExactKeys(expected, CLAUDE_PEER_EXPECTED_KEYS)) {
+    return { ok: false, reason: 'INVALID' };
+  }
+  if (!isHexDigest64(expected.sessionDigest) || !isHexDigest64(expected.worktreeId)
+      || !isHexDigest64(expected.planDigest) || !CANONICAL_ROLES.includes(expected.targetRole)) {
+    return { ok: false, reason: 'INVALID' };
+  }
+  return { ok: true };
+}
+
+function scanClaudePeerBindingsForExpected(projectRoot, expected) {
+  const dir = path.join(registryRepoDir(projectRoot), 'claude-peer-bindings');
+  let entries;
+  try {
+    entries = fs.readdirSync(dir, { withFileTypes: true });
+  } catch (err) {
+    if (err && err.code === 'ENOENT') return { ok: true, records: [] };
+    return { ok: false, reason: 'INVALID' };
+  }
+  if (entries.length > CLAUDE_PEER_BINDING_SCAN_CAP) return { ok: false, reason: 'INVALID' };
+  const records = [];
+  for (const entry of entries.slice().sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0))) {
+    if (entry.name.startsWith('.')) continue;
+    if (!entry.isFile() || !/^[0-9a-f]{32}\.json$/.test(entry.name)) return { ok: false, reason: 'INVALID' };
+    const bindingId = entry.name.slice(0, -5);
+    const read = readClaudePeerBinding(projectRoot, bindingId);
+    if (!read.ok) return { ok: false, reason: 'INVALID' };
+    const record = read.record;
+    if (sha256String(record.session) === expected.sessionDigest
+        && record.role === expected.targetRole
+        && record.worktree_id === expected.worktreeId
+        && record.plan_digest === expected.planDigest) {
+      records.push(record);
+    }
+  }
+  return { ok: true, records };
+}
+
+function findUniqueLiveClaudePeerAction(projectRoot, expected) {
+  const dir = path.join(registryRepoDir(projectRoot), 'actions');
+  let entries;
+  try {
+    entries = fs.readdirSync(dir, { withFileTypes: true });
+  } catch (err) {
+    if (err && err.code === 'ENOENT') return { ok: false, reason: 'UNAVAILABLE' };
+    return { ok: false, reason: 'INVALID' };
+  }
+  if (entries.length > CLAUDE_PEER_BINDING_SCAN_CAP) return { ok: false, reason: 'INVALID' };
+  const matches = [];
+  const repoId = computeRepoId(projectRoot);
+  for (const entry of entries.slice().sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0))) {
+    if (entry.name.startsWith('.')) continue;
+    if (!entry.isFile() || !/^[0-9a-f]{32}\.json$/.test(entry.name)) return { ok: false, reason: 'INVALID' };
+    const actionId = entry.name.slice(0, -5);
+    const read = readRegistryRecord(actionPathFor(projectRoot, actionId));
+    if (!read.ok || read.absent || !read.obj) return { ok: false, reason: 'INVALID' };
+    const action = read.obj;
+    if (!hasExactKeys(action, CLAUDE_PEER_ACTION_KEYS)
+        || action.schema !== 'coordination/role-lifecycle-action/v1'
+        || action.action_id !== actionId || !isHexActionId(action.action_id)
+        || !ACTION_KIND_ENUM.includes(action.kind) || !ACTION_RUNTIME_ENUM.includes(action.runtime)
+        || action.repo_id !== repoId || !isHexDigest64(action.worktree_id)
+        || !isHexDigest64(action.plan_digest) || !isHexDigest64(action.policy_digest)
+        || !isHexCsprng32(action.session_generation_id)
+        || !(action.role === null || CANONICAL_ROLES.includes(action.role))
+        || !isCanonicalIsoUtc(action.expires_at)
+        || !action.payload || typeof action.payload !== 'object' || Array.isArray(action.payload)) {
+      return { ok: false, reason: 'INVALID' };
+    }
+    if (action.runtime !== 'claude-native'
+        || (action.kind !== 'role-spawn' && action.kind !== 'role-rebind')
+        || action.session_generation_id !== expected.generationId
+        || action.role !== expected.role || action.worktree_id !== expected.worktreeId
+        || action.plan_digest !== expected.planDigest
+        || currentClockMsForRegistry() >= isoToMsForRegistry(action.expires_at)) {
+      continue;
+    }
+    if (action.kind === 'role-spawn') {
+      if (!hasExactKeys(action.payload, CLAUDE_PEER_SPAWN_PAYLOAD_KEYS)
+          || action.payload.agent_type !== expected.role
+          || action.payload.teammate_name !== expected.role) continue;
+    } else if (!hasExactKeys(action.payload, CLAUDE_PEER_REBIND_PAYLOAD_KEYS)
+        || action.payload.binding_id !== expected.actorBindingId
+        || action.payload.teammate_name !== expected.role) {
+      continue;
+    }
+    matches.push(action);
+  }
+  if (matches.length === 0) return { ok: false, reason: 'UNAVAILABLE' };
+  if (matches.length !== 1) return { ok: false, reason: 'INVALID' };
+  return { ok: true, action: matches[0] };
+}
+
+function validateClaudePeerBindingFor(projectRoot, bindingId, expected) {
+  try {
+    if (!isHexActionId(bindingId)) return { ok: false, reason: 'INVALID' };
+    const expectedValid = validateClaudePeerExpected(expected);
+    if (!expectedValid.ok) return expectedValid;
+    const read = readClaudePeerBinding(projectRoot, bindingId);
+    if (!read.ok) return read;
+    const record = read.record;
+    if (sha256String(record.session) !== expected.sessionDigest
+        || record.role !== expected.targetRole || record.teammate_name !== expected.targetRole
+        || record.worktree_id !== expected.worktreeId || record.plan_digest !== expected.planDigest) {
+      return { ok: false, reason: 'INVALID' };
+    }
+    const authorityResult = resolveClaudePeerObservedActorAuthority(projectRoot, {
+      sessionId: record.session, agentId: record.agent_id, agentType: record.role,
+    });
+    if (!authorityResult.ok) return authorityResult;
+    const authority = authorityResult.authority;
+    if (authority.actorBinding.binding_id !== record.actor_binding_id
+        || authority.worktreeId !== expected.worktreeId
+        || authority.planDigest !== expected.planDigest || authority.role !== expected.targetRole) {
+      return { ok: false, reason: 'INVALID' };
+    }
+    const action = findUniqueLiveClaudePeerAction(projectRoot, {
+      actorBindingId: record.actor_binding_id,
+      generationId: authority.generationId,
+      planDigest: expected.planDigest,
+      role: expected.targetRole,
+      worktreeId: expected.worktreeId,
+    });
+    if (!action.ok) return action;
+    return { ok: true, record };
+  } catch (err) {
+    return { ok: false, reason: 'INVALID' };
+  }
+}
+
+function findUniqueClaudePeerBindingForTarget(projectRoot, expected) {
+  try {
+    const expectedValid = validateClaudePeerExpected(expected);
+    if (!expectedValid.ok) return expectedValid;
+    const scan = scanClaudePeerBindingsForExpected(projectRoot, expected);
+    if (!scan.ok) return scan;
+    if (scan.records.length === 0) return { ok: false, reason: 'UNAVAILABLE' };
+    if (scan.records.length !== 1) return { ok: false, reason: 'INVALID' };
+    return validateClaudePeerBindingFor(projectRoot, scan.records[0].binding_id, expected);
+  } catch (err) {
+    return { ok: false, reason: 'INVALID' };
+  }
+}
+
+function ensureClaudePeerBindingForObservedActor(projectRoot, event) {
+  try {
+    const eventKeys = ['agentId', 'agentType', 'sessionId'];
+    if (!event || typeof event !== 'object' || Array.isArray(event) || !hasExactKeys(event, eventKeys)
+        || typeof event.sessionId !== 'string' || event.sessionId.length === 0
+        || typeof event.agentId !== 'string' || event.agentId.length === 0
+        || !CANONICAL_ROLES.includes(event.agentType)) {
+      return { ok: false, reason: 'INVALID' };
+    }
+    const first = resolveClaudePeerObservedActorAuthority(projectRoot, event);
+    if (!first.ok) return first;
+    const authority = first.authority;
+    const expected = {
+      sessionDigest: sha256String(event.sessionId),
+      worktreeId: authority.worktreeId,
+      planDigest: authority.planDigest,
+      targetRole: authority.role,
+    };
+    const lockKey = sha256String(canonicalJSONStringify([
+      authority.generationId, authority.worktreeId, authority.planDigest,
+      authority.role, event.agentId, authority.actorBinding.binding_id,
+    ]));
+    const lockDir = path.join(registryRepoDir(projectRoot), 'locks', 'claude-peer-binding-' + lockKey + '.lock');
+    const locked = withRegistryLock(lockDir, () => {
+      const currentResult = resolveClaudePeerObservedActorAuthority(projectRoot, event);
+      if (!currentResult.ok) return currentResult;
+      const current = currentResult.authority;
+      if (current.generationId !== authority.generationId || current.worktreeId !== authority.worktreeId
+          || current.planDigest !== authority.planDigest || current.role !== authority.role
+          || current.actorBinding.binding_id !== authority.actorBinding.binding_id) {
+        return { ok: false, reason: 'INVALID' };
+      }
+      const action = findUniqueLiveClaudePeerAction(projectRoot, {
+        actorBindingId: current.actorBinding.binding_id,
+        generationId: current.generationId,
+        planDigest: current.planDigest,
+        role: current.role,
+        worktreeId: current.worktreeId,
+      });
+      if (!action.ok) return action;
+      const peers = scanClaudePeerBindingsForExpected(projectRoot, expected);
+      if (!peers.ok) return peers;
+      if (peers.records.length > 1) return { ok: false, reason: 'INVALID' };
+      if (peers.records.length === 1) {
+        return validateClaudePeerBindingFor(projectRoot, peers.records[0].binding_id, expected);
+      }
+      const createdAt = nowIsoForRegistry();
+      const expiryMs = Math.min(
+        isoToMsForRegistry(current.actorBinding.expiry),
+        isoToMsForRegistry(current.generationExpiresAt),
+        isoToMsForRegistry(isoPlusSecondsForRegistry(createdAt, 3600)),
+      );
+      if (!Number.isFinite(expiryMs) || expiryMs <= currentClockMsForRegistry()) {
+        return { ok: false, reason: 'UNAVAILABLE' };
+      }
+      const bindingId = generateActionId();
+      const record = {
+        actor_binding_id: current.actorBinding.binding_id,
+        agent_id: event.agentId,
+        binding_id: bindingId,
+        created_at: createdAt,
+        expiry: new Date(expiryMs).toISOString().replace(/\.\d{3}Z$/, 'Z'),
+        plan_digest: current.planDigest,
+        role: current.role,
+        schema: CLAUDE_PEER_BINDING_SCHEMA,
+        session: event.sessionId,
+        teammate_name: current.role,
+        worktree_id: current.worktreeId,
+      };
+      const staticValid = validateClaudePeerBindingRecord(record, bindingId);
+      if (!staticValid.ok) return { ok: false, reason: 'INVALID' };
+      const peerPath = claudePeerBindingPathFor(projectRoot, bindingId);
+      const dirResult = ensureSecureRegistryDir(path.dirname(peerPath));
+      if (!dirResult.ok) return { ok: false, reason: 'INVALID' };
+      try {
+        publishNoClobber(peerPath, Buffer.from(canonicalJSONStringify(record), 'utf8'), {});
+      } catch (err) {
+        return { ok: false, reason: 'INVALID' };
+      }
+      return validateClaudePeerBindingFor(projectRoot, bindingId, expected);
+    }, { maxWaitMs: 5000 });
+    if (!locked.ok || !locked.value) return { ok: false, reason: 'INVALID' };
+    return locked.value;
+  } catch (err) {
+    return { ok: false, reason: 'INVALID' };
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -8001,6 +8533,22 @@ function hasCurrentClaudeId01Capability(projectRoot) {
   return false;
 }
 
+function hasCurrentClaudeHostCompositionCapability(projectRoot) {
+  if (typeof projectRoot !== 'string' || projectRoot.length === 0) return false;
+  try {
+    const admission = require('./runtime-host-claude.cjs').findCurrentProductionAdmission(projectRoot);
+    return Boolean(
+      admission
+      && admission.supported_operations.includes('Agent')
+      && admission.supported_operations.includes('Bash')
+      && admission.supported_operations.includes('SendMessage')
+      && admission.supported_operations.includes('TaskOutput')
+    );
+  } catch {
+    return false;
+  }
+}
+
 /**
  * @param {string} [projectRoot] - required for real production evidence;
  * a caller with no project scope available (a bare unit-test call, or a
@@ -8030,14 +8578,15 @@ function getCapabilityManifest(projectRoot) {
     // primitive action-failed itself uses), capability is revoked
     // immediately even if a stale role-binding record still claims READY.
     let available = [];
+    if (hasCurrentClaudeHostCompositionCapability(projectRoot)) available.push('claude-sendmessage');
     if (typeof projectRoot === 'string' && projectRoot.length > 0 && scanRegistryForReadyDriver(projectRoot, 'codex-app-server')) {
       const coordinationRootId = computeCoordinationRootId(projectRoot);
       const ownerState = readSupervisorLifecycleOwnerState(projectRoot, coordinationRootId);
       if (ownerState.ok && ownerState.state === 'ACTIVE') {
-        available = ['codex-app-server'];
+        available.push('codex-app-server');
       }
     }
-    return { ok: true, availableDrivers: available };
+    return { ok: true, availableDrivers: [...new Set(available)] };
   }
   const raw = process.env.RUNTIME_ROLE_LIFECYCLE_FAKE_CAPABILITIES;
   if (typeof raw !== 'string' || raw.length === 0) return { ok: true, availableDrivers: [] };
@@ -8051,7 +8600,9 @@ function getCapabilityManifest(projectRoot) {
     return { ok: true, availableDrivers: [] };
   }
   const availableDrivers = parsed.filter((driver) => (
-    driver !== 'claude-sendmessage' || hasCurrentClaudeId01Capability(projectRoot)
+    driver !== 'claude-sendmessage'
+    || hasCurrentClaudeHostCompositionCapability(projectRoot)
+    || hasCurrentClaudeId01Capability(projectRoot)
   ));
   return { ok: true, availableDrivers };
 }
@@ -8701,6 +9252,18 @@ function resolvedNodePath() {
   return cachedResolvedNodePath;
 }
 
+function claudeReadyBootstrapMessageFor(actionId) {
+  if (!isHexActionId(actionId)) throw new TypeError('invalid-action-id');
+  const command = renderPosixDirect([
+    resolvedNodePath(),
+    path.resolve(__filename),
+    'ready',
+    '--action',
+    actionId,
+  ]);
+  return `Execute \`${command}\` as one standalone Bash call, read the validated bootstrap/bundle, then enter WAITING.`;
+}
+
 function buildSupervisorStartPayload(nodePath, bridgePath, actionId, coordRoot, roles, sessionExpiry) {
   const bridgeArgv = [nodePath, bridgePath, 'session-run', '--action', actionId, '--coordination-root', coordRoot];
   for (const r of roles) bridgeArgv.push('--role', r);
@@ -9305,6 +9868,1060 @@ function s16ResolveRetainedPair(projectRoot, context, requesterRole, targetRole)
   return { ok: true, source: a, target: b };
 }
 
+// ── R131 P2: subject-bundle seed schema (runtime/p2-subject-bundle-seed/v1) ────
+// Frozen per sequence1-codex-audit.json's codex_binding block (correction1.md).
+// Three fixed roles (arch-platform/arch-testing/arch-integration), exact fixed
+// caps, and a flat sorted [{role,path},...] entries array. Reuses the SAME
+// canonical relative-path predicate runtime-consultation.cjs already exports
+// (isSafeRelativeEntryPath) rather than a second hand-written copy.
+
+const P2_SUBJECT_BUNDLE_SEED_SCHEMA = 'runtime/p2-subject-bundle-seed/v1';
+const P2_SUBJECT_BUNDLE_SEED_ROLES = Object.freeze(['arch-platform', 'arch-testing', 'arch-integration']);
+const P2_SUBJECT_BUNDLE_SEED_CAPS = Object.freeze({
+  max_files_per_role: 24,
+  max_bytes_per_file: 1048576,
+  max_total_bytes_per_role: 8388608,
+});
+const P2_SUBJECT_BUNDLE_SEED_KEYS = Object.freeze([
+  'schema', 'main_binding_id', 'main_actor_instance_id', 'session_generation_id',
+  'repo_id', 'worktree_id', 'head', 'plan_sha256', 'wave_slug', 'sealed_at',
+  'caps', 'entries',
+]);
+const P2_SEAL_REQUIRED_ROLES = Object.freeze([
+  'arch-integration', 'arch-platform', 'arch-testing',
+  'context-provider', 'test-specialist',
+]);
+
+/**
+ * Safe P2 subject-bundle relative entry-path predicate. Delegates verbatim to
+ * runtime-consultation.cjs's own canonical isSafeRelativeEntryPath -- never a
+ * second, independently-drifting reimplementation of that security-critical
+ * grammar.
+ * @param {unknown} v
+ * @returns {boolean}
+ */
+function isSafeP2SubjectPath(v) {
+  return rc.isSafeRelativeEntryPath(v);
+}
+
+/**
+ * Pure, closed-shape validator for a `runtime/p2-subject-bundle-seed/v1`
+ * record (P2-SEED-02/03/04). Every hostile shape must fail with its OWN
+ * distinct, non-empty reason string -- never one shared bucket. Caps are
+ * FIXED at their exact literal values, never merely bounded.
+ * @param {unknown} record
+ * @returns {{ok:true}|{ok:false,reason:string}}
+ */
+function validateP2SubjectBundleSeedRecord(record) {
+  if (record === null || typeof record !== 'object' || Array.isArray(record)) {
+    return { ok: false, reason: 'p2-seed-not-an-object' };
+  }
+  const keys = Object.keys(record);
+  if (keys.length !== P2_SUBJECT_BUNDLE_SEED_KEYS.length
+      || !P2_SUBJECT_BUNDLE_SEED_KEYS.every((k) => Object.prototype.hasOwnProperty.call(record, k))) {
+    return { ok: false, reason: 'p2-seed-extra-or-missing-key' };
+  }
+  if (record.schema !== P2_SUBJECT_BUNDLE_SEED_SCHEMA) return { ok: false, reason: 'p2-seed-schema-mismatch' };
+  if (!isHexCsprng32(record.main_binding_id)) return { ok: false, reason: 'p2-seed-main-binding-id-invalid' };
+  if (!isHexCsprng32(record.main_actor_instance_id)) return { ok: false, reason: 'p2-seed-main-actor-instance-id-invalid' };
+  if (!isHexCsprng32(record.session_generation_id)) return { ok: false, reason: 'p2-seed-session-generation-id-invalid' };
+  if (!isHexDigest64(record.repo_id)) return { ok: false, reason: 'p2-seed-repo-id-invalid' };
+  if (!isHexDigest64(record.worktree_id)) return { ok: false, reason: 'p2-seed-worktree-id-invalid' };
+  if (typeof record.head !== 'string' || !/^[0-9a-f]{40}$/.test(record.head)) return { ok: false, reason: 'p2-seed-head-invalid' };
+  if (!isHexDigest64(record.plan_sha256)) return { ok: false, reason: 'p2-seed-plan-sha256-invalid' };
+  if (typeof record.wave_slug !== 'string' || record.wave_slug.length === 0) return { ok: false, reason: 'p2-seed-wave-slug-invalid' };
+  if (!isCanonicalIsoUtc(record.sealed_at)) return { ok: false, reason: 'p2-seed-sealed-at-invalid' };
+
+  const caps = record.caps;
+  if (caps === null || typeof caps !== 'object' || Array.isArray(caps)) return { ok: false, reason: 'p2-seed-caps-not-an-object' };
+  const capKeys = Object.keys(caps);
+  const fixedCapKeys = Object.keys(P2_SUBJECT_BUNDLE_SEED_CAPS);
+  if (capKeys.length !== fixedCapKeys.length || !fixedCapKeys.every((k) => Object.prototype.hasOwnProperty.call(caps, k))) {
+    return { ok: false, reason: 'p2-seed-caps-extra-or-missing-key' };
+  }
+  for (const k of fixedCapKeys) {
+    if (caps[k] !== P2_SUBJECT_BUNDLE_SEED_CAPS[k]) return { ok: false, reason: 'p2-seed-caps-not-fixed' };
+  }
+
+  const entries = record.entries;
+  if (!Array.isArray(entries)) return { ok: false, reason: 'p2-seed-entries-not-an-array' };
+  const seenRoles = new Set();
+  const seenPairs = new Set();
+  for (const entry of entries) {
+    if (entry === null || typeof entry !== 'object' || Array.isArray(entry)) return { ok: false, reason: 'p2-seed-entry-not-an-object' };
+    const entryKeys = Object.keys(entry);
+    if (entryKeys.length !== 2 || !Object.prototype.hasOwnProperty.call(entry, 'role') || !Object.prototype.hasOwnProperty.call(entry, 'path')) {
+      return { ok: false, reason: 'p2-seed-entry-extra-or-missing-key' };
+    }
+    if (!P2_SUBJECT_BUNDLE_SEED_ROLES.includes(entry.role)) return { ok: false, reason: 'p2-seed-entry-role-unknown' };
+    if (!isSafeP2SubjectPath(entry.path)) return { ok: false, reason: 'p2-seed-entry-path-invalid' };
+    const pairKey = canonicalJSONStringify([entry.role, entry.path]);
+    if (seenPairs.has(pairKey)) return { ok: false, reason: 'p2-seed-entry-duplicate' };
+    seenPairs.add(pairKey);
+    seenRoles.add(entry.role);
+  }
+  for (const role of P2_SUBJECT_BUNDLE_SEED_ROLES) {
+    if (!seenRoles.has(role)) return { ok: false, reason: 'p2-seed-role-missing' };
+  }
+
+  return { ok: true };
+}
+
+/**
+ * Production P2 subject-bundle sealer (P2-SEED-05/06). Two-argument shape
+ * only (`projectRoot`, `{waveSlug,entries,caps}`) -- no caller-identity
+ * fields anywhere; the sealer itself must derive/revalidate a live
+ * MainOrchestratorBinding + SessionGeneration for `projectRoot` before it may
+ * seal anything. Zero live authority fails closed with ZERO seed writes, and
+ * two unauthorized calls with different entries leave IDENTICAL zero seed
+ * state (no partial or divergent write).
+ * @param {string} projectRoot
+ * @param {{waveSlug:string,entries:Array<{role:string,path:string}>,caps:object}} input
+ * @returns {{ok:false,reason:string}}
+ */
+function sealP2SubjectBundleInput(projectRoot, input) {
+  if (typeof projectRoot !== 'string' || projectRoot.length === 0 || !path.isAbsolute(projectRoot)) {
+    return { ok: false, reason: 'p2-seal-project-root-invalid' };
+  }
+  if (
+    input === null || typeof input !== 'object' || Array.isArray(input)
+    || !hasExactKeys(input, ['caps', 'entries', 'waveSlug'])
+  ) {
+    return { ok: false, reason: 'p2-seal-input-invalid' };
+  }
+
+  const plan = discoverPlan(projectRoot);
+  if (!plan.ok) return { ok: false, reason: 'p2-seal-plan-invalid' };
+  const waveSlug = path.basename(path.dirname(plan.planPath)).replace(/^wave-/, '');
+  if (waveSlug !== input.waveSlug) return { ok: false, reason: 'p2-seal-wave-slug-mismatch' };
+
+  const repoId = computeRepoId(projectRoot);
+  const worktreeId = computeWorktreeId(projectRoot);
+  const head = gitRevParse(projectRoot, ['rev-parse', 'HEAD']);
+
+  const findResult = findLiveMainOrchestratorBindingForScope(projectRoot, worktreeId, plan.planDigest);
+  if (!findResult.ok) return { ok: false, reason: findResult.reason };
+  const { binding, generation } = findResult;
+
+  const coordinationRootId = computeCoordinationRootId(projectRoot);
+  const ownerState = readSupervisorLifecycleOwnerState(projectRoot, coordinationRootId);
+  if (!ownerState.ok || ownerState.state !== 'ACTIVE') {
+    return { ok: false, reason: 'p2-seal-roster-not-retained' };
+  }
+  const ownerRecord = ownerState.record;
+  const serviceExpiryMs = Date.parse(ownerRecord.service_expiry);
+  if (
+    ownerRecord.phase !== 'RETAINED'
+    || ownerRecord.worktree_id !== worktreeId
+    || ownerRecord.plan_digest !== plan.planDigest
+    || ownerRecord.session_generation_id !== generation.generationId
+    || !Number.isFinite(serviceExpiryMs) || serviceExpiryMs <= currentClockMsForRegistry()
+    || ownerRecord.roles.join('\0') !== P2_SEAL_REQUIRED_ROLES.join('\0')
+  ) {
+    return { ok: false, reason: 'p2-seal-roster-not-retained' };
+  }
+
+  for (const role of P2_SEAL_REQUIRED_ROLES) {
+    const roleState = readRoleBindingState(
+      projectRoot, worktreeId, plan.planDigest,
+      roleProfileDigestFor(role), generation.generationId, role,
+    );
+    if (!roleState.ok || roleState.state !== 'READY' || !roleState.record) {
+      return { ok: false, reason: 'p2-seal-role-not-ready' };
+    }
+  }
+
+  const record = {
+    schema: P2_SUBJECT_BUNDLE_SEED_SCHEMA,
+    main_binding_id: binding.binding_id,
+    main_actor_instance_id: binding.actor_instance_id,
+    session_generation_id: generation.generationId,
+    repo_id: repoId,
+    worktree_id: worktreeId,
+    head,
+    plan_sha256: plan.planDigest,
+    wave_slug: input.waveSlug,
+    sealed_at: nowIsoForRegistry(),
+    caps: { ...input.caps },
+    entries: input.entries.map((entry) => ({ role: entry.role, path: entry.path })),
+  };
+
+  const validation = validateP2SubjectBundleSeedRecord(record);
+  if (!validation.ok) return validation;
+
+  const seedPath = path.join(
+    registryRepoDir(projectRoot), 'p2-runs', input.waveSlug + '.seed.json',
+  );
+
+  try {
+    publishNoClobber(seedPath, Buffer.from(canonicalJSONStringify(record), 'utf8'), {});
+  } catch (err) {
+    return { ok: false, reason: 'p2-seal-publish-failed' };
+  }
+
+  return { ok: true, record, seedPath };
+}
+
+// ── R131 P2 GREEN-A2a: generic closed-shape PREP-binding record validators ──
+// Pure, side-effect-free validators for the three P2 PREP-binding record
+// schemas (root-consult review, PREP publication intent, PREP publication
+// receipt). Each is a closed-shape check ONLY -- reservation, PREP grammar,
+// completion and conflict transitions are separate, later seams.
+
+const ROOT_CONSULT_REVIEW_SCHEMA = 'runtime/root-consult-review/v1';
+const ROOT_CONSULT_REVIEW_KEYS = Object.freeze([
+  'schema', 'intent_id', 'binding_id', 'requester_actor_instance_id',
+  'session_generation_id', 'thread_id', 'resume_request_id',
+  'cp_completion_digest', 'subject_bundle_ref', 'subject_scope_digest',
+  'decision', 'reviewed_at',
+]);
+const ROOT_CONSULT_REVIEW_DECISIONS = Object.freeze(['APPROVED_PREP', 'REJECTED', 'INCONCLUSIVE']);
+const ROOT_CONSULT_REVIEW_CORRELATED_FIELDS = Object.freeze([
+  'intent_id', 'binding_id', 'requester_actor_instance_id', 'session_generation_id',
+  'thread_id', 'resume_request_id', 'cp_completion_digest', 'subject_bundle_ref',
+  'subject_scope_digest',
+]);
+
+/**
+ * Pure closed-shape validator for a `runtime/root-consult-review/v1` record
+ * (P2-RCR-01..04). `expected` carries the caller-owned binding fields this
+ * review must correlate to byte-for-byte.
+ * @param {unknown} record
+ * @param {object} expected
+ * @returns {{ok:true,record:object}|{ok:false,reason:string}}
+ */
+function validateRootConsultReviewRecord(record, expected) {
+  if (record === null || typeof record !== 'object' || Array.isArray(record)) {
+    return { ok: false, reason: 'root-consult-review-not-an-object' };
+  }
+  const keys = Object.keys(record);
+  if (!ROOT_CONSULT_REVIEW_KEYS.every((k) => Object.prototype.hasOwnProperty.call(record, k))) {
+    return { ok: false, reason: 'root-consult-review-missing-key' };
+  }
+  if (keys.length !== ROOT_CONSULT_REVIEW_KEYS.length) {
+    return { ok: false, reason: 'root-consult-review-unexpected-key' };
+  }
+  if (record.schema !== ROOT_CONSULT_REVIEW_SCHEMA) return { ok: false, reason: 'root-consult-review-schema-mismatch' };
+  if (!isHexCsprng32(record.intent_id)) return { ok: false, reason: 'root-consult-review-intent-id-invalid' };
+  if (!isHexCsprng32(record.binding_id)) return { ok: false, reason: 'root-consult-review-binding-id-invalid' };
+  if (!isHexCsprng32(record.requester_actor_instance_id)) return { ok: false, reason: 'root-consult-review-requester-actor-instance-id-invalid' };
+  if (!isHexCsprng32(record.session_generation_id)) return { ok: false, reason: 'root-consult-review-session-generation-id-invalid' };
+  if (typeof record.thread_id !== 'string' || record.thread_id.length === 0 || Buffer.byteLength(record.thread_id, 'utf8') > 4096) {
+    return { ok: false, reason: 'root-consult-review-thread-id-invalid' };
+  }
+  if (!isHexCsprng32(record.resume_request_id)) return { ok: false, reason: 'root-consult-review-resume-request-id-invalid' };
+  if (record.resume_request_id === record.thread_id) return { ok: false, reason: 'root-consult-review-resume-request-id-thread-id-replay' };
+  if (!isHexDigest64(record.cp_completion_digest)) return { ok: false, reason: 'root-consult-review-cp-completion-digest-invalid' };
+  if (typeof record.subject_bundle_ref !== 'string' || !isSafeP2SubjectPath(record.subject_bundle_ref) || !/(?:^|\/)subject-bundles\/[0-9a-f]{64}\/manifest\.json$/.test(record.subject_bundle_ref)) {
+    return { ok: false, reason: 'root-consult-review-subject-bundle-ref-invalid' };
+  }
+  if (!isHexDigest64(record.subject_scope_digest)) return { ok: false, reason: 'root-consult-review-subject-scope-digest-invalid' };
+  if (!ROOT_CONSULT_REVIEW_DECISIONS.includes(record.decision)) return { ok: false, reason: 'root-consult-review-decision-invalid' };
+  if (!isCanonicalIsoUtc(record.reviewed_at)) return { ok: false, reason: 'root-consult-review-reviewed-at-invalid' };
+
+  if (expected === null || typeof expected !== 'object' || Array.isArray(expected)) {
+    return { ok: false, reason: 'root-consult-review-expected-not-an-object' };
+  }
+  for (const field of ROOT_CONSULT_REVIEW_CORRELATED_FIELDS) {
+    if (record[field] !== expected[field]) return { ok: false, reason: 'root-consult-review-' + field.replace(/_/g, '-') + '-mismatch' };
+  }
+
+  return { ok: true, record };
+}
+
+const PREP_PUBLICATION_INTENT_SCHEMA = 'runtime/prep-publication-intent/v1';
+const PREP_PUBLICATION_INTENT_KEYS = Object.freeze([
+  'schema', 'intent_id', 'role', 'wave_slug', 'head', 'plan_sha256', 'binding_id',
+  'requester_actor_instance_id', 'session_generation_id', 'cp_intent_id',
+  'cp_completion_digest', 'subject_scope_digest', 'review_decision',
+  'publication_nonce', 'state', 'reserved_at', 'state_updated_at', 'expiry',
+]);
+const PREP_PUBLICATION_INTENT_STATES = Object.freeze([
+  'RESERVED', 'PUBLISHED_PENDING_RECEIPT', 'COMPLETED', 'CONFLICTED', 'EXPIRED',
+]);
+const PREP_PUBLICATION_INTENT_CORRELATED_FIELDS = Object.freeze([
+  'role', 'wave_slug', 'head', 'plan_sha256', 'binding_id',
+  'requester_actor_instance_id', 'session_generation_id', 'cp_intent_id',
+  'cp_completion_digest', 'subject_scope_digest', 'publication_nonce',
+]);
+
+/**
+ * Pure closed-shape validator for a `runtime/prep-publication-intent/v1`
+ * record (P2-PPI-01..04). Only a RESERVED intent may carry
+ * `review_decision: 'APPROVED_PREP'`-gated chronology; caps/enum/correlation
+ * checks are closed and each hostile shape fails with a distinct reason.
+ * @param {unknown} record
+ * @param {object} expected
+ * @returns {{ok:true,record:object}|{ok:false,reason:string}}
+ */
+function validatePrepPublicationIntentRecord(record, expected) {
+  if (record === null || typeof record !== 'object' || Array.isArray(record)) {
+    return { ok: false, reason: 'prep-publication-intent-not-an-object' };
+  }
+  const keys = Object.keys(record);
+  if (!PREP_PUBLICATION_INTENT_KEYS.every((k) => Object.prototype.hasOwnProperty.call(record, k))) {
+    return { ok: false, reason: 'prep-publication-intent-missing-key' };
+  }
+  if (keys.length !== PREP_PUBLICATION_INTENT_KEYS.length) {
+    return { ok: false, reason: 'prep-publication-intent-unexpected-key' };
+  }
+  if (record.schema !== PREP_PUBLICATION_INTENT_SCHEMA) return { ok: false, reason: 'prep-publication-intent-schema-mismatch' };
+  if (!isHexCsprng32(record.intent_id)) return { ok: false, reason: 'prep-publication-intent-intent-id-invalid' };
+  if (!P2_SUBJECT_BUNDLE_SEED_ROLES.includes(record.role)) return { ok: false, reason: 'prep-publication-intent-role-invalid' };
+  if (typeof record.wave_slug !== 'string' || record.wave_slug.length === 0) return { ok: false, reason: 'prep-publication-intent-wave-slug-invalid' };
+  if (typeof record.head !== 'string' || !/^[0-9a-f]{40}$/.test(record.head)) return { ok: false, reason: 'prep-publication-intent-head-invalid' };
+  if (!isHexDigest64(record.plan_sha256)) return { ok: false, reason: 'prep-publication-intent-plan-sha256-invalid' };
+  if (!isHexCsprng32(record.binding_id)) return { ok: false, reason: 'prep-publication-intent-binding-id-invalid' };
+  if (!isHexCsprng32(record.requester_actor_instance_id)) return { ok: false, reason: 'prep-publication-intent-requester-actor-instance-id-invalid' };
+  if (!isHexCsprng32(record.session_generation_id)) return { ok: false, reason: 'prep-publication-intent-session-generation-id-invalid' };
+  if (!isHexCsprng32(record.cp_intent_id)) return { ok: false, reason: 'prep-publication-intent-cp-intent-id-invalid' };
+  if (!isHexDigest64(record.cp_completion_digest)) return { ok: false, reason: 'prep-publication-intent-cp-completion-digest-invalid' };
+  if (!isHexDigest64(record.subject_scope_digest)) return { ok: false, reason: 'prep-publication-intent-subject-scope-digest-invalid' };
+  if (record.review_decision === 'REJECTED') return { ok: false, reason: 'prep-publication-intent-review-decision-rejected' };
+  if (record.review_decision === 'INCONCLUSIVE') return { ok: false, reason: 'prep-publication-intent-review-decision-inconclusive' };
+  if (record.review_decision !== 'APPROVED_PREP') return { ok: false, reason: 'prep-publication-intent-review-decision-invalid' };
+  if (!isHexCsprng32(record.publication_nonce)) return { ok: false, reason: 'prep-publication-intent-publication-nonce-invalid' };
+  if (!PREP_PUBLICATION_INTENT_STATES.includes(record.state)) return { ok: false, reason: 'prep-publication-intent-state-invalid' };
+  if (!isCanonicalIsoUtc(record.reserved_at)) return { ok: false, reason: 'prep-publication-intent-reserved-at-invalid' };
+  if (!isCanonicalIsoUtc(record.state_updated_at)) return { ok: false, reason: 'prep-publication-intent-state-updated-at-invalid' };
+  if (!isCanonicalIsoUtc(record.expiry)) return { ok: false, reason: 'prep-publication-intent-expiry-invalid' };
+  if (Date.parse(record.state_updated_at) < Date.parse(record.reserved_at)) {
+    return { ok: false, reason: 'prep-publication-intent-state-updated-at-before-reserved-at' };
+  }
+  if (Date.parse(record.expiry) <= Date.parse(record.state_updated_at)) {
+    return { ok: false, reason: 'prep-publication-intent-expiry-not-after-state-updated-at' };
+  }
+
+  if (expected === null || typeof expected !== 'object' || Array.isArray(expected)) {
+    return { ok: false, reason: 'prep-publication-intent-expected-not-an-object' };
+  }
+  for (const field of PREP_PUBLICATION_INTENT_CORRELATED_FIELDS) {
+    if (record[field] !== expected[field]) return { ok: false, reason: 'prep-publication-intent-' + field.replace(/_/g, '-') + '-mismatch' };
+  }
+
+  return { ok: true, record };
+}
+
+const PREP_PUBLICATION_RECEIPT_SCHEMA = 'runtime/prep-publication-receipt/v1';
+const PREP_PUBLICATION_RECEIPT_KEYS = Object.freeze([
+  'schema', 'receipt_id', 'intent_id', 'role', 'wave_slug', 'head', 'plan_sha256',
+  'binding_id', 'requester_actor_instance_id', 'session_generation_id',
+  'cp_intent_id', 'cp_completion_digest', 'subject_scope_digest', 'review_decision',
+  'publication_nonce', 'verdict_ref', 'verdict_full_sha256', 'published_at',
+]);
+const PREP_PUBLICATION_RECEIPT_CORRELATED_FIELDS = Object.freeze([
+  'intent_id', 'role', 'wave_slug', 'head', 'plan_sha256', 'binding_id',
+  'requester_actor_instance_id', 'session_generation_id', 'cp_intent_id',
+  'cp_completion_digest', 'subject_scope_digest', 'review_decision',
+  'publication_nonce', 'verdict_ref', 'verdict_full_sha256',
+]);
+
+/**
+ * Pure closed-shape validator for a `runtime/prep-publication-receipt/v1`
+ * record (P2-PPI-05/06). `verdict_ref` must be a safe relative `.md` path
+ * (same predicate family as the review's subject_bundle_ref).
+ * @param {unknown} record
+ * @param {object} expected
+ * @returns {{ok:true,record:object}|{ok:false,reason:string}}
+ */
+function validatePrepPublicationReceiptRecord(record, expected) {
+  if (record === null || typeof record !== 'object' || Array.isArray(record)) {
+    return { ok: false, reason: 'prep-publication-receipt-not-an-object' };
+  }
+  const keys = Object.keys(record);
+  if (!PREP_PUBLICATION_RECEIPT_KEYS.every((k) => Object.prototype.hasOwnProperty.call(record, k))) {
+    return { ok: false, reason: 'prep-publication-receipt-missing-key' };
+  }
+  if (keys.length !== PREP_PUBLICATION_RECEIPT_KEYS.length) {
+    return { ok: false, reason: 'prep-publication-receipt-unexpected-key' };
+  }
+  if (record.schema !== PREP_PUBLICATION_RECEIPT_SCHEMA) return { ok: false, reason: 'prep-publication-receipt-schema-mismatch' };
+  if (!isHexCsprng32(record.receipt_id)) return { ok: false, reason: 'prep-publication-receipt-receipt-id-invalid' };
+  if (!isHexCsprng32(record.intent_id)) return { ok: false, reason: 'prep-publication-receipt-intent-id-invalid' };
+  if (!P2_SUBJECT_BUNDLE_SEED_ROLES.includes(record.role)) return { ok: false, reason: 'prep-publication-receipt-role-invalid' };
+  if (typeof record.wave_slug !== 'string' || record.wave_slug.length === 0) return { ok: false, reason: 'prep-publication-receipt-wave-slug-invalid' };
+  if (typeof record.head !== 'string' || !/^[0-9a-f]{40}$/.test(record.head)) return { ok: false, reason: 'prep-publication-receipt-head-invalid' };
+  if (!isHexDigest64(record.plan_sha256)) return { ok: false, reason: 'prep-publication-receipt-plan-sha256-invalid' };
+  if (!isHexCsprng32(record.binding_id)) return { ok: false, reason: 'prep-publication-receipt-binding-id-invalid' };
+  if (!isHexCsprng32(record.requester_actor_instance_id)) return { ok: false, reason: 'prep-publication-receipt-requester-actor-instance-id-invalid' };
+  if (!isHexCsprng32(record.session_generation_id)) return { ok: false, reason: 'prep-publication-receipt-session-generation-id-invalid' };
+  if (!isHexCsprng32(record.cp_intent_id)) return { ok: false, reason: 'prep-publication-receipt-cp-intent-id-invalid' };
+  if (!isHexDigest64(record.cp_completion_digest)) return { ok: false, reason: 'prep-publication-receipt-cp-completion-digest-invalid' };
+  if (!isHexDigest64(record.subject_scope_digest)) return { ok: false, reason: 'prep-publication-receipt-subject-scope-digest-invalid' };
+  if (record.review_decision !== 'APPROVED_PREP') return { ok: false, reason: 'prep-publication-receipt-review-decision-not-approved' };
+  if (!isHexCsprng32(record.publication_nonce)) return { ok: false, reason: 'prep-publication-receipt-publication-nonce-invalid' };
+  if (typeof record.verdict_ref !== 'string' || !record.verdict_ref.endsWith('.md') || !isSafeP2SubjectPath(record.verdict_ref)) {
+    return { ok: false, reason: 'prep-publication-receipt-verdict-ref-invalid' };
+  }
+  if (!isHexDigest64(record.verdict_full_sha256)) return { ok: false, reason: 'prep-publication-receipt-verdict-full-sha256-invalid' };
+  if (!isCanonicalIsoUtc(record.published_at)) return { ok: false, reason: 'prep-publication-receipt-published-at-invalid' };
+
+  if (expected === null || typeof expected !== 'object' || Array.isArray(expected)) {
+    return { ok: false, reason: 'prep-publication-receipt-expected-not-an-object' };
+  }
+  for (const field of PREP_PUBLICATION_RECEIPT_CORRELATED_FIELDS) {
+    if (record[field] !== expected[field]) return { ok: false, reason: 'prep-publication-receipt-' + field.replace(/_/g, '-') + '-mismatch' };
+  }
+
+  return { ok: true, record };
+}
+
+// ── R131 P2 GREEN-A2b: reservation seam (reservePrepPublicationIntent) ──────
+// Pure reservation seam: mints/publishes a `runtime/prep-publication-intent/v1`
+// record (state RESERVED) after fresh worker/RoleActorBinding authority +
+// durable root-chain + predecessor revalidation. NO grammar/completion/
+// conflict/bridge-child/P3 here (proposal-final.json scope_boundary). The
+// positive RESERVED mint is proven only by RED-C/live
+// (APP-LIVE-PREP-01..08/APP-LIVE-PREP-GENUINE-01); PPI-07 here proves only
+// fail-closed zero-mutation on a hand-seeded/no-live-authority fixture.
+
+/**
+ * WAL path for a role's PREP-publication intent -- fixed at one per
+ * (waveSlug, role) forever (publishNoClobber below is the sole mutation).
+ * @param {string} projectRootOrRepoDescriptor
+ * @param {string} waveSlug
+ * @param {string} role
+ * @returns {string}
+ */
+function prepPublicationIntentPathFor(projectRootOrRepoDescriptor, waveSlug, role) {
+  return path.join(registryRepoDir(projectRootOrRepoDescriptor), 'prep-publications', waveSlug, role + '.intent.json');
+}
+
+/**
+ * WAL path for a role's PREP-publication receipt (published later, out of
+ * this unit's scope; only read here for predecessor-completion proof).
+ * @param {string} projectRootOrRepoDescriptor
+ * @param {string} waveSlug
+ * @param {string} role
+ * @returns {string}
+ */
+function prepPublicationReceiptPathFor(projectRootOrRepoDescriptor, waveSlug, role) {
+  return path.join(registryRepoDir(projectRootOrRepoDescriptor), 'prep-publications', waveSlug, role + '.receipt.json');
+}
+
+/**
+ * NEW sibling path helper (the ONLY new path helper this unit adds): the
+ * durable root-consult-review record for a given root-consult intent id.
+ * @param {string} projectRootOrRepoDescriptor
+ * @param {string} intentId
+ * @returns {string}
+ */
+function rootConsultReviewPathFor(projectRootOrRepoDescriptor, intentId) {
+  return path.join(registryRepoDir(projectRootOrRepoDescriptor), 'root-consult-intents', intentId + '.review.json');
+}
+
+/**
+ * Pure predecessor-role lookup for the PREP-publication sequencing chain:
+ * arch-platform has no predecessor; arch-testing requires arch-platform
+ * COMPLETED; arch-integration requires arch-testing COMPLETED.
+ * @param {string} role
+ * @returns {string|null}
+ */
+function prepPublicationPredecessorRole(role) {
+  if (role === 'arch-testing') return 'arch-platform';
+  if (role === 'arch-integration') return 'arch-testing';
+  return null;
+}
+
+/**
+ * Revalidates that `role`'s predecessor (if any) has already COMPLETED its
+ * own PREP publication, proven via ITS OWN durable intent+receipt records
+ * (never caller-supplied), including fd-bound verdict-byte proof via
+ * classifyDurableRead and a fresh HEAD/PLAN cross-check. Pure read-only
+ * gate: never mutates the registry.
+ * @param {string} projectRoot
+ * @param {string} waveSlug
+ * @param {string} role
+ * @param {string} currentHead
+ * @param {string} currentPlanDigest
+ * @returns {{ok:true}|{ok:false,reason:string}}
+ */
+function prepPublicationPredecessorQualifies(projectRoot, waveSlug, role, currentHead, currentPlanDigest) {
+  const predecessorRole = prepPublicationPredecessorRole(role);
+  if (predecessorRole === null) return { ok: true };
+
+  const predIntentRead = readRegistryRecord(prepPublicationIntentPathFor(projectRoot, waveSlug, predecessorRole));
+  if (!predIntentRead.ok) return { ok: false, reason: predIntentRead.reason };
+  if (predIntentRead.absent) return { ok: false, reason: 'predecessor-not-completed' };
+  const predIntent = predIntentRead.obj;
+  const predIntentExpected = {
+    role: predIntent.role,
+    wave_slug: predIntent.wave_slug,
+    head: predIntent.head,
+    plan_sha256: predIntent.plan_sha256,
+    binding_id: predIntent.binding_id,
+    requester_actor_instance_id: predIntent.requester_actor_instance_id,
+    session_generation_id: predIntent.session_generation_id,
+    cp_intent_id: predIntent.cp_intent_id,
+    cp_completion_digest: predIntent.cp_completion_digest,
+    subject_scope_digest: predIntent.subject_scope_digest,
+    publication_nonce: predIntent.publication_nonce,
+  };
+  const predIntentValid = validatePrepPublicationIntentRecord(predIntent, predIntentExpected);
+  if (!predIntentValid.ok) return predIntentValid;
+  if (predIntent.role !== predecessorRole) return { ok: false, reason: 'predecessor-role-mismatch' };
+  if (predIntent.wave_slug !== waveSlug) return { ok: false, reason: 'predecessor-wave-slug-mismatch' };
+  if (predIntent.state !== 'COMPLETED') return { ok: false, reason: 'predecessor-not-completed' };
+
+  const predReceiptRead = readRegistryRecord(prepPublicationReceiptPathFor(projectRoot, waveSlug, predecessorRole));
+  if (!predReceiptRead.ok) return { ok: false, reason: predReceiptRead.reason };
+  if (predReceiptRead.absent) return { ok: false, reason: 'predecessor-not-completed' };
+  const predReceipt = predReceiptRead.obj;
+  const predReceiptExpected = {
+    intent_id: predIntent.intent_id,
+    role: predIntent.role,
+    wave_slug: predIntent.wave_slug,
+    head: predIntent.head,
+    plan_sha256: predIntent.plan_sha256,
+    binding_id: predIntent.binding_id,
+    requester_actor_instance_id: predIntent.requester_actor_instance_id,
+    session_generation_id: predIntent.session_generation_id,
+    cp_intent_id: predIntent.cp_intent_id,
+    cp_completion_digest: predIntent.cp_completion_digest,
+    subject_scope_digest: predIntent.subject_scope_digest,
+    review_decision: predIntent.review_decision,
+    publication_nonce: predIntent.publication_nonce,
+    verdict_ref: predReceipt && typeof predReceipt === 'object' ? predReceipt.verdict_ref : undefined,
+    verdict_full_sha256: predReceipt && typeof predReceipt === 'object' ? predReceipt.verdict_full_sha256 : undefined,
+  };
+  const predReceiptValid = validatePrepPublicationReceiptRecord(predReceipt, predReceiptExpected);
+  if (!predReceiptValid.ok) return predReceiptValid;
+
+  if (!isSafeP2SubjectPath(predReceipt.verdict_ref)) return { ok: false, reason: 'predecessor-verdict-ref-invalid' };
+  const target = path.join(projectRoot, predReceipt.verdict_ref);
+  let projectRootReal;
+  let targetReal;
+  try {
+    projectRootReal = fs.realpathSync(projectRoot);
+    targetReal = fs.realpathSync(target);
+  } catch (err) {
+    return { ok: false, reason: 'predecessor-verdict-realpath-failed' };
+  }
+  if (targetReal !== projectRootReal && !targetReal.startsWith(projectRootReal + path.sep)) {
+    return { ok: false, reason: 'predecessor-verdict-escapes-project-root' };
+  }
+  let classified;
+  try {
+    classified = classifyDurableRead(target, { parse: false });
+  } catch (err) {
+    return { ok: false, reason: 'predecessor-verdict-classify-failed' };
+  }
+  if (!classified || classified.state !== DURABLE_PRESENT) return { ok: false, reason: 'predecessor-verdict-not-durable-present' };
+  if (sha256Buffer(classified.bytes) !== predReceipt.verdict_full_sha256) {
+    return { ok: false, reason: 'predecessor-verdict-bytes-mismatch' };
+  }
+
+  if (predReceipt.head !== currentHead) return { ok: false, reason: 'predecessor-receipt-head-stale' };
+  if (predReceipt.plan_sha256 !== currentPlanDigest) return { ok: false, reason: 'predecessor-receipt-plan-stale' };
+
+  return { ok: true };
+}
+
+/**
+ * The GREEN-A2b reservation seam. Mints/publishes a
+ * `runtime/prep-publication-intent/v1` record (state RESERVED) after fresh
+ * worker/RoleActorBinding authority, durable root-consult intent/completion/
+ * review revalidation, and (for arch-testing/arch-integration) predecessor
+ * qualification. `completion`/`review`/`projection` are EXPECTED snapshots
+ * ONLY -- durable truth is always re-read from disk via readRegistryRecord;
+ * no caller-supplied value is ever trusted as authority. No caller-identity
+ * argument exists anywhere: actor/binding/session/thread are all resolved
+ * fresh from the retained live worker + a freshly-validated RoleActorBinding.
+ * publishNoClobber is the sole mutation, unreachable unless every gate above
+ * it passes -- PPI-07's bare fixture (no retained worker, no durable
+ * root-chain records) fails at the live-authority gate before any write.
+ * @param {string} projectRoot
+ * @param {string} waveSlug
+ * @param {string} role
+ * @param {object} completion - EXPECTED snapshot of runtime/root-consult-completion/v1
+ * @param {object} review - EXPECTED snapshot of runtime/root-consult-review/v1
+ * @param {{subjectBundleRef:string,subjectScopeDigest:string}} projection
+ * @returns {{ok:true,intent:object,intentPath:string}|{ok:false,reason:string}}
+ */
+function reservePrepPublicationIntent(projectRoot, waveSlug, role, completion, review, projection) {
+  if (typeof projectRoot !== 'string' || !path.isAbsolute(projectRoot)) return { ok: false, reason: 'reserve-prep-project-root-invalid' };
+  if (typeof waveSlug !== 'string' || waveSlug.length === 0) return { ok: false, reason: 'reserve-prep-wave-slug-invalid' };
+  if (!P2_SUBJECT_BUNDLE_SEED_ROLES.includes(role)) return { ok: false, reason: 'reserve-prep-role-invalid' };
+  if (completion === null || typeof completion !== 'object' || Array.isArray(completion)) return { ok: false, reason: 'reserve-prep-completion-invalid' };
+  if (review === null || typeof review !== 'object' || Array.isArray(review)) return { ok: false, reason: 'reserve-prep-review-invalid' };
+  if (projection === null || typeof projection !== 'object' || Array.isArray(projection)) return { ok: false, reason: 'reserve-prep-projection-invalid' };
+
+  // Gate 2: current repo/worktree/HEAD/PLAN resolved once.
+  const plan = discoverPlan(projectRoot);
+  if (!plan.ok) return { ok: false, reason: 'reserve-prep-plan-invalid' };
+  const canonicalWaveSlug = path.basename(path.dirname(plan.planPath)).replace(/^wave-/, '');
+  if (waveSlug !== canonicalWaveSlug) return { ok: false, reason: 'wave-slug-mismatch' };
+  const repoId = computeRepoId(projectRoot);
+  const worktreeId = computeWorktreeId(projectRoot);
+  const head = gitRevParse(projectRoot, ['rev-parse', 'HEAD']);
+
+  // Gate 3: retained worker + a fresh runtime/role-binding/v1 read.
+  // MainOrchestratorBinding alone is never authority here -- the trusted
+  // identity is this per-role retained worker cross-checked against a
+  // freshly-read runtime/role-binding/v1 record (execution authority for
+  // this whole seam; there is no RoleActorBinding record in this retained
+  // app-server flow).
+  let bridge;
+  try { bridge = retainedSupervisorBridgeApi(); } catch (err) { return { ok: false, reason: 'retained-bridge-unavailable' }; }
+  if (!bridge || typeof bridge.resolveLiveCodexAppServerWorker !== 'function') return { ok: false, reason: 'retained-bridge-unavailable' };
+  const workerResult = bridge.resolveLiveCodexAppServerWorker(projectRoot, role, roleProfileDigestFor(role));
+  if (!workerResult || !workerResult.ok || !workerResult.available) return { ok: false, reason: 'no-live-retained-worker' };
+  const worker = workerResult.worker;
+  if (!worker || worker.repoId !== repoId || worker.worktreeId !== worktreeId || worker.planDigest !== plan.planDigest
+      || !isHexCsprng32(worker.bindingId)
+      || typeof worker.threadId !== 'string' || worker.threadId.length === 0
+      || Buffer.byteLength(worker.threadId, 'utf8') > 4096
+      || !isHexCsprng32(worker.workerSessionId)) {
+    return { ok: false, reason: 'no-live-retained-worker' };
+  }
+  // A fresh runtime/role-binding/v1 read is the required fresh-authority
+  // proof -- the SAME canonical record resolveLiveCodexAppServerWorker
+  // itself just validated as READY with driver codex-app-server to produce
+  // worker.bindingId, re-read here and re-checked for state/driver/binding-id
+  // agreement before it is trusted. The TRUSTED subject identity is
+  // worker.workerSessionId (NOT any role-binding field): this is the SAME
+  // actor-domain value handleConsultRoot writes into
+  // requester_actor_instance_id on the durable root-consult intent (via
+  // retained.source.workerSessionId), so only workerSessionId correlates
+  // with the existing durable chain.
+  const bindingResult = readRoleBindingState(
+    projectRoot, worktreeId, plan.planDigest, roleProfileDigestFor(role), worker.sessionGenerationId, role,
+  );
+  if (!bindingResult.ok) return { ok: false, reason: bindingResult.reason || 'role-binding-invalid' };
+  if (bindingResult.state !== 'READY' || !bindingResult.record || bindingResult.record.driver !== 'codex-app-server') {
+    return { ok: false, reason: 'role-binding-not-ready' };
+  }
+  if (bindingResult.record.binding_id !== worker.bindingId) return { ok: false, reason: 'role-binding-id-mismatch' };
+
+  // Trusted triple -- these, and ONLY these, are what every durable record
+  // below is checked against; never substituted from any argument payload.
+  const trustedBindingId = worker.bindingId;
+  const trustedActorInstanceId = worker.workerSessionId;
+  const trustedSessionGenerationId = worker.sessionGenerationId;
+  const trustedThreadId = worker.threadId;
+
+  // Gate 4: durable root intent/completion/review via readRegistryRecord +
+  // all correlation/digest/decision checks.
+  if (review === null || typeof review !== 'object' || typeof review.intent_id !== 'string') {
+    return { ok: false, reason: 'reserve-prep-review-invalid' };
+  }
+  const durableIntentRead = readRegistryRecord(rootConsultIntentPathFor(projectRoot, review.intent_id));
+  if (!durableIntentRead.ok) return { ok: false, reason: durableIntentRead.reason };
+  if (durableIntentRead.absent) return { ok: false, reason: 'root-consult-intent-absent' };
+  const durableIntent = durableIntentRead.obj;
+  const durableIntentValid = validateRootConsultIntentRecord(durableIntent, { intent_id: review.intent_id });
+  if (!durableIntentValid.ok) return durableIntentValid;
+  if (durableIntent.requester_role !== role) return { ok: false, reason: 'root-consult-intent-requester-role-mismatch' };
+  if (durableIntent.requester_binding_id !== trustedBindingId) return { ok: false, reason: 'root-consult-intent-requester-binding-id-mismatch' };
+  if (durableIntent.requester_actor_instance_id !== trustedActorInstanceId) return { ok: false, reason: 'root-consult-intent-requester-actor-instance-id-mismatch' };
+  if (durableIntent.session_generation_id !== trustedSessionGenerationId) return { ok: false, reason: 'root-consult-intent-session-generation-id-mismatch' };
+  if (durableIntent.repo_id !== repoId) return { ok: false, reason: 'root-consult-intent-repo-id-mismatch' };
+  if (durableIntent.worktree_id !== worktreeId) return { ok: false, reason: 'root-consult-intent-worktree-id-mismatch' };
+  if (durableIntent.plan_digest !== plan.planDigest) return { ok: false, reason: 'root-consult-intent-plan-digest-mismatch' };
+  if (durableIntent.subject_repo_id !== repoId) return { ok: false, reason: 'root-consult-intent-subject-repo-id-mismatch' };
+  if (durableIntent.subject_worktree_id !== worktreeId) return { ok: false, reason: 'root-consult-intent-subject-worktree-id-mismatch' };
+  if (durableIntent.subject_head !== head) return { ok: false, reason: 'root-consult-intent-subject-head-mismatch' };
+
+  // Gate 4b: fresh Main-correlated PUBLICATION binding, joined against
+  // durableIntent's OWN recorded main_binding_id/main_actor_instance_id --
+  // NEVER the role-worker's trustedBindingId. The retained role worker (and
+  // its RoleActorBinding, validated above) remains sole EXECUTION authority
+  // for this whole seam; this join only re-proves that the SAME live Main
+  // orchestrator correlated on the durable root-consult intent is still
+  // live now, so the durable review/PREP/receipt chain can be stamped with
+  // a binding id that actually correlates with Main, not with the worker.
+  const mainFindResult = findLiveMainOrchestratorBindingForScope(projectRoot, worktreeId, plan.planDigest);
+  if (
+    !mainFindResult.ok || !mainFindResult.binding || !mainFindResult.generation
+    || mainFindResult.binding.binding_id !== durableIntent.main_binding_id
+    || mainFindResult.binding.actor_instance_id !== durableIntent.main_actor_instance_id
+    || mainFindResult.generation.generationId !== trustedSessionGenerationId
+  ) {
+    return { ok: false, reason: 'main-binding-mismatch' };
+  }
+  // Trusted publication-domain id -- distinct from trustedBindingId (role-
+  // worker execution authority) above; used ONLY for the binding_id field
+  // stamped into the durable review-expectation/PREP-intent/self-validation
+  // below, never as a substitute for role-worker/RoleActorBinding checks.
+  const trustedPublicationBindingId = mainFindResult.binding.binding_id;
+
+  const durableCompletionRead = readRegistryRecord(rootConsultCompletionPathFor(projectRoot, review.intent_id));
+  if (!durableCompletionRead.ok) return { ok: false, reason: durableCompletionRead.reason };
+  if (durableCompletionRead.absent) return { ok: false, reason: 'root-consult-completion-absent' };
+  const durableCompletion = durableCompletionRead.obj;
+  const durableCompletionValid = validateRootConsultCompletionRecord(durableCompletion, {
+    intent_id: review.intent_id, request_id: durableIntent.request_id, requester_actor_instance_id: trustedActorInstanceId,
+  });
+  if (!durableCompletionValid.ok) return durableCompletionValid;
+  if (canonicalJSONStringify(durableCompletion) !== canonicalJSONStringify(completion)) {
+    return { ok: false, reason: 'root-consult-completion-snapshot-mismatch' };
+  }
+
+  const durableReviewRead = readRegistryRecord(rootConsultReviewPathFor(projectRoot, review.intent_id));
+  if (!durableReviewRead.ok) return { ok: false, reason: durableReviewRead.reason };
+  if (durableReviewRead.absent) return { ok: false, reason: 'root-consult-review-absent' };
+  const durableReview = durableReviewRead.obj;
+  if (canonicalJSONStringify(durableReview) !== canonicalJSONStringify(review)) {
+    return { ok: false, reason: 'root-consult-review-snapshot-mismatch' };
+  }
+  const completionDigest = sha256String(canonicalJSONStringify(durableCompletion));
+  if (durableReview && durableReview.cp_completion_digest !== completionDigest) {
+    return { ok: false, reason: 'root-consult-review-cp-completion-digest-mismatch' };
+  }
+  const durableReviewValid = validateRootConsultReviewRecord(durableReview, {
+    intent_id: durableIntent.intent_id,
+    binding_id: trustedPublicationBindingId,
+    requester_actor_instance_id: trustedActorInstanceId,
+    session_generation_id: trustedSessionGenerationId,
+    thread_id: trustedThreadId,
+    resume_request_id: durableReview && typeof durableReview === 'object' ? durableReview.resume_request_id : undefined,
+    subject_bundle_ref: durableIntent.subject_bundle_ref,
+    subject_scope_digest: durableIntent.subject_scope_digest,
+    cp_completion_digest: completionDigest,
+  });
+  if (!durableReviewValid.ok) return durableReviewValid;
+  if (durableReview.decision !== 'APPROVED_PREP') return { ok: false, reason: 'root-consult-review-decision-not-approved' };
+
+  if (projection.subjectBundleRef !== durableIntent.subject_bundle_ref) return { ok: false, reason: 'reserve-prep-projection-subject-bundle-ref-mismatch' };
+  if (projection.subjectScopeDigest !== durableIntent.subject_scope_digest) return { ok: false, reason: 'reserve-prep-projection-subject-scope-digest-mismatch' };
+
+  // Gate 5: predecessor qualification for arch-testing/arch-integration.
+  const predecessorQualifies = prepPublicationPredecessorQualifies(projectRoot, waveSlug, role, head, plan.planDigest);
+  if (!predecessorQualifies.ok) return predecessorQualifies;
+
+  // Gate 6: mint intent_id + publication_nonce, build record, self-validate.
+  const nowIso = nowIsoForRegistry();
+  const intentId = crypto.randomBytes(16).toString('hex');
+  const publicationNonce = crypto.randomBytes(16).toString('hex');
+  const record = {
+    schema: PREP_PUBLICATION_INTENT_SCHEMA,
+    intent_id: intentId,
+    role,
+    wave_slug: waveSlug,
+    head,
+    plan_sha256: plan.planDigest,
+    binding_id: trustedPublicationBindingId,
+    requester_actor_instance_id: trustedActorInstanceId,
+    session_generation_id: trustedSessionGenerationId,
+    cp_intent_id: durableIntent.intent_id,
+    cp_completion_digest: completionDigest,
+    subject_scope_digest: durableIntent.subject_scope_digest,
+    review_decision: durableReview.decision,
+    publication_nonce: publicationNonce,
+    state: 'RESERVED',
+    reserved_at: nowIso,
+    state_updated_at: nowIso,
+    expiry: futureIsoForRegistry(600),
+  };
+  const selfValid = validatePrepPublicationIntentRecord(record, {
+    role, wave_slug: waveSlug, head, plan_sha256: plan.planDigest,
+    binding_id: trustedPublicationBindingId, requester_actor_instance_id: trustedActorInstanceId,
+    session_generation_id: trustedSessionGenerationId, cp_intent_id: durableIntent.intent_id,
+    cp_completion_digest: completionDigest, subject_scope_digest: durableIntent.subject_scope_digest,
+    publication_nonce: publicationNonce,
+  });
+  if (!selfValid.ok) return selfValid;
+
+  // Gate 7: publishNoClobber -- sole mutation, unreachable unless 1-6 pass.
+  const intentPath = prepPublicationIntentPathFor(projectRoot, waveSlug, role);
+  try {
+    publishNoClobber(intentPath, Buffer.from(canonicalJSONStringify(record), 'utf8'), {});
+  } catch (err) {
+    return { ok: false, reason: 'reserve-prep-publish-failed' };
+  }
+  return { ok: true, intent: record, intentPath };
+}
+
+// ── R131 P2 GREEN-A2c: exact PREP-publication verdict grammar parser ───────
+// Pure parser/validator for the fixed 9-line PREP verdict grammar (PPG-01..
+// 09). No fs/child_process/network/writes/authority/state transition/child
+// spawn/bridge/live P3 anywhere in this seam -- `intent` is correlation
+// input only, never an authority source. completePrepPublicationIntent/
+// conflictPrepPublicationIntent (PPC-01/02) are OUT OF SCOPE here.
+
+const PREP_PUBLICATION_GRAMMAR_ROLES = Object.freeze(['arch-platform', 'arch-testing', 'arch-integration']);
+const PREP_PUBLICATION_GRAMMAR_WAVE_SLUG_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+const PREP_PUBLICATION_GRAMMAR_HEAD_RE = /^[0-9a-f]{40}$/;
+const PREP_PUBLICATION_GRAMMAR_PLAN_SHA256_RE = /^[0-9a-f]{64}$/;
+const PREP_PUBLICATION_GRAMMAR_NONCE_RE = /^[0-9a-f]{32}$/;
+const PREP_PUBLICATION_GRAMMAR_TIMESTAMP_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/;
+const PREP_PUBLICATION_TIMESTAMP_WINDOW_MS = 300000;
+
+/**
+ * Pure exact-grammar parser/validator for a PREP-publication verdict's raw
+ * bytes (PPG-01..09). `bytes` is the RAW verdict Buffer (never pre-decoded);
+ * `intent` is a read-only correlation record, never mutated and never an
+ * authority source -- this performs zero MainOrchestratorBinding/
+ * SessionGeneration/repo/worktree/roster/fs/state resolution. `Date.now()`
+ * is the sole time source (no third argument).
+ * @param {Buffer} bytes
+ * @param {object} intent
+ * @returns {{ok:true,fields:{role:string,wave_slug:string,phase:string,timestamp:string,status:string,head:string,plan_sha256:string,publication_nonce:string}}|{ok:false,reason:string}}
+ */
+function validatePrepPublicationGrammar(bytes, intent) {
+  if (intent === null || typeof intent !== 'object' || Array.isArray(intent)) {
+    return { ok: false, reason: 'invalid_intent_shape:intent' };
+  }
+  if (!PREP_PUBLICATION_GRAMMAR_ROLES.includes(intent.role)) {
+    return { ok: false, reason: 'invalid_intent_shape:role' };
+  }
+  if (typeof intent.wave_slug !== 'string' || intent.wave_slug.length === 0
+      || !PREP_PUBLICATION_GRAMMAR_WAVE_SLUG_RE.test(intent.wave_slug)) {
+    return { ok: false, reason: 'invalid_intent_shape:wave_slug' };
+  }
+  if (typeof intent.head !== 'string' || !PREP_PUBLICATION_GRAMMAR_HEAD_RE.test(intent.head)) {
+    return { ok: false, reason: 'invalid_intent_shape:head' };
+  }
+  if (typeof intent.plan_sha256 !== 'string' || !PREP_PUBLICATION_GRAMMAR_PLAN_SHA256_RE.test(intent.plan_sha256)) {
+    return { ok: false, reason: 'invalid_intent_shape:plan_sha256' };
+  }
+  if (typeof intent.publication_nonce !== 'string' || !PREP_PUBLICATION_GRAMMAR_NONCE_RE.test(intent.publication_nonce)) {
+    return { ok: false, reason: 'invalid_intent_shape:publication_nonce' };
+  }
+
+  if (!Buffer.isBuffer(bytes)) return { ok: false, reason: 'invalid_buffer' };
+  for (let i = 0; i < bytes.length; i += 1) {
+    const b = bytes[i];
+    if (b === 0x0d || b === 0x00) return { ok: false, reason: 'cr_or_nul_byte' };
+  }
+
+  let text;
+  try {
+    text = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+  } catch (err) {
+    return { ok: false, reason: 'invalid_utf8' };
+  }
+
+  if (bytes.length === 0 || bytes[bytes.length - 1] !== 0x0a) {
+    return { ok: false, reason: 'missing_final_newline' };
+  }
+  const lines = text.split('\n');
+  if (lines.length !== 10) return { ok: false, reason: 'line_count' };
+  const [l1, l2, l3, l4, l5, l6, l7, l8, l9, l10] = lines;
+
+  if (l2 !== '') return { ok: false, reason: 'field_mismatch:l2' };
+  if (l9 !== '') return { ok: false, reason: 'field_mismatch:l9' };
+  if (l10 !== '') return { ok: false, reason: 'field_mismatch:l10' };
+
+  const l1Prefix = '# ';
+  const l1Suffix = ' verdict — wave-' + intent.wave_slug;
+  if (!l1.startsWith(l1Prefix) || !l1.endsWith(l1Suffix)
+      || l1.length < l1Prefix.length + l1Suffix.length) {
+    return { ok: false, reason: 'field_mismatch:l1' };
+  }
+  const role = l1.slice(l1Prefix.length, l1.length - l1Suffix.length);
+  if (role !== intent.role) return { ok: false, reason: 'field_mismatch:role' };
+  const waveSlug = intent.wave_slug;
+
+  if (l3 !== '**Phase**: PREP') return { ok: false, reason: 'field_mismatch:l3' };
+  const phase = 'PREP';
+
+  const l4Prefix = '**Timestamp**: ';
+  if (!l4.startsWith(l4Prefix)) return { ok: false, reason: 'timestamp_format' };
+  const timestamp = l4.slice(l4Prefix.length);
+  if (!PREP_PUBLICATION_GRAMMAR_TIMESTAMP_RE.test(timestamp)) return { ok: false, reason: 'timestamp_format' };
+  const parsedMs = Date.parse(timestamp);
+  if (Number.isNaN(parsedMs)) return { ok: false, reason: 'timestamp_format' };
+  if (new Date(parsedMs).toISOString().replace(/\.\d{3}Z$/, 'Z') !== timestamp) {
+    return { ok: false, reason: 'timestamp_format' };
+  }
+  const now = Date.now();
+  if (!(now - PREP_PUBLICATION_TIMESTAMP_WINDOW_MS <= parsedMs && parsedMs <= now)) {
+    return { ok: false, reason: 'timestamp_out_of_window' };
+  }
+
+  if (l5 !== '**Status**: APPROVED-PREP') return { ok: false, reason: 'field_mismatch:l5' };
+  const status = 'APPROVED-PREP';
+
+  const l6Prefix = '**PREP-HEAD**: ';
+  if (!l6.startsWith(l6Prefix)) return { ok: false, reason: 'field_mismatch:l6' };
+  const head = l6.slice(l6Prefix.length);
+  if (head !== intent.head) return { ok: false, reason: 'field_mismatch:head' };
+
+  const l7Prefix = '**PLAN_SHA256**: ';
+  if (!l7.startsWith(l7Prefix)) return { ok: false, reason: 'field_mismatch:l7' };
+  const planSha256 = l7.slice(l7Prefix.length);
+  if (planSha256 !== intent.plan_sha256) return { ok: false, reason: 'field_mismatch:plan_sha256' };
+
+  const l8Prefix = '**PUBLICATION-NONCE**: ';
+  if (!l8.startsWith(l8Prefix)) return { ok: false, reason: 'field_mismatch:l8' };
+  const publicationNonce = l8.slice(l8Prefix.length);
+  if (publicationNonce !== intent.publication_nonce) return { ok: false, reason: 'nonce_mismatch' };
+
+  return {
+    ok: true,
+    fields: {
+      role, wave_slug: waveSlug, phase, timestamp, status, head,
+      plan_sha256: planSha256, publication_nonce: publicationNonce,
+    },
+  };
+}
+
+// ── R131 P2 GREEN-A2d: completion/conflict transition seams ────────────────
+// Pure state-transition seams for a `runtime/prep-publication-intent/v1`
+// record: no fs/network/child_process/authority resolution anywhere here.
+// `intent` is read-only correlation/state input, never mutated -- every
+// output is a freshly-built object literal.
+
+const PREP_PUBLICATION_PARSED_GRAMMAR_FIELDS = Object.freeze([
+  'role', 'wave_slug', 'phase', 'timestamp', 'status', 'head', 'plan_sha256', 'publication_nonce',
+]);
+
+/**
+ * Builds the `PREP_PUBLICATION_INTENT_CORRELATED_FIELDS` expectation snapshot
+ * from `intent`'s own fields, used to closed-shape validate `intent` against
+ * itself before any transition (never circularly against its own output).
+ * @param {object} intent
+ * @returns {object}
+ */
+function prepPublicationIntentExpectedFromSelf(intent) {
+  const expected = {};
+  for (const field of PREP_PUBLICATION_INTENT_CORRELATED_FIELDS) {
+    expected[field] = intent[field];
+  }
+  return expected;
+}
+
+/**
+ * Transitions a RESERVED/PUBLISHED_PENDING_RECEIPT
+ * `runtime/prep-publication-intent/v1` record to COMPLETED and mints its
+ * `runtime/prep-publication-receipt/v1` companion, after validating `intent`
+ * against itself (closed-shape, pre-transition) and `parsed` (the exact
+ * 8-field grammar success payload) against `intent`'s own correlated fields.
+ * Pure: no fs/network/child_process/authority resolution; `intent` is never
+ * mutated -- `newIntent`/`receipt` are the only new objects, both built from
+ * `intent`'s validated fields plus the verdict reference/digest arguments.
+ * @param {object} intent
+ * @param {object} parsed
+ * @param {string} verdictRef
+ * @param {string} verdictFullSha256
+ * @returns {{ok:true,intent:object,receipt:object}|{ok:false,reason:string}}
+ */
+function completePrepPublicationIntent(intent, parsed, verdictRef, verdictFullSha256) {
+  if (intent === null || typeof intent !== 'object' || Array.isArray(intent)) {
+    return { ok: false, reason: 'complete-prep-intent-invalid' };
+  }
+  if (intent.state !== 'RESERVED' && intent.state !== 'PUBLISHED_PENDING_RECEIPT') {
+    return { ok: false, reason: 'complete-prep-intent-not-completable' };
+  }
+  const expectedIntent = prepPublicationIntentExpectedFromSelf(intent);
+  const intentSelfValid = validatePrepPublicationIntentRecord(intent, expectedIntent);
+  if (!intentSelfValid.ok) return intentSelfValid;
+
+  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    return { ok: false, reason: 'complete-prep-parsed-invalid' };
+  }
+  const parsedKeys = Object.keys(parsed).slice().sort();
+  const expectedParsedKeys = PREP_PUBLICATION_PARSED_GRAMMAR_FIELDS.slice().sort();
+  if (parsedKeys.length !== expectedParsedKeys.length
+      || !parsedKeys.every((k, i) => k === expectedParsedKeys[i])) {
+    return { ok: false, reason: 'complete-prep-parsed-unexpected-key' };
+  }
+  if (parsed.phase !== 'PREP') return { ok: false, reason: 'complete-prep-parsed-phase-mismatch' };
+  if (parsed.status !== 'APPROVED-PREP') return { ok: false, reason: 'complete-prep-parsed-status-mismatch' };
+  if (parsed.role !== intent.role) return { ok: false, reason: 'complete-prep-parsed-role-mismatch' };
+  if (parsed.wave_slug !== intent.wave_slug) return { ok: false, reason: 'complete-prep-parsed-wave_slug-mismatch' };
+  if (parsed.head !== intent.head) return { ok: false, reason: 'complete-prep-parsed-head-mismatch' };
+  if (parsed.plan_sha256 !== intent.plan_sha256) return { ok: false, reason: 'complete-prep-parsed-plan_sha256-mismatch' };
+  if (parsed.publication_nonce !== intent.publication_nonce) return { ok: false, reason: 'complete-prep-parsed-publication_nonce-mismatch' };
+  if (!isCanonicalIsoUtc(parsed.timestamp)) return { ok: false, reason: 'complete-prep-parsed-timestamp-invalid' };
+
+  if (typeof verdictRef !== 'string' || !verdictRef.endsWith('.md') || !isSafeP2SubjectPath(verdictRef)) {
+    return { ok: false, reason: 'complete-prep-verdict-ref-invalid' };
+  }
+  if (!isHexDigest64(verdictFullSha256)) return { ok: false, reason: 'complete-prep-verdict-full-sha256-invalid' };
+
+  const now = nowIsoForRegistry();
+  const nowMs = Date.parse(now);
+  if (!(Date.parse(intent.reserved_at) <= nowMs && nowMs < Date.parse(intent.expiry))) {
+    return { ok: false, reason: 'complete-prep-intent-expired' };
+  }
+
+  const newIntent = { ...intent, state: 'COMPLETED', state_updated_at: now };
+  const receipt = {
+    schema: PREP_PUBLICATION_RECEIPT_SCHEMA,
+    receipt_id: crypto.randomBytes(16).toString('hex'),
+    intent_id: intent.intent_id,
+    role: intent.role,
+    wave_slug: intent.wave_slug,
+    head: intent.head,
+    plan_sha256: intent.plan_sha256,
+    binding_id: intent.binding_id,
+    requester_actor_instance_id: intent.requester_actor_instance_id,
+    session_generation_id: intent.session_generation_id,
+    cp_intent_id: intent.cp_intent_id,
+    cp_completion_digest: intent.cp_completion_digest,
+    subject_scope_digest: intent.subject_scope_digest,
+    review_decision: intent.review_decision,
+    publication_nonce: intent.publication_nonce,
+    verdict_ref: verdictRef,
+    verdict_full_sha256: verdictFullSha256,
+    published_at: now,
+  };
+  const expectedReceipt = {
+    intent_id: intent.intent_id,
+    role: intent.role,
+    wave_slug: intent.wave_slug,
+    head: intent.head,
+    plan_sha256: intent.plan_sha256,
+    binding_id: intent.binding_id,
+    requester_actor_instance_id: intent.requester_actor_instance_id,
+    session_generation_id: intent.session_generation_id,
+    cp_intent_id: intent.cp_intent_id,
+    cp_completion_digest: intent.cp_completion_digest,
+    subject_scope_digest: intent.subject_scope_digest,
+    review_decision: intent.review_decision,
+    publication_nonce: intent.publication_nonce,
+    verdict_ref: verdictRef,
+    verdict_full_sha256: verdictFullSha256,
+  };
+  const receiptValid = validatePrepPublicationReceiptRecord(receipt, expectedReceipt);
+  if (!receiptValid.ok) return receiptValid;
+
+  const newIntentValid = validatePrepPublicationIntentRecord(newIntent, expectedIntent);
+  if (!newIntentValid.ok) return newIntentValid;
+
+  return { intent: newIntent, ok: true, receipt };
+}
+
+/**
+ * Transitions a RESERVED/PUBLISHED_PENDING_RECEIPT
+ * `runtime/prep-publication-intent/v1` record to CONFLICTED. `reason` is the
+ * trigger only -- the schema has no conflict-reason field, so it is never
+ * stored. Pure: no fs/network/child_process/authority resolution; `intent`
+ * is never mutated -- `newIntent` is the sole new object.
+ * @param {object} intent
+ * @param {string} reason
+ * @returns {{ok:true,intent:object}|{ok:false,reason:string}}
+ */
+function conflictPrepPublicationIntent(intent, reason) {
+  if (intent === null || typeof intent !== 'object' || Array.isArray(intent)) {
+    return { ok: false, reason: 'conflict-prep-intent-invalid' };
+  }
+  if (typeof reason !== 'string' || reason.length === 0) {
+    return { ok: false, reason: 'conflict-prep-reason-invalid' };
+  }
+  const expectedIntent = prepPublicationIntentExpectedFromSelf(intent);
+  const intentSelfValid = validatePrepPublicationIntentRecord(intent, expectedIntent);
+  if (!intentSelfValid.ok) return intentSelfValid;
+
+  if (intent.state !== 'RESERVED' && intent.state !== 'PUBLISHED_PENDING_RECEIPT') {
+    return { ok: false, reason: 'conflict-prep-intent-not-conflictable' };
+  }
+
+  const now = nowIsoForRegistry();
+  const nowMs = Date.parse(now);
+  if (!(Date.parse(intent.reserved_at) <= nowMs && nowMs < Date.parse(intent.expiry))) {
+    return { ok: false, reason: 'conflict-prep-intent-expired' };
+  }
+
+  const newIntent = { ...intent, state: 'CONFLICTED', state_updated_at: now };
+  const newIntentValid = validatePrepPublicationIntentRecord(newIntent, expectedIntent);
+  if (!newIntentValid.ok) return newIntentValid;
+
+  return { intent: newIntent, ok: true };
+}
+
 function s16MaterializeCommonArtifacts(projectRoot, context) {
   const api = s16ConsultationApi();
   if (!api || typeof api.materializePlanRef !== 'function'
@@ -9337,6 +10954,216 @@ function s16MaterializeCommonArtifacts(projectRoot, context) {
   } catch (err) { return { ok: false, reason: 's16-materialization-failed' }; }
 }
 
+/**
+ * Fd-bound, real-bytes-only materialization builder for one P2 subject-bundle
+ * seed's role scope (P2-MAT-01..04). Filters `seedRecord.entries` to exactly
+ * `role`, then for each entry (sorted by path): opens with O_NOFOLLOW (never
+ * follows a symlink), fstat()s the OPEN fd (never a separate lstat/stat --
+ * closes the classic TOCTOU race), requires a REGULAR file with nlink===1
+ * (categorically rejects a hardlink), and requires the entry's confined
+ * relative path to realpath to a location still inside `projectRoot` (blocks
+ * `../` escape even through an intermediate symlinked directory segment).
+ * Every byte read is the SAME fd that passed every check above -- never a
+ * second, unguarded re-open. Caps (file count / per-file bytes / total bytes
+ * for the role) are FIXED at the seed's own `caps` object and enforced before
+ * any blob is returned. Returns EITHER `{ok:true,manifest,blobs,
+ * subjectScopeDigest}` OR `{ok:false,reason}` -- never a partial result.
+ * @param {string} projectRoot
+ * @param {object} seedRecord - a `runtime/p2-subject-bundle-seed/v1` record.
+ * @param {string} role
+ * @returns {{ok:true,manifest:object,blobs:Array<object>,subjectScopeDigest:string}|{ok:false,reason:string}}
+ */
+function buildP2SubjectBundleMaterialization(projectRoot, seedRecord, role) {
+  if (seedRecord === null || typeof seedRecord !== 'object' || !Array.isArray(seedRecord.entries)) {
+    return { ok: false, reason: 'p2-mat-seed-invalid' };
+  }
+  if (typeof role !== 'string' || role.length === 0) return { ok: false, reason: 'p2-mat-role-invalid' };
+  if (!P2_SUBJECT_BUNDLE_SEED_ROLES.includes(role)) return { ok: false, reason: 'p2-mat-role-unknown' };
+
+  const caps = (seedRecord.caps && typeof seedRecord.caps === 'object') ? seedRecord.caps : P2_SUBJECT_BUNDLE_SEED_CAPS;
+  const roleEntries = seedRecord.entries
+    .filter((e) => e && e.role === role)
+    .map((e) => e.path)
+    .slice()
+    .sort();
+  if (roleEntries.length === 0) return { ok: false, reason: 'p2-mat-role-scope-empty' };
+  if (roleEntries.length > caps.max_files_per_role) return { ok: false, reason: 'p2-mat-file-count-cap-exceeded' };
+
+  const projectRootReal = realpathOrSelf(projectRoot);
+  const blobs = [];
+  const manifestEntries = [];
+  let totalBytes = 0;
+
+  for (const relPath of roleEntries) {
+    if (!isSafeP2SubjectPath(relPath)) return { ok: false, reason: 'p2-mat-entry-path-invalid' };
+    const abs = path.join(projectRoot, relPath);
+    let fd;
+    try {
+      fd = fs.openSync(abs, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW);
+    } catch (err) {
+      return { ok: false, reason: 'p2-mat-entry-open-failed' };
+    }
+    try {
+      let stat;
+      try {
+        stat = fs.fstatSync(fd);
+      } catch (err) {
+        return { ok: false, reason: 'p2-mat-entry-fstat-failed' };
+      }
+      if (!stat.isFile()) return { ok: false, reason: 'p2-mat-entry-not-a-regular-file' };
+      if (stat.nlink !== 1) return { ok: false, reason: 'p2-mat-entry-hardlinked' };
+      let real;
+      try {
+        real = fs.realpathSync(abs);
+      } catch (err) {
+        return { ok: false, reason: 'p2-mat-entry-realpath-failed' };
+      }
+      if (real !== projectRootReal && !real.startsWith(projectRootReal + path.sep)) {
+        return { ok: false, reason: 'p2-mat-entry-escapes-project-root' };
+      }
+      if (stat.size > caps.max_bytes_per_file) return { ok: false, reason: 'p2-mat-file-size-cap-exceeded' };
+      totalBytes += stat.size;
+      if (totalBytes > caps.max_total_bytes_per_role) return { ok: false, reason: 'p2-mat-total-size-cap-exceeded' };
+      let bytes;
+      try {
+        bytes = fs.readFileSync(fd);
+      } catch (err) {
+        return { ok: false, reason: 'p2-mat-entry-read-failed' };
+      }
+      if (bytes.length !== stat.size) return { ok: false, reason: 'p2-mat-entry-size-mismatch' };
+      const digest = sha256Buffer(bytes);
+      manifestEntries.push({ path: relPath, size: bytes.length, digest });
+      blobs.push({ path: relPath, bytes, size: bytes.length, digest });
+    } finally {
+      try { fs.closeSync(fd); } catch (err) { /* already closed or unrecoverable -- nothing further to release */ }
+    }
+  }
+
+  const manifest = { schema: 'coordination/subject-bundle-manifest/v1', entries: manifestEntries };
+  const subjectScopeDigest = sha256Buffer(Buffer.from(canonicalJSONStringify(manifest), 'utf8'));
+  return { ok: true, manifest, blobs, subjectScopeDigest };
+}
+
+/**
+ * Materializes the architect subject bundle for the current wave.
+ *
+ * Resolves the wave's P2 seed record (if present) and validates it against
+ * the live plan/repo/worktree/generation/binding context, then rebuilds the
+ * plan ref, routing policy, and subject bundle blobs from that seed,
+ * publishing each blob idempotently before delegating to the consultation
+ * API to materialize the subject bundle. When no seed record exists, falls
+ * back to {@link s16MaterializeCommonArtifacts} verbatim. Never throws;
+ * all failure paths are returned as `{ok:false,reason}`.
+ *
+ * @param {string} projectRoot absolute path to the project root
+ * @param {object} context wave context containing plan, repoId, worktreeId,
+ *   coordRoot, generation, and binding information
+ * @param {string} requesterRole role requesting the subject bundle materialization
+ * @returns {object} `{ok:false,reason}` on failure, or on success the common
+ *   materialization shape `{ok:true,planRoot,waveSlug,planRef,routingRef,
+ *   routingDigest,subjectBundleRef,subjectScopeDigest}`
+ */
+function s16MaterializeArchitectSubjectBundle(projectRoot, context, requesterRole) {
+  const waveSlug = path
+    .basename(path.dirname(context.plan.planPath))
+    .replace(/^wave-/, '');
+  const seedPath = path.join(registryRepoDir(projectRoot), 'p2-runs', waveSlug + '.seed.json');
+
+  const read = readRegistryRecord(seedPath);
+  if (!read.ok) {
+    return { ok: false, reason: read.reason };
+  }
+  if (read.absent) {
+    return s16MaterializeCommonArtifacts(projectRoot, context);
+  }
+
+  const validation = validateP2SubjectBundleSeedRecord(read.obj);
+  if (!validation.ok) {
+    return validation;
+  }
+  const seed = read.obj;
+
+  const head = gitRevParse(projectRoot, ['rev-parse', 'HEAD']);
+  const mismatches = [
+    [seed.wave_slug, waveSlug],
+    [seed.head, head],
+    [seed.plan_sha256, context.plan.planDigest],
+    [seed.repo_id, context.repoId],
+    [seed.worktree_id, context.worktreeId],
+    [seed.session_generation_id, context.generation.generationId],
+    [seed.main_binding_id, context.binding.binding_id],
+    [seed.main_actor_instance_id, context.binding.actor_instance_id],
+  ];
+  for (const [expected, actual] of mismatches) {
+    if (expected !== actual) {
+      return { ok: false, reason: 'p2-seed-context-mismatch' };
+    }
+  }
+
+  const built = buildP2SubjectBundleMaterialization(projectRoot, seed, requesterRole);
+  if (!built.ok) {
+    return built;
+  }
+  if (!Array.isArray(built.manifest.entries) || built.manifest.entries.length === 0) {
+    return { ok: false, reason: 'p2-seed-context-mismatch' };
+  }
+
+  const api = s16ConsultationApi();
+  if (
+    typeof api.materializePlanRef !== 'function' ||
+    typeof api.materializeRoutingPolicy !== 'function' ||
+    typeof api.materializeSubjectBundle !== 'function'
+  ) {
+    return { ok: false, reason: 's16-materializer-unavailable' };
+  }
+  const { materializePlanRef, materializeRoutingPolicy, materializeSubjectBundle } = api;
+
+  const planRoot = path.join(
+    context.coordRoot,
+    context.repoId,
+    waveSlug,
+    context.plan.planDigest
+  );
+
+  try {
+    materializePlanRef(planRoot, context.plan.planPath);
+    materializeRoutingPolicy(planRoot);
+
+    for (const blob of built.blobs) {
+      const blobPath = path.join(planRoot, 'blobs', blob.digest);
+      publishNoClobber(blobPath, blob.bytes, { allowIdenticalIdempotent: true });
+    }
+
+    materializeSubjectBundle(planRoot, built.subjectScopeDigest, built.manifest);
+
+    const planPath = path.join(planRoot, 'plan_ref');
+    const routingDigest =
+      typeof api.ROUTING_POLICY_DIGEST === 'string'
+        ? api.ROUTING_POLICY_DIGEST
+        : sha256File(path.join(__dirname, 'runtime-routing.json'));
+    const routingPath = path.join(planRoot, 'routing-policies', routingDigest + '.json');
+    const subjectPath = path.join(
+      planRoot,
+      'subject-bundles',
+      built.subjectScopeDigest,
+      'manifest.json'
+    );
+
+    return {
+      ok: true,
+      planRoot,
+      waveSlug,
+      planRef: s16CoordinationRelativeRef(context.coordRoot, planPath),
+      routingRef: s16CoordinationRelativeRef(context.coordRoot, routingPath),
+      routingDigest,
+      subjectBundleRef: s16CoordinationRelativeRef(context.coordRoot, subjectPath),
+      subjectScopeDigest: built.subjectScopeDigest,
+    };
+  } catch (err) {
+    return { ok: false, reason: 's16-materialization-failed' };
+  }
+}
+
 function s16ReadOptionalValidated(recordPath, validator, expected) {
   const read = readRegistryRecord(recordPath);
   if (!read.ok) return { ok: false, reason: read.reason };
@@ -9364,7 +11191,7 @@ function handleConsultRoot(rawArgv) {
   // first canonical artifact or host-registry byte is materialized.
   const retained = s16ResolveRetainedPair(projectRoot, context, intentInput.requester_role, intentInput.target_role);
   if (!retained.ok) { unavailableError('consult-root', 'CAPABILITY_UNAVAILABLE'); return; }
-  const artifacts = s16MaterializeCommonArtifacts(projectRoot, context);
+  const artifacts = s16MaterializeArchitectSubjectBundle(projectRoot, context, intentInput.requester_role);
   if (!artifacts.ok) { invalidError('consult-root', 'DURABILITY_UNPROVEN'); return; }
 
   const api = s16ConsultationApi();
@@ -9528,14 +11355,32 @@ function handleRootSource(rawArgv) {
     'toolkit-specialist', 'root-source', null, true,
   );
   if (!context.ok) { invalidError('root-source', 'IDENTITY_MISMATCH'); return; }
-  // Validate the live reporting architect before any materialization. The
-  // toolkit source is intentionally not part of the retained support plane.
-  let bridge;
-  try { bridge = retainedSupervisorBridgeApi(); } catch (err) { unavailableError('root-source', 'CAPABILITY_UNAVAILABLE'); return; }
-  const architect = bridge.resolveLiveCodexAppServerWorker(projectRoot, 'arch-platform', roleProfileDigestFor('arch-platform'));
-  if (!architect.ok || !architect.available || architect.worker.sessionGenerationId !== context.generation.generationId) {
-    unavailableError('root-source', 'CAPABILITY_UNAVAILABLE'); return;
+  // Validate one live reporting architect before any materialization. P4's
+  // Claude-native support plane uses the canonical peer-custody binding; P5's
+  // retained Codex lane remains an exact fallback using the same disk
+  // protocol. Never select by role text alone and never require Codex when a
+  // valid same-session Claude peer already owns arch-platform.
+  const claudeArchitectRole = readRoleBindingState(
+    projectRoot, context.worktreeId, context.plan.planDigest,
+    roleProfileDigestFor('arch-platform'), context.generation.generationId,
+    'arch-platform',
+  );
+  let reportingArchitectAvailable = Boolean(
+    claudeArchitectRole.ok && claudeArchitectRole.state === 'READY'
+    && claudeArchitectRole.record.driver === 'claude-sendmessage'
+  );
+  if (!reportingArchitectAvailable) {
+    let bridge = null;
+    try { bridge = retainedSupervisorBridgeApi(); } catch (err) { bridge = null; }
+    const architect = bridge && typeof bridge.resolveLiveCodexAppServerWorker === 'function'
+      ? bridge.resolveLiveCodexAppServerWorker(projectRoot, 'arch-platform', roleProfileDigestFor('arch-platform'))
+      : null;
+    reportingArchitectAvailable = Boolean(
+      architect && architect.ok && architect.available
+      && architect.worker.sessionGenerationId === context.generation.generationId
+    );
   }
+  if (!reportingArchitectAvailable) { unavailableError('root-source', 'CAPABILITY_UNAVAILABLE'); return; }
   const artifacts = s16MaterializeCommonArtifacts(projectRoot, context);
   if (!artifacts.ok) { invalidError('root-source', 'DURABILITY_UNPROVEN'); return; }
   const actionId = generateActionId();
@@ -10391,7 +12236,7 @@ function spawnOrRehydrateSingleRole(projectRoot, pair, capabilityManifest, role,
     // .claude/agents/<role>.md) -- never the harness-generic 'general-purpose'
     // fallback, which agent-spawn-validator.bats would never accept for a
     // canonical subagent_type anyway.
-    const payload = buildRoleSpawnPayload('wp3-support-plane', role, role, null, 'Execute `ready --action <id>`, read the validated bootstrap/bundle, then enter WAITING.');
+    const payload = buildRoleSpawnPayload('wp3-support-plane', role, role, null, claudeReadyBootstrapMessageFor(actionId));
     const ttlResult = computeActionTtlSeconds(pair.policy, bindingExpiryIso);
     if (!ttlResult.ok) return { ok: false, reason: ttlResult.reason };
     const expiresAtIso = futureIsoForRegistry(ttlResult.ttlSeconds);
@@ -10822,11 +12667,54 @@ function handleEnsure(rawArgv) {
     }
 
     if (stateResult.state === 'STARTING') {
-      sawActionRequired = true;
       const pendingId = stateResult.record.pending_action_id;
       if (pendingId) {
         const actionRead = readRegistryRecord(actionPathFor(projectRoot, pendingId));
         if (actionRead.ok && !actionRead.absent) {
+          const pendingExpiryMs = isoToMsForRegistry(actionRead.obj.expires_at);
+          if (!Number.isFinite(pendingExpiryMs)) {
+            hardError = true;
+            break;
+          }
+          if (currentClockMsForRegistry() >= pendingExpiryMs) {
+            // A STARTING binding whose one-shot host action has expired can
+            // no longer make progress. Reconcile it inside this same ensure
+            // transaction and immediately route a replacement action for the
+            // same driver. Merely re-reporting the dead action strands the
+            // role forever because the host gate correctly refuses a target
+            // with no positive TTL remaining.
+            const expired = transitionRoleBinding(
+              projectRoot,
+              binding.worktree_id,
+              binding.plan_digest,
+              profileDigest,
+              binding.session_generation_id,
+              role,
+              'STARTING',
+              'UNAVAILABLE',
+              stateResult.record,
+              { failure_reason: 'expired' },
+            );
+            if (!expired.ok) {
+              hardError = true;
+              break;
+            }
+            pendingSpawns.push({
+              role,
+              profileDigest,
+              fromState: 'UNAVAILABLE',
+              toState: 'STARTING',
+              fromRecord: expired.record,
+              respawnCount: expired.record.respawn_count || 0,
+              // Expiry is an unconsumed transport action, not evidence that
+              // the selected driver failed. The replacement must retain the
+              // same policy-selected driver when fallback is denied.
+              excludeDriver: null,
+              requiredDriver: null,
+            });
+            continue;
+          }
+          sawActionRequired = true;
           // M7 (arch-testing-20260808T142647Z), corrected after a HARD NO-GO:
           // a role-spawn action minted by an EARLIER ensure() call (this
           // call's own fresh-mint loop below never runs for an already-
@@ -10849,7 +12737,13 @@ function handleEnsure(rawArgv) {
           } else {
             collectedActions.push(actionForEnvelope(actionRead.obj));
           }
+        } else {
+          hardError = true;
+          break;
         }
+      } else {
+        hardError = true;
+        break;
       }
       continue;
     }
@@ -10910,11 +12804,10 @@ function handleEnsure(rawArgv) {
   // excluded by NAME (never by hiding it from the capability manifest,
   // which would make `noop` spuriously reachable past every other real
   // driver still later in the routing list).
-  let driverExclusions;
-  const teamEnsureFailedCheck = readTeamEnsureState(projectRoot, binding.session_generation_id, binding.worktree_id, binding.plan_digest);
-  if (teamEnsureFailedCheck.ok && teamEnsureFailedCheck.state === 'FAILED') {
-    driverExclusions = ['claude-sendmessage'];
-  }
+  // TeamCreate is obsolete for the accepted Claude profile. Historical
+  // team-ensure records remain readable for registry compatibility but no
+  // longer exclude the direct Agent+SendMessage driver.
+  const driverExclusions = undefined;
 
   // Pass 2: resolve a driver for each pending spawn (pure lookup, no
   // mutation). WP3 item C correction pass R3 (point C.1): the six routing
@@ -10936,6 +12829,13 @@ function handleEnsure(rawArgv) {
   // codex-mcp or runtime-spawn.
   const codexAppServerGroup = [];
   const claudeSendmessageGroup = [];
+  const policySelectedLifecycleDriver = (
+    pair.policy.schema === 'runtime-collaboration-policy/v2'
+    && pair.policy.selection.requested_host === 'claude'
+    && pair.policy.selection.requested_role_engine === 'claude'
+    && pair.policy.selection.fallback.mode === 'deny'
+    && pair.policy.selection.fallback.allowed.length === 0
+  ) ? 'claude-sendmessage' : null;
   // M6 CORRECTION PASS (P0-1): lazily-memoized real first-start check --
   // computed AT MOST ONCE per ensure() call (never per-role: it is a
   // project-wide pin/credential probe, not role-scoped), and only if pass 2
@@ -10960,7 +12860,12 @@ function handleEnsure(rawArgv) {
       .concat(spawn.excludeDriver ? [spawn.excludeDriver] : [])
       .concat(hasRegisteredValidatedDiskConsumer(projectRoot, spawn.role, binding.worktree_id, binding.plan_digest, binding.session_generation_id) ? [] : ['noop']);
     let driver = null;
-    if (spawn.requiredDriver === 'codex-app-server') {
+    if (policySelectedLifecycleDriver) {
+      if (
+        !perRoleExclusions.includes(policySelectedLifecycleDriver)
+        && capabilityManifest.availableDrivers.includes(policySelectedLifecycleDriver)
+      ) driver = policySelectedLifecycleDriver;
+    } else if (spawn.requiredDriver === 'codex-app-server') {
       if (
         codexAppServerStartupEligible(pair.routing, spawn.role, perRoleExclusions)
         && ensureSupervisorStartabilityChecked().ok
@@ -10986,7 +12891,7 @@ function handleEnsure(rawArgv) {
     // pass 2 already builds below -- no new mint path, no hand-written
     // READY record.
     if (
-      !spawn.requiredDriver && !driver
+      !policySelectedLifecycleDriver && !spawn.requiredDriver && !driver
       && codexAppServerStartupEligible(pair.routing, spawn.role, perRoleExclusions)
       && ensureSupervisorStartabilityChecked().ok
     ) {
@@ -11039,82 +12944,37 @@ function handleEnsure(rawArgv) {
     }
   }
 
-  // Claude-native: team-ensure-before-role-spawn ordering (PLAN.md ~L167:
-  // "Claude orders team-ensure before role-spawn; failure suppresses the
-  // dependent spawn"). Point 3.4 (R4): a SINGLE ensure() call now returns
-  // BOTH, ordered team-ensure then role-spawn(s), whether team-ensure is
-  // freshly PENDING or already SUCCEEDED -- eliminating the second
-  // ensure()/grant round-trip a prior pass required the interpreter to
-  // make ONLY to "unlock" role-spawn after registering team-ensure
-  // SUCCEEDED out-of-band. Each role-spawn is stamped with
-  // `team_ensure_action_id` regardless of team-ensure's CURRENT state, so
-  // the pre-existing action-failed dependent-invalidation path (point C,
-  // `findRoleBindingsDependentOnTeamEnsure`) still correctly quarantines
-  // it if team-ensure is LATER explicitly failed. This is the safety net
-  // that makes eager minting sound: PLAN.md ~L165 already forbids the
-  // executor from "continu[ing] to a dependent action" once an earlier one
-  // errors -- the interpreter is contractually required to execute
-  // actions[] IN ORDER and never call role-spawn's Agent-spawn if its
-  // ordered predecessor (TeamCreate) did not itself already succeed. The
-  // core does not need to WITHHOLD MINTING role-spawn to enforce that; it
-  // only needs the dependent-invalidation safety net for when the
-  // interpreter correctly stops and reports action-failed instead.
+  // Accepted Claude profile: each missing persistent role maps directly to
+  // one role-spawn/claude-native action. TeamCreate is not part of the
+  // current host surface. Historical team-ensure schemas and readers stay
+  // intact solely for old registry records; this path never mints one.
   if (claudeSendmessageGroup.length > 0) {
     const repoId = computeRepoId(projectRoot);
-    const policyDigest = sha256String(canonicalJSONStringify(pair.routing));
-    const teamResult = ensureTeamEnsureAction(projectRoot, repoId, binding.worktree_id, binding.plan_digest, policyDigest, binding.session_generation_id, pair.policy, binding.expiry);
-    if (!teamResult.ok) {
+    sawActionRequired = true;
+    const transitioned = [];
+    for (const spawn of claudeSendmessageGroup) {
+      const spawnPolicyDigest = sha256String(canonicalJSONStringify(pair.routing));
+      const actionId = generateActionId();
+      const payload = buildRoleSpawnPayload('wp3-support-plane', spawn.role, spawn.role, null, claudeReadyBootstrapMessageFor(actionId));
+      const spawnTtlResult = computeActionTtlSeconds(pair.policy, binding.expiry);
+      if (!spawnTtlResult.ok) { hardError = true; break; }
+      const spawnExpiresAtIso = futureIsoForRegistry(spawnTtlResult.ttlSeconds);
+      const mintResult = mintRoleLifecycleAction(projectRoot, actionId, 'role-spawn', 'claude-native', repoId, binding.worktree_id, binding.plan_digest, spawnPolicyDigest, binding.session_generation_id, spawn.role, payload, spawnExpiresAtIso);
+      if (!mintResult.ok) { hardError = true; break; }
+      const t1 = transitionRoleBinding(projectRoot, binding.worktree_id, binding.plan_digest, spawn.profileDigest, binding.session_generation_id, spawn.role, spawn.fromState, spawn.toState, spawn.fromRecord, { driver: spawn.driver, respawn_count: spawn.respawnCount, pending_action_id: mintResult.actionId });
+      if (!t1.ok) { hardError = true; break; }
+      transitioned.push({ spawn, record: t1.record });
+      const operation = resolveHostOperationForAction(mintResult.action.kind, mintResult.action.runtime);
+      collectedActions.push(operation
+        ? Object.assign(actionForEnvelope(mintResult.action), { operation })
+        : actionForEnvelope(mintResult.action));
+    }
+    if (hardError) {
+      for (const t of transitioned) {
+        transitionRoleBinding(projectRoot, binding.worktree_id, binding.plan_digest, t.spawn.profileDigest, binding.session_generation_id, t.spawn.role, t.spawn.toState, 'QUARANTINED', t.record, { failure_reason: 'batch-sibling-transition-failed' });
+      }
       invalidError('ensure', 'INTERNAL_ERROR');
       return;
-    }
-    if (teamResult.state === 'FAILED') {
-      sawUnavailable = true;
-    } else {
-      // PENDING or SUCCEEDED: mint/return role-spawn action(s) too, in the
-      // SAME call, ordered AFTER team-ensure's own action when it is
-      // freshly PENDING. Role-spawn actions stay one-per-role (PLAN.md's
-      // batching applies ONLY to the codex-app-server supervisor-start).
-      sawActionRequired = true;
-      if (teamResult.state === 'PENDING' && teamResult.action) collectedActions.push(actionForEnvelope(teamResult.action));
-      const transitioned = [];
-      for (const spawn of claudeSendmessageGroup) {
-        const spawnPolicyDigest = sha256String(canonicalJSONStringify(pair.routing));
-        const actionId = generateActionId();
-        // M6: agent_type is the role's OWN canonical value, never the
-        // harness-generic 'general-purpose' fallback -- see the sibling fix
-        // in spawnOrRehydrateSingleRole above for the full rationale.
-        const payload = buildRoleSpawnPayload('wp3-support-plane', spawn.role, spawn.role, null, 'Execute `ready --action <id>`, read the validated bootstrap/bundle, then enter WAITING.');
-        const spawnTtlResult = computeActionTtlSeconds(pair.policy, binding.expiry);
-        if (!spawnTtlResult.ok) { hardError = true; break; }
-        const spawnExpiresAtIso = futureIsoForRegistry(spawnTtlResult.ttlSeconds);
-        const mintResult = mintRoleLifecycleAction(projectRoot, actionId, 'role-spawn', 'claude-native', repoId, binding.worktree_id, binding.plan_digest, spawnPolicyDigest, binding.session_generation_id, spawn.role, payload, spawnExpiresAtIso);
-        if (!mintResult.ok) { hardError = true; break; }
-        const t1 = transitionRoleBinding(projectRoot, binding.worktree_id, binding.plan_digest, spawn.profileDigest, binding.session_generation_id, spawn.role, spawn.fromState, spawn.toState, spawn.fromRecord, { driver: spawn.driver, respawn_count: spawn.respawnCount, pending_action_id: mintResult.actionId, team_ensure_action_id: teamResult.actionId });
-        if (!t1.ok) { hardError = true; break; }
-        transitioned.push({ spawn, record: t1.record });
-        // M7 (arch-testing-20260808T142647Z), corrected after a HARD NO-GO:
-        // the freshly-minted action must surface its resolved `operation` on
-        // THIS call's envelope via the PURE, side-effect-free
-        // resolveHostOperationForAction(kind,runtime) lookup ONLY -- never
-        // interpretRoleLifecycleAction, which (even with a no-op executor)
-        // reaches consumeInterpreterActionOnce BEFORE any real Agent(...)
-        // call ever runs, permanently burning the action's one-time-use
-        // token with no genuine execution having happened. The action stays
-        // genuinely interpretable (consumable exactly once, executor firing
-        // for real) for whichever REAL caller eventually performs the actual
-        // Agent(...) spawn.
-        const operation = resolveHostOperationForAction(mintResult.action.kind, mintResult.action.runtime);
-        collectedActions.push(operation
-          ? Object.assign(actionForEnvelope(mintResult.action), { operation })
-          : actionForEnvelope(mintResult.action));
-      }
-      if (hardError) {
-        for (const t of transitioned) {
-          transitionRoleBinding(projectRoot, binding.worktree_id, binding.plan_digest, t.spawn.profileDigest, binding.session_generation_id, t.spawn.role, t.spawn.toState, 'QUARANTINED', t.record, { failure_reason: 'batch-sibling-transition-failed' });
-        }
-        invalidError('ensure', 'INTERNAL_ERROR');
-        return;
-      }
     }
   }
 
@@ -11193,6 +13053,16 @@ function classifyIngestionNotifyArtifactSafely(projectRoot, artifact) {
     return coordinationArtifactModule().classifyIngestionNotifyArtifact(artifact, { projectRoot });
   } catch (err) {
     return { valid: false, reason: 'classifier-unavailable' };
+  }
+}
+
+function validateIngestionResultForSafely(requestPath, approvalPath, resultPath, projectRoot, slug) {
+  try {
+    const api = coordinationArtifactModule();
+    if (!api || typeof api.validateIngestionResultFor !== 'function') return { valid: false, reason: 'validator-unavailable' };
+    return api.validateIngestionResultFor(requestPath, approvalPath, resultPath, { projectRoot, slug });
+  } catch (error) {
+    return { valid: false, reason: 'validator-failed' };
   }
 }
 
@@ -12446,13 +14316,37 @@ function main(argv) {
 module.exports = {
   renderPosixDirect,
   parsePosixDirect,
+  claudeReadyBootstrapMessageFor,
   makeResult,
   resolvePolicyPair,
   isValidPolicy,
+  isValidPolicyV2,
+  projectPolicyV2ToV1,
   isValidRouting,
   CANONICAL_ROLES,
   STATUS_ENUM,
   DETAIL_ENUM,
+  // R131 P2 GREEN-A1: subject-bundle seed schema PATH/SEED/MAT seams plus the
+  // request-birth role-bound materializer selector.
+  isSafeP2SubjectPath,
+  validateP2SubjectBundleSeedRecord,
+  sealP2SubjectBundleInput,
+  buildP2SubjectBundleMaterialization,
+  s16MaterializeArchitectSubjectBundle,
+  // R131 P2 GREEN-A2a: generic PREP-binding record validators (review/intent/receipt).
+  validateRootConsultReviewRecord,
+  validatePrepPublicationIntentRecord,
+  validatePrepPublicationReceiptRecord,
+  prepPublicationIntentPathFor,
+  prepPublicationReceiptPathFor,
+  rootConsultReviewPathFor,
+  prepPublicationPredecessorRole,
+  reservePrepPublicationIntent,
+  // R131 P2 GREEN-A2c: exact PREP-publication verdict grammar parser.
+  validatePrepPublicationGrammar,
+  // R131 P2 GREEN-A2d: completion/conflict transition seams.
+  completePrepPublicationIntent,
+  conflictPrepPublicationIntent,
   // WP3 registry/identity/session/binding/grant internals -- exported for direct
   // node:test coverage of the security-critical logic (bats drives the CLI
   // envelope surface; these unit-level tests drive the internals directly).
@@ -12471,6 +14365,8 @@ module.exports = {
   writeRegistryRecordReplace,
   publishNoClobber,
   readRegistryRecord,
+  classifyIngestionNotifyArtifactSafely,
+  validateIngestionResultForSafely,
   withRegistryLock,
   getRuntimeIdentity,
   resolveSessionGeneration,
@@ -12483,6 +14379,7 @@ isCanonicalIsoUtc,
   createMainOrchestratorBinding,
   rebindMainOrchestratorBindingForNewPlan,
   mainOrchestratorBindingPathFor,
+  findLiveMainOrchestratorBindingForScope,
   hasLiveMainOrchestratorBindingForScope,
   createRoleActorBinding,
   validateRoleActorBindingFor,
@@ -12562,6 +14459,15 @@ admitAndCreateRootSourceBinding,
   deleteClaudeId01TraceForSession,
   checkClaudeId01ProofComplete,
   checkClaudeId01RuntimeCapability,
+  CLAUDE_PEER_BINDING_SCHEMA,
+  CLAUDE_PEER_BINDING_KEYS,
+  claudePeerBindingPathFor,
+  validateClaudePeerBindingRecord,
+  readClaudePeerBinding,
+  resolveClaudePeerObservedActorAuthority,
+  ensureClaudePeerBindingForObservedActor,
+  validateClaudePeerBindingFor,
+  findUniqueClaudePeerBindingForTarget,
   // Section C parity (item 4): the ONE closed-shape/range/chronology
   // validator for a completed attestation, now also called (via a lazy
   // require, same circular-import-safe pattern as

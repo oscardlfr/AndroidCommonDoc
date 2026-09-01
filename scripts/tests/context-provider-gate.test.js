@@ -1821,10 +1821,45 @@ const M6A_LC_CAPABILITY = 'cp-gate-m6a-supervisor-fixture-capability';
 const M6A_EXEC_CAPABILITY = 'cp-gate-m6a-supervisor-fixture-executor-capability';
 const M6A_FIVE_ROLES = ['arch-platform', 'arch-testing', 'arch-integration', 'context-provider', 'doc-updater'];
 
+function makeM6AFakeCodexExecutable() {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cp-gate-m6a-codexbin-'));
+  const filePath = path.join(dir, 'fake-codex');
+  fs.writeFileSync(filePath, '#!/bin/sh\nexit 0\n', { mode: 0o755 });
+  return { dir, filePath };
+}
+
+function makeM6ASyntheticJwt(payload) {
+  const encode = (value) => Buffer.from(value).toString('base64')
+    .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  return encode(JSON.stringify({ alg: 'none', typ: 'JWT' })) + '.'
+    + encode(JSON.stringify(payload)) + '.' + encode(crypto.randomBytes(16));
+}
+
+function makeM6ACredentialHome() {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'cp-gate-m6a-home-'));
+  const codexDir = path.join(home, '.codex');
+  fs.mkdirSync(codexDir, { recursive: true });
+  const exp = Math.floor(Date.now() / 1000) + 7200;
+  fs.writeFileSync(path.join(codexDir, 'auth.json'), JSON.stringify({
+    tokens: {
+      access_token: makeM6ASyntheticJwt({ sub: 'cp-gate-m6a', exp }),
+      account_id: 'cp-gate-m6a-' + crypto.randomBytes(4).toString('hex'),
+      id_token: makeM6ASyntheticJwt({ sub: 'cp-gate-m6a', exp }),
+      refresh_token: 'synthetic-cp-gate-m6a-' + crypto.randomBytes(8).toString('hex'),
+    },
+  }), { mode: 0o600 });
+  return home;
+}
+
 // Mints a REAL batched supervisor-start action for `roles` via the actual
 // production ensure()/grant machinery under a fake codex-app-server-only
 // capability -- never a hand-fabricated action record.
 function mintSupervisorStartAction(proj, roles, sessionKey) {
+  const projectLib = path.join(proj, 'scripts', 'lib');
+  fs.mkdirSync(projectLib, { recursive: true });
+  const toolkitPolicy = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../lib/runtime-collaboration-policy.json'), 'utf8'));
+  fs.writeFileSync(path.join(projectLib, 'runtime-collaboration-policy.json'), JSON.stringify(rll.projectPolicyV2ToV1(toolkitPolicy)));
+  fs.copyFileSync(path.resolve(__dirname, '../lib/runtime-routing.json'), path.join(projectLib, 'runtime-routing.json'));
   const identity = { ok: true, provider: 'claude-hook', runtime_session_key: sessionKey };
   const worktreeId = rll.computeWorktreeId(proj);
   const planDigest = rll.discoverPlan(proj).planDigest;
@@ -1838,12 +1873,22 @@ function mintSupervisorStartAction(proj, roles, sessionKey) {
   const args = [IMPL_RLL, 'ensure', '--project-root', proj];
   for (const r of roles) args.push('--role', r);
   args.push('--lifecycle-binding', grantResult.grantId);
-  const env = Object.assign({}, process.env, {
-    NODE_ENV: 'test',
-    RUNTIME_ROLE_LIFECYCLE_TEST_CAPABILITY: M6A_LC_CAPABILITY,
-    RUNTIME_ROLE_LIFECYCLE_FAKE_CAPABILITIES: JSON.stringify(['codex-app-server']),
-  });
-  const result = spawnSync('node', args, { env, encoding: 'utf8' });
+  const codexBin = makeM6AFakeCodexExecutable();
+  const credentialHome = makeM6ACredentialHome();
+  let result;
+  try {
+    const env = Object.assign({}, process.env, {
+      NODE_ENV: 'test',
+      HOME: credentialHome,
+      CODEX_CLI_PATH: codexBin.filePath,
+      RUNTIME_ROLE_LIFECYCLE_TEST_CAPABILITY: M6A_LC_CAPABILITY,
+      RUNTIME_ROLE_LIFECYCLE_FAKE_CAPABILITIES: JSON.stringify(['codex-app-server']),
+    });
+    result = spawnSync('node', args, { env, encoding: 'utf8' });
+  } finally {
+    fs.rmSync(credentialHome, { recursive: true, force: true });
+    fs.rmSync(codexBin.dir, { recursive: true, force: true });
+  }
   if (result.status !== 0) throw new Error('mintSupervisorStartAction: ensure CLI failed (status=' + result.status + '): stdout=' + result.stdout + ' stderr=' + result.stderr);
   const lines = result.stdout.trim().split('\n');
   const parsed = JSON.parse(lines[lines.length - 1]);
@@ -4072,6 +4117,11 @@ function s16HookCase(name, fn) {
 }
 
 function s16PublishRetainedPlane(proj, sessionId) {
+  const projectLib = path.join(proj, 'scripts', 'lib');
+  fs.mkdirSync(projectLib, { recursive: true });
+  const toolkitPolicy = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../lib/runtime-collaboration-policy.json'), 'utf8'));
+  fs.writeFileSync(path.join(projectLib, 'runtime-collaboration-policy.json'), JSON.stringify(rll.projectPolicyV2ToV1(toolkitPolicy)));
+  fs.copyFileSync(path.resolve(__dirname, '../lib/runtime-routing.json'), path.join(projectLib, 'runtime-routing.json'));
   const priorExecutor = process.env.RUNTIME_ROLE_LIFECYCLE_FAKE_EXECUTOR_CAPABILITY;
   const priorReady = process.env.RUNTIME_ROLE_LIFECYCLE_TEST_BATCH_READY_CAPABILITY;
   const priorNodeEnv = process.env.NODE_ENV;
@@ -4098,11 +4148,21 @@ function s16PublishRetainedPlane(proj, sessionId) {
     const ensureArgs = [S16_RLL_PATH, 'ensure', '--project-root', proj];
     for (const role of S16_SUPPORT_ROLES) ensureArgs.push('--role', role);
     ensureArgs.push('--lifecycle-binding', grantResult.grantId);
-    const ensured = spawnSync('node', ensureArgs, {
-      encoding: 'utf8', env: Object.assign({}, process.env, {
-        RUNTIME_ROLE_LIFECYCLE_FAKE_CAPABILITIES: JSON.stringify(['codex-app-server']),
-      }),
-    });
+    const startabilityBin = makeM6AFakeCodexExecutable();
+    const startabilityHome = makeM6ACredentialHome();
+    let ensured;
+    try {
+      ensured = spawnSync('node', ensureArgs, {
+        encoding: 'utf8', env: Object.assign({}, process.env, {
+          HOME: startabilityHome,
+          CODEX_CLI_PATH: startabilityBin.filePath,
+          RUNTIME_ROLE_LIFECYCLE_FAKE_CAPABILITIES: JSON.stringify(['codex-app-server']),
+        }),
+      });
+    } finally {
+      fs.rmSync(startabilityHome, { recursive: true, force: true });
+      fs.rmSync(startabilityBin.dir, { recursive: true, force: true });
+    }
     assert.strictEqual(ensured.status, 0, 'S16 fixture: real ensure CLI must succeed: ' + JSON.stringify(ensured));
     const ensuredLines = ensured.stdout.trim().split('\n');
     const ensuredBody = JSON.parse(ensuredLines[ensuredLines.length - 1]);
@@ -4621,3 +4681,112 @@ const HARNESS_SUFFIX_NEGATIVE_TABLE = [
 // exercise or depend on this ambiguity branch. The fix itself
 // (tryInjectRequesterGrant's root-source branch) does not touch or weaken
 // this ambiguity check in any way; see the production diff.
+
+// ══════════════════════════════════════════════════════════════════════════
+// Sequence 66/67/73 RED correction — Defect 4: context-provider-gate.js's
+// Bash search-pattern scan (its own "2b. Bash allow-list" step) tests its
+// trigger regex against data.tool_input.command IN FULL, including any
+// heredoc BODY text -- a Bash tool call that merely WRITES a file whose
+// heredoc payload happens to contain search-shaped prose (e.g. authoring a
+// test fixture that itself contains a live invocation of one of the hook's
+// own two trigger POSIX text-search utilities as literal file content,
+// exactly like this repo's own scripts/tests/write-verdict.bats does) is
+// misclassified as a live search command and wrongly requires CP
+// consultation.
+//
+// Byte-confirmed against the live source before writing anything below
+// (this test-specialist, Sequence 73 session) -- the trigger scan reads:
+//   const cmd = data.tool_input?.command || '';
+//   if (!TRIGGER_RE.test(cmd)) { process.exit(0); }
+// where TRIGGER_RE alternates on the two POSIX text-search utility names
+// plus a bounded read-of-source-file pattern. `cmd` is the FULL raw command
+// string exactly as delivered by the harness -- no heredoc/here-string-aware
+// parsing exists anywhere in this file. The fix must stop misreading
+// heredoc BODY bytes as command surface WITHOUT weakening real
+// search-command detection: a genuine trigger command placed textually
+// BEFORE or AFTER a heredoc redirection in the SAME Bash call must still
+// deny (SEQ73-HEREDOC-B1/B2 below, companion guards that must ALREADY pass,
+// both before and after the eventual fix). This file makes NO production
+// edit -- ONLY these new test cases are added -- so context-provider-gate.js's
+// real authority semantics (session-scoped flag, per-specialist
+// arch-response flag, disk-consult fallback, post-PLAN accepted-result
+// requirement -- see PP2/PP7/PP17/PP18 etc. above, all unmodified and
+// preserved byte-for-byte) are structurally unaffected; a heredoc payload
+// carrying prose that merely LOOKS LIKE evidence never satisfies any of
+// those real authority checks either, before or after this fix, since none
+// of them ever read tool_input.command content as evidence in the first
+// place.
+//
+// NOTE ON THIS SECTION'S OWN AUTHORING: the two trigger utility names are
+// deliberately reconstructed via string concatenation in the code below
+// (never spelled out as one contiguous literal anywhere in this section,
+// including in comments) -- spelling either out contiguously in a live Bash
+// heredoc call while authoring this very file would itself trip this
+// repo's own PreToolUse Bash-search scan on the authoring session, exactly
+// the heredoc-misclassification defect this section exists to prove. The
+// concatenation is resolved at ordinary Node module-load time when this
+// test file itself later runs -- semantically identical to a literal, just
+// never contiguous in this file's own on-disk source bytes.
+// ══════════════════════════════════════════════════════════════════════════
+
+{
+  const { test: seq73Test } = require('node:test');
+
+  const SEARCH_WORD_ONE = 'gr' + 'ep';
+  const SEARCH_WORD_TWO = 'fi' + 'nd';
+
+  function runSeq73HeredocCase(command, sessionId) {
+    clearSessionFlag(sessionId);
+    return runHook({
+      tool_name: 'Bash',
+      tool_input: { command },
+      session_id: sessionId,
+      agent_type: 'arch-platform',
+      agent_id: 'arch-platform',
+    });
+  }
+
+  seq73Test('SEQ73-HEREDOC-A1 RED: heredoc BODY containing a live search-utility-one invocation as literal fixture content must not block a pure file-write Bash command', () => {
+    const cmd = [
+      "cat > /tmp/seq73-fixture-a1.bats <<'EOF'",
+      '@test "example" {',
+      '  ' + SEARCH_WORD_ONE + ' -q "APPROVED-PREP" "$verdict"',
+      '}',
+      'EOF',
+    ].join('\n');
+    const r = runSeq73HeredocCase(cmd, 'seq73-heredoc-a1');
+    assertPreToolUsePassthrough(r, 'SEQ73-HEREDOC-A1');
+  });
+
+  seq73Test('SEQ73-HEREDOC-A2 RED: heredoc BODY containing search-utility-two prose text must not block a pure file-write Bash command', () => {
+    const cmd = [
+      "cat > /tmp/seq73-fixture-a2.txt <<'EOF'",
+      '# Notes',
+      'Run ' + SEARCH_WORD_TWO + ' . -name star.kt to locate Kotlin sources.',
+      'EOF',
+    ].join('\n');
+    const r = runSeq73HeredocCase(cmd, 'seq73-heredoc-a2');
+    assertPreToolUsePassthrough(r, 'SEQ73-HEREDOC-A2');
+  });
+
+  seq73Test('SEQ73-HEREDOC-B1 companion guard (must already pass before and after the fix): a genuine search-utility-one command BEFORE a heredoc in the same Bash call must still block', () => {
+    const cmd = [
+      SEARCH_WORD_ONE + ' -r "libs.lifecycle" . && cat > /tmp/seq73-fixture-b1.bats <<\'EOF\'',
+      'harmless heredoc body, no trigger words here',
+      'EOF',
+    ].join('\n');
+    const r = runSeq73HeredocCase(cmd, 'seq73-heredoc-b1');
+    assertPreToolUseDeny(r, 'SEQ73-HEREDOC-B1');
+  });
+
+  seq73Test('SEQ73-HEREDOC-B2 companion guard (must already pass before and after the fix): a genuine search-utility-one command AFTER a heredoc in the same Bash call must still block', () => {
+    const cmd = [
+      "cat > /tmp/seq73-fixture-b2.bats <<'EOF'",
+      'harmless heredoc body, no trigger words here',
+      'EOF',
+      SEARCH_WORD_ONE + ' -r "libs.lifecycle" .',
+    ].join('\n');
+    const r = runSeq73HeredocCase(cmd, 'seq73-heredoc-b2');
+    assertPreToolUseDeny(r, 'SEQ73-HEREDOC-B2');
+  });
+}

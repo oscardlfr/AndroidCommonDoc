@@ -754,7 +754,7 @@
       "description": "Analyze external content and extract patterns for routing to docs. Use when asked to ingest an article, URL, or pasted content.",
       "category": "guides",
       "tier": "extended",
-      "hash": "sha256:172a0adbdec9432456ac6777228364e1e00c5399b49304414eff90b7569175a6",
+      "hash": "sha256:e3f7a2186c05b8f2fd675cad23bbd8621a678fc8e0ad9d1fb1be40263d47f6af",
       "dependencies": [],
       "frontmatter": {
         "name": "ingest-content",
@@ -788,7 +788,7 @@
       "description": "Show project context dashboard. Optionally ensures the persistent support plane with --orchestrate <slug> flag.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:5499d0437f7abf293fadf7f269e10614d8a5a44661252a33f7e49dcca94d9aa5",
+      "hash": "sha256:f53a6042f3ea763667bb5f995ea6a494b528c74aa483374967932bf976b1fc31",
       "dependencies": [],
       "frontmatter": {
         "name": "init-session",
@@ -958,7 +958,7 @@
       "description": "Monitor upstream doc sources for version drift and deprecations. Use when asked to check for outdated dependencies or doc freshness.",
       "category": "guides",
       "tier": "extended",
-      "hash": "sha256:2a0084a0a0f9e63a10b055f101fc09a866357095634763a3dd08568fa0082a3d",
+      "hash": "sha256:156c5141c3f206415fe3acda582b21516d7146141db4341e5d483916193ba637",
       "dependencies": [],
       "frontmatter": {
         "name": "monitor-docs",
@@ -1134,7 +1134,7 @@
       "description": "Resume session with a CEO/CTO dashboard — shows status by department from last session.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:976f4ff0e5ef36c42782955cc34a9823832e9035021168499f84ae06c4b39d4c",
+      "hash": "sha256:c0f54caaf7d8de5523bab61e49333d02a2f4b44499c5e6c9810858366350bdcf",
       "dependencies": [],
       "frontmatter": {
         "name": "resume-work",
@@ -1835,7 +1835,7 @@
       "description": "Smart task routing — analyzes freeform text and delegates to the right agent or skill.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:355a73921919e12e1ff0bc4ca5b31b5bc451938e4515424853bcfe32536107b5",
+      "hash": "sha256:f6c6ab7255fbeaff865441c91c3510854dcf26f97f654a0f2af19b5731a03dd4",
       "dependencies": [],
       "frontmatter": {
         "name": "work",

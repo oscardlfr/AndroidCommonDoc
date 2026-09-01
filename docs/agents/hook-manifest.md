@@ -2,7 +2,7 @@
 scope: [agents, hooks, workflow]
 sources: [androidcommondoc]
 targets: [all]
-version: 4
+version: 5
 last_updated: "2026-08"
 description: "Consumer hook manifest: classifies all 37 L0 hook files as consumer-required / consumer-optional / l0-internal"
 slug: hook-manifest
@@ -42,6 +42,17 @@ These are two separate steps — both must be completed for a hook to be active.
 - Every other hook (all `/sync-l0`-propagated `.js` hooks, plus the remaining `.sh` hooks) requires **manual** `settings.json` registration.
 
 This is the gap the manifest addresses: files landing on disk is not the same as registration. The L2 consumer project currently registers 5 of 12 consumer-required hooks; 7 are missing.
+
+### Runtime Activation (Registered ≠ Executed)
+
+Propagation and registration are still not proof of execution — **registration on disk is not proof that a hook actually ran at runtime**. Confirming real activation requires:
+
+- **Safe-mode disables hooks.** Claude Code 2.1.219 `--safe-mode` disables hooks entirely and sets `CLAUDE_CODE_SAFE_MODE=1` in the process environment. Any enforcement probe must statically reject both the flag and an inherited `CLAUDE_CODE_SAFE_MODE`, and run with an isolated/sealed configuration: explicit `--settings` plus empty `--setting-sources`.
+- **Runtime compatibility check** against the pinned Claude Code version: registry matcher name, actual dispatched payload name, the firing hook event, the hook's exit code, and the resulting host denial must all be verified together — none alone is sufficient.
+- **Manual invocation and a derived summary are each insufficient alone.** Treat a hook as proven-active only when an automatic (non-manual) triggering event is corroborated by independent owner-stream evidence, with confirmed absence of any native task/child/result/handle/survivor for the blocked call.
+- Full probe methodology: [hook-authoring-conventions.md#safe-mode-and-hook-enforcement-probes](hook-authoring-conventions.md#safe-mode-and-hook-enforcement-probes).
+
+This subsection documents verification methodology only; it does not assert that any specific in-flight enforcement attempt (I-BIND) has been accepted.
 
 ## Hook Table
 

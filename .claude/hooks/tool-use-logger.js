@@ -9,6 +9,136 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const zlib = require('zlib');
+const crypto = require('crypto');
+
+const DIGEST_RE = /^[0-9a-f]{64}$/;
+const ADMISSION_SCHEMA = 'runtime/host-observation-admission/v1';
+const TRUST_ANCHOR_SCHEMA = 'runtime/host-observation-trust-anchor/v1';
+const PENDING_SCHEMA = 'runtime/raw-observation-pending/v1';
+const PROJECTION_SCHEMA = 'runtime/tool-use-observation-projection/v1';
+
+function sha256hex(value) {
+  return crypto.createHash('sha256').update(String(value), 'utf8').digest('hex');
+}
+
+function readJsonObject(filePath) {
+  try {
+    const raw = fs.readFileSync(filePath, 'utf8');
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? { raw, parsed } : null;
+  } catch {
+    return null;
+  }
+}
+
+function exactKeySet(value, expectedKeys) {
+  return Object.keys(value).sort().join('\u0000') === expectedKeys.slice().sort().join('\u0000');
+}
+
+function decodeCanonicalBase64(value) {
+  if (typeof value !== 'string' || value.length === 0) return null;
+  try {
+    const decoded = Buffer.from(value, 'base64');
+    return decoded.length > 0 && decoded.toString('base64') === value ? decoded : null;
+  } catch {
+    return null;
+  }
+}
+
+function verifiedAdmission(root, key, sessionDigest, toolUseDigest) {
+  const anchorRecord = readJsonObject(path.join(root, 'trust', 'host-observer-key.json'));
+  const ticketRecord = readJsonObject(path.join(root, 'admission', `${key}.json`));
+  if (!anchorRecord || !ticketRecord) return null;
+
+  const anchor = anchorRecord.parsed;
+  const ticket = ticketRecord.parsed;
+  if (
+    !exactKeySet(anchor, ['schema', 'key_id', 'public_key_spki_der_base64']) ||
+    anchor.schema !== TRUST_ANCHOR_SCHEMA ||
+    typeof anchor.key_id !== 'string' || !DIGEST_RE.test(anchor.key_id) ||
+    !exactKeySet(ticket, ['schema', 'session_digest', 'tool_use_digest', 'admission_proof', 'key_id', 'signature_ed25519_base64']) ||
+    ticket.schema !== ADMISSION_SCHEMA ||
+    ticket.session_digest !== sessionDigest ||
+    ticket.tool_use_digest !== toolUseDigest ||
+    typeof ticket.admission_proof !== 'string' || !DIGEST_RE.test(ticket.admission_proof) ||
+    ticket.key_id !== anchor.key_id
+  ) return null;
+
+  const spki = decodeCanonicalBase64(anchor.public_key_spki_der_base64);
+  const signature = decodeCanonicalBase64(ticket.signature_ed25519_base64);
+  if (!spki || !signature || crypto.createHash('sha256').update(spki).digest('hex') !== anchor.key_id) return null;
+
+  try {
+    const publicKey = crypto.createPublicKey({ key: spki, format: 'der', type: 'spki' });
+    if (publicKey.asymmetricKeyType !== 'ed25519') return null;
+    const signedPayload = JSON.stringify([
+      ADMISSION_SCHEMA,
+      sessionDigest,
+      toolUseDigest,
+      ticket.admission_proof,
+      anchor.key_id,
+    ]);
+    return crypto.verify(null, Buffer.from(signedPayload, 'utf8'), publicKey, signature) ? ticket : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Project only evidence that the host admitted and the boundary authenticated.
+ * The receipt is random host-origin evidence, not a public or reusable action
+ * credential. Missing, malformed, or hand-written records remain untrusted.
+ */
+function projectTrustedObservation(data, success) {
+  try {
+    if (data.hook_event_name !== 'PostToolUse' && data.hook_event_name !== 'PostToolUseFailure') return;
+    if (typeof data.session_id !== 'string' || data.session_id.length === 0) return;
+    if (typeof data.tool_use_id !== 'string' || data.tool_use_id.length === 0) return;
+    if (typeof data.tool_name !== 'string' || data.tool_name.length === 0) return;
+
+    // Projection is confined to an explicitly owned observation root. Never
+    // infer it from the ordinary project/log directory.
+    const observationRoot = process.env.RUNTIME_HOST_OBSERVATION_ROOT;
+    if (typeof observationRoot !== 'string' || observationRoot.length === 0) return;
+
+    const sessionDigest = sha256hex(data.session_id);
+    const toolUseDigest = sha256hex(data.tool_use_id);
+    const key = `${sessionDigest}__${toolUseDigest}`;
+    const pending = readJsonObject(path.join(observationRoot, 'pending', `${key}.pre.json`));
+    const admission = verifiedAdmission(observationRoot, key, sessionDigest, toolUseDigest);
+    if (!admission || !pending) return;
+
+    const capture = pending.parsed;
+    if (
+      capture.schema !== PENDING_SCHEMA ||
+      capture.session_digest !== sessionDigest ||
+      capture.tool_use_digest !== toolUseDigest ||
+      capture.tool_name !== data.tool_name ||
+      typeof capture.payload_digest !== 'string' ||
+      !DIGEST_RE.test(capture.payload_digest) ||
+      capture.admission_receipt !== admission.admission_proof
+    ) return;
+
+    const projectionDir = path.join(observationRoot, 'projections');
+    const projection = {
+      schema: PROJECTION_SCHEMA,
+      correlated: true,
+      success,
+      session_digest: sessionDigest,
+      tool_use_digest: toolUseDigest,
+      observed_at: new Date().toISOString(),
+    };
+    fs.mkdirSync(projectionDir, { recursive: true });
+    // First authenticated projection wins; replay must not recompute evidence.
+    fs.writeFileSync(
+      path.join(projectionDir, `${key}.json`),
+      JSON.stringify(projection),
+      { encoding: 'utf8', flag: 'wx' },
+    );
+  } catch {
+    // Observation projection is best-effort and never changes logger fail-open semantics.
+  }
+}
 
 let input = '';
 const stdinTimeout = setTimeout(() => process.exit(0), 5000);
@@ -54,7 +184,9 @@ process.stdin.on('end', () => {
     }
 
     // ── success ──────────────────────────────────────────────────────────────
-    const success = (data.tool_response?.error == null);
+    const success = data.hook_event_name === 'PostToolUseFailure'
+      ? false
+      : (data.tool_response?.error == null);
 
     // ── cp_bypass_blocked ────────────────────────────────────────────────────
     const BLOCKABLE_TOOLS = new Set(['Bash', 'Grep', 'Glob', 'Read']);
@@ -133,6 +265,11 @@ process.stdin.on('end', () => {
     } catch {}
 
     fs.appendFileSync(logPath, JSON.stringify(entry) + '\n');
+
+    // Keep the established fourteen-key log entry untouched. A separate,
+    // digest-only projection is emitted only from boundary-authenticated
+    // evidence, never from ordinary or caller-created hook payloads.
+    projectTrustedObservation(data, success);
 
   } catch (e) {
     // Fail open — never block on errors

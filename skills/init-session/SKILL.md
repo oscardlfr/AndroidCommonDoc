@@ -18,6 +18,18 @@ Show project context — available agents, skills, modules, and business docs.
 
 The `<slug>` is required when `--orchestrate` is passed. Example: `/init-session --orchestrate bl-w32-07`.
 
+## Canonical Runtime Entrypoint
+
+All dashboard and support-plane operations enter through the shared product flow:
+
+```bash
+node scripts/lib/runtime-collaboration-entrypoints.cjs execute --entrypoint init-session --project-root <absolute> --intent <base64url canonical JSON>
+```
+
+The Bash call must be one standalone direct Node command. Replace `<absolute>` with the literal absolute project path before invoking it. Never use `$(pwd)`, `$PWD`, `cd`, shell variables, command substitution, pipes, redirects, or command separators in this authenticated entrypoint call.
+
+Encode exactly `{"mode":"dashboard"}` for the read-only form or `{"mode":"start"}` for orchestration. Treat `READY` as a proven dashboard result, execute only returned `ACTION_REQUIRED` actions through the runtime adapter, and report `BLOCKED|UNAVAILABLE|FAILED` without inventing readiness.
+
 ## Step 0 — Core Support-Plane Dispatch (when --orchestrate <slug> is passed)
 
 Skip this step if `--orchestrate` flag is absent. Default behavior is read-only dashboard.

@@ -112,6 +112,18 @@ const RETAINED_SUPPORT_ROLES = Object.freeze([
  */
 function establishRetainedCodexSupportPlane(projectRoot, mainBinding) {
   projectRoot = fs.realpathSync(projectRoot);
+  // This helper explicitly exercises the retained Codex compatibility lane.
+  // Production's current v2 policy pins the Claude-native lane, so project a
+  // canonical v1 policy only into this hermetic fixture project before the
+  // real ensure call. Dedicated v2 peer-custody suites cover the Claude lane.
+  const fixtureLibDir = path.join(projectRoot, 'scripts', 'lib');
+  fs.mkdirSync(fixtureLibDir, { recursive: true });
+  const fixturePolicy = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../../lib/runtime-collaboration-policy.json'), 'utf8'));
+  fixturePolicy.schema = 'runtime-collaboration-policy/v1';
+  fixturePolicy.version = 1;
+  delete fixturePolicy.selection;
+  fs.writeFileSync(path.join(fixtureLibDir, 'runtime-collaboration-policy.json'), JSON.stringify(fixturePolicy, null, 2) + '\n');
+  fs.copyFileSync(path.resolve(__dirname, '../../lib/runtime-routing.json'), path.join(fixtureLibDir, 'runtime-routing.json'));
   const roles = RETAINED_SUPPORT_ROLES.slice().sort();
   const grant = rll.mintLifecycleCommandGrant(
     projectRoot, mainBinding, rc.sha256String('ensure:' + roles.join(',')), roles,

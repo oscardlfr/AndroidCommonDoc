@@ -266,3 +266,65 @@ run_hook() {
   run_hook
   [ "$status" -eq 2 ]
 }
+
+# ══════════════════════════════════════════════════════════════════════════
+# Sequence 66/67/73 RED correction — Defect 4: this hook scans the FULL raw
+# Bash tool-call command string for BLOCK_PATTERNS/ALLOWLIST_PATTERNS,
+# including any heredoc BODY text -- a Bash call that only WRITES a fixture
+# file via heredoc, whose payload merely CONTAINS Gradle-test-shaped text as
+# literal file content (e.g. authoring a bats/doc fixture that itself
+# mentions "./gradlew test" or ":module:test" as example prose -- exactly
+# the kind of content this very test suite's own files legitimately
+# contain), is misclassified as a live Gradle test invocation and wrongly
+# blocked. Byte-confirmed against the live source before writing anything
+# below (this test-specialist, Sequence 73 session): BLOCK_PATTERNS is
+# tested against `command` (the full raw tool_input.command string) with no
+# heredoc/here-string-aware parsing anywhere in this file.
+#
+# SEQ73-HD1/HD2 are the genuine RED cases (must be exit 0, currently exit 2).
+# SEQ73-BL1/BL2 are companion guards that must ALREADY pass, both before and
+# after the eventual fix: a genuine, live trigger command placed textually
+# BEFORE or AFTER a heredoc redirection in the SAME Bash call must still
+# block -- proving the fix narrows to heredoc BODY bytes only, and must
+# never stop scanning real command text merely because a heredoc appears
+# somewhere in the same string. Distinct from the ALREADY-decided-against
+# "BL-W43-02: BLOCK: gh pr create body with gradlew test (no bypass — by
+# design)" case above (a short inline prose string, not a heredoc payload,
+# intentionally still blocked and unaffected by this defect/fix).
+# ══════════════════════════════════════════════════════════════════════════
+
+@test "SEQ73-HD1 RED: heredoc BODY containing './gradlew test' as literal fixture content must not block a pure file-write command" {
+  make_input 'cat > /tmp/seq73-fixture-hd1.bats <<EOF
+@test example {
+  run ./gradlew test
+}
+EOF'
+  run_hook
+  [ "$status" -eq 0 ]
+}
+
+@test "SEQ73-HD2 RED: heredoc BODY containing ':module:test' prose as literal doc content must not block a pure file-write command" {
+  make_input 'cat > /tmp/seq73-fixture-hd2.md <<EOF
+# Notes
+Historically this repo invoked :core-network:test directly before the CLI wrapper existed.
+EOF'
+  run_hook
+  [ "$status" -eq 0 ]
+}
+
+@test "SEQ73-BL1 companion guard (must already pass before and after the fix): a genuine './gradlew test' BEFORE a heredoc in the same call must still block" {
+  make_input './gradlew test && cat > /tmp/seq73-fixture-bl1.md <<EOF
+harmless heredoc body, no trigger words here
+EOF'
+  run_hook
+  [ "$status" -eq 2 ]
+}
+
+@test "SEQ73-BL2 companion guard (must already pass before and after the fix): a genuine './gradlew test' AFTER a heredoc in the same call must still block" {
+  make_input 'cat > /tmp/seq73-fixture-bl2.md <<EOF
+harmless heredoc body, no trigger words here
+EOF
+./gradlew test'
+  run_hook
+  [ "$status" -eq 2 ]
+}

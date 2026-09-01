@@ -7,8 +7,8 @@ status: active
 layer: L0
 parent: agents-hub
 category: agents
-version: 2
-last_updated: "2026-07-11"
+version: 3
+last_updated: "2026-08"
 description: "Canonical authoring conventions for L0 PreToolUse/PostToolUse hook scripts: exit codes, stdin parsing, identity model, matching rules, and bypass pattern"
 ---
 
@@ -113,6 +113,22 @@ Name the bypass after the gate file (e.g. `push-authorization-gate.js` → `PUSH
 Inline bypass tokens (strings embedded in the Bash command, e.g. `[PREMATURE_EXEC_BYPASS]`) are also valid for command-level escape, but env vars are preferred for session-wide bypass.
 
 See `docs/guides/hook-bypass-recursive-pattern.md` for the recursive-gate problem that arises when gate-blocking strings appear in commit messages or PR bodies, and the pattern to avoid it.
+
+## Safe-Mode and Hook-Enforcement Probes
+
+Guidance for probing whether hooks are actually enforced by the host, distinct from authoring the hooks themselves.
+
+**Safe-mode disables hooks.** In Claude Code 2.1.219, `--safe-mode` disables hooks and sets `CLAUDE_CODE_SAFE_MODE=1` in the process environment. Any probe or test asserting automatic hook enforcement MUST reject `--safe-mode` and MUST NOT inherit `CLAUDE_CODE_SAFE_MODE` from the parent environment — clear it explicitly before launch.
+
+**Controlled probe setup**: use an isolated configuration/state root, an explicit sealed `--settings` file, and empty `--setting-sources`, so no ambient config can silently enable or disable hooks.
+
+**Three naming surfaces, not one.** The init registry and settings matcher key on `Task`; the assistant's display-level tool use shows `Agent`; the automatic hook payload/label also uses `Agent`. Match settings against the registry surface (`Task`) but validate the actual dispatched payload surface (`Agent`) — never assume the two names are interchangeable. Correlate events across surfaces by session ID and tool-use identity/digest, never by name equality.
+
+**What proves enforcement**: manual invocation of a hook script proves only that the script's own logic works — it is not evidence of host enforcement. A complete enforcement proof requires all of: automatic pre-dispatch invocation (the hook fires before the tool runs), an exit-2 denial from that automatic invocation, owner-stream corroboration (the raw session stream shows the same denial), and confirmed absence of any dispatched task/child/result/handle/survivor for the blocked call.
+
+**Summaries are fail-closed, not authoritative.** A derived summary/evaluator stays fail-closed by default, but when it looks stale or incomplete, direct audit of the sealed raw stream is authoritative over it — never accept a derived summary's verdict without checking the raw stream when they disagree.
+
+This section documents probe methodology only; it does not assert that any specific in-flight enforcement attempt (I-BIND) has been accepted.
 
 ## Reference Implementations
 

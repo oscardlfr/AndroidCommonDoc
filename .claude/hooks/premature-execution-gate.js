@@ -32,6 +32,8 @@ const path = require('path');
 const { getWaveSlug } = require('./hook-control-plane-utils');
 const crypto = require('crypto');
 const { spawnSync } = require('child_process');
+let runtimeRoleLifecycle = null;
+try { runtimeRoleLifecycle = require('../../scripts/lib/runtime-role-lifecycle.cjs'); } catch { runtimeRoleLifecycle = null; }
 
 // Canonical subject type names — matched with startsWith to tolerate
 // suffix-rotated peer names (e.g. toolkit-specialist-2 matches toolkit-specialist)
@@ -43,6 +45,25 @@ const SUBJECT_TYPES = [
   'data-layer-specialist',
   'doc-updater',
 ];
+
+// A root-source toolkit actor is dispatched by one exact runtime action, not
+// by the legacy human-authored specialist-dispatch artifact. Defer ONLY the
+// closed, standalone consultation protocol commands below to the later
+// requester/target grant gates, which validate and inject their one-use
+// action-correlated authority. This is not an allow on its own: malformed,
+// chained, wrong-script, wrong-role or unbound commands continue through the
+// ordinary PREP/dispatch gate or are denied by the authority hook.
+function isRootSourceProtocolCommand(toolName, agentType, toolInput, projectRoot) {
+  if (toolName !== 'Bash' || agentType !== 'toolkit-specialist' || !runtimeRoleLifecycle) return false;
+  const command = toolInput && toolInput.command;
+  if (typeof command !== 'string' || typeof runtimeRoleLifecycle.parsePosixDirect !== 'function') return false;
+  let argv;
+  try { argv = runtimeRoleLifecycle.parsePosixDirect(command); } catch { return false; }
+  if (!Array.isArray(argv) || argv.length < 3) return false;
+  const expectedScript = path.join(projectRoot, 'scripts', 'lib', 'runtime-consultation.cjs');
+  if (path.resolve(argv[1]) !== expectedScript) return false;
+  return ['publish-request', 'dispatch', 'await-result', 'accept-result', 'transaction-ack'].includes(argv[2]);
+}
 
 // Resolve current HEAD (40-hex) or '' — fail-closed at the call site (D5).
 function getGitHead(projectRoot) {
@@ -97,6 +118,7 @@ process.stdin.on('end', () => {
     }
 
     const projectRoot = process.env.CLAUDE_PROJECT_DIR || process.cwd();
+    if (isRootSourceProtocolCommand(toolName, agentType, data.tool_input, projectRoot)) process.exit(0);
     const slug = getWaveSlug(projectRoot);
 
     // Fail-open: no wave detected

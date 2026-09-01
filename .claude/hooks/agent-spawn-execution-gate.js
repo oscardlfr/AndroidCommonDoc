@@ -171,6 +171,8 @@ function findOwningRoleLifecycleCandidate(projectRoot, worktreeId, role) {
     if (action.kind === 'root-source-spawn') continue;
     if (action.role !== role || action.worktree_id !== worktreeId) continue;
     if (rll.resolveHostOperationForAction(action.kind, action.runtime) !== 'Agent') continue;
+    const actionExpiryMs = Date.parse(action.expires_at);
+    if (!Number.isFinite(actionExpiryMs) || actionExpiryMs <= Date.now()) continue;
     if (!foundByActionId.has(action.action_id)) {
       foundByActionId.set(action.action_id, { record: null, action });
     }
@@ -331,11 +333,47 @@ process.stdin.on('end', () => {
       + claudeAgentCandidates.length
       + (lifecycleLookup.candidate ? 1 : 0);
     if (rootSourceLookup.actions.length > 1 || claudeAgentCandidates.length > 1
-      || lifecycleLookup.ambiguous || ownershipCount > 1) {
+      || lifecycleLookup.ambiguous) {
       emit(denyResponse('[agent-spawn-execution-gate] owning action union is ambiguous for "' + subagentType + '" -- root-source, claude-agent and role-spawn are disjoint and may never be selected by priority.'));
       return;
     }
-    if (rootSourceLookup.actions.length === 1) {
+    // Multiple ownership families may retain concurrently-live diagnostic
+    // records for the same role. They are disjoint, but the Agent call is
+    // not ambiguous when exactly one immutable action payload matches all
+    // supplied fields. Resolve by full accredited-input correlation, never
+    // family priority or role coincidence. Zero or multiple exact matches
+    // remain an explicit fail-closed ambiguity.
+    let selectedOwnership = null;
+    if (ownershipCount > 1) {
+      const exact = [];
+      if (rootSourceLookup.actions.length === 1) {
+        const expected = rootSourceLookup.actions[0].payload || {};
+        if (subagentType === expected.agent_type && name === expected.name && toolInput.prompt === expected.bootstrap_message) {
+          exact.push('root-source');
+        }
+      }
+      if (claudeAgentCandidates.length === 1) {
+        const { activation, requestId } = claudeAgentCandidates[0];
+        const expectedPrompt = rll.claudeAgentBootstrapMessageFor(subagentType, requestId, activation.attempt_id);
+        if (name === subagentType && toolInput.prompt === expectedPrompt) exact.push('claude-agent');
+      }
+      if (lifecycleLookup.candidate) {
+        const expected = lifecycleLookup.candidate.action.payload || {};
+        if (name === expected.teammate_name && toolInput.prompt === expected.bootstrap_message) exact.push('role-lifecycle');
+      }
+      if (exact.length !== 1) {
+        emit(denyResponse('[agent-spawn-execution-gate] owning action union is ambiguous for "' + subagentType + '" -- exact action-payload correlation did not select one unique owner.'));
+        return;
+      }
+      selectedOwnership = exact[0];
+    } else if (rootSourceLookup.actions.length === 1) {
+      selectedOwnership = 'root-source';
+    } else if (claudeAgentCandidates.length === 1) {
+      selectedOwnership = 'claude-agent';
+    } else if (lifecycleLookup.candidate) {
+      selectedOwnership = 'role-lifecycle';
+    }
+    if (selectedOwnership === 'root-source') {
       const action = rootSourceLookup.actions[0];
       const sessionId = data.session_id;
       if (typeof sessionId !== 'string' || sessionId.length === 0 || Buffer.byteLength(sessionId, 'utf8') > MAX_RUNTIME_SESSION_KEY_BYTES) {
@@ -384,7 +422,7 @@ process.stdin.on('end', () => {
     // findLiveClaudeAgentActivations's own disclosure) this falls straight
     // through to the UNCHANGED role-lifecycle logic below, never altering
     // its behavior in any way.
-    if (claudeAgentCandidates.length === 1) {
+    if (selectedOwnership === 'claude-agent') {
       const sessionIdForClaudeAgent = data.session_id;
       if (typeof sessionIdForClaudeAgent !== 'string' || sessionIdForClaudeAgent.length === 0 || Buffer.byteLength(sessionIdForClaudeAgent, 'utf8') > MAX_RUNTIME_SESSION_KEY_BYTES) {
         emit(denyResponse('[agent-spawn-execution-gate] missing or invalid session_id while a genuine claude-agent activation candidate exists for "' + subagentType + '".'));
@@ -498,7 +536,7 @@ process.stdin.on('end', () => {
     // with a missing session_id reach an explicit deny below, instead of
     // looking identical to "no owning action exists" the way the OLD
     // ordering did.
-    if (!lifecycleLookup.candidate) process.exit(0);
+    if (selectedOwnership !== 'role-lifecycle') process.exit(0);
     const candidate = lifecycleLookup.candidate;
     const action = candidate.action;
 
@@ -569,27 +607,25 @@ process.stdin.on('end', () => {
       return;
     }
 
-    // Fresh revalidation every time -- never trust stale state: mints a
-    // BRAND NEW MainOrchestratorBinding from THIS call's own observed
-    // session_id. RB12a: a session_id different from whichever one minted
-    // the target action re-derives a DIFFERENT session_generation_id, which
-    // mintRoleSpawnExecutionClaim's own validateMainOrchestratorBindingFor
-    // check (cross-correlated against the action's session_generation_id)
-    // then rejects. RB7: an action whose own expires_at has already passed
-    // (inherited from a short-TTL authorizing binding at ITS OWN mint time)
-    // is rejected by mintRoleSpawnExecutionClaim's min()-bounded expiry
-    // check regardless of this fresh binding's own (long) TTL.
+    // Fresh revalidation every time -- never trust stale state. The
+    // lifecycle session owns exactly one live MainOrchestratorBinding for
+    // {session,worktree,plan}; reuse that canonical singleton instead of
+    // minting one sibling per Agent call. RB12a remains fail-closed because
+    // a different observed session resolves a different binding/generation,
+    // and mintRoleSpawnExecutionClaim cross-correlates that generation with
+    // the action. RB7 remains bounded by the action's own expiry.
     let mainBindingId;
     try {
-      const identity = { ok: true, provider: 'claude-hook', runtime_session_key: sessionId };
-      const bindingResult = rll.createMainOrchestratorBinding(projectRoot, identity, worktreeId, planResult.planDigest, RESERVATION_BINDING_TTL_SECONDS);
+      const bindingResult = rll.getOrCreateMainOrchestratorBindingForSession(
+        projectRoot, sessionId, worktreeId, planResult.planDigest, RESERVATION_BINDING_TTL_SECONDS,
+      );
       if (!bindingResult.ok) {
-        emit(denyResponse('[agent-spawn-execution-gate] unable to mint an authorizing main-orchestrator binding.'));
+        emit(denyResponse('[agent-spawn-execution-gate] unable to resolve an authorizing main-orchestrator binding.'));
         return;
       }
       mainBindingId = bindingResult.binding.binding_id;
     } catch {
-      emit(denyResponse('[agent-spawn-execution-gate] unable to mint an authorizing main-orchestrator binding.'));
+      emit(denyResponse('[agent-spawn-execution-gate] unable to resolve an authorizing main-orchestrator binding.'));
       return;
     }
 

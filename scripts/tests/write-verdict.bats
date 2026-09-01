@@ -1022,3 +1022,151 @@ _real_sha256() {
   # Nothing written through the symlink to the sibling location.
   [ -z "$(ls -A "$evil_dir" 2>/dev/null)" ] || return 1
 }
+
+# ══════════════════════════════════════════════════════════════════════════
+# Sequence 66/67/73 RED correction — Defect 3: same-HEAD --supersede cannot
+# repair a corrupt verdict; malformed/unterminated delimiter structure fails
+# OPEN instead of closed.
+#
+# Byte-confirmed against the live source before writing anything below (this
+# test-specialist, Sequence 73 session), run_verify_final()'s --supersede
+# branch (~L471-478):
+#   if [[ "$begin_count" -eq 1 && "$stored_head" == "$head_sha" ]]; then
+#     # Idempotent NO-OP: single canonical block, same HEAD already in file...
+#     exit 0
+#   fi
+# This fires purely on "same HEAD already recorded" -- it never inspects
+# whether the existing block's CONTENT is well-formed or corrupt. VS-15
+# below constructs a same-HEAD block whose body is a deliberately corrupt
+# canary string; --supersede must actually rewrite it, not silently leave
+# the corruption in place. This does NOT contradict or duplicate VS-2 (same-
+# HEAD idempotent no-op on an already-WELL-FORMED block, above, unchanged
+# and preserved byte-for-byte) -- VS-15's fixture is deliberately corrupt, a
+# case VS-2 never exercises, and does not claim VS-2's contract is wrong for
+# a well-formed block.
+#
+# Separately, an UNTERMINATED delimited block (a BEGIN with no matching END)
+# always yields stored_head=="" (extraction is gated on end_line being found
+# at all -- `if [[ -n "$end_line" ]]`), so it can never take the same-HEAD
+# no-op branch above; it always falls into the "different HEAD" excise-and-
+# append branch instead. That branch's awk excision
+# (`/^<!-- BEGIN VERIFY-FINAL -->$/ { skip=1 } !skip { print }
+# /^<!-- END VERIFY-FINAL -->$/ { skip=0 }`) never un-sets skip when no END
+# is ever seen -- every byte from BEGIN through EOF is silently dropped, and
+# the function still returns success (exit 0), confirmed by direct trace of
+# the same source before writing VS-16 below. The fix must fail CLOSED
+# (reject, non-zero -- matching this script's own documented "2 integrity
+# violation" bucket, the same bucket dual-token/orphan-final/traversal
+# already use) on this malformed shape instead of silently truncating and
+# reporting success. Neither VS-15 nor VS-16 duplicates the already-covered
+# different-HEAD-replacement (VS-1), no-PREP-hard-failure (VS-9), or
+# non-supersede-replay-guard (VS-3) cases.
+# ══════════════════════════════════════════════════════════════════════════
+
+@test "VS-15 FAIL(RED): same-HEAD --supersede must repair a corrupt existing block, not silently no-op and leave the corruption in place" {
+  _seed_plan "$WAVE_SLUG"
+  run_verdict --role arch-testing --phase prep --slug "$WAVE_SLUG"
+  [ "$status" -eq 0 ]
+
+  local verdict="$PROJ/.planning/wave-$WAVE_SLUG/arch-testing-verdict.md"
+  local current_head
+  current_head="$(git -C "$PROJ" rev-parse HEAD)"
+
+  # Hand-write a delimited VERIFY-FINAL block already bound to the CURRENT
+  # HEAD, but whose body is a deliberately corrupt canary string a legitimate
+  # architect verdict would never contain.
+  printf '\n<!-- BEGIN VERIFY-FINAL -->\nCORRUPT-CANARY-CONTENT-e916\n**HEAD**: %s\n**Phase**: VERIFY-FINAL\n**Status**: APPROVED-VERIFY-FINAL\n\n<!-- END VERIFY-FINAL -->\n' \
+    "$current_head" >> "$verdict"
+
+  run bash -c "cd '$PROJ' && printf '## Repaired verdict body\n' | CLAUDE_WAVE_SLUG='$WAVE_SLUG' \
+    bash '$SCRIPT' --role arch-testing --phase verify-final --supersede --slug '$WAVE_SLUG'"
+  [ "$status" -eq 0 ]
+
+  # The corrupt canary must be GONE -- a true repair rewrites the block, it
+  # does not leave stale corrupt content sitting in the file.
+  ! grep -q "CORRUPT-CANARY-CONTENT-e916" "$verdict"
+
+  # The fresh stdin body must be present instead.
+  grep -q "## Repaired verdict body" "$verdict"
+
+  # Exactly ONE **HEAD**: line, still the current HEAD.
+  local head_count
+  head_count="$(grep -c '^\*\*HEAD\*\*:' "$verdict")"
+  [ "$head_count" -eq 1 ]
+  grep -q "^\*\*HEAD\*\*: $current_head$" "$verdict"
+
+  grep -q "APPROVED-PREP" "$verdict"
+  grep -q "APPROVED-VERIFY-FINAL" "$verdict"
+}
+
+@test "VS-16 FAIL(RED): unterminated BEGIN VERIFY-FINAL delimiter (no matching END) must fail closed, not silently drop content through EOF and report success" {
+  _seed_plan "$WAVE_SLUG"
+  run_verdict --role arch-testing --phase prep --slug "$WAVE_SLUG"
+  [ "$status" -eq 0 ]
+
+  local verdict="$PROJ/.planning/wave-$WAVE_SLUG/arch-testing-verdict.md"
+  local current_head
+  current_head="$(git -C "$PROJ" rev-parse HEAD)"
+
+  # Hand-corrupt the file: a delimited block whose BEGIN is never matched by
+  # an END -- structurally malformed, distinct from VS-11/VS-12/VS-13's own
+  # well-terminated multi-block scenarios (never duplicated here).
+  printf '\n<!-- BEGIN VERIFY-FINAL -->\n**HEAD**: %s\n**Status**: APPROVED-VERIFY-FINAL\nUNTERMINATED-CANARY-b207\n' \
+    "$current_head" >> "$verdict"
+
+  run bash -c "cd '$PROJ' && CLAUDE_WAVE_SLUG='$WAVE_SLUG' \
+    bash '$SCRIPT' --role arch-testing --phase verify-final --supersede --slug '$WAVE_SLUG' < /dev/null"
+
+  # Fail CLOSED: malformed delimiter structure is an integrity violation,
+  # matching this script's own documented exit-code contract (0 success, 1
+  # usage, 2 integrity violation) -- never a silent success.
+  [ "$status" -eq 2 ]
+
+  # Must NOT have already silently truncated/dropped the canary content via
+  # a mutating rewrite before failing.
+  grep -q "UNTERMINATED-CANARY-b207" "$verdict"
+}
+
+# ── P2 same-actor PREP publication binding ──────────────────────────────
+
+@test "PPB2-1 valid publication nonce is rendered exactly once after PLAN_SHA256" {
+  _seed_plan "$WAVE_SLUG"
+  local nonce="0123456789abcdef0123456789abcdef"
+  run_verdict --role arch-testing --phase prep --slug "$WAVE_SLUG" --publication-nonce "$nonce"
+  [ "$status" -eq 0 ]
+  local verdict="$PROJ/.planning/wave-$WAVE_SLUG/arch-testing-verdict.md"
+  [ -f "$verdict" ] || return 1
+  [ "$(grep -c '^\*\*PUBLICATION-NONCE\*\*: ' "$verdict")" -eq 1 ] || return 1
+  grep -q "^\*\*PUBLICATION-NONCE\*\*: $nonce$" "$verdict" || return 1
+  local plan_line nonce_line
+  plan_line="$(grep -n '^\*\*PLAN_SHA256\*\*: ' "$verdict" | cut -d: -f1)"
+  nonce_line="$(grep -n '^\*\*PUBLICATION-NONCE\*\*: ' "$verdict" | cut -d: -f1)"
+  [ "$nonce_line" -eq $((plan_line + 1)) ]
+}
+
+@test "PPB2-2 omitted publication nonce preserves legacy PREP bytes without a nonce line" {
+  _seed_plan "$WAVE_SLUG"
+  run_verdict --role arch-testing --phase prep --slug "$WAVE_SLUG"
+  [ "$status" -eq 0 ]
+  local verdict="$PROJ/.planning/wave-$WAVE_SLUG/arch-testing-verdict.md"
+  [ -f "$verdict" ] || return 1
+  ! grep -q '^\*\*PUBLICATION-NONCE\*\*:' "$verdict"
+  grep -q '^\*\*Status\*\*: APPROVED-PREP$' "$verdict"
+}
+
+@test "PPB2-3 malformed publication nonce values fail closed before verdict creation" {
+  local index=0 value slug
+  for value in \
+    "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" \
+    "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" \
+    "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" \
+    "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"; do
+    index=$((index + 1))
+    slug="ppb2-invalid-$index"
+    _seed_plan "$slug"
+    run_verdict_slug "$slug" --role arch-testing --phase prep --slug "$slug" --publication-nonce "$value"
+    [ "$status" -eq 2 ]
+    [[ "$output" == *"publication-nonce"* ]] || return 1
+    [ ! -e "$PROJ/.planning/wave-$slug/arch-testing-verdict.md" ] || return 1
+  done
+}

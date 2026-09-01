@@ -8252,6 +8252,27 @@ function validateRootConsultCompletionArtifacts(c, completionRec) {
     acceptedPath, acceptedDigest: acceptedRec.digest,
     ackPath, ackDigest: ackRec.digest,
     completionPath: completionRec.path, completionDigest: completionRec.digest,
+    item: {
+      ok: true,
+      ready: true,
+      status: 'ANSWERED',
+      content: resultRec.obj.content,
+      resultKind: resultRec.obj.result_kind,
+      acceptedPath,
+      acceptedDigest: acceptedRec.digest,
+      resultPath: expectedResultPath,
+      resultDigest: resultRec.digest,
+      requestPath,
+      requestDigest: requestRec.digest,
+      ackPath,
+      ackDigest: ackRec.digest,
+      dependency: {
+        request_id: requestRec.obj.request_id,
+        accepted_result_digest: acceptedRec.digest,
+        result_digest: resultRec.digest,
+        from_role: resultRec.obj.from_role,
+      },
+    },
   };
 }
 
@@ -10272,7 +10293,40 @@ function cmdTransactionAck(flags) {
     acked_at: nowIso(),
   };
   const ackPath = ackPathFor(txnDir);
-  publishNoClobber(ackPath, Buffer.from(canonicalJSONStringify(ackObj), 'utf8'), { allowIdenticalIdempotent: true });
+  // A duplicate/racing transaction-ack for the SAME semantic decision
+  // (disposition + attempt correlation) must succeed, never collide on
+  // acked_at (which legitimately differs call to call) -- but any OTHER
+  // attempt/disposition for an already-acked transaction still fails
+  // closed. Checked both before publishing (the plain duplicate-call case)
+  // and after a lost publishNoClobber race (another writer won first); no
+  // other publishNoClobber failure is ever treated as success.
+  const ackSemanticsMatch = (existing) => Boolean(
+    existing && existing.schema === 'coordination/ack/v1'
+    && existing.disposition === disposition
+    && existing.in_reply_to_attempt_id === auth.attemptId,
+  );
+  const existingAck = readJsonDurableOptional(ackPath, { shape: (o) => assertClosedShape(o, ACK_V1_FIELDS) });
+  if (existingAck !== null) {
+    if (!ackSemanticsMatch(existingAck)) {
+      throw new CliError('INVALID', 'AUTHORITY_INVALID', 'a durable ack already exists for this transaction with a different disposition or attempt');
+    }
+    return { request_id: reqObj.request_id, artifact_ref: ackPath };
+  }
+  try {
+    publishNoClobber(ackPath, Buffer.from(canonicalJSONStringify(ackObj), 'utf8'), { allowIdenticalIdempotent: true });
+  } catch (err) {
+    // Only publishNoClobber's genuine EEXIST/race-loss classification may be
+    // recovered semantically.  Durability, security, I/O, and every other
+    // failure remain failures even if an equal ack happens to be observable.
+    if (!(err instanceof CliError) || err.status !== 'INVALID' || err.detailCode !== 'AUTHORITY_INVALID') {
+      throw err;
+    }
+    const raced = readJsonDurableOptional(ackPath, { shape: (o) => assertClosedShape(o, ACK_V1_FIELDS) });
+    if (raced !== null && ackSemanticsMatch(raced)) {
+      return { request_id: reqObj.request_id, artifact_ref: ackPath };
+    }
+    throw err;
+  }
   return { request_id: reqObj.request_id, artifact_ref: ackPath };
 }
 COMMANDS['transaction-ack'] = cmdTransactionAck;
@@ -11242,12 +11296,54 @@ function dispatchCanonical(flags, options) {
     requiredDriver = undefined;
   }
   let selectedDriver = 'noop';
+  let selectedClaudePeerBinding = null;
   let rll = null;
   for (const candidate of allowedDrivers) {
     if (requiredDriver !== undefined && candidate !== requiredDriver) continue;
     if (excludedDriver !== null && candidate === excludedDriver) continue;
     if (candidate === 'noop') {
       selectedDriver = 'noop';
+      break;
+    }
+    if (candidate === 'claude-sendmessage') {
+      // PLAN §15c: this accelerator is selectable only for exactly one
+      // current, live peer in the same Claude session/worktree/PLAN/role.
+      // The main-orchestrator binding is the host-observed source of the raw
+      // session key; the coordination activation stores only the peer's
+      // opaque binding id and the transient action exposes only its exact
+      // registered teammate name.
+      try {
+        rll = rll || require('./runtime-role-lifecycle.cjs');
+      } catch (err) {
+        rll = null;
+        continue;
+      }
+      let projectRoot;
+      let manifest;
+      let mainBinding;
+      let peer;
+      try {
+        projectRoot = gitRevParse(coordRoot, ['rev-parse', '--show-toplevel']);
+        manifest = rll.getCapabilityManifest(projectRoot);
+        if (!manifest || manifest.ok !== true
+            || !Array.isArray(manifest.availableDrivers)
+            || !manifest.availableDrivers.includes('claude-sendmessage')) continue;
+        mainBinding = rll.findLiveMainOrchestratorBindingForScope(
+          projectRoot, reqObj.requester_worktree_id, reqObj.plan_digest,
+        );
+        if (!mainBinding || mainBinding.ok !== true) continue;
+        peer = rll.findUniqueClaudePeerBindingForTarget(projectRoot, {
+          sessionDigest: sha256String(mainBinding.binding.runtime_session_key),
+          worktreeId: reqObj.requester_worktree_id,
+          planDigest: reqObj.plan_digest,
+          targetRole: reqObj.target_role,
+        });
+      } catch (err) {
+        continue;
+      }
+      if (!peer || peer.ok !== true || !peer.record) continue;
+      selectedClaudePeerBinding = peer.record;
+      selectedDriver = 'claude-sendmessage';
       break;
     }
     if (candidate === 'claude-agent') {
@@ -11404,7 +11500,9 @@ function dispatchCanonical(flags, options) {
       || existingActivation.routing_policy_version !== reqObj.routing_policy_version
       || existingActivation.routing_policy_digest !== reqObj.routing_policy_digest
       || existingActivation.selected_driver !== selectedDriver
-      || existingActivation.native_target_binding_id !== null
+      || existingActivation.native_target_binding_id !== (
+        selectedDriver === 'claude-sendmessage' ? selectedClaudePeerBinding.binding_id : null
+      )
       || existingActivation.activation_liveness_expiry !== activationLivenessDeadline(reqObj)
     ) throw new CliError('INVALID', 'AUTHORITY_INVALID', 'existing activation does not match deterministic dispatch recovery');
     if (!idempotentRecovery) existingActivation = null; // preserve ordinary dispatch's no-clobber replay rejection.
@@ -11428,7 +11526,9 @@ function dispatchCanonical(flags, options) {
     routing_policy_version: reqObj.routing_policy_version,
     routing_policy_digest: reqObj.routing_policy_digest,
     selected_driver: selectedDriver,
-    native_target_binding_id: null,
+    native_target_binding_id: selectedDriver === 'claude-sendmessage'
+      ? selectedClaudePeerBinding.binding_id
+      : null,
     native_spawn_action_id: nativeSpawnActionId,
     created_at: now,
     activation_liveness_expiry: activationLivenessDeadline(reqObj),
@@ -11532,41 +11632,63 @@ function dispatchCanonical(flags, options) {
     { allowIdenticalIdempotent: true },
   );
 
-  // `noop` requires no caller execution -- activation_action stays null (ABI:
-  // "codex-app-server/noop adds no payload keys and therefore returns no
-  // action"). `claude-agent` returns the transient ActivationAction/v1 the
-  // top-level host uses to invoke exactly one foreground Agent (PLAN.md
-  // §15d) -- built only from already-validated, host-derived fields, never
-  // prompt/prose/model output: `rll` is guaranteed non-null here (the only
-  // way `selectedDriver` becomes 'claude-agent', above, is after a
-  // successful `require`), so `claudeAgentBootstrapMessageFor` (the single
-  // source of truth this exact bootstrap text also uses on the hook/mint
-  // side) is called directly, never re-derived by hand.
+  // PLAN's frozen ActivationAction union: every caller-executed arm carries
+  // the exact common correlation fields, then only its closed driver payload.
+  // Neither action is authority or evidence; activation/WAL/inbox are already
+  // durable before this transient descriptor becomes visible.
   let activationAction = null;
-  if (selectedDriver === 'claude-agent') {
+  const commonActivationAction = {
+    schema: 'coordination/activation-action/v1',
+    request_id: reqObj.request_id,
+    attempt_id: attemptId,
+    lease_epoch: leaseEpoch,
+    selected_driver: selectedDriver,
+    target_role: reqObj.target_role,
+    request_artifact_path: requestPath,
+    activation_artifact_path: activationPath,
+  };
+  if (selectedDriver === 'claude-sendmessage') {
     activationAction = {
-      schema: 'coordination/activation-action/v1',
-      driver: 'claude-agent',
+      ...commonActivationAction,
+      kind: 'claude-sendmessage',
+      target_name: selectedClaudePeerBinding.teammate_name,
+      message: {
+        role: reqObj.source_role,
+        target_role: reqObj.target_role,
+        request_id: reqObj.request_id,
+        artifact_path: requestPath,
+        kind: 'consult',
+      },
+    };
+  } else if (selectedDriver === 'claude-agent') {
+    activationAction = {
+      ...commonActivationAction,
+      kind: 'claude-agent',
       agent_type: reqObj.target_role,
-      request_ref: requestPath,
-      activation_ref: activationPath,
-      subject_bundle_ref: path.join(planRoot, 'subject-bundles', reqObj.subject_scope_digest, 'manifest.json'),
-      native_spawn_action_id: nativeSpawnActionId,
-      bootstrap_message: rll.claudeAgentBootstrapMessageFor(reqObj.target_role, reqObj.request_id, attemptId),
+      spawn_action_id: nativeSpawnActionId,
+      bootstrap_message: {
+        role: reqObj.source_role,
+        target_role: reqObj.target_role,
+        request_id: reqObj.request_id,
+        artifact_path: requestPath,
+        activation_path: activationPath,
+        kind: 'consult-one-shot',
+      },
     };
   }
   return { request_id: reqObj.request_id, artifact_ref: activationPath, activation_action: activationAction };
 }
 function cmdDispatch(flags, grantContext) {
-  // M6-M7-ROOT-SOURCE-CONTINUATION-CLOSURE-20260820: a root-source-
-  // authenticated dispatch is constrained to the retained codex-app-server
-  // architect its action was minted against -- requiredDriver is the
-  // existing, accepted hard candidate filter inside dispatchCanonical, so a
-  // live higher-priority claude-agent candidate can no longer win the
-  // canonical routing race for a root-source transaction. Every ordinary
-  // (non-root-source) dispatch, and every in-process caller that passes no
-  // grantContext, keeps the exact pre-existing empty options and routing.
-  return dispatchCanonical(flags, isRootSourceGrantContext(grantContext) ? { requiredDriver: 'codex-app-server' } : {});
+  // Driver selection belongs to the target's pinned route and current live
+  // capability evidence. A root-source grant authenticates the requester;
+  // it does not imply that requester is backed by codex-app-server. Claude
+  // native root sources are legitimate after the exact reporting architect
+  // binding has been validated, and must therefore be able to select their
+  // unique claude-sendmessage target instead of being forced onto an absent
+  // Codex worker. Retained Codex bridge children still use the separate
+  // in-process dispatchCanonical(...,{requiredDriver:'codex-app-server'})
+  // call in hostBridgePublishChildRequest above.
+  return dispatchCanonical(flags, {});
 }
 COMMANDS.dispatch = cmdDispatch;
 
@@ -11673,6 +11795,9 @@ function resolveActivationForRequestPath(requestPath) {
       if (a.selected_driver === 'claude-agent') {
         const rll = require('./runtime-role-lifecycle.cjs');
         if (!rll.isHexActionId(a.native_spawn_action_id) || a.native_target_binding_id !== null) return { ok: false };
+      } else if (a.selected_driver === 'claude-sendmessage') {
+        const rll = require('./runtime-role-lifecycle.cjs');
+        if (!rll.isHexActionId(a.native_target_binding_id) || a.native_spawn_action_id !== null) return { ok: false };
       } else if (a.native_spawn_action_id !== null || a.native_target_binding_id !== null) {
         return { ok: false };
       }
@@ -12760,6 +12885,7 @@ function validateRuntimeTurnEnvelope(value, expectedResultKind, allowedChildRole
 }
 
 module.exports = {
+  isSafeRelativeEntryPath,
   canonicalJSONStringify, sha256Buffer, sha256String, sha256File, writeAllSync, classifyDurableRead,
   // NO-GO Correction C: the ONE canonical ack/cancel basename source,
   // reused by runtime-role-lifecycle.cjs's retirement-record validator to

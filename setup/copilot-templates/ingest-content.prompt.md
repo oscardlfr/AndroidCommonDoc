@@ -26,6 +26,18 @@ Additional skill-specific arguments (not in params.json):
 - A URL as the first positional argument (optional). If provided, the tool attempts to fetch the content.
 - If no URL is provided, the user is prompted to paste the content directly.
 
+## Canonical Runtime Entrypoint
+
+After explicit user approval, the write request enters the shared product flow:
+
+```bash
+node scripts/lib/runtime-collaboration-entrypoints.cjs execute --entrypoint ingest-content --project-root <absolute> --intent <base64url canonical JSON>
+```
+
+The Bash call must be one standalone direct Node command. Replace `<absolute>` with the literal absolute project path before invoking it. Never use `$(pwd)`, `$PWD`, `cd`, shell variables, command substitution, pipes, redirects, or command separators in this authenticated entrypoint call.
+
+The decoded intent is exactly `{"request_ref":"request:<sha256>","approval_ref":"approval:<sha256>"}`. An empty approval is `BLOCKED`; only a correlated `COMPLETED` result with canonical result, acceptance, and acknowledgement evidence confirms ingestion. Exact repeats deduplicate.
+
 ## Behavior
 
 1. **URL provided:**

@@ -302,3 +302,682 @@ console.log('T16 agent_name/agent_class main: PASS');
 }
 
 console.log('\nAll tool-use-logger tests passed.');
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Sequence151 P1-I observation-only RED AUTHENTICITY CORRECTION of
+// Sequence150 (Codex rejection: sequence150-codex-audit.json, finding
+// P1I-150-01, the part owned by this file). Everything above this line
+// (T1-T19) is byte-for-byte UNCHANGED. This section fully replaces the
+// previous P1I-OBS-LOGGER-* section.
+//
+// P1I-150-01 (P0): the previous positive tests invoked the REAL boundary
+// hook directly with a plain caller-supplied PreToolUse event and treated
+// that alone as "genuine" -- but any local caller can pipe JSON into that
+// executable, so it was never proof of host-origin authenticity. CLOSED: the
+// four positive tests below now call admitHostOrigin() FIRST (mints the
+// genuine test brand bound to this test's own observation root via
+// scripts/lib/runtime-host-claude.cjs's double-gated seam, creates the
+// authenticated composition, calls its beginObservation(pre) to create the
+// private admission ticket the boundary requires) and only THEN invoke the
+// real boundary hook with the matching PreToolUse event -- the identical
+// two-step chain scripts/tests/runtime-host-boundary.test.js's own positive
+// tests use. The malformed/unmatched/well-formed-hand-placed negative tests
+// (06-08 below) remain deliberately unchanged: they prove a caller-generated
+// PENDING artifact never earns trust regardless of this producer-side change,
+// exactly as this order's point 3 requires preserving.
+//
+// Shared conventions (identical to scripts/tests/runtime-host-claude.test.js
+// and scripts/tests/runtime-host-boundary.test.js): sha256hex(v),
+// CAPABILITY_ENV_VAR='RUNTIME_HOST_OBSERVATION_TEST_CAPABILITY',
+// CAPABILITY_VALUE (the ONE fixed string, exact match required),
+// admission/<sessionDigest>__<toolUseDigest>.json ticket path (this file
+// never inspects the ticket directly -- it only needs beginObservation's
+// side effect to have happened before the real boundary trusts the matching
+// PreToolUse), pending/<...>.pre.json, projections/<...>.json (this file's
+// own schema, unchanged from Sequence150: {schema, correlated, success,
+// session_digest, tool_use_digest, observed_at}).
+//
+// Each new test remains wrapped in its own try/catch (unchanged rationale
+// from Sequence149/150: every predicate must stay individually diagnosable
+// in a single run of this flat, non-node:test script).
+
+{
+  const crypto = require('crypto');
+  let newFailures = 0;
+
+  const BOUNDARY_HOOK = path.resolve(__dirname, '../../.claude/hooks/runtime-host-boundary.js');
+  const HOST_CLAUDE_IMPL = path.resolve(__dirname, '../lib/runtime-host-claude.cjs');
+  const DIGEST_RE = /^[0-9a-f]{64}$/;
+  const ISO_MS_Z_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
+  const CAPABILITY_ENV_VAR = 'RUNTIME_HOST_OBSERVATION_TEST_CAPABILITY';
+  const CAPABILITY_VALUE = 'p1i-observation-red-fixture-capability';
+
+  let hostClaude = null;
+  let hostClaudeLoadError = null;
+  try {
+    hostClaude = require(HOST_CLAUDE_IMPL);
+  } catch (err) {
+    hostClaudeLoadError = err;
+  }
+
+  function requireHostClaude() {
+    assert.ok(
+      hostClaude,
+      'scripts/lib/runtime-host-claude.cjs must exist and be requireable -- P1I-150-01 host-origin ' +
+      'admission is a precondition for every positive logger test in this section (load error: ' +
+      (hostClaudeLoadError ? hostClaudeLoadError.message : 'n/a') + ')',
+    );
+    return hostClaude;
+  }
+
+  function withCapabilityEnvSync(fn) {
+    const savedNodeEnv = process.env.NODE_ENV;
+    const savedCap = process.env[CAPABILITY_ENV_VAR];
+    process.env.NODE_ENV = 'test';
+    process.env[CAPABILITY_ENV_VAR] = CAPABILITY_VALUE;
+    try {
+      return fn();
+    } finally {
+      if (savedNodeEnv === undefined) delete process.env.NODE_ENV; else process.env.NODE_ENV = savedNodeEnv;
+      if (savedCap === undefined) delete process.env[CAPABILITY_ENV_VAR]; else process.env[CAPABILITY_ENV_VAR] = savedCap;
+    }
+  }
+
+  function mintGenuineBrand(mod, observationRoot) {
+    return withCapabilityEnvSync(() => {
+      assert.strictEqual(typeof mod.__TEST_ONLY__mintHostAdapterBrand, 'function', 'runtime-host-claude.cjs must export __TEST_ONLY__mintHostAdapterBrand({observationRoot})');
+      const brand = mod.__TEST_ONLY__mintHostAdapterBrand({ observationRoot });
+      assert.ok(brand, 'the gated test seam must return a genuine, usable brand value');
+      return brand;
+    });
+  }
+
+  /** P1I-150-01: establishes host-origin admission BEFORE this test invokes the real boundary hook. */
+  function admitHostOrigin(pre, observationRoot) {
+    const mod = requireHostClaude();
+    const brand = mintGenuineBrand(mod, observationRoot);
+    assert.strictEqual(typeof mod.createHostComposition, 'function', 'runtime-host-claude.cjs must export createHostComposition(hostAdapterBrand)');
+    const composition = mod.createHostComposition(brand);
+    assert.ok(composition && typeof composition.beginObservation === 'function', 'createHostComposition(<genuine brand>) must return a usable composition');
+    const handle = composition.beginObservation(pre);
+    assert.ok(handle !== null && handle !== undefined, 'beginObservation(pre) must return a handle -- and, as its disk side effect, the admission ticket the boundary requires');
+    return { mod, brand, composition, handle };
+  }
+
+  function sha256hex(value) {
+    return crypto.createHash('sha256').update(String(value), 'utf8').digest('hex');
+  }
+
+  function obsRoot() {
+    // The production hook never creates .androidcommondoc/ itself (it relies
+    // on the caller/environment already owning that directory -- the SAME
+    // latent assumption T1-T19's shared os.tmpdir() setup satisfies once, at
+    // module load, above). Each new test below uses its OWN fresh,
+    // isolated root instead of that shared one, so it must satisfy the same
+    // precondition here.
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'tul-obs-'));
+    fs.mkdirSync(path.join(root, '.androidcommondoc'), { recursive: true });
+    return root;
+  }
+
+  function digestKey(sessionDigest, toolUseDigest) { return sessionDigest + '__' + toolUseDigest; }
+  function pendingPrePath(root, sessionDigest, toolUseDigest) {
+    return path.join(root, 'pending', digestKey(sessionDigest, toolUseDigest) + '.pre.json');
+  }
+  function projectionPath(root, sessionDigest, toolUseDigest) {
+    return path.join(root, 'projections', digestKey(sessionDigest, toolUseDigest) + '.json');
+  }
+
+  function readJsonIfExists(p) {
+    if (!fs.existsSync(p)) return undefined;
+    try { return JSON.parse(fs.readFileSync(p, 'utf8')); } catch { return { __parseError: true }; }
+  }
+
+  /** Invokes the REAL boundary hook (never a hand-written marker) for a PreToolUse ALREADY admitted via admitHostOrigin(). */
+  function admitGenuinePreToolUse(preEvent, observationRoot) {
+    return spawnSync('node', [BOUNDARY_HOOK], {
+      input: JSON.stringify(preEvent),
+      env: { ...process.env, CLAUDE_PROJECT_DIR: observationRoot, RUNTIME_HOST_OBSERVATION_ROOT: observationRoot },
+      encoding: 'utf8',
+    });
+  }
+
+  /** Runs the LOGGER hook with an explicit, isolated observation root. */
+  function runHookObs(payload, observationRoot) {
+    const input = typeof payload === 'string' ? payload : JSON.stringify(payload);
+    const result = spawnSync('node', [HOOK], {
+      input,
+      env: { ...process.env, CLAUDE_PROJECT_DIR: observationRoot, RUNTIME_HOST_OBSERVATION_ROOT: observationRoot },
+      encoding: 'utf8',
+    });
+    let line = null;
+    const logPath = path.join(observationRoot, '.androidcommondoc', 'tool-use-log.jsonl');
+    if (fs.existsSync(logPath)) {
+      const raw = fs.readFileSync(logPath, 'utf8').trim();
+      if (raw) { try { line = JSON.parse(raw); } catch {} }
+    }
+    return { status: result.status, stderr: result.stderr, line };
+  }
+
+  function runNewTest(title, fn) {
+    try {
+      fn();
+      console.log(title + ': PASS');
+    } catch (err) {
+      newFailures++;
+      console.error(title + ': FAIL -- ' + err.message);
+    }
+  }
+
+  function basePre(overrides = {}) {
+    return {
+      hook_event_name: 'PreToolUse',
+      session_id: 'sess-logger-obs-' + crypto.randomBytes(6).toString('hex'),
+      tool_use_id: 'toolu_' + crypto.randomBytes(6).toString('hex'),
+      tool_name: 'Agent',
+      tool_input: { prompt: 'logger observation fixture' },
+      cwd: process.cwd(),
+      ...overrides,
+    };
+  }
+
+  runNewTest('P1I-OBS-LOGGER-OWNED-PROJECTION-VIA-REAL-BOUNDARY-CREATED-01 RED', () => {
+    const root = obsRoot();
+    const pre = basePre();
+    const sDig = sha256hex(pre.session_id);
+    const tDig = sha256hex(pre.tool_use_id);
+
+    admitHostOrigin(pre, root);
+    const boundaryResult = admitGenuinePreToolUse(pre, root);
+    assert.strictEqual(boundaryResult.status, 0, 'precondition: the REAL boundary hook must genuinely admit the ticket-backed PreToolUse (fail-open exit 0): ' + String(boundaryResult.stderr || '').slice(0, 300));
+    assert.ok(fs.existsSync(pendingPrePath(root, sDig, tDig)), 'precondition: a genuinely boundary-admitted pending capture must exist at the digest-keyed path');
+
+    const post = { hook_event_name: 'PostToolUse', session_id: pre.session_id, tool_use_id: pre.tool_use_id, tool_name: pre.tool_name, tool_response: {} };
+    const { status, line } = runHookObs(post, root);
+    assert.strictEqual(status, 0, 'logger hook must exit 0 (fail-open) even while projecting an owned observation');
+    assert.ok(line, 'ordinary log line must still be written for an owned observation');
+
+    const projection = readJsonIfExists(projectionPath(root, sDig, tDig));
+    assert.ok(projection, 'an explicitly owned observation (backed by a GENUINE host-admitted, boundary-admitted pending capture) must be additionally projected to the observation boundary');
+    assert.strictEqual(projection.correlated, true, 'projection must report correlated:true');
+    assert.strictEqual(projection.success, true, 'projection must carry success/failure result metadata');
+  });
+
+  runNewTest('P1I-OBS-LOGGER-PROJECTION-KEY-ALLOWLIST-02 RED', () => {
+    const root = obsRoot();
+    const pre = basePre({ tool_name: 'Bash' });
+    const sDig = sha256hex(pre.session_id);
+    const tDig = sha256hex(pre.tool_use_id);
+    admitHostOrigin(pre, root);
+    const boundaryResult = admitGenuinePreToolUse(pre, root);
+    assert.strictEqual(boundaryResult.status, 0, 'precondition: the REAL boundary hook must genuinely admit the ticket-backed PreToolUse: ' + String(boundaryResult.stderr || '').slice(0, 300));
+
+    runHookObs({ hook_event_name: 'PostToolUse', session_id: pre.session_id, tool_use_id: pre.tool_use_id, tool_name: pre.tool_name, tool_response: { error: 'boom' } }, root);
+    const projection = readJsonIfExists(projectionPath(root, sDig, tDig));
+    assert.ok(projection, 'projection must exist for this genuinely owned, boundary-backed observation');
+    assert.deepStrictEqual(
+      Object.keys(projection).sort(),
+      ['correlated', 'observed_at', 'schema', 'session_digest', 'success', 'tool_use_digest'].sort(),
+      'projection must have EXACTLY the same 6-key redacted digest-only schema as the host result, never a raw-ID-bearing or wider shape',
+    );
+    assert.strictEqual(projection.schema, 'runtime/tool-use-observation-projection/v1');
+    assert.strictEqual(projection.success, false, 'projection success metadata must reflect tool_response.error being set');
+    assert.match(projection.session_digest, DIGEST_RE, 'session_digest must be 64 lowercase hex');
+    assert.match(projection.tool_use_digest, DIGEST_RE, 'tool_use_digest must be 64 lowercase hex');
+    assert.match(projection.observed_at, ISO_MS_Z_RE, 'observed_at must be UTC ISO8601 with milliseconds and Z');
+  });
+
+  runNewTest('P1I-OBS-LOGGER-PROJECTION-NO-RAW-LEAK-03 RED', () => {
+    const root = obsRoot();
+    const secretMarker = 'RAW-LOGGER-SECRET-' + crypto.randomBytes(8).toString('hex');
+    const pre = basePre({ tool_name: 'Read', tool_input: { file_path: '/etc/' + secretMarker } });
+    const sDig = sha256hex(pre.session_id);
+    const tDig = sha256hex(pre.tool_use_id);
+    admitHostOrigin(pre, root);
+    const boundaryResult = admitGenuinePreToolUse(pre, root);
+    assert.strictEqual(boundaryResult.status, 0, 'precondition: the REAL boundary hook must genuinely admit the ticket-backed PreToolUse: ' + String(boundaryResult.stderr || '').slice(0, 300));
+
+    runHookObs({ hook_event_name: 'PostToolUse', session_id: pre.session_id, tool_use_id: pre.tool_use_id, tool_name: pre.tool_name, tool_response: { content: secretMarker.repeat(50) } }, root);
+    const projection = readJsonIfExists(projectionPath(root, sDig, tDig));
+    assert.ok(projection, 'projection must exist for this genuinely owned observation');
+    const serialized = JSON.stringify(projection);
+    assert.ok(!serialized.includes(pre.session_id), 'the raw session_id must never leak into the projection');
+    assert.ok(!serialized.includes(pre.tool_use_id), 'the raw tool_use_id must never leak into the projection');
+    assert.ok(!serialized.includes(secretMarker), 'raw tool_input/tool_response content must never leak into the projection');
+
+    const projectionFileName = path.basename(projectionPath(root, sDig, tDig));
+    assert.ok(!projectionFileName.includes(pre.session_id) && !projectionFileName.includes(pre.tool_use_id), 'the projection FILENAME itself must be digest-keyed, never contain a raw ID');
+  });
+
+  runNewTest('P1I-OBS-LOGGER-PROJECTION-DIGEST-CORRECTNESS-04 RED', () => {
+    const root = obsRoot();
+    const pre = basePre();
+    const sDig = sha256hex(pre.session_id);
+    const tDig = sha256hex(pre.tool_use_id);
+    admitHostOrigin(pre, root);
+    const boundaryResult = admitGenuinePreToolUse(pre, root);
+    assert.strictEqual(boundaryResult.status, 0, 'precondition: the REAL boundary hook must genuinely admit the ticket-backed PreToolUse: ' + String(boundaryResult.stderr || '').slice(0, 300));
+
+    runHookObs({ hook_event_name: 'PostToolUse', session_id: pre.session_id, tool_use_id: pre.tool_use_id, tool_name: pre.tool_name, tool_response: {} }, root);
+    const projection = readJsonIfExists(projectionPath(root, sDig, tDig));
+    assert.ok(projection, 'projection must exist');
+    assert.strictEqual(projection.session_digest, sDig, 'session_digest must be the exact sha256hex of the genuine raw session_id');
+    assert.strictEqual(projection.tool_use_digest, tDig, 'tool_use_digest must be the exact sha256hex of the genuine raw tool_use_id');
+  });
+
+  runNewTest('P1I-OBS-LOGGER-DIRECT-BOUNDARY-WITHOUT-HOST-ADMISSION-NOT-TRUSTED-05', () => {
+    // P1I-150-01: even a REAL boundary invocation, if it skips host-origin
+    // admission (no admitHostOrigin() call, so no admission ticket exists),
+    // must never produce trusted evidence the logger goes on to project.
+    const root = obsRoot();
+    const pre = basePre();
+    const sDig = sha256hex(pre.session_id);
+    const tDig = sha256hex(pre.tool_use_id);
+    const boundaryResult = admitGenuinePreToolUse(pre, root); // deliberately NO admitHostOrigin() first
+    assert.strictEqual(boundaryResult.status, 0, 'the real boundary hook must still fail open (exit 0) even without prior host-origin admission');
+    assert.strictEqual(fs.existsSync(pendingPrePath(root, sDig, tDig)), false, 'without a genuine admission ticket, the boundary must never create a trusted pending capture for the logger to later find');
+
+    const { status, line } = runHookObs({ hook_event_name: 'PostToolUse', session_id: pre.session_id, tool_use_id: pre.tool_use_id, tool_name: pre.tool_name, tool_response: {} }, root);
+    assert.strictEqual(status, 0, 'logger hook must exit 0 (fail-open)');
+    assert.ok(line, 'ordinary log line must still be written correctly');
+    assert.strictEqual(readJsonIfExists(projectionPath(root, sDig, tDig)), undefined, 'no projection may ever be produced when the antecedent boundary admission itself was never host-originated');
+  });
+
+  runNewTest('P1I-OBS-LOGGER-WELL-FORMED-HAND-PLACED-PENDING-NOT-TRUSTED-06', () => {
+    const root = obsRoot();
+    const pre = basePre();
+    const sDig = sha256hex(pre.session_id);
+    const tDig = sha256hex(pre.tool_use_id);
+    // Deliberately WELL-FORMED and correctly digest-keyed -- but hand-placed
+    // by THIS TEST, never produced by a genuine invocation of the real
+    // boundary hook (which itself would have required a real admission
+    // ticket). Even a perfectly-shaped forgery must never be trusted.
+    fs.mkdirSync(path.join(root, 'pending'), { recursive: true });
+    fs.writeFileSync(pendingPrePath(root, sDig, tDig), JSON.stringify({
+      schema: 'runtime/host-raw-pretooluse/v1',
+      session_digest: sDig,
+      tool_use_digest: tDig,
+      tool_name: pre.tool_name,
+      captured_at: new Date().toISOString(),
+      input_digest: sha256hex('fixture'),
+    }));
+
+    const { status, line } = runHookObs({ hook_event_name: 'PostToolUse', session_id: pre.session_id, tool_use_id: pre.tool_use_id, tool_name: pre.tool_name, tool_response: {} }, root);
+    assert.strictEqual(status, 0, 'hook must still exit 0 on a well-formed-but-forged pending file (fail-open)');
+    assert.ok(line, 'ordinary log line must still be written correctly');
+    assert.strictEqual(readJsonIfExists(projectionPath(root, sDig, tDig)), undefined, 'a well-formed but hand-placed (never genuinely boundary-admitted) pending file must never be trusted as ownership');
+  });
+
+  runNewTest('P1I-OBS-LOGGER-MALFORMED-MARKER-NO-AUTHORITY-07', () => {
+    const root = obsRoot();
+    const pre = basePre();
+    const sDig = sha256hex(pre.session_id);
+    const tDig = sha256hex(pre.tool_use_id);
+    fs.mkdirSync(path.join(root, 'pending'), { recursive: true });
+    fs.writeFileSync(pendingPrePath(root, sDig, tDig), JSON.stringify({ schema: 'not-the-real-schema' }));
+
+    const { status, line } = runHookObs({ hook_event_name: 'PostToolUse', session_id: pre.session_id, tool_use_id: pre.tool_use_id, tool_name: pre.tool_name, tool_response: {} }, root);
+    assert.strictEqual(status, 0, 'hook must still exit 0 on a malformed marker (fail-open)');
+    assert.ok(line, 'ordinary log line must still be written correctly despite the malformed marker');
+    assert.strictEqual(line.tool_name, pre.tool_name, 'ordinary log behavior must not be corrupted by the malformed marker');
+    assert.strictEqual(readJsonIfExists(projectionPath(root, sDig, tDig)), undefined, 'a malformed marker must never acquire observation authority -- no projection may be produced from it');
+  });
+
+  runNewTest('P1I-OBS-LOGGER-UNMATCHED-MARKER-NO-AUTHORITY-08', () => {
+    const root = obsRoot();
+    const realSessionId = 'sess-logger-obs-' + crypto.randomBytes(6).toString('hex');
+    const realToolUseId = 'toolu_' + crypto.randomBytes(6).toString('hex');
+    const differentToolUseId = 'toolu_' + crypto.randomBytes(6).toString('hex');
+    const sDig = sha256hex(realSessionId);
+    const realTDig = sha256hex(realToolUseId);
+    const differentTDig = sha256hex(differentToolUseId);
+    // Well-formed-shaped, but keyed for a DIFFERENT tool_use_id than the call
+    // actually being logged -- an unmatched marker.
+    fs.mkdirSync(path.join(root, 'pending'), { recursive: true });
+    fs.writeFileSync(pendingPrePath(root, sDig, differentTDig), JSON.stringify({
+      schema: 'runtime/host-raw-pretooluse/v1', session_digest: sDig, tool_use_digest: differentTDig,
+      tool_name: 'Bash', captured_at: new Date().toISOString(), input_digest: sha256hex('fixture'),
+    }));
+
+    const { status, line } = runHookObs({ hook_event_name: 'PostToolUse', session_id: realSessionId, tool_use_id: realToolUseId, tool_name: 'Bash', tool_response: {} }, root);
+    assert.strictEqual(status, 0, 'hook must still exit 0 (fail-open)');
+    assert.ok(line, 'ordinary log line must still be written correctly for the actual call');
+    assert.strictEqual(readJsonIfExists(projectionPath(root, sDig, realTDig)), undefined, 'an unmatched marker (different tool_use_id) must never grant projection authority to an unrelated call');
+  });
+
+  runNewTest('P1I-OBS-LOGGER-ORDINARY-LOG-UNCHANGED-KEYSET-09', () => {
+    const root = obsRoot();
+    const pre = basePre();
+    // No pending fixture at all -- an entirely ordinary, unowned call.
+    const { status, line } = runHookObs({ hook_event_name: 'PostToolUse', session_id: pre.session_id, tool_use_id: pre.tool_use_id, tool_name: 'Bash', tool_input: { command: 'echo ordinary' }, tool_response: {} }, root);
+    assert.strictEqual(status, 0, 'hook must exit 0');
+    assert.ok(line, 'ordinary log line must exist');
+    assert.deepStrictEqual(
+      Object.keys(line).sort(),
+      ['agent_class', 'agent_id', 'agent_name', 'agent_type', 'cp_bypass_blocked', 'duration_ms', 'input_summary', 'mcp_server', 'mcp_tool', 'session_id', 'skill_name', 'success', 'tool_name', 'ts'].sort(),
+      'ordinary (unowned) tool-use logging must remain byte-for-byte compatible: EXACTLY the pre-existing 14-key shape, never gaining a stray observation-related key',
+    );
+    const sDig = sha256hex(pre.session_id);
+    const tDig = sha256hex(pre.tool_use_id);
+    assert.strictEqual(readJsonIfExists(projectionPath(root, sDig, tDig)), undefined, 'an entirely unowned call must never produce a projection');
+  });
+
+  if (newFailures > 0) {
+    console.error('\n' + newFailures + ' of 9 new P1I-OBS-LOGGER-* tests FAILED (see above).');
+    process.exitCode = 1;
+  } else {
+    console.log('\nAll 9 new P1I-OBS-LOGGER-* tests passed.');
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// P1-I/A RED Block B1 — logger-owned I-BIND evidence projection. Order:
+// /private/tmp/androidcommondoc-wave1-r131-p1ia-red-blockb1-logger-20260828/
+// order.md. Everything above this line (T1-T19 and the nine P1I-OBS-LOGGER-*
+// tests) is byte-for-byte UNCHANGED. Exactly two new compact tests below.
+//
+// Both depend on the accepted Block A seam
+// scripts/lib/runtime-host-claude.cjs#__TEST_ONLY__admitIbindEvidence(fixture),
+// which is not exported yet, and/or on an I-BIND-aware projection path in
+// .claude/hooks/tool-use-logger.js. Production is frozen for this block: this
+// file only SPECIFIES the intended contract so both tests are RED for that
+// reason alone. Everything reachable without that seam (fixture-shape self
+// checks, the ordinary-logger env/JSON-claim resistance proof) is exercised
+// for real, now, and must pass on its own.
+{
+  const crypto = require('crypto');
+  let newFailures = 0;
+
+  const BOUNDARY_HOOK = path.resolve(__dirname, '../../.claude/hooks/runtime-host-boundary.js');
+  const HOST_CLAUDE_IMPL = path.resolve(__dirname, '../lib/runtime-host-claude.cjs');
+  const DIGEST_RE = /^[0-9a-f]{64}$/;
+  const CAPABILITY_ENV_VAR = 'RUNTIME_HOST_OBSERVATION_TEST_CAPABILITY';
+  const CAPABILITY_VALUE = 'p1i-observation-red-fixture-capability';
+  const ORDINARY_LOG_KEYS = ['agent_class', 'agent_id', 'agent_name', 'agent_type', 'cp_bypass_blocked',
+    'duration_ms', 'input_summary', 'mcp_server', 'mcp_tool', 'session_id', 'skill_name', 'success', 'tool_name', 'ts'].sort();
+  const PROJECTION_KEYS = ['correlated', 'observed_at', 'schema', 'session_digest', 'success', 'tool_use_digest'].sort();
+
+  let hostClaude = null;
+  let hostClaudeLoadError = null;
+  try {
+    hostClaude = require(HOST_CLAUDE_IMPL);
+  } catch (err) {
+    hostClaudeLoadError = err;
+  }
+
+  function requireHostClaude() {
+    assert.ok(
+      hostClaude,
+      'scripts/lib/runtime-host-claude.cjs must exist and be requireable (load error: ' +
+      (hostClaudeLoadError ? hostClaudeLoadError.message : 'n/a') + ')',
+    );
+    return hostClaude;
+  }
+
+  /** Guards every seam-dependent assertion behind one clean, diagnosable reason. */
+  function requireIbindSeam() {
+    const mod = requireHostClaude();
+    assert.strictEqual(
+      typeof mod.__TEST_ONLY__admitIbindEvidence,
+      'function',
+      'scripts/lib/runtime-host-claude.cjs must export __TEST_ONLY__admitIbindEvidence(fixture) ' +
+      '(the accepted Block A seam) -- absent, so this test is RED by design',
+    );
+    return mod;
+  }
+
+  /** Mirrors runtime-host-claude.cjs's existing double-gated test-capability convention. */
+  function withIbindTestEnv(observationRoot, fn) {
+    const keys = ['NODE_ENV', CAPABILITY_ENV_VAR, 'RUNTIME_HOST_OBSERVATION_ROOT'];
+    const saved = {};
+    for (const k of keys) saved[k] = process.env[k];
+    process.env.NODE_ENV = 'test';
+    process.env[CAPABILITY_ENV_VAR] = CAPABILITY_VALUE;
+    process.env.RUNTIME_HOST_OBSERVATION_ROOT = observationRoot;
+    try {
+      return fn();
+    } finally {
+      for (const k of keys) {
+        if (saved[k] === undefined) delete process.env[k]; else process.env[k] = saved[k];
+      }
+    }
+  }
+
+  function sha256hex(value) {
+    return crypto.createHash('sha256').update(String(value), 'utf8').digest('hex');
+  }
+
+  function obsRoot() {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'tul-ibind-'));
+    fs.mkdirSync(path.join(root, '.androidcommondoc'), { recursive: true });
+    return root;
+  }
+
+  function digestKey(sessionDigest, toolUseDigest) { return sessionDigest + '__' + toolUseDigest; }
+  function projectionPath(root, sessionDigest, toolUseDigest) {
+    return path.join(root, 'projections', digestKey(sessionDigest, toolUseDigest) + '.json');
+  }
+  function readJsonIfExists(p) {
+    if (!fs.existsSync(p)) return undefined;
+    try { return JSON.parse(fs.readFileSync(p, 'utf8')); } catch { return { __parseError: true }; }
+  }
+
+  /** Invokes the REAL boundary hook (never a hand-written marker). */
+  function invokeBoundary(event, observationRoot) {
+    return spawnSync('node', [BOUNDARY_HOOK], {
+      input: JSON.stringify(event),
+      env: { ...process.env, CLAUDE_PROJECT_DIR: observationRoot, RUNTIME_HOST_OBSERVATION_ROOT: observationRoot },
+      encoding: 'utf8',
+    });
+  }
+
+  /** Invokes the REAL logger hook (never a hand-written marker). */
+  function invokeLogger(payload, observationRoot, extraEnv = {}) {
+    const input = typeof payload === 'string' ? payload : JSON.stringify(payload);
+    const result = spawnSync('node', [HOOK], {
+      input,
+      env: { ...process.env, CLAUDE_PROJECT_DIR: observationRoot, RUNTIME_HOST_OBSERVATION_ROOT: observationRoot, ...extraEnv },
+      encoding: 'utf8',
+    });
+    const logPath = path.join(observationRoot, '.androidcommondoc', 'tool-use-log.jsonl');
+    let line = null;
+    if (fs.existsSync(logPath)) {
+      const raw = fs.readFileSync(logPath, 'utf8').trim();
+      if (raw) { try { line = JSON.parse(raw); } catch {} }
+    }
+    return { status: result.status, stderr: result.stderr, line };
+  }
+
+  function runNewTest(title, fn) {
+    try {
+      fn();
+      console.log(title + ': PASS');
+    } catch (err) {
+      newFailures++;
+      console.error(title + ': FAIL -- ' + err.message);
+    }
+  }
+
+  /**
+   * Builds ONE authentic I-BIND deny-evidence fixture (order.md, Block B1):
+   *  - init tools:["Task"]
+   *  - one displayed Agent tool_use
+   *  - automatic PreToolUse hook_started/hook_response for Agent, exit 2, IBIND_DENY_TASK_V1
+   *  - denied tool_result + native permission_denials entry (tool_name:"Task") for that Agent tool-use id
+   *  - exactly one sequence1-ibind-deny-hook-record-v2: matcher Task, payload Agent,
+   *    correct session/tool-use SHA-256 digests, authority:false
+   *  - deliberately NO dispatch/child/task/output/handle/survivor evidence
+   */
+  function authenticIbindFixture() {
+    const observationRoot = obsRoot();
+    const sessionId = 'sess-ibind-' + crypto.randomBytes(6).toString('hex');
+    const toolUseId = 'toolu_' + crypto.randomBytes(6).toString('hex');
+    const hookId = crypto.randomUUID();
+    const promptMarker = 'IBIND-FIXTURE-' + crypto.randomBytes(8).toString('hex');
+    const evidence = {
+      observationRoot,
+      ownerStreamRows: [
+        { type: 'system', subtype: 'init', session_id: sessionId, tools: ['Task'] },
+        { type: 'assistant', session_id: sessionId, message: { content: [{ type: 'tool_use', id: toolUseId, name: 'Agent', input: { run_in_background: true } }] } },
+        { type: 'system', subtype: 'hook_started', session_id: sessionId, hook_event: 'PreToolUse', hook_name: 'PreToolUse:Agent', hook_id: hookId },
+        { type: 'system', subtype: 'hook_response', session_id: sessionId, hook_event: 'PreToolUse', hook_name: 'PreToolUse:Agent', hook_id: hookId, exit_code: 2, stderr: 'IBIND_DENY_TASK_V1' },
+        { type: 'user', session_id: sessionId, message: { content: [{ type: 'tool_result', tool_use_id: toolUseId, is_error: true, content: 'IBIND_DENY_TASK_V1' }] } },
+        { type: 'assistant', session_id: sessionId, message: { content: [{ type: 'text', text: 'SEQUENCE1_PROBE_RESULT nonce DENIED' }] } },
+        { type: 'result', subtype: 'success', session_id: sessionId, result: 'SEQUENCE1_PROBE_RESULT nonce DENIED', permission_denials: [{ tool_name: 'Task', tool_use_id: toolUseId }] },
+      ],
+      automaticHookRecords: [{
+        schema: 'sequence1-ibind-deny-hook-record-v2',
+        hookEventName: 'PreToolUse',
+        matcherToolName: 'Task',
+        payloadToolName: 'Agent',
+        sessionIdSha256: sha256hex(sessionId),
+        toolUseIdSha256: sha256hex(toolUseId),
+        denyLiteral: 'IBIND_DENY_TASK_V1',
+        authority: false,
+      }],
+    };
+    return { evidence, observationRoot, sessionId, toolUseId, hookId, promptMarker };
+  }
+
+  function cloneIbindEvidence(value) {
+    return JSON.parse(JSON.stringify(value));
+  }
+
+  runNewTest('P1I-A-B1-LOGGER-IBIND-PROJECTION-POSITIVE-01 RED', () => {
+    const { evidence, observationRoot, sessionId, toolUseId, promptMarker } = authenticIbindFixture();
+    const init = evidence.ownerStreamRows.find((row) => row.subtype === 'init');
+    const proposal = evidence.ownerStreamRows.find((row) => row.type === 'assistant' && row.message && row.message.content.some((entry) => entry.type === 'tool_use'));
+    const response = evidence.ownerStreamRows.find((row) => row.subtype === 'hook_response');
+    const resultRow = evidence.ownerStreamRows.find((row) => row.type === 'result');
+    const record = evidence.automaticHookRecords[0];
+    assert.deepStrictEqual(init.tools, ['Task'], 'authentic host registry must expose only Task');
+    assert.strictEqual(proposal.message.content[0].name, 'Agent', 'displayed proposal must remain Agent');
+    assert.strictEqual(response.exit_code, 2, 'automatic PreToolUse response must exit 2');
+    assert.strictEqual(response.stderr, 'IBIND_DENY_TASK_V1', 'automatic response must carry the literal denial');
+    assert.deepStrictEqual(resultRow.permission_denials, [{ tool_name: 'Task', tool_use_id: toolUseId }], 'native denial must correlate Task to the Agent tool-use id');
+    assert.strictEqual(record.matcherToolName, 'Task');
+    assert.strictEqual(record.payloadToolName, 'Agent');
+    assert.strictEqual(record.sessionIdSha256, sha256hex(sessionId));
+    assert.strictEqual(record.toolUseIdSha256, sha256hex(toolUseId));
+    assert.strictEqual(record.authority, false);
+
+    try {
+      const mod = requireIbindSeam();
+      const brand = withIbindTestEnv(observationRoot, () => mod.__TEST_ONLY__admitIbindEvidence(evidence));
+      assert.ok(brand, 'authentic dual-channel evidence must yield an opaque usable brand');
+      const composition = mod.createHostComposition(brand);
+      assert.ok(composition && typeof composition.beginObservation === 'function', 'brand must yield a usable host composition');
+      const pre = {
+        hook_event_name: 'PreToolUse', session_id: sessionId, tool_use_id: toolUseId,
+        tool_name: 'Agent', tool_input: { prompt: promptMarker }, cwd: process.cwd(),
+      };
+      assert.ok(composition.beginObservation(pre), 'matching Agent observation must begin');
+      const boundaryResult = invokeBoundary(pre, observationRoot);
+      assert.strictEqual(boundaryResult.status, 0, 'real boundary hook must fail open');
+      const post = {
+        hook_event_name: 'PostToolUseFailure', session_id: sessionId, tool_use_id: toolUseId,
+        tool_name: 'Agent', tool_response: { error: 'IBIND_DENY_TASK_V1' },
+      };
+      const { status, line } = invokeLogger(post, observationRoot);
+      assert.strictEqual(status, 0, 'real logger hook must fail open');
+      assert.ok(line, 'ordinary log line must still be written');
+      const projection = readJsonIfExists(projectionPath(observationRoot, sha256hex(sessionId), sha256hex(toolUseId)));
+      assert.ok(projection, 'authentic admitted denial must produce one digest projection');
+      assert.deepStrictEqual(Object.keys(projection).sort(), PROJECTION_KEYS, 'projection must have exactly the existing six keys');
+      assert.ok(!Object.prototype.hasOwnProperty.call(projection, 'authority'), 'projection must carry no authority field');
+      assert.strictEqual(projection.schema, 'runtime/tool-use-observation-projection/v1');
+      assert.match(projection.session_digest, DIGEST_RE);
+      assert.match(projection.tool_use_digest, DIGEST_RE);
+      assert.strictEqual(projection.success, false);
+      const serialized = JSON.stringify(projection);
+      assert.ok(!serialized.includes(sessionId));
+      assert.ok(!serialized.includes(toolUseId));
+      assert.ok(!serialized.includes(promptMarker));
+    } finally {
+      fs.rmSync(observationRoot, { recursive: true, force: true });
+    }
+  });
+
+  runNewTest('P1I-A-B1-LOGGER-IBIND-HOSTILE-MATRIX-02 RED', () => {
+    const claimRoot = obsRoot();
+    try {
+      const sessionId = 'sess-ibind-claim-' + crypto.randomBytes(6).toString('hex');
+      const toolUseId = 'toolu_' + crypto.randomBytes(6).toString('hex');
+      const claimPost = {
+        hook_event_name: 'PostToolUse', session_id: sessionId, tool_use_id: toolUseId,
+        tool_name: 'Bash', tool_input: { command: 'echo claim' }, tool_response: {},
+        authority: true, ibind_authority: true, permission_denials: [],
+        record: { schema: 'sequence1-ibind-deny-hook-record-v2', authority: true },
+      };
+      const { status, line } = invokeLogger(claimPost, claimRoot, {
+        NODE_ENV: 'test', RUNTIME_HOST_OBSERVATION_TEST_CAPABILITY: CAPABILITY_VALUE,
+        IBIND_AUTHORITY: 'true', IBIND_AUTHORITY_JSON: JSON.stringify({ authority: true }),
+      });
+      assert.strictEqual(status, 0);
+      assert.ok(line);
+      assert.deepStrictEqual(Object.keys(line).sort(), ORDINARY_LOG_KEYS, 'manual claims must not widen the ordinary log');
+      assert.strictEqual(readJsonIfExists(projectionPath(claimRoot, sha256hex(sessionId), sha256hex(toolUseId))), undefined, 'env/JSON claims alone must not project');
+    } finally {
+      fs.rmSync(claimRoot, { recursive: true, force: true });
+    }
+
+    const mod = requireIbindSeam();
+    const cases = {
+      stream_only: (x) => { x.automaticHookRecords = []; },
+      record_only: (x) => { x.ownerStreamRows = []; },
+      duplicate_record: (x) => { x.automaticHookRecords.push(cloneIbindEvidence(x.automaticHookRecords[0])); },
+      session_digest_mismatch: (x) => { x.automaticHookRecords[0].sessionIdSha256 = '0'.repeat(64); },
+      tool_use_digest_mismatch: (x) => { x.automaticHookRecords[0].toolUseIdSha256 = '1'.repeat(64); },
+      swapped_task_agent_surfaces: (x) => { x.automaticHookRecords[0].matcherToolName = 'Agent'; x.automaticHookRecords[0].payloadToolName = 'Task'; },
+      wrong_record_literal: (x) => { x.automaticHookRecords[0].denyLiteral = 'ALLOW'; },
+      record_authority_claim: (x) => { x.automaticHookRecords[0].authority = true; },
+      missing_native_denial: (x) => { x.ownerStreamRows.find((row) => row.type === 'result').permission_denials = []; },
+      hook_allowed: (x) => { x.ownerStreamRows.find((row) => row.subtype === 'hook_response').exit_code = 0; },
+      hook_literal_mismatch: (x) => { x.ownerStreamRows.find((row) => row.subtype === 'hook_response').stderr = 'ALLOW'; },
+      proposal_surface_mismatch: (x) => { x.ownerStreamRows.find((row) => row.type === 'assistant').message.content[0].name = 'Task'; },
+      object_shaped_pseudo_registry: (x) => { x.ownerStreamRows.find((row) => row.subtype === 'init').tools = [{ name: 'Task' }]; },
+      manual_claims: (x) => { x.manual = true; x.role = 'arch-platform'; x.grant_id = 'forged'; x.operatorApproved = true; },
+      env_claim: (x) => { x.env = { IBIND_AUTHORITY: 'true' }; },
+      json_claim: (x) => { x.authority_json = JSON.stringify({ authority: true }); },
+      second_agent_attempt: (x) => { x.ownerStreamRows.splice(2, 0, cloneIbindEvidence(x.ownerStreamRows[1])); },
+      child_artifact: (x) => { x.ownerStreamRows.push({ type: 'system', subtype: 'task_started', task_id: 'child' }); },
+      task_progress_artifact: (x) => { x.ownerStreamRows.push({ type: 'system', subtype: 'task_progress', task_id: 'child' }); },
+      background_handle_artifact: (x) => { x.ownerStreamRows.push({ type: 'system', subtype: 'background_tasks_changed', handle: 'h1' }); },
+      child_survivor_artifact: (x) => { x.ownerStreamRows.push({ type: 'system', subtype: 'init', session_id: 'child-survivor', tools: ['Task'] }); },
+      task_output_path_artifact: (x) => { x.ownerStreamRows.push({ type: 'system', subtype: 'task_output_reference', path: '/tasks/child/result.output' }); },
+    };
+
+    const unexpectedlyUsable = [];
+    try {
+      for (const [label, mutate] of Object.entries(cases)) {
+        const fixture = authenticIbindFixture();
+        const evidence = cloneIbindEvidence(fixture.evidence);
+        mutate(evidence);
+        let brand = null;
+        try { brand = withIbindTestEnv(fixture.observationRoot, () => mod.__TEST_ONLY__admitIbindEvidence(evidence)); } catch { brand = null; }
+        let composition = null;
+        if (brand) { try { composition = mod.createHostComposition(brand); } catch { composition = null; } }
+        if (composition && typeof composition.beginObservation === 'function') unexpectedlyUsable.push(label);
+        assert.strictEqual(
+          readJsonIfExists(projectionPath(fixture.observationRoot, sha256hex(fixture.sessionId), sha256hex(fixture.toolUseId))),
+          undefined,
+          label + ' must not produce a projection',
+        );
+        const logPath = path.join(fixture.observationRoot, '.androidcommondoc', 'tool-use-log.jsonl');
+        assert.ok(!fs.existsSync(logPath) || fs.readFileSync(logPath, 'utf8').trim() === '', label + ' must not produce a log entry');
+        fs.rmSync(fixture.observationRoot, { recursive: true, force: true });
+      }
+      assert.deepStrictEqual(unexpectedlyUsable, [], 'hostile evidence must never yield a usable composition: ' + unexpectedlyUsable.join(', '));
+    } finally {
+      // Each case owns and removes its own observation root.
+    }
+  });
+
+  if (newFailures > 0) {
+    console.error('\n' + newFailures + ' of 2 new P1I-A-B1-LOGGER-IBIND-* tests FAILED (see above) -- ' +
+      'expected RED until Block A lands __TEST_ONLY__admitIbindEvidence and the I-BIND-aware projection path.');
+    process.exitCode = 1;
+  } else {
+    console.log('\nAll 2 new P1I-A-B1-LOGGER-IBIND-* tests passed.');
+  }
+}

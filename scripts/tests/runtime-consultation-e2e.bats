@@ -186,18 +186,21 @@ else:
 " "$1" "$2"
 }
 
-# Lightweight single-role ensure -- primes a session's own MainOrchestratorBinding
-# without waiting for READY or starting any bridge process. Used by scenarios that
-# only need an ordinary requester grant, not a full retained plane.
+# Lightweight direct binding prime. These scenarios need only the canonical
+# MainOrchestratorBinding for the observed session; no role lifecycle action is
+# involved, so do not route through ensure or an external host capability.
 _wave1_prime_session_binding() {
   local session_key="$1"
-  local ensure_cmd; ensure_cmd="$(_render_posix_direct node "$RLL_IMPL" ensure --project-root "$PROJ" --role arch-testing)"
-  _make_input "$ensure_cmd" "" "$session_key"
-  _run_cp_hook
-  [ "$status" -eq 0 ] || return 1
-  local lifecycle_grant; lifecycle_grant="$(_extract_injected lifecycle-binding)"
-  [ -n "$lifecycle_grant" ] || return 1
-  run env NODE_ENV=test RUNTIME_ROLE_LIFECYCLE_TEST_CAPABILITY="$S16E2E_LC_CAPABILITY" RUNTIME_ROLE_LIFECYCLE_FAKE_CAPABILITIES='["codex-app-server"]' node "$RLL_IMPL" ensure --project-root "$PROJ" --role arch-testing --lifecycle-binding "$lifecycle_grant"
+  run env NODE_ENV=test RUNTIME_ROLE_LIFECYCLE_TEST_CAPABILITY="$S16E2E_LC_CAPABILITY" node -e '
+    const rll = require(process.argv[1]);
+    const projectRoot = process.argv[2];
+    const identity = { ok: true, provider: "claude-hook", runtime_session_key: process.argv[3] };
+    const worktreeId = rll.computeWorktreeId(projectRoot);
+    const plan = rll.discoverPlan(projectRoot);
+    if (!plan.ok) process.exit(1);
+    const created = rll.createMainOrchestratorBinding(projectRoot, identity, worktreeId, plan.planDigest, 600);
+    if (!created.ok) process.exit(1);
+  ' "$RLL_IMPL" "$PROJ" "$session_key"
   [ "$status" -eq 0 ] || return 1
 }
 
@@ -224,6 +227,15 @@ _s16e2e_bootstrap_project() {
   chmod 0700 "$PROJ/.planning/coordination"
   mkdir -p "$PROJ/scripts"
   cp -R "$BATS_TEST_DIRNAME/../lib" "$PROJ/scripts/lib"
+  node -e '
+    const fs = require("fs");
+    const path = require("path");
+    const lib = process.argv[1];
+    const rll = require(path.join(lib, "runtime-role-lifecycle.cjs"));
+    const policyPath = path.join(lib, "runtime-collaboration-policy.json");
+    const policy = JSON.parse(fs.readFileSync(policyPath, "utf8"));
+    fs.writeFileSync(policyPath, JSON.stringify(rll.projectPolicyV2ToV1(policy)));
+  ' "$PROJ/scripts/lib"
   S16E2E_BRIDGE="$PROJ/scripts/lib/runtime-bridge-codex.cjs"
   if [ -n "$routing_override_role" ]; then
     node -e '
@@ -490,7 +502,7 @@ _s16e2e_mint_raw_action() {
   if [ -z "$lifecycle_grant" ]; then echo "ensure hook did not inject a lifecycle-binding grant: $output" >&2; return 1; fi
 
   local ensure_out
-  ensure_out="$(NODE_ENV=test RUNTIME_ROLE_LIFECYCLE_TEST_CAPABILITY="$S16E2E_LC_CAPABILITY" RUNTIME_ROLE_LIFECYCLE_FAKE_CAPABILITIES='["codex-app-server"]' node "$RLL_IMPL" ensure --project-root "$PROJ" "${role_flags[@]}" --lifecycle-binding "$lifecycle_grant")"
+  ensure_out="$(HOME="$S16E2E_TEST_HOME" CODEX_CLI_PATH="$S16E2E_FAKE_CODEX" NODE_ENV=test RUNTIME_ROLE_LIFECYCLE_TEST_CAPABILITY="$S16E2E_LC_CAPABILITY" RUNTIME_ROLE_LIFECYCLE_FAKE_CAPABILITIES='["codex-app-server"]' node "$RLL_IMPL" ensure --project-root "$PROJ" "${role_flags[@]}" --lifecycle-binding "$lifecycle_grant")"
   if [ $? -ne 0 ]; then echo "real ensure CLI failed: $ensure_out" >&2; return 1; fi
 
   node -e '

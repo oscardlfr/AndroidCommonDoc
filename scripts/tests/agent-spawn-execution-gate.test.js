@@ -272,7 +272,8 @@ function cleanup(dir) {
 }
 
 // Mints a REAL, fully-eligible pending role-spawn action for `role`: a
-// genuinely SUCCEEDED team-ensure AND a genuinely PENDING role-spawn action
+// a genuinely PENDING role-spawn action, plus a genuinely SUCCEEDED
+// team-ensure when the selected lifecycle policy actually mints one
 // (STARTING role-binding with pending_action_id), via the real production
 // binding+grant+ensure machinery -- never a hand-fabricated action/marker.
 // Mirrors context-provider-gate.test.js's own mintPendingRoleSpawnAction,
@@ -302,11 +303,13 @@ function mintFullyEligibleRoleSpawnAction(proj, role, sessionKey) {
 
   const repoDescriptor = { repoId: rll.computeRepoId(proj) };
   const teamEnsureState = rll.readTeamEnsureState(repoDescriptor, genResult.generationId, worktreeId, planResult.planDigest);
-  if (!teamEnsureState.ok || teamEnsureState.state !== 'PENDING') {
-    throw new Error('mintFullyEligibleRoleSpawnAction: expected a PENDING team-ensure marker after ensure: ' + JSON.stringify(teamEnsureState));
+  if (!teamEnsureState.ok || !['ABSENT', 'PENDING'].includes(teamEnsureState.state)) {
+    throw new Error('mintFullyEligibleRoleSpawnAction: expected an ABSENT or PENDING team-ensure marker after ensure: ' + JSON.stringify(teamEnsureState));
   }
-  const registerResult = rll.registerTeamEnsureSuccess(repoDescriptor, genResult.generationId, worktreeId, planResult.planDigest, teamEnsureState.record.pending_action_id);
-  if (!registerResult.ok) throw new Error('mintFullyEligibleRoleSpawnAction: registerTeamEnsureSuccess failed: ' + JSON.stringify(registerResult));
+  if (teamEnsureState.state === 'PENDING') {
+    const registerResult = rll.registerTeamEnsureSuccess(repoDescriptor, genResult.generationId, worktreeId, planResult.planDigest, teamEnsureState.record.pending_action_id);
+    if (!registerResult.ok) throw new Error('mintFullyEligibleRoleSpawnAction: registerTeamEnsureSuccess failed: ' + JSON.stringify(registerResult));
+  }
 
   const profileDigest = rll.roleProfileDigestFor(role);
   const stateResult = rll.readRoleBindingState(proj, worktreeId, planResult.planDigest, profileDigest, genResult.generationId, role);
@@ -324,7 +327,7 @@ function mintFullyEligibleRoleSpawnAction(proj, role, sessionKey) {
   }
   return {
     roleSpawnActionId: stateResult.record.pending_action_id,
-    teamEnsureActionId: teamEnsureState.record.pending_action_id,
+    teamEnsureActionId: teamEnsureState.state === 'PENDING' ? teamEnsureState.record.pending_action_id : null,
     worktreeId, planDigest: planResult.planDigest, generationId: genResult.generationId,
     mainBindingId: bindingResult.binding.binding_id,
     repoDescriptor,
@@ -409,7 +412,36 @@ function listRegistryFiles(projectRoot) {
   return out;
 }
 
+function makeS16CodexStartabilityFixture() {
+  const binDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-spawn-s16-codexbin-'));
+  const executable = path.join(binDir, 'fake-codex');
+  fs.writeFileSync(executable, '#!/bin/sh\nexit 0\n', { mode: 0o755 });
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-spawn-s16-home-'));
+  const codexDir = path.join(home, '.codex');
+  fs.mkdirSync(codexDir, { recursive: true });
+  const encode = (value) => Buffer.from(value).toString('base64')
+    .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  const exp = Math.floor(Date.now() / 1000) + 7200;
+  const jwt = () => encode(JSON.stringify({ alg: 'none', typ: 'JWT' })) + '.'
+    + encode(JSON.stringify({ sub: 'agent-spawn-s16', exp })) + '.'
+    + encode(crypto.randomBytes(16));
+  fs.writeFileSync(path.join(codexDir, 'auth.json'), JSON.stringify({
+    tokens: {
+      access_token: jwt(),
+      account_id: 'agent-spawn-s16-' + crypto.randomBytes(4).toString('hex'),
+      id_token: jwt(),
+      refresh_token: 'synthetic-agent-spawn-s16-' + crypto.randomBytes(8).toString('hex'),
+    },
+  }), { mode: 0o600 });
+  return { binDir, executable, home };
+}
+
 function invokeRealRootSourceCli(projectRoot, sessionId) {
+  const projectLib = path.join(projectRoot, 'scripts', 'lib');
+  fs.mkdirSync(projectLib, { recursive: true });
+  const toolkitPolicy = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../lib/runtime-collaboration-policy.json'), 'utf8'));
+  fs.writeFileSync(path.join(projectLib, 'runtime-collaboration-policy.json'), JSON.stringify(rll.projectPolicyV2ToV1(toolkitPolicy)));
+  fs.copyFileSync(path.resolve(__dirname, '../lib/runtime-routing.json'), path.join(projectLib, 'runtime-routing.json'));
   const intent = {
     source_role: 'toolkit-specialist',
     reporting_architect: 'arch-platform',
@@ -436,10 +468,21 @@ function invokeRealRootSourceCli(projectRoot, sessionId) {
   const ensureArgv = [IMPL_RLL, 'ensure', '--project-root', projectRoot];
   for (const role of S16_SUPPORT_ROLES) ensureArgv.push('--role', role);
   ensureArgv.push('--lifecycle-binding', ensureGrant.grantId);
-  const ensured = spawnSync('node', ensureArgv, {
-    env: Object.assign({}, process.env, { RUNTIME_ROLE_LIFECYCLE_FAKE_CAPABILITIES: '["codex-app-server"]' }),
-    encoding: 'utf8',
-  });
+  const startability = makeS16CodexStartabilityFixture();
+  let ensured;
+  try {
+    ensured = spawnSync('node', ensureArgv, {
+      env: Object.assign({}, process.env, {
+        HOME: startability.home,
+        CODEX_CLI_PATH: startability.executable,
+        RUNTIME_ROLE_LIFECYCLE_FAKE_CAPABILITIES: '["codex-app-server"]',
+      }),
+      encoding: 'utf8',
+    });
+  } finally {
+    fs.rmSync(startability.home, { recursive: true, force: true });
+    fs.rmSync(startability.binDir, { recursive: true, force: true });
+  }
   assert.strictEqual(ensured.status, 0, 'S16 root-source setup: retained-plane ensure must succeed: ' + JSON.stringify(ensured));
   const ensureEnvelope = JSON.parse(String(ensured.stdout).trim());
   const supervisorAction = ensureEnvelope.actions.find((candidate) => candidate.kind === 'supervisor-start');
@@ -1525,6 +1568,17 @@ runPositiveOwningNameAbsent();
     const r2 = runMainOrchestratorAgentCall(toolInput, proj, 'rb2-session');
     assertPreToolUseDeny(r2, 'RB2b: a second, concurrent/replayed reservation attempt for the SAME action must be DENIED');
 
+    const bindingDir = path.join(rll.registryRepoDir(proj), 'orchestrator-bindings');
+    const sessionBindings = fs.readdirSync(bindingDir)
+      .filter((name) => name.endsWith('.json'))
+      .map((name) => JSON.parse(fs.readFileSync(path.join(bindingDir, name), 'utf8')))
+      .filter((record) => record.runtime === 'claude-hook'
+        && record.runtime_session_key === 'rb2-session'
+        && record.worktree_id === fixture.worktreeId
+        && record.plan_digest === fixture.planDigest);
+    assert.strictEqual(sessionBindings.length, 1, 'RB2: repeated Agent calls in one lifecycle session must retain exactly one MainOrchestratorBinding for {session,worktree,plan}: ' + JSON.stringify(sessionBindings));
+    assert.strictEqual(sessionBindings[0].binding_id, fixture.mainBindingId, 'RB2: the hook must reuse the fixture\'s original canonical MainOrchestratorBinding, never mint a sibling: ' + JSON.stringify(sessionBindings[0]));
+
     console.log('RB2 second/replayed reservation attempt for the same action is denied (atomic single-winner): PASS');
   } finally {
     cleanup(proj);
@@ -1621,6 +1675,11 @@ runPositiveOwningNameAbsent();
   const proj = makeGitProject();
   try {
     writePlanFixture(proj, 'rb5-wave');
+    const projectLib = path.join(proj, 'scripts', 'lib');
+    fs.mkdirSync(projectLib, { recursive: true });
+    const toolkitPolicy = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../lib/runtime-collaboration-policy.json'), 'utf8'));
+    fs.writeFileSync(path.join(projectLib, 'runtime-collaboration-policy.json'), JSON.stringify(rll.projectPolicyV2ToV1(toolkitPolicy)));
+    fs.copyFileSync(path.resolve(__dirname, '../lib/runtime-routing.json'), path.join(projectLib, 'runtime-routing.json'));
     const identity = { ok: true, provider: 'claude-hook', runtime_session_key: 'rb5-session' };
     const worktreeId = rll.computeWorktreeId(proj);
     const planResult = rll.discoverPlan(proj);
@@ -1630,13 +1689,39 @@ runPositiveOwningNameAbsent();
     const grantResult = rll.mintLifecycleCommandGrant(proj, bindingResult.binding, argvDigest, RB_ROLE, 'ensure', 'main-orchestrator', 'orchestrator', 'normal', null);
     const ensureResult = spawnSync('node', [IMPL_RLL, 'ensure', '--project-root', proj, '--role', RB_ROLE, '--lifecycle-binding', grantResult.grantId], { env: process.env, encoding: 'utf8' });
     assert.strictEqual(ensureResult.status, 0, 'RB5 setup: ensure CLI must succeed: ' + ensureResult.stdout + ensureResult.stderr);
-    // Deliberately NEVER call registerTeamEnsureSuccess -- team-ensure stays PENDING.
+    // The accepted host profile no longer mints TeamCreate. Reconstruct one
+    // genuine historical PENDING dependency through the retained canonical
+    // writer, then attach its action id to the otherwise-current binding so
+    // this compatibility guard remains load-bearing.
     const genResult = rll.resolveSessionGeneration(proj, identity);
     const repoDescriptor = { repoId: rll.computeRepoId(proj) };
+    const pair = rll.resolvePolicyPair(proj);
+    assert.strictEqual(pair.ok, true, 'RB5 setup: policy pair must resolve');
+    const historicalTeamEnsure = rll.ensureTeamEnsureAction(
+      proj, repoDescriptor.repoId, worktreeId, planResult.planDigest,
+      rc.sha256String(rc.canonicalJSONStringify(pair.routing)), genResult.generationId,
+      pair.policy, bindingResult.binding.expiry,
+    );
+    assert.strictEqual(historicalTeamEnsure.ok, true, 'RB5 setup: historical team-ensure must mint: ' + JSON.stringify(historicalTeamEnsure));
+    const profileDigest = rll.roleProfileDigestFor(RB_ROLE);
+    const roleState = rll.readRoleBindingState(proj, worktreeId, planResult.planDigest, profileDigest, genResult.generationId, RB_ROLE);
+    assert.ok(roleState.ok && roleState.record, 'RB5 setup: pending role binding must resolve: ' + JSON.stringify(roleState));
+    const historicalRoleRecord = Object.assign({}, roleState.record, { team_ensure_action_id: historicalTeamEnsure.actionId });
+    const historicalWrite = rll.writeRegistryRecordReplace(
+      rll.roleBindingPathFor(proj, worktreeId, planResult.planDigest, profileDigest, genResult.generationId, RB_ROLE),
+      Buffer.from(rc.canonicalJSONStringify(historicalRoleRecord), 'utf8'),
+    );
+    assert.strictEqual(historicalWrite.ok, true, 'RB5 setup: historical dependency must attach: ' + JSON.stringify(historicalWrite));
     const teamEnsureState = rll.readTeamEnsureState(repoDescriptor, genResult.generationId, worktreeId, planResult.planDigest);
     assert.strictEqual(teamEnsureState.state, 'PENDING', 'RB5 setup sanity: team-ensure must genuinely still be PENDING (never SUCCEEDED) for this test: ' + JSON.stringify(teamEnsureState));
 
-    const toolInput = { subagent_type: RB_ROLE, name: RB_ROLE };
+    const roleAction = rll.findActionAcrossRepos(roleState.record.pending_action_id);
+    assert.ok(roleAction.ok && !roleAction.absent, 'RB5 setup: pending role action must resolve: ' + JSON.stringify(roleAction));
+    const toolInput = {
+      subagent_type: RB_ROLE,
+      name: roleAction.action.payload.teammate_name,
+      prompt: roleAction.action.payload.bootstrap_message,
+    };
     const r = runMainOrchestratorAgentCall(toolInput, proj, 'rb5-session');
     assertPreToolUseDeny(r, 'RB5: reservation must be DENIED while team-ensure has not yet reached SUCCEEDED, even though a genuinely pending role-spawn action exists for this role');
 
@@ -1754,7 +1839,15 @@ runPositiveOwningNameAbsent();
     const genResult = rll.resolveSessionGeneration(proj, identity);
     const repoDescriptor = { repoId: rll.computeRepoId(proj) };
     const teamEnsureState = rll.readTeamEnsureState(repoDescriptor, genResult.generationId, worktreeId, planResult.planDigest);
-    rll.registerTeamEnsureSuccess(repoDescriptor, genResult.generationId, worktreeId, planResult.planDigest, teamEnsureState.record.pending_action_id);
+    if (teamEnsureState.state === 'PENDING') {
+      rll.registerTeamEnsureSuccess(repoDescriptor, genResult.generationId, worktreeId, planResult.planDigest, teamEnsureState.record.pending_action_id);
+    }
+    const roleStateBeforeExpiry = rll.readRoleBindingState(
+      proj, worktreeId, planResult.planDigest, rll.roleProfileDigestFor(RB_ROLE), genResult.generationId, RB_ROLE,
+    );
+    assert.ok(roleStateBeforeExpiry.ok && roleStateBeforeExpiry.record, 'RB7 setup: pending role binding must resolve');
+    const roleActionBeforeExpiry = rll.findActionAcrossRepos(roleStateBeforeExpiry.record.pending_action_id);
+    assert.ok(roleActionBeforeExpiry.ok && !roleActionBeforeExpiry.absent, 'RB7 setup: pending role action must resolve');
 
     // Busy-wait until DEFINITELY past the binding's 3-second expiry,
     // measured from its own creation instant (registry operations are pure
@@ -1764,7 +1857,11 @@ runPositiveOwningNameAbsent();
     const deadline = bindingCreatedAtMs + 3300;
     while (Date.now() < deadline) { /* busy-wait past the 3s binding TTL */ }
 
-    const toolInput = { subagent_type: RB_ROLE, name: RB_ROLE };
+    const toolInput = {
+      subagent_type: RB_ROLE,
+      name: roleActionBeforeExpiry.action.payload.teammate_name,
+      prompt: roleActionBeforeExpiry.action.payload.bootstrap_message,
+    };
     const r = runMainOrchestratorAgentCall(toolInput, proj, 'rb7-session');
     assertPreToolUseDeny(r, 'RB7: reservation must be DENIED once the referenced main-orchestrator binding has expired, even though the role-spawn action and team-ensure state were both genuinely valid at mint time');
 

@@ -3399,3 +3399,351 @@ _write_r33_bootstrap_receipt() {
   [ "$status" -eq 3 ]
   _assert_conformance "INVALID" "SCHEMA_INVALID"
 }
+
+# ══════════════════════════════════════════════════════════════════════════
+# P1A -- Sequence135 RED-only, append-only (Sequence123 R129 binding section5,
+# "P1-A exact cleanup algorithm and receipt"; PLAN.md R130). Unlike the rest
+# of this file, the 4 cases below exercise scripts/lib/runtime-bridge-codex.cjs
+# directly (its IsolationProvider/spawnWithIntent/session-run-engine root
+# lifecycle -- the exact subject of section5's algorithm), never
+# runtime-consultation.cjs. Each builds its own small, self-contained,
+# genuinely-real fixture (a short-lived owned child process and, where
+# needed, the minimal cooperative app-server JSONL stub below) rather than
+# reusing runtime-consultation-bridge.bats's own private helpers (a
+# different file this task may not touch). Confirmed by direct source read
+# before writing this section: none of the reap/tombstone/kind-enforcement
+# behavior asserted below exists in production yet. Zero pre-existing byte
+# above this line is touched; zero production file is touched.
+# ══════════════════════════════════════════════════════════════════════════
+
+P1A_BRIDGE="$BATS_TEST_DIRNAME/../lib/runtime-bridge-codex.cjs"
+
+# A minimal, owner-confined HOME with a fixture ~/.codex/auth.json (same
+# shape runtime-consultation-bridge.bats's own setup() writes) --
+# createCredentialSourceProvider().read() requires this before session-run's
+# engine can be driven directly.
+_p1a_test_home() {
+  local home_dir="$PROJ/p1a-test-home"
+  if [ ! -f "$home_dir/.codex/auth.json" ]; then
+    mkdir -p "$home_dir/.codex"
+    node -e '
+      const fs = require("fs");
+      const enc = (v) => Buffer.from(JSON.stringify(v)).toString("base64url");
+      const accessToken = enc({ alg: "none", typ: "JWT" }) + "." + enc({ exp: Math.floor(Date.now() / 1000) + 3600 }) + ".fixture";
+      fs.writeFileSync(process.argv[1], JSON.stringify({ tokens: { access_token: accessToken, account_id: "p1a-roots-account", id_token: accessToken } }), { mode: 0o600 });
+    ' "$home_dir/.codex/auth.json"
+    chmod 0600 "$home_dir/.codex/auth.json"
+  fi
+  printf '%s' "$home_dir"
+}
+
+# The minimal real JSONL peer needed for an owned app-server child to reach
+# BORN+INITIALIZED+LOGIN+THREAD_START+bootstrap-READY -- a deliberately
+# smaller subset of runtime-consultation-bridge.bats's own FAKE_CODEX
+# (cooperative mode only; no thread/read, thread/archive, nested-consult or
+# alternate-mode branching, none of which any P1A roots case needs).
+_p1a_cooperative_stub_path() {
+  local stub_path="$PROJ/p1a-cooperative-stub.cjs"
+  if [ ! -f "$stub_path" ]; then
+    cat > "$stub_path" <<'STUBEOF'
+#!/usr/bin/env node
+'use strict';
+const readline = require('node:readline');
+function send(frame) { process.stdout.write(JSON.stringify(frame) + '\n'); }
+let ordinal = 0;
+readline.createInterface({ input: process.stdin }).on('line', (line) => {
+  let frame;
+  try { frame = JSON.parse(line); } catch (err) { process.exit(2); }
+  if (frame.method === 'initialize') {
+    send({ id: frame.id, result: { codexHome: '/tmp/p1a-fake-home', platformFamily: 'unix', platformOs: 'macos', userAgent: 'p1a-fake-stub/1.0.0' } });
+    return;
+  }
+  if (frame.method === 'account/login/start') {
+    send({ id: frame.id, result: { type: 'chatgptAuthTokens' } });
+    send({ method: 'account/updated', params: { authMode: 'chatgptAuthTokens', planType: null } });
+    return;
+  }
+  if (frame.method === 'thread/start') {
+    ordinal += 1;
+    const id = 'p1a-fixture-thread-' + ordinal;
+    const nowSec = Math.floor(Date.now() / 1000);
+    const thread = { id, sessionId: id, forkedFromId: null, parentThreadId: null, preview: '', ephemeral: false, modelProvider: 'openai', createdAt: nowSec, updatedAt: nowSec, recencyAt: null, status: { type: 'idle' }, path: null, cwd: frame.params.cwd, cliVersion: '0.145.0-alpha.18', source: 'cli', threadSource: null, agentNickname: null, agentRole: null, gitInfo: null, name: null, turns: [] };
+    send({ id: frame.id, result: { thread, approvalPolicy: 'never', approvalsReviewer: 'user', cwd: frame.params.cwd, instructionSources: [], model: 'gpt-5', modelProvider: 'openai', sandbox: { type: 'readOnly', networkAccess: false }, serviceTier: null, reasoningEffort: null } });
+    return;
+  }
+  if (frame.method === 'turn/start') {
+    ordinal += 1;
+    const turnId = 'p1a-fixture-turn-' + ordinal;
+    send({ id: frame.id, result: { turn: { id: turnId, status: 'inProgress', items: [], itemsView: 'full' } } });
+    const envelope = { schema: 'coordination/runtime-turn-envelope/v1', kind: 'terminal-result', result: { schema: 'coordination/result-envelope/v1', status: 'ANSWERED', result_kind: 'role-bootstrap', content: 'READY' } };
+    setImmediate(() => send({ method: 'turn/completed', params: { threadId: frame.params.threadId, turn: { id: turnId, status: 'completed', itemsView: 'full', items: [{ type: 'agentMessage', id: 'p1a-fixture-msg-' + ordinal, phase: 'final_answer', text: JSON.stringify({ envelope }), memoryCitation: null }] } } }));
+    return;
+  }
+});
+STUBEOF
+    chmod +x "$stub_path"
+  fi
+  printf '%s' "$stub_path"
+}
+
+@test "P1A-COUNT2-TOMBSTONE-REAP-01 RED: a full two-role owned batch's clean stop reaps BOTH sealed roots to a real tombstone -- count2, never a vacuous pass at zero and never a false partial count" {
+  local test_home; test_home="$(_p1a_test_home)"
+  local stub_path; stub_path="$(_p1a_cooperative_stub_path)"
+  local node_bin; node_bin="$(command -v node)"
+  local spawn_json; spawn_json="$(node -e 'process.stdout.write(JSON.stringify({command:process.argv[1],args:[process.argv[2]]}))' "$node_bin" "$stub_path")"
+  run env NODE_ENV=test RUNTIME_BRIDGE_CODEX_TEST_CAPABILITY=x HOME="$test_home" RUNTIME_BRIDGE_CODEX_FAKE_APP_SERVER_SPAWN="$spawn_json" node -e '
+    const crypto = require("crypto");
+    const fs = require("fs");
+    const path = require("path");
+    const bridge = require(process.argv[1]);
+    const rll = require(process.argv[2]);
+    const projectRoot = process.argv[3];
+    const repoId = crypto.randomBytes(16).toString("hex");
+    const repoDescriptor = { repoId };
+    const identityResult = bridge.requireProvenProcessIdentity();
+    if (!identityResult.ok) throw new Error("requireProvenProcessIdentity failed: " + identityResult.reason);
+    const pidIdentity = identityResult.pidIdentity;
+    const credentialSource = bridge.createCredentialSourceProvider().read();
+    if (!credentialSource.ok) throw new Error("credentialSource unavailable: " + JSON.stringify(credentialSource));
+    const p = { roles: ["quality-gater", "verifier"], sessionExpiry: new Date(Date.now() + 300000).toISOString() };
+    const ownedChildRef = { child: null, children: [] };
+    const state = { phase: "READY", batchReady: false };
+    const shutdown = async (reason) => {};
+    const actionExpiryMs = Date.now() + 300000;
+    const sessionExpiryMs = Date.now() + 300000;
+    const waveActivation = { ok: true, waveSlug: "p1a-roots-fixture" };
+    const action = { action_id: "p1a".padEnd(32, "0"), repo_id: repoId, plan_digest: "p1a".padEnd(64, "0"), expires_at: new Date(actionExpiryMs).toISOString() };
+    const engine = { p, repoDescriptor, action, coordinationRootReal: projectRoot, projectRoot, pidIdentity, credentialSource, rendezvousInstanceId: crypto.randomBytes(16).toString("hex"), supervisorInstanceId: crypto.randomBytes(16).toString("hex"), ownedChildRef, state, shutdown, actionExpiryMs, sessionExpiryMs, waveActivation };
+    (async () => {
+      const isolationRootsDir = path.join(rll.registryRepoDir({ repoId }), "isolation-roots");
+      const handle = bridge.__testOnlyStartOwnedAppServerSupervisorEngine(engine);
+      // Sequence136 correction (finding 1): guarantee requestStop runs even
+      // if a precondition/assertion throws before the original single call
+      // would have been reached -- see P1A-BORN-COMPLETE-01 own comment
+      // (runtime-consultation-bridge.bats) for the full rationale.
+      let testError = null;
+      try {
+        const outcome = await handle.readyPromise.then(() => "resolved", (err) => "rejected:" + String((err && err.message) || err));
+        if (outcome !== "resolved") throw new Error("readyPromise did not resolve: " + outcome);
+        const rootsBefore = fs.readdirSync(isolationRootsDir);
+        if (rootsBefore.length !== 2) throw new Error("test precondition: expected exactly two sealed roots before stop, found " + rootsBefore.length);
+        const stopResult = await handle.requestStop("p1a-count2-tombstone-reap-01-cleanup");
+        if (stopResult.stopped !== true) throw new Error("requestStop did not report stopped:true: " + JSON.stringify(stopResult));
+        const tombstoneDir = path.join(rll.registryRepoDir({ repoId }), "instances", ".tombstone");
+        let tombstoneCount = 0;
+        try { tombstoneCount = fs.readdirSync(tombstoneDir).filter((f) => f.endsWith(".json")).length; } catch (err) { tombstoneCount = 0; }
+        const rootsAfter = fs.readdirSync(isolationRootsDir).filter((name) => fs.existsSync(path.join(isolationRootsDir, name)));
+        if (tombstoneCount !== 2 || rootsAfter.length !== 0) throw new Error("expected exactly two reaped tombstones and zero remaining sealed root directories after a clean two-role stop, got tombstoneCount=" + tombstoneCount + " remainingRoots=" + JSON.stringify(rootsAfter));
+      } catch (err) {
+        testError = err;
+      }
+      await handle.requestStop("p1a-count2-tombstone-reap-01-cleanup-finally").catch(() => {});
+      if (testError) throw testError;
+      process.stdout.write("P1A-COUNT2-TOMBSTONE-REAP-01-OK\n");
+    })().catch((err) => {
+      process.stderr.write("FAILED: " + ((err && err.stack) || String(err)) + "\n");
+      process.exitCode = 1;
+    });
+  ' "$P1A_BRIDGE" "$RLL" "$PROJ"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"P1A-COUNT2-TOMBSTONE-REAP-01-OK"* ]]
+}
+
+@test "P1A-UNSEALED-PID-ABSENT-01 RED: a genuine app-server-worker BORN record (fixed kind, never a generic low-level label) is required before an unsealed PID_ABSENT reap is trusted" {
+  run env NODE_ENV=test RUNTIME_BRIDGE_CODEX_TEST_CAPABILITY=x node -e '
+    const crypto = require("crypto");
+    const fs = require("fs");
+    const path = require("path");
+    const os = require("os");
+    const bridge = require(process.argv[1]);
+    const rll = require(process.argv[2]);
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "p1a-unsealed-pid-absent-"));
+    const readViewAuthority = Object.assign(() => ({ ok: true, capability: {} }), { resolve: () => ({ ok: true }) });
+    const isolationProvider = bridge.createIsolationProvider({ readViewAuthority, strictConfigValidator: () => ({ ok: true }), projectRoot: tmp });
+    const repoId = crypto.randomBytes(16).toString("hex");
+    const instanceId = crypto.randomBytes(16).toString("hex");
+    const runId = crypto.randomBytes(16).toString("hex");
+    const ownerIdentity = { pid: process.pid, birthToken: "p1a-synthetic-birth", executableIdentity: process.execPath };
+    (async () => {
+      const created = isolationProvider.createRunRoot({ instanceId, repoId, runId, ownerIdentity });
+      if (!created.ok) throw new Error("test precondition: createRunRoot failed: " + JSON.stringify(created));
+      // Genuinely unsealed: finalizeRunRoot is deliberately never called --
+      // "genuine original inode for unsealed roots" is section5 own phrase.
+      if (created.handle.state !== "PROFILE_PENDING") throw new Error("test precondition: handle must remain unsealed (PROFILE_PENDING): " + JSON.stringify(created.handle));
+      const registry = bridge.createSupervisorOwnedChildRegistry();
+      const { spawn } = require("child_process");
+      const spawnResult = await bridge.spawnWithIntent(
+        { instanceId, repoId, runId, rootIdentity: null },
+        () => spawn(process.execPath, ["-e", "process.exit(0)"]),
+        { registry, stopOwnedChild: (child) => { try { child.kill("SIGTERM"); } catch (err) {} } },
+      );
+      if (spawnResult.state !== "BORN") throw new Error("test precondition: spawnWithIntent did not reach BORN: " + JSON.stringify(spawnResult));
+      const bornPid = spawnResult.child.pid;
+      await new Promise((resolve) => spawnResult.child.once("exit", resolve));
+      // Genuine PID_ABSENT now proven -- a real, formerly-live pid that has
+      // now genuinely exited, never a fabricated absence.
+      let stillAlive = true;
+      try { process.kill(bornPid, 0); } catch (err) { stillAlive = false; }
+      if (stillAlive) throw new Error("test precondition: owned child did not genuinely exit");
+
+      // Old low-level shape: syntactically complete (all 11 fields present,
+      // correctly typed) but never the fixed app-server-worker kind/driver
+      // semantics section5 requires for a genuine owned-app-server record --
+      // exactly the "old low-level shape fixtures are synthetic data, not
+      // real app-server evidence" case section5 names.
+      const instanceRecordPath = path.join(rll.registryRepoDir({ repoId }), "instances", instanceId + ".json");
+      fs.mkdirSync(path.dirname(instanceRecordPath), { recursive: true });
+      fs.writeFileSync(instanceRecordPath, JSON.stringify({
+        instance_id: instanceId, driver: "generic-worker", process_kind: "supervisor",
+        ephemeral_home_path: "/fake/home", worker_session_id: null, worker_nonce: crypto.randomBytes(16).toString("hex"),
+        pid: bornPid, executable_path: process.execPath, os_birth_token: "p1a-synthetic-birth-token", pgid: bornPid,
+        created_at: new Date().toISOString(),
+      }), { mode: 0o600 });
+
+      const authorization = {
+        outcome: "PID_ABSENT", pid: bornPid, birthToken: "p1a-synthetic-birth-token", executableIdentity: process.execPath,
+        instanceRecordIdentity: null, repoId, instanceId, runId, ownerToken: created.ownerToken,
+      };
+      const result = isolationProvider.cleanupRoot(created.handle, authorization);
+      if (result.ok === true) {
+        throw new Error("cleanupRoot accepted a PID_ABSENT reap backed by an instance record carrying a generic driver/process_kind (never the fixed codex-app-server/app-server-worker semantics section5 requires for a genuine owned-app-server record) -- old low-level shape fixtures must not qualify as real app-server evidence: " + JSON.stringify(result));
+      }
+      process.stdout.write("P1A-UNSEALED-PID-ABSENT-01-OK\n");
+    })().catch((err) => {
+      process.stderr.write("FAILED: " + ((err && err.stack) || String(err)) + "\n");
+      process.exitCode = 1;
+    }).finally(() => { try { fs.rmSync(tmp, { recursive: true, force: true }); } catch (err) {} });
+  ' "$P1A_BRIDGE" "$RLL"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"P1A-UNSEALED-PID-ABSENT-01-OK"* ]]
+}
+
+@test "P1A-UNSEALED-INODE-REPLACEMENT-DENIED-01 RED: an unsealed (PROFILE_PENDING) root whose original leaf inode was replaced before cleanup must be denied, never silently adopting the replacement" {
+  run env NODE_ENV=test RUNTIME_BRIDGE_CODEX_TEST_CAPABILITY=x node -e '
+    const crypto = require("crypto");
+    const fs = require("fs");
+    const path = require("path");
+    const os = require("os");
+    const bridge = require(process.argv[1]);
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "p1a-unsealed-inode-"));
+    const readViewAuthority = Object.assign(() => ({ ok: true, capability: {} }), { resolve: () => ({ ok: true }) });
+    const isolationProvider = bridge.createIsolationProvider({ readViewAuthority, strictConfigValidator: () => ({ ok: true }), projectRoot: tmp });
+    const repoId = crypto.randomBytes(16).toString("hex");
+    const instanceId = crypto.randomBytes(16).toString("hex");
+    const runId = crypto.randomBytes(16).toString("hex");
+    const ownerIdentity = { pid: process.pid, birthToken: "p1a-synthetic-birth", executableIdentity: process.execPath };
+    try {
+      const created = isolationProvider.createRunRoot({ instanceId, repoId, runId, ownerIdentity });
+      if (!created.ok) throw new Error("test precondition: createRunRoot failed: " + JSON.stringify(created));
+      if (created.handle.state !== "PROFILE_PENDING") throw new Error("test precondition: handle must remain unsealed: " + JSON.stringify(created.handle));
+      // Genuine replacement of the original leaf: remove and recreate a
+      // FRESH directory at the exact same path -- a genuinely different
+      // inode at an unchanged path, never merely a byte/content mutation.
+      fs.rmSync(created.handle.intendedPath, { recursive: true, force: true });
+      fs.mkdirSync(created.handle.intendedPath, { recursive: true, mode: 0o700 });
+      const authorization = {
+        outcome: "NEVER_SPAWNED", pid: null, birthToken: null, executableIdentity: null,
+        instanceRecordIdentity: null, repoId, instanceId, runId, ownerToken: created.ownerToken,
+        allowPendingAbandonment: true,
+      };
+      const result = isolationProvider.cleanupRoot(created.handle, authorization);
+      if (result.ok === true) {
+        throw new Error("cleanupRoot accepted an unsealed root whose original leaf inode was replaced before cleanup -- must never adopt an unrelated replacement inode as if it were the original: " + JSON.stringify(result));
+      }
+      process.stdout.write("P1A-UNSEALED-INODE-REPLACEMENT-DENIED-01-OK\n");
+    } finally {
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
+  ' "$P1A_BRIDGE"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"P1A-UNSEALED-INODE-REPLACEMENT-DENIED-01-OK"* ]]
+}
+
+@test "P1A-PARTIAL-BATCH-NO-FALSE-READY-01 RED: a two-role batch where the second root can never be created never reports READY, and the genuinely-spawned first role's own spawn evidence is never lost or confused with the failed second role" {
+  local test_home; test_home="$(_p1a_test_home)"
+  local stub_path; stub_path="$(_p1a_cooperative_stub_path)"
+  local node_bin; node_bin="$(command -v node)"
+  local spawn_json; spawn_json="$(node -e 'process.stdout.write(JSON.stringify({command:process.argv[1],args:[process.argv[2]]}))' "$node_bin" "$stub_path")"
+  run env NODE_ENV=test RUNTIME_BRIDGE_CODEX_TEST_CAPABILITY=x HOME="$test_home" RUNTIME_BRIDGE_CODEX_FAKE_APP_SERVER_SPAWN="$spawn_json" node -e '
+    const crypto = require("crypto");
+    const fs = require("fs");
+    const path = require("path");
+    const bridge = require(process.argv[1]);
+    const rll = require(process.argv[2]);
+    const projectRoot = process.argv[3];
+    const repoId = crypto.randomBytes(16).toString("hex");
+    const repoDescriptor = { repoId };
+    const identityResult = bridge.requireProvenProcessIdentity();
+    if (!identityResult.ok) throw new Error("requireProvenProcessIdentity failed: " + identityResult.reason);
+    const pidIdentity = identityResult.pidIdentity;
+    const credentialSource = bridge.createCredentialSourceProvider().read();
+    if (!credentialSource.ok) throw new Error("credentialSource unavailable: " + JSON.stringify(credentialSource));
+    // Sorted so "quality-gater" (role 1, succeeds) is admitted strictly
+    // before "verifier" (role 2, sabotaged mid-flight below).
+    const p = { roles: ["quality-gater", "verifier"], sessionExpiry: new Date(Date.now() + 300000).toISOString() };
+    const ownedChildRef = { child: null, children: [] };
+    const state = { phase: "READY", batchReady: false };
+    const shutdown = async (reason) => {};
+    const actionExpiryMs = Date.now() + 300000;
+    const sessionExpiryMs = Date.now() + 300000;
+    const waveActivation = { ok: true, waveSlug: "p1a-roots-fixture" };
+    const action = { action_id: "p1a".padEnd(32, "0"), repo_id: repoId, plan_digest: "p1a".padEnd(64, "0"), expires_at: new Date(actionExpiryMs).toISOString() };
+    const engine = { p, repoDescriptor, action, coordinationRootReal: projectRoot, projectRoot, pidIdentity, credentialSource, rendezvousInstanceId: crypto.randomBytes(16).toString("hex"), supervisorInstanceId: crypto.randomBytes(16).toString("hex"), ownedChildRef, state, shutdown, actionExpiryMs, sessionExpiryMs, waveActivation };
+    (async () => {
+      const isolationRootsDir = path.join(rll.registryRepoDir({ repoId }), "isolation-roots");
+      const spawnIntentsDir = path.join(rll.registryRepoDir({ repoId }), "spawn-intents");
+      const handle = bridge.__testOnlyStartOwnedAppServerSupervisorEngine(engine);
+      // Sequence136 correction (finding 1): guarantee requestStop runs even
+      // if a precondition/assertion throws before the original single call
+      // would have been reached -- see P1A-BORN-COMPLETE-01 own comment
+      // (runtime-consultation-bridge.bats) for the full rationale. The
+      // isolation-roots parent directory is ALSO always restored to
+      // owner-writable before this test ends, regardless of outcome, so
+      // teardown()s sweep never trips on a permission-denied leftover.
+      let testError = null;
+      try {
+        // Bounded poll for the FIRST role own root to appear, then sabotage
+        // the SHARED isolation-roots parent directory (read-only) so the
+        // SECOND role own createRunRoot deterministically fails -- the
+        // already-created first-role subdirectory is unaffected by its own
+        // parent losing write permission for NEW entries.
+        let firstInstanceId = null;
+        const deadline = Date.now() + 8000;
+        while (Date.now() < deadline) {
+          let entries = [];
+          try { entries = fs.readdirSync(isolationRootsDir); } catch (err) { entries = []; }
+          if (entries.length >= 1) { firstInstanceId = entries[0]; break; }
+          await new Promise((resolve) => setTimeout(resolve, 20));
+        }
+        if (!firstInstanceId) throw new Error("test precondition: the first role own root never appeared within the bound");
+        fs.chmodSync(isolationRootsDir, 0o500);
+        let outcome;
+        try {
+          outcome = await Promise.race([
+            handle.readyPromise.then(() => "resolved", () => "rejected"),
+            new Promise((resolve) => setTimeout(() => resolve("timeout"), 10000)),
+          ]);
+        } finally {
+          fs.chmodSync(isolationRootsDir, 0o700);
+        }
+        if (outcome === "resolved") throw new Error("readyPromise falsely resolved READY for a batch whose second root could never be created");
+        if (outcome === "timeout") throw new Error("readyPromise neither resolved nor rejected within the bound -- an incomplete batch must settle, never hang");
+        const spawnIntentFiles = fs.readdirSync(spawnIntentsDir).filter((f) => f.endsWith(".json") && !f.endsWith(".failed.json"));
+        if (spawnIntentFiles.length !== 1 || spawnIntentFiles[0] !== firstInstanceId + ".json") {
+          throw new Error("expected exactly one genuine spawn-intent record, for the first role own instanceId only -- the first role own real spawn evidence must never be lost or confused with the second role (which never reached spawnWithIntent at all): " + JSON.stringify(spawnIntentFiles) + " vs firstInstanceId=" + firstInstanceId);
+        }
+      } catch (err) {
+        testError = err;
+      }
+      try { fs.chmodSync(isolationRootsDir, 0o700); } catch (err) { /* best-effort -- already restored above on the normal path */ }
+      await handle.requestStop("p1a-partial-batch-no-false-ready-01-cleanup").catch(() => {});
+      if (testError) throw testError;
+      process.stdout.write("P1A-PARTIAL-BATCH-NO-FALSE-READY-01-OK\n");
+    })().catch((err) => {
+      process.stderr.write("FAILED: " + ((err && err.stack) || String(err)) + "\n");
+      process.exitCode = 1;
+    });
+  ' "$P1A_BRIDGE" "$RLL" "$PROJ"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"P1A-PARTIAL-BATCH-NO-FALSE-READY-01-OK"* ]]
+}

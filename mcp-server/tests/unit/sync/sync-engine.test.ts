@@ -1448,3 +1448,637 @@ describe("getGitCommit", () => {
     // In CI without git, commit might be undefined — both are valid
   });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Sequence150 P1-I observation-only RED CORRECTION of Sequence149 (Codex
+// rejection: sequence149-codex-audit.json, finding P1I-149-03). Everything
+// above this line is byte-for-byte UNCHANGED. This section fully replaces
+// the previous P1I-OBS-SYNC section.
+//
+// P1I-149-03 (P0): the previous file registered runtime-host-boundary.js
+// only under PreToolUse/PostToolUse and exercised PostToolUseFailure nowhere
+// in this repository's registration surface. CLOSED: registration is now
+// required for all THREE genuine hook events -- PreToolUse, PostToolUse,
+// PostToolUseFailure -- with the corrected matcher `Agent|SendMessage`
+// (previously wrongly assumed `Task|Agent|SendMessage`; Codex's own finding
+// specifies `Agent|SendMessage` exactly), appended additively without
+// reordering any existing block/hook. All add/skip counts below are updated
+// from 2 to 3 accordingly. This is the SAME cross-file finding from
+// Sequence149 that the sibling scripts/tests/runtime-host-boundary.test.js
+// now exercises via a genuine hook_event_name:"PostToolUseFailure" event
+// (P1I-149-03's other half) -- both files agree on the same three-event set.
+//
+// The CRITICAL cross-file finding from Sequence149 (mergeHookRegistrations()'s
+// own protected fail-open malformed-JSON behavior for the 11 unconditional
+// L0 hooks, read directly from mcp-server/tests/integration/sync-settings-merge.test.ts,
+// NOT part of this RED phase's writable set) is unaffected by this
+// correction and still governs why this section targets a SEPARATE,
+// explicitly assumed mergeObservationBoundaryRegistration() rather than
+// mergeHookRegistrations() itself -- unchanged from Sequence149.
+//
+// ASSUMED API SHAPE (updated only for the corrected 3-event set and matcher;
+// otherwise identical to Sequence149's assumption):
+//   syncEngineNs.mergeObservationBoundaryRegistration(
+//     projectRoot: string,
+//     options?: { observationPolicy?: {enabled:boolean} | null, dryRun?: boolean },
+//   ): Promise<{
+//     added: Array<{event:string; matcher:string; file:string}>,
+//     skipped: Array<{event:string; matcher:string; file:string}>,
+//     dryRun: boolean,
+//     status: "REGISTERED" | "NOT_CONFIGURED" | "FAILED_UTILITY_MISSING"
+//           | "FAILED_SETTINGS_MALFORMED" | "FAILED_SETTINGS_READ",
+//     reason?: string,
+//   }>
+//   -- registers .claude/hooks/runtime-host-boundary.js under PreToolUse,
+//   PostToolUse AND PostToolUseFailure, matcher "Agent|SendMessage" (P1I-149-03).
+import * as syncEngineNs from "../../../src/sync/sync-engine.js";
+import { existsSync } from "node:fs";
+import { stat } from "node:fs/promises";
+
+const OBSERVATION_BOUNDARY_EVENTS = ["PreToolUse", "PostToolUse", "PostToolUseFailure"] as const;
+const OBSERVATION_BOUNDARY_MATCHER = "Agent|SendMessage";
+
+type AssumedObservationPolicy = { enabled: boolean } | null | undefined;
+type AssumedMergeObservationBoundaryResult = {
+  added: Array<{ event: string; matcher: string; file: string }>;
+  skipped: Array<{ event: string; matcher: string; file: string }>;
+  dryRun: boolean;
+  status:
+    | "REGISTERED"
+    | "NOT_CONFIGURED"
+    | "FAILED_UTILITY_MISSING"
+    | "FAILED_SETTINGS_MALFORMED"
+    | "FAILED_SETTINGS_READ";
+  reason?: string;
+};
+type AssumedMergeObservationBoundaryFn = (
+  projectRoot: string,
+  options?: { observationPolicy?: AssumedObservationPolicy; dryRun?: boolean },
+) => Promise<AssumedMergeObservationBoundaryResult>;
+
+const mergeObservationBoundaryRegistration = (
+  syncEngineNs as unknown as { mergeObservationBoundaryRegistration?: AssumedMergeObservationBoundaryFn }
+).mergeObservationBoundaryRegistration;
+
+function requireMergeObservationBoundaryRegistration(): AssumedMergeObservationBoundaryFn {
+  expect(
+    typeof mergeObservationBoundaryRegistration,
+    "mcp-server/src/sync/sync-engine.ts must export mergeObservationBoundaryRegistration() -- the observation-policy-gated registration path for runtime-host-boundary.js (sequence149 section 4 / sequence150 P1I-149-03)",
+  ).toBe("function");
+  return mergeObservationBoundaryRegistration as AssumedMergeObservationBoundaryFn;
+}
+
+async function writeProjectSettingsJson(dir: string, settings: unknown): Promise<void> {
+  const claudeDir = join(dir, ".claude");
+  await mkdir(claudeDir, { recursive: true });
+  await writeFile(join(claudeDir, "settings.json"), JSON.stringify(settings, null, 2) + "\n", "utf-8");
+}
+
+async function readProjectSettingsJson(dir: string): Promise<Record<string, unknown>> {
+  const raw = await readFile(join(dir, ".claude", "settings.json"), "utf-8");
+  return JSON.parse(raw) as Record<string, unknown>;
+}
+
+async function placeBoundaryUtility(dir: string): Promise<void> {
+  const hooksDir = join(dir, ".claude", "hooks");
+  await mkdir(hooksDir, { recursive: true });
+  await writeFile(join(hooksDir, "runtime-host-boundary.js"), "// fixture stub, never executed by these unit tests\n", "utf-8");
+}
+
+type ObsMatcherBlock = { matcher: string; hooks: Array<{ command: string }> };
+
+describe("mergeObservationBoundaryRegistration() -- P1I-OBS-SYNC", () => {
+  it("P1I-OBS-SYNC-BOUNDARY-REGISTER-ADDITIVE-01 RED: registers PreToolUse, PostToolUse AND PostToolUseFailure entries (matcher Agent|SendMessage) for runtime-host-boundary.js while preserving every pre-existing hook entry and its order", async () => {
+    const fn = requireMergeObservationBoundaryRegistration();
+    const dir = await mkdtemp(join(tmpdir(), "sync-obs-boundary-"));
+    try {
+      await writeProjectSettingsJson(dir, {
+        hooks: {
+          PreToolUse: [
+            { matcher: "Bash", hooks: [{ type: "command", command: "node \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/branch-guard.js", timeout: 5 }] },
+          ],
+          PostToolUse: [
+            { matcher: ".*", hooks: [{ type: "command", command: "node \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/tool-use-logger.js", timeout: 5 }] },
+          ],
+        },
+      });
+      await placeBoundaryUtility(dir);
+
+      const result = await fn(dir, { observationPolicy: { enabled: true } });
+      expect(result.status).toBe("REGISTERED");
+      for (const event of OBSERVATION_BOUNDARY_EVENTS) {
+        expect(result.added.some((a) => a.event === event && a.file === "runtime-host-boundary.js" && a.matcher === OBSERVATION_BOUNDARY_MATCHER)).toBe(true);
+      }
+      expect(result.added.filter((a) => a.file === "runtime-host-boundary.js")).toHaveLength(3);
+
+      const settings = await readProjectSettingsJson(dir);
+      const hooks = settings.hooks as Record<string, ObsMatcherBlock[]>;
+      // Pre-existing entries preserved, byte-identical, at their original index.
+      expect(hooks.PreToolUse[0].matcher).toBe("Bash");
+      expect(hooks.PreToolUse[0].hooks[0].command).toContain("branch-guard.js");
+      expect(hooks.PostToolUse[0].matcher).toBe(".*");
+      expect(hooks.PostToolUse[0].hooks[0].command).toContain("tool-use-logger.js");
+      // New entries additively present in all three event arrays.
+      for (const event of OBSERVATION_BOUNDARY_EVENTS) {
+        const arr = hooks[event] ?? [];
+        expect(arr.some((b) => b.matcher === OBSERVATION_BOUNDARY_MATCHER && b.hooks.some((h) => h.command.includes("runtime-host-boundary.js")))).toBe(true);
+      }
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("P1I-OBS-SYNC-BOUNDARY-REGISTER-IDEMPOTENT-02 RED: a second registration call adds zero duplicate entries across all three events and reports all three as skipped", async () => {
+    const fn = requireMergeObservationBoundaryRegistration();
+    const dir = await mkdtemp(join(tmpdir(), "sync-obs-boundary-"));
+    try {
+      await placeBoundaryUtility(dir);
+      const first = await fn(dir, { observationPolicy: { enabled: true } });
+      expect(first.status).toBe("REGISTERED");
+      expect(first.added.filter((a) => a.file === "runtime-host-boundary.js")).toHaveLength(3);
+
+      const second = await fn(dir, { observationPolicy: { enabled: true } });
+      expect(second.added.some((a) => a.file === "runtime-host-boundary.js")).toBe(false);
+      expect(second.skipped.filter((s) => s.file === "runtime-host-boundary.js")).toHaveLength(3); // PreToolUse + PostToolUse + PostToolUseFailure
+
+      const settings = await readProjectSettingsJson(dir);
+      const hooks = settings.hooks as Record<string, ObsMatcherBlock[]>;
+      for (const event of OBSERVATION_BOUNDARY_EVENTS) {
+        const arr = hooks[event] ?? [];
+        const matchingCommands = arr.flatMap((b) => b.hooks.map((h) => h.command)).filter((c) => c.includes("runtime-host-boundary.js"));
+        expect(matchingCommands).toHaveLength(1);
+      }
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("P1I-OBS-SYNC-HOOKS-PROPAGATES-BOUNDARY-UTILITY-03 RED: syncHooks() copies runtime-host-boundary.js from an L0 source, after which registration under all three events succeeds against the now-present utility", async () => {
+    const fn = requireMergeObservationBoundaryRegistration();
+    const l0Root = await mkdtemp(join(tmpdir(), "sync-obs-l0-"));
+    const projectRoot = await mkdtemp(join(tmpdir(), "sync-obs-project-"));
+    try {
+      await mkdir(join(l0Root, ".claude", "hooks"), { recursive: true });
+      await writeFile(join(l0Root, ".claude", "hooks", "runtime-host-boundary.js"), "// L0 source stub\n", "utf-8");
+      await mkdir(join(projectRoot, ".claude"), { recursive: true });
+
+      const hookResult = await syncEngineNs.syncHooks(l0Root, projectRoot, [], false);
+      expect(hookResult.copied).toContain("runtime-host-boundary.js");
+      expect(hookResult.errors).toHaveLength(0);
+      const copiedContent = await readFile(join(projectRoot, ".claude", "hooks", "runtime-host-boundary.js"), "utf-8");
+      expect(copiedContent).toContain("L0 source stub");
+
+      const result = await fn(projectRoot, { observationPolicy: { enabled: true } });
+      expect(result.status).toBe("REGISTERED");
+      expect(result.added.filter((a) => a.file === "runtime-host-boundary.js")).toHaveLength(3);
+    } finally {
+      await rm(l0Root, { recursive: true, force: true });
+      await rm(projectRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("P1I-OBS-SYNC-BOUNDARY-MALFORMED-JSON-PRESERVES-BYTES-04 RED: malformed settings.json returns a typed failure and leaves the original malformed bytes completely untouched (distinct from mergeHookRegistrations()'s own protected fail-open behavior for the unconditional L0 hooks)", async () => {
+    const fn = requireMergeObservationBoundaryRegistration();
+    const dir = await mkdtemp(join(tmpdir(), "sync-obs-boundary-"));
+    try {
+      await placeBoundaryUtility(dir);
+      const claudeDir = join(dir, ".claude");
+      await mkdir(claudeDir, { recursive: true });
+      const malformed = "{ this is not valid json, deliberately broken }";
+      await writeFile(join(claudeDir, "settings.json"), malformed, "utf-8");
+
+      const result = await fn(dir, { observationPolicy: { enabled: true } });
+      expect(result.status).toBe("FAILED_SETTINGS_MALFORMED");
+      expect(result.added).toHaveLength(0);
+
+      const rawAfter = await readFile(join(claudeDir, "settings.json"), "utf-8");
+      expect(rawAfter).toBe(malformed);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("P1I-OBS-SYNC-BOUNDARY-NON-ENOENT-READ-FAILURE-05 RED: a non-ENOENT read failure (settings.json is a directory, EISDIR) returns a distinct typed read failure and leaves the path untouched", async () => {
+    const fn = requireMergeObservationBoundaryRegistration();
+    const dir = await mkdtemp(join(tmpdir(), "sync-obs-boundary-"));
+    try {
+      await placeBoundaryUtility(dir);
+      const claudeDir = join(dir, ".claude");
+      await mkdir(join(claudeDir, "settings.json"), { recursive: true });
+
+      const result = await fn(dir, { observationPolicy: { enabled: true } });
+      expect(result.status).toBe("FAILED_SETTINGS_READ");
+      expect(result.status).not.toBe("FAILED_SETTINGS_MALFORMED");
+      expect(result.added).toHaveLength(0);
+
+      const st = await stat(join(claudeDir, "settings.json"));
+      expect(st.isDirectory()).toBe(true);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("P1I-OBS-SYNC-BOUNDARY-ENOENT-SEEDS-MINIMAL-06 RED: only a genuine ENOENT (settings.json entirely absent) seeds the minimal empty settings structure and succeeds", async () => {
+    const fn = requireMergeObservationBoundaryRegistration();
+    const dir = await mkdtemp(join(tmpdir(), "sync-obs-boundary-"));
+    try {
+      await placeBoundaryUtility(dir);
+      expect(existsSync(join(dir, ".claude", "settings.json"))).toBe(false);
+
+      const result = await fn(dir, { observationPolicy: { enabled: true } });
+      expect(result.status).toBe("REGISTERED");
+      expect(existsSync(join(dir, ".claude", "settings.json"))).toBe(true);
+
+      const settings = await readProjectSettingsJson(dir);
+      expect(Object.keys(settings)).toEqual(["hooks"]);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("P1I-OBS-SYNC-BOUNDARY-UTILITY-MISSING-FAILS-CLOSED-07 RED: a configured observation policy whose utility file is missing fails closed and writes no reference to the nonexistent file", async () => {
+    const fn = requireMergeObservationBoundaryRegistration();
+    const dir = await mkdtemp(join(tmpdir(), "sync-obs-boundary-"));
+    try {
+      const result = await fn(dir, { observationPolicy: { enabled: true } });
+      expect(result.status).toBe("FAILED_UTILITY_MISSING");
+      expect(result.added).toHaveLength(0);
+
+      if (existsSync(join(dir, ".claude", "settings.json"))) {
+        const settings = await readProjectSettingsJson(dir);
+        expect(JSON.stringify(settings).includes("runtime-host-boundary.js")).toBe(false);
+      }
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("P1I-OBS-SYNC-BOUNDARY-NO-POLICY-NO-UTILITY-REQUIRED-08 RED: an ordinary project with no observation policy configured succeeds trivially even though the utility file is also absent", async () => {
+    const fn = requireMergeObservationBoundaryRegistration();
+    const dir = await mkdtemp(join(tmpdir(), "sync-obs-boundary-"));
+    try {
+      const explicitNull = await fn(dir, { observationPolicy: null });
+      expect(explicitNull.status).toBe("NOT_CONFIGURED");
+      expect(explicitNull.added).toHaveLength(0);
+
+      const omitted = await fn(dir);
+      expect(omitted.status).toBe("NOT_CONFIGURED");
+      expect(omitted.added).toHaveLength(0);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("P1I-OBS-SYNC-BOUNDARY-DRYRUN-REPORTS-NO-WRITE-09 RED: dryRun reports the exact PreToolUse/PostToolUse/PostToolUseFailure additions without writing any byte to settings.json", async () => {
+    const fn = requireMergeObservationBoundaryRegistration();
+    const dir = await mkdtemp(join(tmpdir(), "sync-obs-boundary-"));
+    try {
+      await placeBoundaryUtility(dir);
+      await writeProjectSettingsJson(dir, { hooks: { PreToolUse: [], PostToolUse: [] } });
+      const beforeRaw = await readFile(join(dir, ".claude", "settings.json"), "utf-8");
+
+      const result = await fn(dir, { observationPolicy: { enabled: true }, dryRun: true });
+      expect(result.dryRun).toBe(true);
+      expect(result.status).toBe("REGISTERED");
+      for (const event of OBSERVATION_BOUNDARY_EVENTS) {
+        expect(result.added.some((a) => a.event === event && a.file === "runtime-host-boundary.js")).toBe(true);
+      }
+      expect(result.added.filter((a) => a.file === "runtime-host-boundary.js")).toHaveLength(3);
+
+      const afterRaw = await readFile(join(dir, ".claude", "settings.json"), "utf-8");
+      expect(afterRaw).toBe(beforeRaw);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// P1-I/A RED Block B2 -- mergeIbindBoundaryRegistration() (sync/settings).
+// Mailbox: androidcommondoc-wave1-r131-p1ia-red-blockb2-sync-20260829/order.md
+// Everything ABOVE this line (all 70 pre-existing tests, including the
+// mergeObservationBoundaryRegistration() -- P1I-OBS-SYNC scaffold) is
+// byte-for-byte UNCHANGED.
+//
+// This targets a SEPARATE assumed seam from mergeObservationBoundaryRegistration()
+// above -- same owned utility file (.claude/hooks/runtime-host-boundary.js),
+// the same three genuine hook events, but a DIFFERENT registry/matcher
+// surface: "Task|SendMessage", not "Agent|SendMessage". "Agent" is not
+// dropped from the contract -- it is kept as a separately-represented
+// payload/display tool name, never folded into the matcher string itself.
+//
+// ASSUMED API SHAPE (narrow; this seam does not exist yet):
+//   syncEngineNs.mergeIbindBoundaryRegistration(projectRoot: string): Promise<{
+//     added: Array<{event; matcher; payloadToolName; file}>,
+//     skipped: Array<{event; matcher; payloadToolName; file}>,
+//     upgraded: Array<{event; matcher; payloadToolName; file; removedFromMatcher}>,
+//     status: "REGISTERED" | "FAILED_SETTINGS_MALFORMED" | "FAILED_UTILITY_MISSING",
+//   }>
+//   -- registers runtime-host-boundary.js under PreToolUse, PostToolUse AND
+//   PostToolUseFailure with matcher "Task|SendMessage" ONLY. A pre-existing
+//   OWNED command found under the stale "Agent|SendMessage" matcher for the
+//   same event is upgraded in place (old owned command removed, any
+//   unrelated co-located command preserved) instead of being registered a
+//   second time under the new matcher.
+// ═══════════════════════════════════════════════════════════════════════════
+
+const IBIND_BOUNDARY_EVENTS = ["PreToolUse", "PostToolUse", "PostToolUseFailure"] as const;
+const IBIND_BOUNDARY_MATCHER = "Task|SendMessage";
+const IBIND_BOUNDARY_STALE_MATCHER = "Agent|SendMessage";
+const IBIND_BOUNDARY_PAYLOAD_TOOL = "Agent";
+const IBIND_BOUNDARY_FILE = "runtime-host-boundary.js";
+
+type IbindMatcherBlock = ObsMatcherBlock;
+
+type AssumedIbindBoundaryEntry = {
+  event: string;
+  matcher: string;
+  payloadToolName: string;
+  file: string;
+};
+type AssumedIbindUpgradedEntry = AssumedIbindBoundaryEntry & {
+  removedFromMatcher: string;
+};
+type AssumedMergeIbindBoundaryResult = {
+  added: AssumedIbindBoundaryEntry[];
+  skipped: AssumedIbindBoundaryEntry[];
+  upgraded: AssumedIbindUpgradedEntry[];
+  status: "REGISTERED" | "FAILED_SETTINGS_MALFORMED" | "FAILED_UTILITY_MISSING";
+};
+type AssumedMergeIbindBoundaryFn = (projectRoot: string) => Promise<AssumedMergeIbindBoundaryResult>;
+
+const mergeIbindBoundaryRegistration = (
+  syncEngineNs as unknown as { mergeIbindBoundaryRegistration?: AssumedMergeIbindBoundaryFn }
+).mergeIbindBoundaryRegistration;
+
+function requireMergeIbindBoundaryRegistration(): AssumedMergeIbindBoundaryFn {
+  expect(
+    typeof mergeIbindBoundaryRegistration,
+    "mcp-server/src/sync/sync-engine.ts must export mergeIbindBoundaryRegistration() -- the Task|SendMessage registration/migration path for runtime-host-boundary.js, keeping Agent as a separately-represented payload surface (P1-I/A RED Block B2)",
+  ).toBe("function");
+  return mergeIbindBoundaryRegistration as AssumedMergeIbindBoundaryFn;
+}
+
+describe("mergeIbindBoundaryRegistration() -- P1IA-IBIND-SYNC", () => {
+  it("P1IA-IBIND-SYNC-REGISTER-TASK-MATCHER-ADDITIVE-01 RED: registers PreToolUse, PostToolUse and PostToolUseFailure entries under matcher Task|SendMessage (Agent kept only as payloadToolName) for runtime-host-boundary.js while preserving every pre-existing hook entry, its order, and unrelated settings keys", async () => {
+    const fn = requireMergeIbindBoundaryRegistration();
+    const dir = await mkdtemp(join(tmpdir(), "sync-ibind-boundary-"));
+    try {
+      await writeProjectSettingsJson(dir, {
+        permissions: { allow: ["Bash(echo hi)"], deny: [] },
+        hooks: {
+          PreToolUse: [
+            { matcher: "Bash", hooks: [{ type: "command", command: "node \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/branch-guard.js", timeout: 5 }] },
+          ],
+          PostToolUse: [
+            { matcher: ".*", hooks: [{ type: "command", command: "node \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/tool-use-logger.js", timeout: 5 }] },
+          ],
+        },
+      });
+      await placeBoundaryUtility(dir);
+
+      const result = await fn(dir);
+      expect(result.status).toBe("REGISTERED");
+      expect(result.upgraded).toHaveLength(0);
+      expect(result.skipped).toHaveLength(0);
+      for (const event of IBIND_BOUNDARY_EVENTS) {
+        const entry = result.added.find((a) => a.event === event && a.file === IBIND_BOUNDARY_FILE);
+        expect(entry, `expected an added entry for ${event}`).toBeTruthy();
+        expect(entry?.matcher).toBe(IBIND_BOUNDARY_MATCHER);
+        expect(entry?.matcher).not.toContain("Agent");
+        expect(entry?.payloadToolName).toBe(IBIND_BOUNDARY_PAYLOAD_TOOL);
+      }
+      expect(result.added.filter((a) => a.file === IBIND_BOUNDARY_FILE)).toHaveLength(3);
+
+      const settings = await readProjectSettingsJson(dir);
+      expect(settings.permissions).toEqual({ allow: ["Bash(echo hi)"], deny: [] });
+
+      const hooks = settings.hooks as Record<string, IbindMatcherBlock[]>;
+      // Pre-existing entries preserved, byte-identical, at their original index.
+      expect(hooks.PreToolUse[0].matcher).toBe("Bash");
+      expect(hooks.PreToolUse[0].hooks[0].command).toContain("branch-guard.js");
+      expect(hooks.PostToolUse[0].matcher).toBe(".*");
+      expect(hooks.PostToolUse[0].hooks[0].command).toContain("tool-use-logger.js");
+      // New entries additively present in all three event arrays, under Task|SendMessage ONLY.
+      for (const event of IBIND_BOUNDARY_EVENTS) {
+        const arr = hooks[event] ?? [];
+        expect(arr.some((b) => b.matcher === IBIND_BOUNDARY_MATCHER && b.hooks.some((h) => h.command.includes(IBIND_BOUNDARY_FILE)))).toBe(true);
+        expect(arr.some((b) => b.matcher.includes("Agent") && b.hooks.some((h) => h.command.includes(IBIND_BOUNDARY_FILE)))).toBe(false);
+      }
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("P1IA-IBIND-SYNC-UPGRADE-STALE-AGENT-MATCHER-02 RED: an owned command already registered under the stale Agent|SendMessage matcher is upgraded to Task|SendMessage for the same event, removing only the stale owned command and preserving a co-located unrelated command", async () => {
+    const fn = requireMergeIbindBoundaryRegistration();
+    const dir = await mkdtemp(join(tmpdir(), "sync-ibind-boundary-"));
+    try {
+      await writeProjectSettingsJson(dir, {
+        hooks: {
+          PreToolUse: [
+            { matcher: IBIND_BOUNDARY_STALE_MATCHER, hooks: [{ type: "command", command: "node \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/runtime-host-boundary.js", timeout: 5 }] },
+          ],
+          PostToolUse: [
+            { matcher: IBIND_BOUNDARY_STALE_MATCHER, hooks: [{ type: "command", command: "node \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/runtime-host-boundary.js", timeout: 5 }] },
+          ],
+          PostToolUseFailure: [
+            {
+              matcher: IBIND_BOUNDARY_STALE_MATCHER,
+              hooks: [
+                { type: "command", command: "node \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/tool-use-logger.js", timeout: 5 },
+                { type: "command", command: "node \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/runtime-host-boundary.js", timeout: 5 },
+              ],
+            },
+          ],
+        },
+      });
+      await placeBoundaryUtility(dir);
+
+      const result = await fn(dir);
+      expect(result.status).toBe("REGISTERED");
+      expect(result.added.filter((a) => a.file === IBIND_BOUNDARY_FILE)).toHaveLength(0);
+      expect(result.skipped).toHaveLength(0);
+      expect(result.upgraded).toHaveLength(3);
+      for (const event of IBIND_BOUNDARY_EVENTS) {
+        const entry = result.upgraded.find((u) => u.event === event && u.file === IBIND_BOUNDARY_FILE);
+        expect(entry, `expected an upgraded entry for ${event}`).toBeTruthy();
+        expect(entry?.matcher).toBe(IBIND_BOUNDARY_MATCHER);
+        expect(entry?.matcher).not.toContain("Agent");
+        expect(entry?.payloadToolName).toBe(IBIND_BOUNDARY_PAYLOAD_TOOL);
+        expect(entry?.removedFromMatcher).toBe(IBIND_BOUNDARY_STALE_MATCHER);
+      }
+
+      const settings = await readProjectSettingsJson(dir);
+      const hooks = settings.hooks as Record<string, IbindMatcherBlock[]>;
+      for (const event of IBIND_BOUNDARY_EVENTS) {
+        const arr = hooks[event] ?? [];
+        const taskCommands = arr.filter((b) => b.matcher === IBIND_BOUNDARY_MATCHER).flatMap((b) => b.hooks.map((h) => h.command)).filter((c) => c.includes(IBIND_BOUNDARY_FILE));
+        expect(taskCommands, `${event} must have exactly one owned command under Task|SendMessage`).toHaveLength(1);
+
+        const staleOwnedCommands = arr.filter((b) => b.matcher === IBIND_BOUNDARY_STALE_MATCHER).flatMap((b) => b.hooks.map((h) => h.command)).filter((c) => c.includes(IBIND_BOUNDARY_FILE));
+        expect(staleOwnedCommands, `${event} must have zero owned commands remaining under the stale Agent|SendMessage matcher`).toHaveLength(0);
+      }
+
+      // The unrelated command co-located in PostToolUseFailure's stale block must survive the migration.
+      const postFailureBlocks = hooks.PostToolUseFailure ?? [];
+      const survivingUnrelated = postFailureBlocks.flatMap((b) => b.hooks.map((h) => h.command)).filter((c) => c.includes("tool-use-logger.js"));
+      expect(survivingUnrelated).toHaveLength(1);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("P1IA-IBIND-SYNC-IDEMPOTENT-NO-BYTE-CHURN-03 RED: a second invocation after convergence adds and upgrades nothing, reports the prior entries as skipped, and leaves settings.json byte-for-byte identical", async () => {
+    const fn = requireMergeIbindBoundaryRegistration();
+    const dir = await mkdtemp(join(tmpdir(), "sync-ibind-boundary-"));
+    try {
+      await placeBoundaryUtility(dir);
+      const first = await fn(dir);
+      expect(first.status).toBe("REGISTERED");
+      expect(first.added.filter((a) => a.file === IBIND_BOUNDARY_FILE)).toHaveLength(3);
+
+      const afterFirstRaw = await readFile(join(dir, ".claude", "settings.json"), "utf-8");
+
+      const second = await fn(dir);
+      expect(second.status).toBe("REGISTERED");
+      expect(second.added.filter((a) => a.file === IBIND_BOUNDARY_FILE)).toHaveLength(0);
+      expect(second.upgraded).toHaveLength(0);
+      expect(second.skipped.filter((s) => s.file === IBIND_BOUNDARY_FILE)).toHaveLength(3);
+
+      const afterSecondRaw = await readFile(join(dir, ".claude", "settings.json"), "utf-8");
+      expect(afterSecondRaw).toBe(afterFirstRaw);
+
+      const settings = await readProjectSettingsJson(dir);
+      const hooks = settings.hooks as Record<string, IbindMatcherBlock[]>;
+      for (const event of IBIND_BOUNDARY_EVENTS) {
+        const arr = hooks[event] ?? [];
+        const matchingCommands = arr.flatMap((b) => b.hooks.map((h) => h.command)).filter((c) => c.includes(IBIND_BOUNDARY_FILE));
+        expect(matchingCommands).toHaveLength(1);
+        const matchingBlocks = arr.filter((b) => b.matcher === IBIND_BOUNDARY_MATCHER);
+        expect(matchingBlocks).toHaveLength(1);
+      }
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("P1IA-IBIND-SYNC-MALFORMED-SETTINGS-PRESERVES-BYTES-04 RED: malformed settings.json fails closed and leaves the original malformed bytes completely untouched", async () => {
+    const fn = requireMergeIbindBoundaryRegistration();
+    const dir = await mkdtemp(join(tmpdir(), "sync-ibind-boundary-"));
+    try {
+      await placeBoundaryUtility(dir);
+      const claudeDir = join(dir, ".claude");
+      await mkdir(claudeDir, { recursive: true });
+      const malformed = "{ this is not valid json, deliberately broken -- ibind }";
+      await writeFile(join(claudeDir, "settings.json"), malformed, "utf-8");
+
+      const result = await fn(dir);
+      expect(result.status).toBe("FAILED_SETTINGS_MALFORMED");
+      expect(result.added).toHaveLength(0);
+      expect(result.upgraded).toHaveLength(0);
+
+      const rawAfter = await readFile(join(claudeDir, "settings.json"), "utf-8");
+      expect(rawAfter).toBe(malformed);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("P1IA-IBIND-SYNC-UTILITY-MISSING-FAILS-CLOSED-05 RED: a completely absent runtime-host-boundary.js fails closed and writes no reference to it", async () => {
+    const fn = requireMergeIbindBoundaryRegistration();
+    const dir = await mkdtemp(join(tmpdir(), "sync-ibind-boundary-"));
+    try {
+      // Deliberately no placeBoundaryUtility(dir) call -- the utility is absent.
+      const result = await fn(dir);
+      expect(result.status).toBe("FAILED_UTILITY_MISSING");
+      expect(result.added).toHaveLength(0);
+      expect(result.upgraded).toHaveLength(0);
+
+      if (existsSync(join(dir, ".claude", "settings.json"))) {
+        const settings = await readProjectSettingsJson(dir);
+        expect(JSON.stringify(settings).includes(IBIND_BOUNDARY_FILE)).toBe(false);
+      }
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("P1IA-IBIND-SYNC-UTILITY-NON-FILE-FAILS-CLOSED-06 RED: a directory occupying the runtime-host-boundary.js path fails closed and writes no reference to it", async () => {
+    const fn = requireMergeIbindBoundaryRegistration();
+    const dir = await mkdtemp(join(tmpdir(), "sync-ibind-boundary-"));
+    try {
+      await mkdir(join(dir, ".claude", "hooks", "runtime-host-boundary.js"), { recursive: true });
+
+      const result = await fn(dir);
+      expect(result.status).toBe("FAILED_UTILITY_MISSING");
+      expect(result.added).toHaveLength(0);
+
+      if (existsSync(join(dir, ".claude", "settings.json"))) {
+        const settings = await readProjectSettingsJson(dir);
+        expect(JSON.stringify(settings).includes(IBIND_BOUNDARY_FILE)).toBe(false);
+      }
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("P1IA-IBIND-SYNC-UTILITY-SYMLINK-FAILS-CLOSED-07 RED: a symlinked runtime-host-boundary.js fails closed and writes no reference to it, even when the link target is a valid file", async () => {
+    const fn = requireMergeIbindBoundaryRegistration();
+    const dir = await mkdtemp(join(tmpdir(), "sync-ibind-boundary-"));
+    try {
+      const { symlink } = await import("node:fs/promises");
+      const hooksDir = join(dir, ".claude", "hooks");
+      await mkdir(hooksDir, { recursive: true });
+      const realTarget = join(hooksDir, "runtime-host-boundary.real.js");
+      await writeFile(realTarget, "// real target, never executed by these unit tests\n", "utf-8");
+      await symlink(realTarget, join(hooksDir, IBIND_BOUNDARY_FILE));
+
+      const result = await fn(dir);
+      expect(result.status).toBe("FAILED_UTILITY_MISSING");
+      expect(result.added).toHaveLength(0);
+
+      if (existsSync(join(dir, ".claude", "settings.json"))) {
+        const settings = await readProjectSettingsJson(dir);
+        expect(JSON.stringify(settings).includes(IBIND_BOUNDARY_FILE)).toBe(false);
+      }
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("P1IA-IBIND-SYNC-STATIC-SETTINGS-TASK-MATCHER-CONTRACT-08 RED: the real repository .claude/settings.json must register runtime-host-boundary.js under Task|SendMessage for exactly PreToolUse, PostToolUse and PostToolUseFailure, with no stale owned Agent|SendMessage registration left behind", async () => {
+    const repoRoot = process.cwd().replace(/[\\/]mcp-server$/, "");
+    const raw = await readFile(join(repoRoot, ".claude", "settings.json"), "utf-8");
+    const settings = JSON.parse(raw) as { hooks?: Record<string, IbindMatcherBlock[]> };
+    const hooks = settings.hooks ?? {};
+
+    // Falsifiable across the ENTIRE hooks object -- not just the three expected
+    // events -- so a fourth (unexpected) event carrying the owned command would
+    // fail this just as surely as a missing one.
+    const eventsWithOwnedCommand = Object.entries(hooks)
+      .filter(([, blocks]) => (blocks ?? []).some((b) => b.hooks.some((h) => h.command.includes(IBIND_BOUNDARY_FILE))))
+      .map(([event]) => event)
+      .sort();
+    expect(
+      eventsWithOwnedCommand,
+      `expected the owned runtime-host-boundary.js command to appear under exactly ${JSON.stringify([...IBIND_BOUNDARY_EVENTS].sort())} across the entire hooks object in the real .claude/settings.json, got ${JSON.stringify(eventsWithOwnedCommand)}`,
+    ).toEqual([...IBIND_BOUNDARY_EVENTS].sort());
+
+    for (const event of IBIND_BOUNDARY_EVENTS) {
+      const blocks = hooks[event] ?? [];
+      const taskBlock = blocks.find((b) => b.matcher === IBIND_BOUNDARY_MATCHER);
+      expect(
+        taskBlock?.hooks.some((h) => h.command.includes(IBIND_BOUNDARY_FILE)) ?? false,
+        `expected ${event} to register runtime-host-boundary.js under matcher "${IBIND_BOUNDARY_MATCHER}" in the real .claude/settings.json`,
+      ).toBe(true);
+
+      const staleBlock = blocks.find((b) => b.matcher === IBIND_BOUNDARY_STALE_MATCHER);
+      const staleOwnedCommand = staleBlock?.hooks.some((h) => h.command.includes(IBIND_BOUNDARY_FILE)) ?? false;
+      expect(
+        staleOwnedCommand,
+        `expected no stale owned runtime-host-boundary.js registration left under "${IBIND_BOUNDARY_STALE_MATCHER}" for ${event} in the real .claude/settings.json`,
+      ).toBe(false);
+    }
+  });
+});

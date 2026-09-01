@@ -29,6 +29,18 @@ Additional skill-specific arguments (not in params.json):
 - `--review` -- Include previously reviewed findings in the output (default: only new findings).
 - `--layer L0|L1|L2` -- Project layer (default: L0). Use L1/L2 when monitoring consumer projects. The layer is passed to the doc scanner for correct registry classification.
 
+## Canonical Runtime Entrypoint
+
+Monitoring enters through the shared product flow:
+
+```bash
+node scripts/lib/runtime-collaboration-entrypoints.cjs execute --entrypoint monitor-docs --project-root <absolute> --intent <base64url canonical JSON>
+```
+
+The Bash call must be one standalone direct Node command. Replace `<absolute>` with the literal absolute project path before invoking it. Never use `$(pwd)`, `$PWD`, `cd`, shell variables, command substitution, pipes, redirects, or command separators in this authenticated entrypoint call.
+
+The decoded intent is exactly `{"scope":"<safe scope>"}`. The result contains observations and proposals only; it never converts a proposal into approval or writes documentation. Surface `BLOCKED|UNAVAILABLE|FAILED` unchanged.
+
 ## Behavior
 
 1. Run the `monitor-sources` MCP tool (or the CLI entrypoint directly) to check upstream documentation sources against the versions manifest and content hashes.

@@ -54,6 +54,19 @@ function makeGitProject(prefix) {
   execFileSync('git', ['-C', dir, 'config', 'user.email', 'rll-handlers-test@test.local']);
   execFileSync('git', ['-C', dir, 'config', 'user.name', 'RLL Handlers Test']);
   execFileSync('git', ['-C', dir, 'commit', '-q', '--allow-empty', '-m', 'init']);
+  // This historical handler matrix exercises routing/fallback across every
+  // driver. Production's current v2 policy intentionally pins the Claude
+  // lane and would prevent those cases from reaching the driver they test.
+  // Give each hermetic project the canonical v1 projection; dedicated v2
+  // selection coverage lives in the current peer-binding suites.
+  const libDir = path.join(dir, 'scripts', 'lib');
+  fs.mkdirSync(libDir, { recursive: true });
+  const policy = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../lib/runtime-collaboration-policy.json'), 'utf8'));
+  policy.schema = 'runtime-collaboration-policy/v1';
+  policy.version = 1;
+  delete policy.selection;
+  fs.writeFileSync(path.join(libDir, 'runtime-collaboration-policy.json'), JSON.stringify(policy, null, 2) + '\n');
+  fs.copyFileSync(path.resolve(__dirname, '../lib/runtime-routing.json'), path.join(libDir, 'runtime-routing.json'));
   return dir;
 }
 
@@ -252,11 +265,9 @@ const NOOP_CAPS = JSON.stringify([]);
 const LIVE_CAPS = JSON.stringify(['claude-sendmessage']);
 const CODEX_CAPS = JSON.stringify(['codex-app-server']);
 
-// WP3 item C correction (point A.3): a first-time Claude-native `ensure` now
-// ALSO mints a `team-ensure` action, ordered before the role-spawn action(s)
-// (PLAN.md ~L167). Every existing fixture that captures "the" minted action
-// off a fresh `ensure` call must select the role-spawn one explicitly rather
-// than assuming `actions[0]`.
+// Current Claude-native ensure mints a direct role-spawn. Historical
+// team-ensure records remain readable, so tests select by kind rather than
+// relying on array position.
 function findRoleSpawnAction(actions) {
   const found = actions.find((a) => a.kind === 'role-spawn');
   assert.ok(found, 'expected a role-spawn action among: ' + JSON.stringify(actions));
@@ -279,29 +290,68 @@ function succeedTeamEnsure(dir, teamAction) {
 }
 
 /**
- * Full "get me a role-spawn action for `role`" fixture flow: ensure (mints
- * team-ensure PENDING), register team-ensure SUCCESS, ensure again (now
- * mints the role-spawn). Returns the role-spawn action.
+ * Full "get me a role-spawn action for `role`" fixture flow. The accepted
+ * Claude surface is direct: one ensure mints and returns the role action.
  */
 function ensureLiveRoleSpawnAction(dir, sessionKey, role) {
   role = role || LIVE_ROLE;
   const g1 = mintGrant(dir, sessionKey, role, 'ensure', ensureDigest([role]));
   const r1 = runCli(['ensure', '--project-root', dir, '--role', role, '--lifecycle-binding', g1.grantId], { RUNTIME_ROLE_LIFECYCLE_FAKE_CAPABILITIES: LIVE_CAPS });
-  assert.strictEqual(r1.result.status, 'ACTION_REQUIRED', 'fixture: first ensure must mint team-ensure: ' + JSON.stringify(r1.result));
-  const teamAction = findTeamEnsureAction(r1.result.actions);
-  succeedTeamEnsure(dir, teamAction);
-  const g2 = mintGrant(dir, sessionKey, role, 'ensure', ensureDigest([role]));
-  const r2 = runCli(['ensure', '--project-root', dir, '--role', role, '--lifecycle-binding', g2.grantId], { RUNTIME_ROLE_LIFECYCLE_FAKE_CAPABILITIES: LIVE_CAPS });
-  assert.strictEqual(r2.result.status, 'ACTION_REQUIRED', 'fixture: second ensure must mint role-spawn: ' + JSON.stringify(r2.result));
-  return findRoleSpawnAction(r2.result.actions);
+  assert.strictEqual(r1.result.status, 'ACTION_REQUIRED', 'fixture: ensure must mint role-spawn: ' + JSON.stringify(r1.result));
+  return findRoleSpawnAction(r1.result.actions);
 }
+
+test('ensure replaces an expired STARTING role-spawn action in the same session without excluding its healthy driver', () => {
+  const dir = makeGitProject();
+  try {
+    writePlanFixture(dir, 'expired-starting-replacement');
+    const sessionKey = 'expired-starting-session';
+    const role = LIVE_ROLE;
+    const initialGrant = mintGrant(dir, sessionKey, role, 'ensure', ensureDigest([role]));
+    const initial = runCli(
+      ['ensure', '--project-root', dir, '--role', role, '--lifecycle-binding', initialGrant.grantId],
+      { RUNTIME_ROLE_LIFECYCLE_FAKE_CAPABILITIES: LIVE_CAPS },
+    );
+    assert.strictEqual(initial.result.status, 'ACTION_REQUIRED', JSON.stringify(initial.result));
+    const action = findRoleSpawnAction(initial.result.actions);
+    const actionPath = rll.actionPathFor(dir, action.action_id);
+    const expired = JSON.parse(fs.readFileSync(actionPath, 'utf8'));
+    expired.expires_at = '2000-01-01T00:00:00Z';
+    fs.writeFileSync(actionPath, JSON.stringify(expired));
+
+    const grant = mintGrant(dir, sessionKey, role, 'ensure', ensureDigest([role]));
+    const retried = runCli(
+      ['ensure', '--project-root', dir, '--role', role, '--lifecycle-binding', grant.grantId],
+      { RUNTIME_ROLE_LIFECYCLE_FAKE_CAPABILITIES: LIVE_CAPS },
+    );
+    assert.strictEqual(retried.status, 0, JSON.stringify(retried.result));
+    assert.strictEqual(retried.result.status, 'ACTION_REQUIRED', JSON.stringify(retried.result));
+    const replacement = findRoleSpawnAction(retried.result.actions);
+    assert.notStrictEqual(replacement.action_id, action.action_id, 'expired action must never be re-reported');
+    assert.ok(Date.parse(replacement.expires_at) > Date.now(), 'replacement must have positive TTL');
+
+    const state = rll.readRoleBindingState(
+      dir,
+      rll.computeWorktreeId(dir),
+      rll.discoverPlan(dir).planDigest,
+      rll.roleProfileDigestFor(role),
+      rll.peekSessionGeneration(dir, identityFor(sessionKey)).generationId,
+      role,
+    );
+    assert.strictEqual(state.state, 'STARTING');
+    assert.strictEqual(state.record.pending_action_id, replacement.action_id);
+    assert.strictEqual(state.record.driver, 'claude-sendmessage');
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
 
 // ══════════════════════════════════════════════════════════════════════════
 // Positive path: ensure -> ACTION_REQUIRED -> ready -> READY -> idempotent
 // re-ensure -> notify -> rotate -> ready(new action) -> stop-owned
 // ══════════════════════════════════════════════════════════════════════════
 
-test('ensure(live driver, valid grant): a SINGLE call mints team-ensure THEN role-spawn together, ordered (point 3.4); binding STARTING; a role-actor grant whose binding is actually a MainOrchestratorBinding (never a genuine RoleActorBinding) is correctly rejected AT MINT TIME as binding-kind-schema-mismatch (R4 round 3, round 4 correction -- role-actor authority is now genuinely evaluated, not universally unavailable; the dedicated positive path lives in its own test); re-ensure (including after team-ensure SUCCEEDS) is idempotent (no second mint); notify/rotate/stop-owned complete the lifecycle against a directly-seeded READY binding', () => {
+test('ensure(live driver, valid grant): a SINGLE call mints the direct role-spawn; binding STARTING; a role-actor grant whose binding is actually a MainOrchestratorBinding (never a genuine RoleActorBinding) is correctly rejected AT MINT TIME as binding-kind-schema-mismatch; re-ensure is idempotent; notify/rotate/stop-owned complete the lifecycle against a directly-seeded READY binding', () => {
   const dir = makeGitProject();
   try {
     writePlanFixture(dir, 'handlers-happy');
@@ -311,40 +361,31 @@ test('ensure(live driver, valid grant): a SINGLE call mints team-ensure THEN rol
     const r1 = runCli(['ensure', '--project-root', dir, '--role', LIVE_ROLE, '--lifecycle-binding', g1.grantId], { RUNTIME_ROLE_LIFECYCLE_FAKE_CAPABILITIES: LIVE_CAPS });
     assert.strictEqual(r1.status, 0, JSON.stringify(r1.result));
     assert.strictEqual(r1.result.status, 'ACTION_REQUIRED');
-    // Point 3.4: ONE ensure() call returns BOTH, ordered team-ensure then
-    // role-spawn -- no second ensure()/grant round-trip required merely to
-    // "unlock" role-spawn after registering team-ensure SUCCEEDED.
-    assert.strictEqual(r1.result.actions.length, 2, 'team-ensure AND role-spawn together, ordered, in the SAME call (point 3.4)');
-    assert.strictEqual(r1.result.actions[0].kind, 'team-ensure', 'team-ensure must be ORDERED FIRST (PLAN.md ~L167)');
-    assert.strictEqual(r1.result.actions[1].kind, 'role-spawn', 'role-spawn ordered AFTER its team-ensure predecessor');
-    const teamAction = r1.result.actions[0];
-    assert.strictEqual(teamAction.runtime, 'claude-native');
-    assert.strictEqual(teamAction.role, null);
-    const action = r1.result.actions[1];
+    // The accepted Claude host surface has no TeamCreate prerequisite. ONE
+    // ensure() call therefore returns exactly the correlated role-spawn.
+    assert.strictEqual(r1.result.actions.length, 1, 'exactly one direct role-spawn in the SAME call');
+    const action = r1.result.actions[0];
+    assert.strictEqual(action.kind, 'role-spawn');
     assert.strictEqual(action.runtime, 'claude-native');
     assert.strictEqual(action.role, LIVE_ROLE);
     assert.match(action.action_id, /^[0-9a-f]{32}$/);
-    assert.strictEqual(action.payload.bootstrap_message.includes('ready --action'), true);
+    assert.strictEqual(action.payload.bootstrap_message.includes("'ready'"), true);
+    assert.strictEqual(action.payload.bootstrap_message.includes(action.action_id), true);
 
-    // Idempotent team-ensure: a second first-time ensure for a DIFFERENT role
-    // in the SAME session generation reuses the SAME team-ensure action_id
-    // rather than minting a second one.
+    // A different role receives its own direct, correlated role-spawn action.
     const g1b = mintGrant(dir, sessionKey, 'toolkit-specialist', 'ensure', ensureDigest(['toolkit-specialist']));
     const r1b = runCli(['ensure', '--project-root', dir, '--role', 'toolkit-specialist', '--lifecycle-binding', g1b.grantId], { RUNTIME_ROLE_LIFECYCLE_FAKE_CAPABILITIES: LIVE_CAPS });
     assert.strictEqual(r1b.result.status, 'ACTION_REQUIRED', JSON.stringify(r1b.result));
-    const teamAction1b = findTeamEnsureAction(r1b.result.actions);
-    assert.strictEqual(teamAction1b.action_id, teamAction.action_id, 'idempotent: the SAME pending team-ensure action_id is reused, never a second mint');
+    const otherRoleAction = findRoleSpawnAction(r1b.result.actions);
+    assert.notStrictEqual(otherRoleAction.action_id, action.action_id);
+    assert.strictEqual(otherRoleAction.role, 'toolkit-specialist');
 
-    // Host/executor registers team-ensure SUCCESS -- a LATER re-ensure for
-    // LIVE_ROLE must still be idempotent: the SAME role-spawn action_id
-    // already minted above, never a second one now that team-ensure has
-    // ALSO independently reached SUCCEEDED.
-    succeedTeamEnsure(dir, teamAction);
+    // A later re-ensure for LIVE_ROLE must re-report the SAME role-spawn.
     const g1c = mintGrant(dir, sessionKey, LIVE_ROLE, 'ensure', ensureDigest([LIVE_ROLE]));
     const r1c = runCli(['ensure', '--project-root', dir, '--role', LIVE_ROLE, '--lifecycle-binding', g1c.grantId], { RUNTIME_ROLE_LIFECYCLE_FAKE_CAPABILITIES: LIVE_CAPS });
     assert.strictEqual(r1c.result.status, 'ACTION_REQUIRED', JSON.stringify(r1c.result));
     const reReportedAction = findRoleSpawnAction(r1c.result.actions);
-    assert.strictEqual(reReportedAction.action_id, action.action_id, 'idempotent: re-reports the SAME already-minted role-spawn action_id, never a second mint after team-ensure SUCCEEDS');
+    assert.strictEqual(reReportedAction.action_id, action.action_id, 'idempotent: re-reports the SAME already-minted role-spawn action_id');
 
     // A never-consumed action is still WAITING from wait-ready's perspective.
     const gw1 = mintGrant(dir, sessionKey, LIVE_ROLE, 'wait-ready', waitReadyDigest(action.action_id), { actionId: action.action_id });
@@ -693,7 +734,7 @@ test('supervisor-start action-failed: every affected role-binding leaves STARTIN
 // a genuine core-side invalidation, not merely trusted interpreter
 // discipline. Before point 3.4, this path (`findRoleBindingsDependentOnTeamEnsure`)
 // had no reachable dependent at all under the OLD two-call design.
-test('team-ensure FAILED: invalidates the ALREADY-eagerly-minted dependent role-spawn (point 3.4 safety net), no dependent spawn can execute or reappear afterward, and with NO other capable driver in routing the role falls through to noop -- never UNAVAILABLE forever (point C + point 5, corrected)', () => {
+test('direct claude-native role-spawn is the only current Claude action and is idempotently re-reported without a historical team-ensure dependency', () => {
   const dir = makeGitProject();
   try {
     writePlanFixture(dir, 'handlers-team-failed');
@@ -701,61 +742,32 @@ test('team-ensure FAILED: invalidates the ALREADY-eagerly-minted dependent role-
     const g1 = mintGrant(dir, sessionKey, LIVE_ROLE, 'ensure', ensureDigest([LIVE_ROLE]));
     const r1 = runCli(['ensure', '--project-root', dir, '--role', LIVE_ROLE, '--lifecycle-binding', g1.grantId], { RUNTIME_ROLE_LIFECYCLE_FAKE_CAPABILITIES: LIVE_CAPS });
     assert.strictEqual(r1.result.status, 'ACTION_REQUIRED', JSON.stringify(r1.result));
-    // Point 3.4: role-spawn was minted EAGERLY, in this SAME call, alongside
-    // the still-PENDING team-ensure -- a genuinely live dependent, not a
-    // scenario reached via a second ensure() after registering SUCCESS.
-    assert.strictEqual(r1.result.actions.length, 2, JSON.stringify(r1.result));
-    const teamAction = findTeamEnsureAction(r1.result.actions);
+    assert.strictEqual(r1.result.actions.length, 1, JSON.stringify(r1.result));
     const eagerSpawnAction = findRoleSpawnAction(r1.result.actions);
     assert.strictEqual(eagerSpawnAction.role, LIVE_ROLE);
+    assert.strictEqual(eagerSpawnAction.runtime, 'claude-native');
+    assert.strictEqual(r1.result.actions.some((action) => action.kind === 'team-ensure'), false);
 
     const worktreeId = rll.computeWorktreeId(dir);
     const planDigest = rll.discoverPlan(dir).planDigest;
     const generationId = rll.resolveSessionGeneration(dir, identityFor(sessionKey)).generationId;
     const profileDigest = rll.roleProfileDigestFor(LIVE_ROLE);
     const beforeState = rll.readRoleBindingState(dir, worktreeId, planDigest, profileDigest, generationId, LIVE_ROLE);
-    assert.strictEqual(beforeState.state, 'STARTING', 'the dependent must genuinely be live/STARTING BEFORE team-ensure fails');
+    assert.strictEqual(beforeState.state, 'STARTING');
     assert.strictEqual(beforeState.record.pending_action_id, eagerSpawnAction.action_id);
-    assert.strictEqual(beforeState.record.team_ensure_action_id, teamAction.action_id);
 
-    const gFail = mintGrant(dir, sessionKey, null, 'action-failed', actionFailedDigest(teamAction.action_id, 'native-tool-error'), { actionId: teamAction.action_id });
-    const r2 = runCli(['action-failed', '--action', teamAction.action_id, '--reason', 'native-tool-error', '--lifecycle-binding', gFail.grantId]);
-    assert.strictEqual(r2.result.status, 'UNAVAILABLE', JSON.stringify(r2.result));
-
-    // The safety net actually fired: the eagerly-minted dependent is now
-    // invalidated, never left STARTING referencing a team-ensure that will
-    // never succeed.
-    const afterState = rll.readRoleBindingState(dir, worktreeId, planDigest, profileDigest, generationId, LIVE_ROLE);
-    assert.strictEqual(afterState.state, 'UNAVAILABLE');
-    assert.strictEqual(afterState.record.failure_reason, 'team-ensure-failed');
-    assert.strictEqual(afterState.record.driver, 'claude-sendmessage');
-
-    // A fresh ensure for the SAME role, SAME generation, re-selects a
-    // driver -- point 5 correction: FAILED must never pin the role
-    // UNAVAILABLE forever. claude-sendmessage is excluded by name (its own
-    // team-ensure already failed for this exact scope) and the routing list
-    // for LIVE_ROLE has no OTHER live-capable entry in this fixture's
-    // manifest, so selection legitimately falls all the way through to
-    // `noop` (itself a routing-permitted entry, unconditionally
-    // selectable) -- READY via the disk-consumer path, not a resurrected
-    // claude-native role-spawn and not a second team-ensure mint. Point
-    // 3.3: noop itself now also requires a registered+validated disk
-    // consumer to declare READY -- registered here so this test keeps
-    // proving the FALLBACK reaches noop, not noop's own separate gate.
     const g2 = mintGrant(dir, sessionKey, LIVE_ROLE, 'ensure', ensureDigest([LIVE_ROLE]));
-    const r3 = runCli(['ensure', '--project-root', dir, '--role', LIVE_ROLE, '--lifecycle-binding', g2.grantId], { RUNTIME_ROLE_LIFECYCLE_FAKE_CAPABILITIES: LIVE_CAPS, RUNTIME_ROLE_LIFECYCLE_TEST_DISK_CONSUMERS: JSON.stringify([LIVE_ROLE]) });
-    assert.strictEqual(r3.result.status, 'READY', JSON.stringify(r3.result));
-    assert.strictEqual(r3.result.bindings[0].driver, 'noop');
-
-    // Attempting to register SUCCESS on the now-FAILED marker is rejected.
-    const registerResult = rll.registerTeamEnsureSuccess({ repoId: teamAction.repo_id }, teamAction.session_generation_id, teamAction.worktree_id, teamAction.plan_digest, teamAction.action_id);
-    assert.strictEqual(registerResult.ok, false);
+    const r2 = runCli(['ensure', '--project-root', dir, '--role', LIVE_ROLE, '--lifecycle-binding', g2.grantId], { RUNTIME_ROLE_LIFECYCLE_FAKE_CAPABILITIES: LIVE_CAPS });
+    assert.strictEqual(r2.result.status, 'ACTION_REQUIRED', JSON.stringify(r2.result));
+    assert.strictEqual(r2.result.actions.length, 1);
+    assert.strictEqual(r2.result.actions[0].action_id, eagerSpawnAction.action_id);
+    assert.strictEqual(r2.result.actions[0].kind, 'role-spawn');
   } finally {
     cleanup(dir);
   }
 });
 
-test('team-ensure FAILED: with codex-app-server ALSO permitted by routing and capable, the role falls through to it -- the illustrative "advance to the next driver" case (point 5)', () => {
+test('when Claude and Codex capabilities are both present, routing selects one direct claude-native role-spawn without fabricating a team-ensure or supervisor fallback', () => {
   const dir = makeGitProject();
   try {
     writePlanFixture(dir, 'handlers-team-failed-fallback');
@@ -764,24 +776,10 @@ test('team-ensure FAILED: with codex-app-server ALSO permitted by routing and ca
     const g1 = mintGrant(dir, sessionKey, LIVE_ROLE, 'ensure', ensureDigest([LIVE_ROLE]));
     const r1 = runCli(['ensure', '--project-root', dir, '--role', LIVE_ROLE, '--lifecycle-binding', g1.grantId], { RUNTIME_ROLE_LIFECYCLE_FAKE_CAPABILITIES: bothCaps });
     assert.strictEqual(r1.result.status, 'ACTION_REQUIRED', JSON.stringify(r1.result));
-    const teamAction = findTeamEnsureAction(r1.result.actions);
-    assert.strictEqual(teamAction.kind, 'team-ensure');
-
-    const gFail = mintGrant(dir, sessionKey, null, 'action-failed', actionFailedDigest(teamAction.action_id, 'native-tool-error'), { actionId: teamAction.action_id });
-    const r2 = runCli(['action-failed', '--action', teamAction.action_id, '--reason', 'native-tool-error', '--lifecycle-binding', gFail.grantId]);
-    assert.strictEqual(r2.result.status, 'UNAVAILABLE', JSON.stringify(r2.result));
-
-    // A fresh ensure for the SAME role/generation now advances PAST the
-    // failed claude-sendmessage to the next routing-permitted, CAPABLE
-    // driver -- codex-app-server -- and mints a real supervisor-start
-    // action, never staying UNAVAILABLE forever and never re-attempting
-    // claude-sendmessage's own already-FAILED team-ensure.
-    const g2 = mintGrant(dir, sessionKey, LIVE_ROLE, 'ensure', ensureDigest([LIVE_ROLE]));
-    const r3 = runCli(['ensure', '--project-root', dir, '--role', LIVE_ROLE, '--lifecycle-binding', g2.grantId], { RUNTIME_ROLE_LIFECYCLE_FAKE_CAPABILITIES: bothCaps });
-    assert.strictEqual(r3.result.status, 'ACTION_REQUIRED', JSON.stringify(r3.result));
-    assert.strictEqual(r3.result.actions.length, 1);
-    assert.strictEqual(r3.result.actions[0].kind, 'supervisor-start');
-    assert.notStrictEqual(r3.result.actions[0].action_id, teamAction.action_id, 'a genuinely new action, never the dead team-ensure action_id');
+    assert.strictEqual(r1.result.actions.length, 1);
+    assert.strictEqual(r1.result.actions[0].kind, 'role-spawn');
+    assert.strictEqual(r1.result.actions[0].runtime, 'claude-native');
+    assert.strictEqual(r1.result.actions.some((action) => action.kind === 'team-ensure' || action.kind === 'supervisor-start'), false);
 
     const worktreeId = rll.computeWorktreeId(dir);
     const planDigest = rll.discoverPlan(dir).planDigest;
@@ -789,8 +787,8 @@ test('team-ensure FAILED: with codex-app-server ALSO permitted by routing and ca
     const generationId = rll.resolveSessionGeneration(dir, identityFor(sessionKey)).generationId;
     const state = rll.readRoleBindingState(dir, worktreeId, planDigest, profileDigest, generationId, LIVE_ROLE);
     assert.strictEqual(state.state, 'STARTING');
-    assert.strictEqual(state.record.driver, 'codex-app-server');
-    assert.strictEqual(state.record.pending_action_id, r3.result.actions[0].action_id);
+    assert.strictEqual(state.record.driver, 'claude-sendmessage');
+    assert.strictEqual(state.record.pending_action_id, r1.result.actions[0].action_id);
   } finally {
     cleanup(dir);
   }
@@ -844,15 +842,6 @@ test('DEAD role-binding respawns once (max_respawns_per_role=1), then a SECOND d
     const t3 = rll.transitionRoleBinding(dir, worktreeId, planDigest, profileDigest, genResult.generationId, LIVE_ROLE, 'READY', 'DEAD', t2.record, {});
     assert.strictEqual(t3.ok, true, JSON.stringify(t3));
     assert.strictEqual(t3.record.respawn_count, 0);
-
-    // Team-ensure must SUCCEED before `ensure` will act on any Claude-native
-    // role at all (point C) -- register it via a bootstrap call for a
-    // DIFFERENT role first, so the DEAD-binding respawn below is not itself
-    // gated behind a fresh team-ensure mint.
-    const gBoot = mintGrant(dir, sessionKey, 'toolkit-specialist', 'ensure', ensureDigest(['toolkit-specialist']));
-    const rBoot = runCli(['ensure', '--project-root', dir, '--role', 'toolkit-specialist', '--lifecycle-binding', gBoot.grantId], { RUNTIME_ROLE_LIFECYCLE_FAKE_CAPABILITIES: LIVE_CAPS });
-    assert.strictEqual(rBoot.result.status, 'ACTION_REQUIRED', JSON.stringify(rBoot.result));
-    succeedTeamEnsure(dir, findTeamEnsureAction(rBoot.result.actions));
 
     const g1 = mintGrant(dir, sessionKey, LIVE_ROLE, 'ensure', ensureDigest([LIVE_ROLE]));
     const r1 = runCli(['ensure', '--project-root', dir, '--role', LIVE_ROLE, '--lifecycle-binding', g1.grantId], { RUNTIME_ROLE_LIFECYCLE_FAKE_CAPABILITIES: LIVE_CAPS });
@@ -2055,6 +2044,9 @@ test('worktree isolation: two REAL git worktrees of the SAME repo, SAME committe
     execFileSync('git', ['-C', dir, 'add', '.planning']);
     execFileSync('git', ['-C', dir, 'commit', '-q', '-m', 'add PLAN fixture']);
     execFileSync('git', ['-C', dir, 'worktree', 'add', '-q', worktreeDir, '-b', 'wt-second-branch']);
+    fs.mkdirSync(path.join(worktreeDir, 'scripts', 'lib'), { recursive: true });
+    fs.copyFileSync(path.join(dir, 'scripts', 'lib', 'runtime-collaboration-policy.json'), path.join(worktreeDir, 'scripts', 'lib', 'runtime-collaboration-policy.json'));
+    fs.copyFileSync(path.join(dir, 'scripts', 'lib', 'runtime-routing.json'), path.join(worktreeDir, 'scripts', 'lib', 'runtime-routing.json'));
 
     const repoIdMain = rll.computeRepoId(dir);
     const repoIdSecond = rll.computeRepoId(worktreeDir);
@@ -2199,8 +2191,8 @@ test('SupervisorLifecycleTransaction: an ACTIVE owner whose referenced action ha
     // this file's registry clock has no fixed-clock test seam (by design,
     // matching every other TTL proof in this suite).
     fs.mkdirSync(path.join(dir, 'scripts', 'lib'), { recursive: true });
-    const toolkitPolicy = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../lib/runtime-collaboration-policy.json'), 'utf8'));
-    fs.writeFileSync(path.join(dir, 'scripts', 'lib', 'runtime-collaboration-policy.json'), JSON.stringify(Object.assign({}, toolkitPolicy, { ready_timeout_seconds: 1 })));
+    const fixturePolicy = JSON.parse(fs.readFileSync(path.join(dir, 'scripts', 'lib', 'runtime-collaboration-policy.json'), 'utf8'));
+    fs.writeFileSync(path.join(dir, 'scripts', 'lib', 'runtime-collaboration-policy.json'), JSON.stringify(Object.assign({}, fixturePolicy, { ready_timeout_seconds: 1 })));
     fs.copyFileSync(path.resolve(__dirname, '../lib/runtime-routing.json'), path.join(dir, 'scripts', 'lib', 'runtime-routing.json'));
 
     const sessionKey = 'stale-heal-session';
@@ -2547,12 +2539,12 @@ test('fallback after supervisor-start action-failed: a fresh session generation 
 
     // A FRESH generation, with codex-app-server no longer capability-proven
     // but claude-sendmessage now proven, must select claude-sendmessage --
-    // genuine cross-driver fallback via team-ensure.
+    // genuine cross-driver fallback via the direct Claude role action.
     const nextSessionKey = 'c3-fallback-supstart-session-next-gen';
     const g2 = mintGrant(dir, nextSessionKey, LIVE_ROLE, 'ensure', ensureDigest([LIVE_ROLE]));
     const r2 = runCli(['ensure', '--project-root', dir, '--role', LIVE_ROLE, '--lifecycle-binding', g2.grantId], { RUNTIME_ROLE_LIFECYCLE_FAKE_CAPABILITIES: LIVE_CAPS });
     assert.strictEqual(r2.result.status, 'ACTION_REQUIRED', JSON.stringify(r2.result));
-    assert.strictEqual(r2.result.actions[0].kind, 'team-ensure', 'fell through to the next routing-permitted, capability-proven driver');
+    assert.strictEqual(r2.result.actions[0].kind, 'role-spawn', 'fell through to the next routing-permitted, capability-proven driver');
     assert.strictEqual(r2.result.actions[0].runtime, 'claude-native');
   } finally {
     cleanup(dir);
@@ -2852,7 +2844,7 @@ test('rotate (call site ~L3538, no registration of ANY kind): stays UNAVAILABLE 
 // handleEnsure can take.
 // ══════════════════════════════════════════════════════════════════════════
 
-test('ensure(live driver) M7 fresh mint: a role-spawn action minted for the FIRST time for THIS role (its own team-ensure predecessor already SUCCEEDED, from an earlier ensure() call for a DIFFERENT role in the same session) must reach the CLI JSON boundary with operation resolved via the pure lookup, while remaining genuinely UNCONSUMED -- proving the M7 fix holds in the FRESH-MINT branch (handleEnsure ~L4265), not merely the STARTING re-report branch (~L4049, covered by the sibling test below)', () => {
+test('ensure(live driver) M7 fresh mint: a direct role-spawn action minted for the FIRST time must reach the CLI JSON boundary with operation resolved via pure lookup while remaining genuinely UNCONSUMED', () => {
   assert.strictEqual(typeof rll.interpretRoleLifecycleAction, 'function', 'precondition: interpretRoleLifecycleAction must exist');
   assert.strictEqual(typeof rll.resolveHostOperationForAction, 'function', 'precondition: resolveHostOperationForAction must exist');
   const dir = makeGitProject('rll-handlers-m7-freshmint-');
@@ -2862,26 +2854,14 @@ test('ensure(live driver) M7 fresh mint: a role-spawn action minted for the FIRS
     const roleA = LIVE_ROLE;
     const roleB = 'toolkit-specialist'; // a DIFFERENT canonical role, same session -- shares the SAME team-ensure action (mirrors the happy-path test's own r1b precedent).
 
-    // Seed a SUCCEEDED team-ensure via roleA first (unrelated to this test's
-    // own subject, roleB) so that roleB's OWN first-ever ensure() call mints
-    // its role-spawn action AFTER team-ensure has already succeeded --
-    // otherwise a role's fresh mint always lands while team-ensure is still
-    // PENDING (freshly minted in the SAME call), and any buggy consume
-    // attempt would bail out early on 'dependent-team-ensure-not-succeeded'
-    // BEFORE ever reaching consumeInterpreterActionOnce -- which would make
-    // this scenario pass even under the unfixed bug, a false negative.
+    // Mint a disjoint direct action first so the subject remains roleB's own
+    // first-ever action while still exercising an established generation.
     const gA = mintGrant(dir, sessionKey, roleA, 'ensure', ensureDigest([roleA]));
     const rA = runCli(['ensure', '--project-root', dir, '--role', roleA, '--lifecycle-binding', gA.grantId], { RUNTIME_ROLE_LIFECYCLE_FAKE_CAPABILITIES: LIVE_CAPS });
     assert.strictEqual(rA.result.status, 'ACTION_REQUIRED', JSON.stringify(rA.result));
-    const teamAction = findTeamEnsureAction(rA.result.actions);
-    succeedTeamEnsure(dir, teamAction);
+    assert.strictEqual(findRoleSpawnAction(rA.result.actions).kind, 'role-spawn');
 
-    // roleB's FIRST-EVER ensure() call: team-ensure is ALREADY SUCCEEDED
-    // (idempotently reused, no second mint -- and therefore, per handleEnsure
-    // ~L4236, no longer even reported in THIS call's own actions[]). This is
-    // the first point at which a buggy mint-time consume attempt
-    // (handleEnsure ~L4265) could reach consumeInterpreterActionOnce for
-    // real, all within this ONE call.
+    // roleB's FIRST-EVER ensure() call directly mints its role-spawn action.
     const gB = mintGrant(dir, sessionKey, roleB, 'ensure', ensureDigest([roleB]));
     const rB = runCli(['ensure', '--project-root', dir, '--role', roleB, '--lifecycle-binding', gB.grantId], { RUNTIME_ROLE_LIFECYCLE_FAKE_CAPABILITIES: LIVE_CAPS });
     assert.strictEqual(rB.result.status, 'ACTION_REQUIRED', JSON.stringify(rB.result));
@@ -2932,21 +2912,18 @@ test('ensure(live driver) M7 fresh mint: a role-spawn action minted for the FIRS
   }
 });
 
-test('ensure(live driver) M7 STARTING re-report: a SECOND ensure() call for a role already STARTING on a pending role-spawn action (team-ensure already SUCCEEDED) must re-surface that SAME action_id with operation resolved -- and must NOT itself consume it either; a genuine downstream interpretation must still succeed exactly once afterward', () => {
+test('ensure(live driver) M7 STARTING re-report: a SECOND ensure() call for a role already STARTING on a direct pending role-spawn action re-surfaces the SAME action_id without consuming it', () => {
   const dir = makeGitProject('rll-handlers-m7-rereport-');
   try {
     writePlanFixture(dir, 'handlers-m7-rereport');
     const sessionKey = 'm7-rereport-session';
     const role = LIVE_ROLE;
 
-    // Call 1: mints team-ensure + role-spawn together (point 3.4); role
-    // transitions ABSENT -> STARTING.
+    // Call 1 directly mints role-spawn; role transitions ABSENT -> STARTING.
     const g1 = mintGrant(dir, sessionKey, role, 'ensure', ensureDigest([role]));
     const r1 = runCli(['ensure', '--project-root', dir, '--role', role, '--lifecycle-binding', g1.grantId], { RUNTIME_ROLE_LIFECYCLE_FAKE_CAPABILITIES: LIVE_CAPS });
     assert.strictEqual(r1.result.status, 'ACTION_REQUIRED', JSON.stringify(r1.result));
-    const teamAction = findTeamEnsureAction(r1.result.actions);
     const mintedAction = findRoleSpawnAction(r1.result.actions);
-    succeedTeamEnsure(dir, teamAction);
 
     // Call 2: the role is STILL STARTING (nothing has transitioned it to
     // READY) -- this call must hit the RE-REPORT branch (handleEnsure pass

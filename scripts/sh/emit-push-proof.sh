@@ -607,43 +607,55 @@ required_roles = json.loads(_rr) if _rr else (arb_step.get('required_roles', [])
 
 wave_dir = os.path.join(repo_root, '.planning', f'wave-{wave_slug}')
 digests = {}
+
+# Sequence 68/69 Defect 2: derive the exact canonical filename PER REQUIRED ROLE
+# and validate only that file -- never glob-scan every arch-*-verdict.md file in
+# the directory. A historical/legacy/non-required verdict file (e.g. left over
+# from an earlier, since-retired role in this same wave) is therefore NEVER
+# opened, read, or capable of causing a rejection: only the canonical per-role
+# filename derived below is ever touched. Historical/review/reverify files stay
+# untouched by construction, never by a special-cased exemption.
 if required_roles:
-    # The CLASS requires architects: wave dir + VERIFY-FINAL + HEAD-bound verdicts must exist.
     if not os.path.isdir(wave_dir):
         die(2, f"verdict-head-binding: wave dir not found: {wave_dir}")
-    verdict_files = [f for f in os.listdir(wave_dir) if re.match(r'arch-.*-verdict\.md$', f)]
-    if not verdict_files:
-        die(2, f"verdict-head-binding: no arch-*-verdict.md files found in {wave_dir}")
-    for fname in verdict_files:
-        fpath = os.path.join(wave_dir, fname)
+
+    _ROLE_RE = re.compile(r'^(arch-)?[a-z][a-z0-9-]*$')
+    seen_roles = set()
+    for role in required_roles:
+        if not isinstance(role, str) or not role.strip():
+            die(2, f"deliberation-role-incomplete: required_roles contains an empty/invalid role entry: {role!r}")
+        if role in seen_roles:
+            die(2, f"deliberation-role-incomplete: required_roles contains duplicate role '{role}'")
+        seen_roles.add(role)
+        if not _ROLE_RE.match(role):
+            die(2, f"deliberation-role-incomplete: required_roles contains an unrecognized role '{role}'")
+
+        short = role[len('arch-'):] if role.startswith('arch-') else role
+        expected = f'arch-{short}-verdict.md'
+        fpath = os.path.join(wave_dir, expected)
+
+        # Unsafe-file guard: never follow a symlink at the canonical path, and
+        # never accept anything other than a real regular file there.
+        if os.path.islink(fpath):
+            die(2, f"verdict-head-binding: {expected} is a symlink, refusing to follow")
+        if not os.path.isfile(fpath):
+            die(2, f"verdict-head-binding: required verdict file '{expected}' missing in {wave_dir} — re-run write-verdict.sh --phase verify-final for role '{role}'")
+
         with open(fpath, 'r', encoding='utf-8') as f:
             content = f.read()
         # Must contain APPROVED-VERIFY-FINAL
         if 'APPROVED-VERIFY-FINAL' not in content:
-            die(2, f"verdict-head-binding: {fname} does not contain APPROVED-VERIFY-FINAL — re-run VERIFY-FINAL at final HEAD")
+            die(2, f"verdict-head-binding: {expected} does not contain APPROVED-VERIFY-FINAL — re-run VERIFY-FINAL at final HEAD")
         # Must contain **HEAD**: <sha> matching final HEAD
         m = re.search(r'^\*\*HEAD\*\*:\s*([0-9a-f]{40})', content, re.MULTILINE)
         if not m:
-            die(2, f"verdict-head-binding: {fname} missing **HEAD**: field — re-run write-verdict.sh --phase verify-final at final HEAD")
+            die(2, f"verdict-head-binding: {expected} missing **HEAD**: field — re-run write-verdict.sh --phase verify-final at final HEAD")
         verdict_head = m.group(1)
         if verdict_head != final_head:
-            die(2, f"verdict-head-binding: {fname} HEAD ({verdict_head}) != final HEAD ({final_head}) — stale verdict, re-run VERIFY-FINAL")
+            die(2, f"verdict-head-binding: {expected} HEAD ({verdict_head}) != final HEAD ({final_head}) — stale verdict, re-run VERIFY-FINAL")
         # Digest the file (CRLF->LF)
         raw = open(fpath, 'rb').read().replace(b'\r\n', b'\n')
-        digests[fname] = hashlib.sha256(raw).hexdigest()
-
-# ── Per-role verdict-file check (P1) ─────────────────────────────────────────
-# For each required_role, a VERIFY-FINAL + HEAD-bound arch-<role>-verdict.md must exist.
-# required_roles was resolved at the top of this block (empty for FAST-PATH -> no-op loop).
-verdict_basenames = set(digests.keys())  # already verified VERIFY-FINAL + HEAD-bound
-for role in required_roles:
-    # required_roles values carry the 'arch-' prefix (e.g. "arch-platform").
-    # write-verdict.sh strips it via ${ROLE#arch-} → file is "arch-platform-verdict.md".
-    # Strip here too so f'arch-{short}-verdict.md' matches what write-verdict.sh produces.
-    short = role[5:] if role.startswith('arch-') else role
-    expected = f'arch-{short}-verdict.md'
-    if expected not in verdict_basenames:
-        die(2, f"deliberation-role-incomplete: required verdict file '{expected}' missing or not VERIFY-FINAL+HEAD-bound in {wave_dir}")
+        digests[expected] = hashlib.sha256(raw).hexdigest()
 
 # Write digests to stdout as JSON for bash to capture
 print(json.dumps(digests))

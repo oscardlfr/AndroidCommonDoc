@@ -640,7 +640,16 @@ describe('CredentialSourceProvider/v1 real backing (Group A / M6, user-authorize
     }, opts.tokens || {});
     const body = Object.assign({ tokens }, opts.topLevel || {});
     const raw = Object.prototype.hasOwnProperty.call(opts, 'rawText') ? opts.rawText : JSON.stringify(body);
-    fs.writeFileSync(authPath, raw, { mode: Object.prototype.hasOwnProperty.call(opts, 'mode') ? opts.mode : 0o600 });
+    const authMode = Object.prototype.hasOwnProperty.call(opts, 'mode') ? opts.mode : 0o600;
+    fs.writeFileSync(authPath, raw, { mode: authMode });
+    // fs.writeFileSync's `mode` option is itself subject to the ambient
+    // process umask (standard POSIX file-creation semantics), so a
+    // caller-requested non-default mode (e.g. 0o644) can silently land as a
+    // DIFFERENT mode on disk under a restrictive umask -- accidentally
+    // constructing a fixture that does not match what the test claims to
+    // construct. chmodSync applies the exact requested bits unconditionally,
+    // regardless of umask, so the on-disk mode always matches `authMode`.
+    fs.chmodSync(authPath, authMode);
     return { authPath, codexDir, tokens };
   }
 
@@ -13254,7 +13263,24 @@ describe('C3 FINAL CLOSURE ROUND (fresh session, 2026-07-22): C3-owned residual 
     try {
       const sourcePath = instanceRecordPathFor(repoId, instanceId);
       fs.mkdirSync(path.dirname(sourcePath), { recursive: true });
-      fs.writeFileSync(sourcePath, JSON.stringify(makeInstanceRecordFixture()), { mode: 0o600 });
+      // Sequence135 P1A-bound E24 fixture correction (sequence123-codex-r129-binding.md
+      // section5: "C3-CLEANUP-E24 overrides instance_id with its actual
+      // scoped path ID"): makeInstanceRecordFixture()'s own generic
+      // placeholder instance_id ('c3-block4-fixture-instance') never matched
+      // this test's own real, randomly-minted instanceId (the exact ID the
+      // record is stored under, at instanceRecordPathFor(repoId,instanceId)
+      // above) -- harmless for THIS test's own narrow order-of-operations
+      // assertion today (retireInstanceRecordLocked's normal-path source read
+      // never cross-checks record.instance_id against the caller's own
+      // instanceId), but exactly the correlation gap a future normal-path
+      // validation pass (section5, same paragraph: "Validate full 11-field
+      // shape and exact instance-id/path correlation at cleanup authorization
+      // and both normal/resumed retirement, not only the reaper") would
+      // otherwise trip on for a fixture that was never actually wrong about
+      // anything ELSE. Same Object.assign(makeInstanceRecordFixture(), {...})
+      // override pattern already established elsewhere in this file (e.g.
+      // the "FIX (needs real implementation)" reapTombstonedRoot fixture).
+      fs.writeFileSync(sourcePath, JSON.stringify(Object.assign(makeInstanceRecordFixture(), { instance_id: instanceId })), { mode: 0o600 });
 
       const order = [];
       const result = rbc.retireInstanceRecord({ repoId, instanceId }, { onRetirementStep: (name) => order.push(name) });
@@ -13693,4 +13719,604 @@ describe('M6 live login plan semantics: unknown local plan may be derived exactl
     assert.deepStrictEqual(await loginPromise, { ok: false, reason: 'login-conflicting-plan-type' });
     assert.strictEqual(connection.isStopped(), true);
   });
+});
+
+// ══════════════════════════════════════════════════════════════════════════
+// Sequence 66/67/69 RED correction — Defect 1: Frozen Codex bridge ABI absent.
+// Independently byte-confirmed (this test-specialist, 2026-08-24) against
+// scripts/lib/runtime-bridge-codex.cjs directly: main() (line 13023) is
+//
+//   function main(argv) {
+//     const subcommand = argv[0];
+//     const rest = argv.slice(1);
+//     if (subcommand === 'session-run') return cmdSessionRun(rest);
+//     if (!subcommand) return usageError('missing subcommand');
+//     return usageError('unknown subcommand: ' + subcommand);
+//   }
+//
+// -- the ONLY recognized literal is 'session-run'. PLAN.md's own frozen
+// Codex bridge ABI table (~L871-882) names SIX subcommands as first-class
+// members of this exact CLI: session-run, runtime-spawn, claude-mcp-launch,
+// mcp-serve, worker-cleanup, conformance -- confirmed against PLAN.md
+// directly, byte-for-byte, before writing this test. Empirically re-verified
+// by directly invoking the CLI for each of the five missing subcommands:
+// every one prints `usage error: unknown subcommand: <name>` and exits 2.
+//
+// This is a structural (source-text) proof, complementary to the black-box
+// CLI-level RED tests in runtime-consultation-bridge.bats (CPX-DISPATCH-01/
+// 02/04/05, CPX-TESTFRONTEND-PROD-REJECT-01, CPX-WORKERCLEANUP-SYMLINK-01,
+// CPX-CONFORMANCE-INVALID-MODE-01) -- it is the ONLY coverage in this wave
+// for `mcp-serve` specifically, deliberately never invoked live (PLAN.md
+// ~L878: "launcher-only stdio MCP server", a genuine long-running stdio
+// loop that must never risk hanging a test run).
+// ══════════════════════════════════════════════════════════════════════════
+
+describe('Sequence 66/67/69 defect 1: main() must dispatch every ABI-frozen Codex bridge subcommand, not only session-run', () => {
+  function mainFunctionBody() {
+    const sourceText = fs.readFileSync(IMPL, 'utf8');
+    const fnStart = sourceText.indexOf('function main(argv)');
+    assert.ok(fnStart >= 0, 'test precondition: main(argv) must exist as a named function in runtime-bridge-codex.cjs');
+    const fnEnd = sourceText.indexOf('\nmodule.exports = {', fnStart);
+    assert.ok(fnEnd > fnStart, 'test precondition: the known trailing module.exports marker must be found after main()');
+    return sourceText.slice(fnStart, fnEnd);
+  }
+
+  test('RED: main() must reference runtime-spawn, claude-mcp-launch, mcp-serve, worker-cleanup and conformance as recognized subcommands', () => {
+    const body = mainFunctionBody();
+    assert.ok(body.includes("'session-run'"), 'test precondition: session-run must remain dispatched (regression guard)');
+    for (const subcommand of ['runtime-spawn', 'claude-mcp-launch', 'mcp-serve', 'worker-cleanup', 'conformance']) {
+      assert.ok(
+        body.includes("'" + subcommand + "'"),
+        'main() must reference the subcommand literal "' + subcommand
+        + '" to route it -- PLAN.md ~L871-882\'s frozen Codex bridge ABI table names it as a first-class subcommand of this exact CLI, but main() today falls through every one of these five to the unknown-subcommand usageError branch (confirmed by direct source read and by live CLI invocation before writing this test)'
+      );
+    }
+  });
+
+  test('RED: main() must not resolve any of the five missing subcommands purely through the generic usageError("unknown subcommand: ...") fallback', () => {
+    const body = mainFunctionBody();
+    // The current, broken shape is exactly two branches: the 'session-run'
+    // dispatch and a bare "missing subcommand" / "unknown subcommand: " +
+    // subcommand fallback -- i.e. the function body contains NO OTHER
+    // recognized-subcommand branch at all. A fixed main() must contain at
+    // least one additional conditional branch (an `if`/`else if`/switch
+    // case) beyond the single 'session-run' check before ever reaching the
+    // generic fallback -- approximated here by requiring more than one
+    // occurrence of the string "subcommand ===" (or an equivalent switch
+    // case) in the function body; today there is exactly one.
+    const dispatchBranchCount = (body.match(/subcommand === '/g) || []).length;
+    assert.ok(
+      dispatchBranchCount > 1,
+      'main() must recognize more than just the single "session-run" branch (found ' + dispatchBranchCount
+      + ' subcommand === \'...\' branch(es)) -- PLAN.md ~L871-882 requires six recognized subcommands total'
+    );
+  });
+});
+
+// Sequence 82 (WAVE1-FUNCTIONAL-CLOSEOUT-REALISTIC-20260822): RED-first TDD
+// coverage for rbc.probeAppServerLiveCapability(), the R2 preflight gate
+// (schema-probe-then-auth-probe short circuit), per sequence81-test-
+// specialist-dispatch.json. Mirrors this file's own top-of-file convention
+// (lines 25-27): every test below is DESIGNED to RED as a clean
+// "rbc.probeAppServerLiveCapability is not a function" TypeError until
+// toolkit-specialist's own implementation dispatch lands, never a bug in
+// this file itself.
+describe('probeAppServerLiveCapability (R2 preflight)', () => {
+  /** Generalized save-then-restore env-override helper for this describe
+   * block, mirroring the file's own established hasOwnProperty-based idioms
+   * (withOverriddenCodexHome, withoutTestCapability, above) for the
+   * multi-var precedence/production-shape tests below that need more than
+   * one simultaneous override. */
+  function withEnvOverrides(overrides, fn) {
+    const saved = {};
+    for (const key of Object.keys(overrides)) {
+      saved[key] = { hadOwn: Object.prototype.hasOwnProperty.call(process.env, key), value: process.env[key] };
+    }
+    for (const key of Object.keys(overrides)) {
+      if (overrides[key] === undefined) delete process.env[key];
+      else process.env[key] = overrides[key];
+    }
+    try {
+      return fn();
+    } finally {
+      for (const key of Object.keys(saved)) {
+        if (saved[key].hadOwn) process.env[key] = saved[key].value;
+        else delete process.env[key];
+      }
+    }
+  }
+
+  test('R2-PREFLIGHT-RC3-SCHEMA-DRIFT-01 RED: a failing fake schema probe under test capability returns rc3 (RC.CAPABILITY_SCHEMA_DRIFT), short-circuiting before any auth probe', () => {
+    withEnvOverrides({
+      RUNTIME_BRIDGE_CODEX_FAKE_SCHEMA_PROBE: '{"ok":false,"reason":"fixture-schema-drift-01"}',
+      RUNTIME_BRIDGE_CODEX_FAKE_AUTH_PROBE: undefined,
+    }, () => {
+      assert.deepStrictEqual(
+        rbc.probeAppServerLiveCapability(),
+        { ok: false, rc: rbc.RC.CAPABILITY_SCHEMA_DRIFT, reason: 'fixture-schema-drift-01' },
+      );
+    });
+  });
+
+  test('R2-PREFLIGHT-RC4-AUTH-ISOLATION-01 RED: schema probe passes, a failing fake auth probe under test capability returns rc4 (RC.AUTH_ISOLATION)', () => {
+    withEnvOverrides({
+      RUNTIME_BRIDGE_CODEX_FAKE_SCHEMA_PROBE: '{"ok":true}',
+      RUNTIME_BRIDGE_CODEX_FAKE_AUTH_PROBE: '{"ok":false,"reason":"fixture-auth-isolation-01"}',
+    }, () => {
+      assert.deepStrictEqual(
+        rbc.probeAppServerLiveCapability(),
+        { ok: false, rc: rbc.RC.AUTH_ISOLATION, reason: 'fixture-auth-isolation-01' },
+      );
+    });
+  });
+
+  test('R2-PREFLIGHT-SUCCESS-01 RED: both fake probes ok:true returns exactly {ok:true}, with zero process.exit/stdout/stderr side effect', (t) => {
+    const exitSpy = t.mock.method(process, 'exit', () => {
+      throw new Error('R2-PREFLIGHT-SUCCESS-01: process.exit must never be called by probeAppServerLiveCapability');
+    });
+    const stdoutSpy = t.mock.method(process.stdout, 'write', () => true);
+    const stderrSpy = t.mock.method(process.stderr, 'write', () => true);
+    withEnvOverrides({
+      RUNTIME_BRIDGE_CODEX_FAKE_SCHEMA_PROBE: '{"ok":true}',
+      RUNTIME_BRIDGE_CODEX_FAKE_AUTH_PROBE: '{"ok":true}',
+    }, () => {
+      const result = rbc.probeAppServerLiveCapability();
+      assert.deepStrictEqual(result, { ok: true });
+      assert.deepStrictEqual(Object.keys(result), ['ok']);
+    });
+    assert.strictEqual(exitSpy.mock.calls.length, 0);
+    assert.strictEqual(stdoutSpy.mock.calls.length, 0);
+    assert.strictEqual(stderrSpy.mock.calls.length, 0);
+  });
+
+  test('R2-PREFLIGHT-RC3-PRECEDENCE-OVER-RC4-01 RED: both fake probes fail simultaneously -- rc3 wins, proving the fixed schema-before-auth short-circuit order', () => {
+    withEnvOverrides({
+      RUNTIME_BRIDGE_CODEX_FAKE_SCHEMA_PROBE: '{"ok":false,"reason":"fixture-schema-drift-precedence"}',
+      RUNTIME_BRIDGE_CODEX_FAKE_AUTH_PROBE: '{"ok":false,"reason":"fixture-auth-isolation-precedence"}',
+    }, () => {
+      assert.deepStrictEqual(
+        rbc.probeAppServerLiveCapability(),
+        { ok: false, rc: rbc.RC.CAPABILITY_SCHEMA_DRIFT, reason: 'fixture-schema-drift-precedence' },
+      );
+    });
+  });
+
+  test('R2-PREFLIGHT-PRODUCTION-SHAPE-FAKES-UNREACHABLE-01 RED: with the test-capability gate NOT satisfied, both fake probe env vars have zero effect -- mechanically proving the fixture is unreachable from a production-shaped invocation, independent of host Codex state', () => {
+    withEnvOverrides({
+      NODE_ENV: undefined,
+      RUNTIME_BRIDGE_CODEX_TEST_CAPABILITY: undefined,
+      RUNTIME_BRIDGE_CODEX_FAKE_SCHEMA_PROBE: '{"ok":false,"reason":"UNREACHABLE-FAKE-SCHEMA-MARKER-R2"}',
+      RUNTIME_BRIDGE_CODEX_FAKE_AUTH_PROBE: '{"ok":false,"reason":"UNREACHABLE-FAKE-AUTH-MARKER-R2"}',
+    }, () => {
+      const result = rbc.probeAppServerLiveCapability();
+      assert.strictEqual(typeof result, 'object');
+      assert.notStrictEqual(result, null);
+      assert.strictEqual(typeof result.ok, 'boolean');
+      assert.notStrictEqual(result.reason, 'UNREACHABLE-FAKE-SCHEMA-MARKER-R2');
+      assert.notStrictEqual(result.reason, 'UNREACHABLE-FAKE-AUTH-MARKER-R2');
+    });
+  });
+
+  test('R2-PREFLIGHT-MALFORMED-SCHEMA-PROBE-FALLS-THROUGH-01 RED: an invalid-JSON fake schema-probe value, under test capability, falls through silently to the real probe path (never throws) -- made fully deterministic by pairing with the existing, already-shipped RUNTIME_BRIDGE_CODEX_FAKE_APP_SERVER_SPAWN seam pointed at a guaranteed-nonexistent binary path', () => {
+    withEnvOverrides({
+      RUNTIME_BRIDGE_CODEX_FAKE_APP_SERVER_SPAWN: JSON.stringify({
+        command: '/definitely/nonexistent/codex-binary-r2-fixture-' + crypto.randomBytes(4).toString('hex'),
+        args: ['--listen', 'stdio://'],
+      }),
+      RUNTIME_BRIDGE_CODEX_FAKE_SCHEMA_PROBE: 'not-valid-json{{{',
+      RUNTIME_BRIDGE_CODEX_FAKE_AUTH_PROBE: undefined,
+    }, () => {
+      let result;
+      assert.doesNotThrow(() => {
+        result = rbc.probeAppServerLiveCapability();
+      });
+      assert.deepStrictEqual(
+        result,
+        { ok: false, rc: rbc.RC.CAPABILITY_SCHEMA_DRIFT, reason: 'app-server-version-probe-failed' },
+      );
+    });
+  });
+});
+
+// ══════════════════════════════════════════════════════════════════════════
+// Sequence 83 (WAVE1-FUNCTIONAL-CLOSEOUT-REALISTIC-20260822): RED-first TDD
+// coverage for 3 independently-audited defects in the ALREADY-SHIPPED R2
+// preflight internals (probeSchemaCapability's rc3 path --
+// r2ProbeSchemaGenerationLive / r2SchemaKeysStructurallyPresent -- and
+// probeAuthReadiness's rc4 path -- r2ReadOwnedAuthFileSecurely), confirmed
+// directly against runtime-bridge-codex.cjs's current source before writing
+// anything below, plus one production-shape regression guard for the 3 new
+// test-only exports the fix (landing separately, next) adds inside this
+// file's existing `if (isTestCapability())` gated export block
+// (runtime-bridge-codex.cjs, module.exports.__testOnly*). Mirrors this
+// file's own top-of-file convention (lines 25-27) and the R2 preflight
+// block's own convention immediately above: every test below asserting a
+// not-yet-exported `__testOnly*` function is DESIGNED to RED as a clean
+// "is not a function" TypeError until that fix lands -- never a bug in this
+// file itself. The one exception (the last test below) already passes
+// today: the absence of a not-yet-existing property is trivially true right
+// now, and stays a valid regression guard once the fix lands.
+describe('R2 audit repair (Sequence 83)', () => {
+  const R2_AUDIT_GENERATED_SCHEMA = require(path.resolve(__dirname, '../lib/generated/c2-schema-validators.generated.cjs'));
+
+  /**
+   * Mirrors runtime-bridge-codex.cjs's own private r2SchemaFileRelPathFor
+   * root-only branch (read directly from source before writing this
+   * helper, cross-checked against scripts/tools/generate-c2-schema-
+   * validators.cjs's own INBOUND_ROOTS/OUTBOUND_ROOTS tables): a versioned
+   * root (ns v1/v2) lives at "<ns>/<Name>.json"; an unversioned ("base")
+   * root lives flat at "<Name>.json". Deliberately has no definition-key
+   * branch at all -- these fixtures never create a standalone
+   * per-definition file anywhere, which is exactly the point (defect 1).
+   */
+  function r2AuditRootRelPathFor(rootKey) {
+    const sep = rootKey.indexOf('::');
+    if (sep === -1) return rootKey + '.json';
+    const ns = rootKey.slice(0, sep);
+    const name = rootKey.slice(sep + 2);
+    return ns === 'base' ? name + '.json' : ns + '/' + name + '.json';
+  }
+
+  /**
+   * Writes one small, valid, parseable fixture root JSON file per REAL
+   * current generated.roots key (read from the real generated module at
+   * require-time, never invented), each carrying an embedded `definitions`
+   * object with every REAL current generated.definitions key EXCEPT
+   * `omitDefinitionKey` (when supplied). No standalone per-definition file
+   * (e.g. a bare "<DefinitionName>.json") is ever written anywhere in
+   * `dir`.
+   */
+  function writeR2AuditSchemaFixture(dir, omitDefinitionKey) {
+    const definitionKeys = Object.keys(R2_AUDIT_GENERATED_SCHEMA.definitions || {});
+    const rootKeys = Object.keys(R2_AUDIT_GENERATED_SCHEMA.roots || {});
+    assert.ok(definitionKeys.length > 0, 'fixture precondition: the real generated module must expose at least one definitions key');
+    assert.ok(rootKeys.length > 0, 'fixture precondition: the real generated module must expose at least one roots key');
+    const embeddedKeys = definitionKeys.filter((key) => key !== omitDefinitionKey);
+    for (const rootKey of rootKeys) {
+      const filePath = path.join(dir, r2AuditRootRelPathFor(rootKey));
+      fs.mkdirSync(path.dirname(filePath), { recursive: true });
+      const definitions = {};
+      for (const key of embeddedKeys) definitions[key] = {};
+      fs.writeFileSync(filePath, JSON.stringify({ definitions }), { mode: 0o600 });
+    }
+    return { definitionKeys, rootKeys };
+  }
+
+  test('R2-AUDIT-SCHEMA-DEFINITION-MAPPING-POSITIVE-01 RED: every real generated.definitions key embedded inside some real generated.roots fixture file\'s own definitions object, with NO standalone per-definition file anywhere, must be reported structurally present once the P0 structural-oracle defect is fixed', () => {
+    const fixtureDir = fs.mkdtempSync(path.join(os.tmpdir(), 'r2-audit-schema-map-pos-'));
+    try {
+      writeR2AuditSchemaFixture(fixtureDir);
+      assert.strictEqual(
+        rbc.__testOnlyR2SchemaKeysStructurallyPresent(fixtureDir),
+        true,
+        'every real generated.definitions key is embedded in some real root fixture file\'s own definitions object -- the fixed oracle must report true even though no standalone per-definition file exists anywhere in the fixture directory',
+      );
+    } finally {
+      cleanupDir(fixtureDir);
+    }
+  });
+
+  test('R2-AUDIT-SCHEMA-DEFINITION-MAPPING-NEGATIVE-01 RED: omitting exactly one real generated.definitions key from every fixture root file\'s embedded definitions object must be reported structurally absent once the P0 structural-oracle defect is fixed', () => {
+    const fixtureDir = fs.mkdtempSync(path.join(os.tmpdir(), 'r2-audit-schema-map-neg-'));
+    try {
+      const definitionKeys = Object.keys(R2_AUDIT_GENERATED_SCHEMA.definitions || {});
+      assert.ok(definitionKeys.length > 0, 'fixture precondition: the real generated module must expose at least one definitions key');
+      const omittedKey = definitionKeys[0];
+      writeR2AuditSchemaFixture(fixtureDir, omittedKey);
+      assert.strictEqual(
+        rbc.__testOnlyR2SchemaKeysStructurallyPresent(fixtureDir),
+        false,
+        'omitting definitions key "' + omittedKey + '" from every fixture root file\'s embedded definitions object must be reported structurally absent, never true',
+      );
+    } finally {
+      cleanupDir(fixtureDir);
+    }
+  });
+
+  test('R2-AUDIT-SCHEMA-CLEANUP-FAIL-OPEN-01 RED: an fs.rmSync cleanup failure inside r2ProbeSchemaGenerationLive must flip an otherwise-successful probe to {ok:false,reason:\'app-server-schema-cleanup-failed\'} at the private helper (no rc field there) and to {ok:false,rc:RC.CAPABILITY_SCHEMA_DRIFT,reason:\'app-server-schema-cleanup-failed\'} (rc3) at the public probeAppServerLiveCapability() once the P1 fail-open cleanup defect is fixed -- never silently preserve prior success', (t) => {
+    const fixtureDir = fs.mkdtempSync(path.join(os.tmpdir(), 'r2-audit-cleanup-fixture-'));
+    const binaryPath = path.join(fixtureDir, 'fake-codex-r2-audit');
+    // A real, tiny, deterministic executable -- never the real Codex binary
+    // (must be CI-safe without one) -- so the underlying spawnSync call
+    // genuinely succeeds (status 0, no error/signal) without depending on
+    // mocking child_process: runtime-bridge-codex.cjs destructures
+    // `spawnSync` from `require('child_process')` into a local module-scope
+    // const at its own top (its R2 section, `const { spawnSync } =
+    // require('child_process');`), so a later t.mock.method on the
+    // child_process module object has no effect on that already-captured
+    // local reference -- confirmed by direct source read before writing
+    // this fixture. `fs.rmSync`, by contrast, is always called as
+    // `fs.rmSync(...)` (a property access on the shared `fs` module object
+    // both this test file and runtime-bridge-codex.cjs hold the same
+    // reference to), so mocking it here genuinely reaches the internal
+    // call.
+    fs.writeFileSync(binaryPath, '#!/bin/sh\nexit 0\n', { mode: 0o755 });
+    const realRmSync = fs.rmSync.bind(fs);
+    // sequence85 correction (sequence84-codex-audit.json remaining_findings
+    // R2-QUALITY-TEST-LEAK-01): the product probe's own real
+    // fs.mkdtempSync(path.join(os.tmpdir(), 'rbc-r2-schema-probe-')) call
+    // (runtime-bridge-codex.cjs r2ProbeSchemaGenerationLive) is never faked
+    // by this fixture -- only fs.rmSync is mocked-to-throw, below -- so each
+    // product call in this test creates one real, genuinely-orphaned
+    // rbc-r2-schema-probe-* directory under os.tmpdir(). Snapshotting the
+    // pre-existing matching names here, before either product call, lets
+    // the finally below remove ONLY the ones this run itself created, via
+    // the already-captured real rmSync (fs.rmSync is still mocked-to-throw
+    // at that point) -- never a broader os.tmpdir() sweep.
+    const r2SchemaProbeTmpPrefix = 'rbc-r2-schema-probe-';
+    const preExistingR2SchemaProbeDirs = new Set(
+      fs.readdirSync(os.tmpdir()).filter((name) => name.startsWith(r2SchemaProbeTmpPrefix)),
+    );
+    try {
+      t.mock.method(fs, 'rmSync', () => { throw new Error('fixture-rmsync-failure'); });
+      const result = rbc.__testOnlyR2ProbeSchemaGenerationLive(binaryPath);
+      assert.deepStrictEqual(
+        result,
+        { ok: false, reason: 'app-server-schema-cleanup-failed' },
+      );
+      // sequence84 correction (sequence83-codex-audit.json
+      // test_fixture_correction R2-AUDIT-SCHEMA-CLEANUP-FAIL-OPEN-01): the
+      // PRIVATE r2ProbeSchemaGenerationLive helper's own fail-closed cleanup
+      // result never carries an `rc` field -- only probeSchemaCapability /
+      // probeAppServerLiveCapability, one layer up, map it to rc3. Reuses
+      // the SAME fake executable and the SAME still-active fs.rmSync mock
+      // above (never a second fixture) via the existing
+      // RUNTIME_BRIDGE_CODEX_FAKE_APP_SERVER_SPAWN seam (double-gated on
+      // isTestCapability(), like every other fake-* seam in this file) plus
+      // a fake auth-success probe, so the schema-cleanup defect alone
+      // drives this public-surface outcome.
+      const preflightEnvKeys = ['RUNTIME_BRIDGE_CODEX_FAKE_APP_SERVER_SPAWN', 'RUNTIME_BRIDGE_CODEX_FAKE_SCHEMA_PROBE', 'RUNTIME_BRIDGE_CODEX_FAKE_AUTH_PROBE'];
+      const savedPreflightEnv = {};
+      for (const key of preflightEnvKeys) {
+        savedPreflightEnv[key] = { hadOwn: Object.prototype.hasOwnProperty.call(process.env, key), value: process.env[key] };
+      }
+      try {
+        delete process.env.RUNTIME_BRIDGE_CODEX_FAKE_SCHEMA_PROBE;
+        process.env.RUNTIME_BRIDGE_CODEX_FAKE_APP_SERVER_SPAWN = JSON.stringify({ command: binaryPath, args: ['--listen', 'stdio://'] });
+        process.env.RUNTIME_BRIDGE_CODEX_FAKE_AUTH_PROBE = '{"ok":true}';
+        assert.deepStrictEqual(
+          rbc.probeAppServerLiveCapability(),
+          { ok: false, rc: rbc.RC.CAPABILITY_SCHEMA_DRIFT, reason: 'app-server-schema-cleanup-failed' },
+        );
+      } finally {
+        for (const key of preflightEnvKeys) {
+          if (savedPreflightEnv[key].hadOwn) process.env[key] = savedPreflightEnv[key].value;
+          else delete process.env[key];
+        }
+      }
+    } finally {
+      realRmSync(fixtureDir, { recursive: true, force: true });
+      for (const name of fs.readdirSync(os.tmpdir())) {
+        if (name.startsWith(r2SchemaProbeTmpPrefix) && !preExistingR2SchemaProbeDirs.has(name)) {
+          realRmSync(path.join(os.tmpdir(), name), { recursive: true, force: true });
+        }
+      }
+    }
+  });
+
+  test('R2-AUDIT-FAILED-READ-BUFFER-NOT-ZEROED-01 RED: a post-read TOCTOU identity mismatch inside r2ReadOwnedAuthFileSecurely must return {ok:false} with the exact local read buffer already zeroed once the P1 not-zeroed defect is fixed -- secret bytes must never remain resident on a failure path', (t) => {
+    const fixtureDir = fs.mkdtempSync(path.join(os.tmpdir(), 'r2-audit-auth-read-fixture-'));
+    const fixturePath = path.join(fixtureDir, 'auth.json');
+    fs.writeFileSync(fixturePath, JSON.stringify({
+      tokens: {
+        access_token: 'r2-audit-fixture-access-token-must-be-zeroed-after-failure',
+        account_id: 'r2-audit-fixture-account-id',
+      },
+    }), { mode: 0o600 });
+    const realLstatSync = fs.lstatSync.bind(fs);
+    let fixtureLstatCalls = 0;
+    try {
+      // No existing generic RUNTIME_BRIDGE_CODEX_FAULT_TOCTOU_SWAP seam
+      // applies here -- confirmed by direct read of
+      // r2ReadOwnedAuthFileSecurely's own body, which has no
+      // isTestCapability()/env-var fault-injection check of its own at all
+      // (unlike the two call sites that seam actually gates elsewhere in
+      // this file). Falling through to t.mock.method per this dispatch's
+      // own explicit fallback instruction. The FIRST fs.lstatSync(fixturePath)
+      // call is the function's own initial security precheck and must stay
+      // genuinely real so the fixture file passes it; only the SECOND (the
+      // post-read `afterPath` recheck) is mutated -- a `.size` off-by-one is
+      // sufficient to fail the fd-bound before/after comparison
+      // deterministically, without touching the real file on disk or its
+      // own `isSymbolicLink()` method.
+      t.mock.method(fs, 'lstatSync', (targetPath, options) => {
+        const real = realLstatSync(targetPath, options);
+        if (targetPath === fixturePath) {
+          fixtureLstatCalls += 1;
+          if (fixtureLstatCalls === 2) real.size = real.size + 1;
+        }
+        return real;
+      });
+      const result = rbc.__testOnlyR2ReadOwnedAuthFileSecurely(fixturePath);
+      assert.strictEqual(result.ok, false, 'the post-read TOCTOU recheck must fail deterministically: ' + JSON.stringify(result));
+      assert.ok(
+        Buffer.isBuffer(result.buffer) && result.buffer.length > 0,
+        'the exact local buffer used for the fd-bound read must still be returned on failure, never omitted: ' + JSON.stringify(result),
+      );
+      assert.ok(
+        result.buffer.every((b) => b === 0),
+        'every byte of the failed-read buffer must be zeroed before the function returns, never leaving secret bytes resident',
+      );
+    } finally {
+      cleanupDir(fixtureDir);
+    }
+  });
+
+  test('R2-AUDIT-TEST-ONLY-EXPORTS-ABSENT-PRODUCTION-SHAPE-01: a fresh require of runtime-bridge-codex.cjs with NODE_ENV/RUNTIME_BRIDGE_CODEX_TEST_CAPABILITY both cleared must never expose __testOnlyR2SchemaKeysStructurallyPresent / __testOnlyR2ProbeSchemaGenerationLive / __testOnlyR2ReadOwnedAuthFileSecurely -- already trivially true today (none of the three exist yet at all), and remains a valid regression guard once the fix adds them inside the existing isTestCapability()-gated export block', () => {
+    const ENV_KEYS = ['NODE_ENV', 'RUNTIME_BRIDGE_CODEX_TEST_CAPABILITY'];
+    const saved = {};
+    for (const key of ENV_KEYS) {
+      saved[key] = { hadOwn: Object.prototype.hasOwnProperty.call(process.env, key), value: process.env[key] };
+    }
+    try {
+      delete process.env.NODE_ENV;
+      delete process.env.RUNTIME_BRIDGE_CODEX_TEST_CAPABILITY;
+      delete require.cache[require.resolve(IMPL)];
+      const freshRbc = require(IMPL);
+      assert.strictEqual(freshRbc.__testOnlyR2SchemaKeysStructurallyPresent, undefined);
+      assert.strictEqual(freshRbc.__testOnlyR2ProbeSchemaGenerationLive, undefined);
+      assert.strictEqual(freshRbc.__testOnlyR2ReadOwnedAuthFileSecurely, undefined);
+    } finally {
+      for (const key of ENV_KEYS) {
+        if (saved[key].hadOwn) process.env[key] = saved[key].value;
+        else delete process.env[key];
+      }
+      // Re-require under the SAME test-capability env every other test in
+      // this file relies on, so the require cache never stays pinned to
+      // the production-shaped module instance this test deliberately
+      // forced.
+      delete require.cache[require.resolve(IMPL)];
+      require(IMPL);
+    }
+  });
+});
+
+// ══════════════════════════════════════════════════════════════════════════
+// P1A -- Sequence135 RED-only, append-only (Sequence123 R129 binding
+// section5, "P1-A exact cleanup algorithm and receipt"; PLAN.md R130). Four
+// TOP-LEVEL node:test cases (never nested in a describe(), so the anchored
+// `--test-name-pattern='^P1A-'` filter selects them directly). Each reuses
+// this file's own pre-existing fixture helpers (makeSealedIsolationFixture,
+// minimalValidCleanupAuthorization, makeInstanceRecordFixture,
+// instanceRecordPathFor/instanceTombstonePathFor, cleanupRegistryFor/
+// cleanupDir, fakeOwnerIdentityBlock2) -- never a new/invented fixture
+// convention. Confirmed by direct source read before writing this section:
+// none of the behavior asserted below is currently enforced. Zero
+// pre-existing byte above this line is touched; zero production file is
+// touched.
+// ══════════════════════════════════════════════════════════════════════════
+
+test('P1A-SAMEPROVIDER-TOKEN-DENIAL-01 RED: same-provider root ownership is per-instance, not per-provider -- a genuine ownerToken minted for one sealed instance must be denied against a DIFFERENT sealed instance from the SAME provider/handle family', () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'p1a-sameprovider-token-'));
+  try {
+    const issuer = createFakeReadViewIssuer();
+    const isolationProvider = rbc.createIsolationProvider({
+      readViewAuthority: issuer.asReadViewAuthority(),
+      strictConfigValidator: () => ({ ok: true }),
+      projectRoot: process.cwd(),
+    });
+    const repoId = crypto.randomBytes(16).toString('hex');
+    const runId = crypto.randomBytes(16).toString('hex');
+    const instanceIdA = crypto.randomBytes(16).toString('hex');
+    const instanceIdB = crypto.randomBytes(16).toString('hex');
+    const ownerIdentity = fakeOwnerIdentityBlock2();
+    const createdA = isolationProvider.createRunRoot({ instanceId: instanceIdA, repoId, runId, ownerIdentity });
+    assert.strictEqual(createdA.ok, true, 'fixture setup: createRunRoot(A) must succeed: ' + JSON.stringify(createdA));
+    const finalizedA = isolationProvider.finalizeRunRoot(createdA.handle, { role: 'verifier', capability: issuer.issue('verifier', runId).capability });
+    assert.strictEqual(finalizedA.ok, true, 'fixture setup: finalizeRunRoot(A) must succeed: ' + JSON.stringify(finalizedA));
+    const createdB = isolationProvider.createRunRoot({ instanceId: instanceIdB, repoId, runId, ownerIdentity });
+    assert.strictEqual(createdB.ok, true, 'fixture setup: createRunRoot(B) must succeed: ' + JSON.stringify(createdB));
+    const finalizedB = isolationProvider.finalizeRunRoot(createdB.handle, { role: 'quality-gater', capability: issuer.issue('quality-gater', runId).capability });
+    assert.strictEqual(finalizedB.ok, true, 'fixture setup: finalizeRunRoot(B) must succeed: ' + JSON.stringify(finalizedB));
+
+    // Cross-wired: B's own real handle, but A's own genuine ownerToken (both
+    // minted by the SAME provider instance/run) -- same-provider root
+    // ownership must still be denied per-instance.
+    const crossAuthorization = minimalValidCleanupAuthorization(createdB.handle, createdA.ownerToken, { outcome: 'NEVER_SPAWNED', allowPendingAbandonment: false });
+    const crossResult = isolationProvider.cleanupRoot(createdB.handle, crossAuthorization);
+    assert.strictEqual(crossResult.ok, false, 'cleanupRoot must deny a same-provider cross-instance ownerToken -- retained from creation means bound to its OWN instance, never merely any token this provider ever minted: ' + JSON.stringify(crossResult));
+
+    // Positive control: B's own handle with B's own genuine token succeeds --
+    // proves the denial above is genuinely discriminating, never a blanket
+    // rejection of every authorization.
+    const ownAuthorization = minimalValidCleanupAuthorization(createdB.handle, createdB.ownerToken, { outcome: 'NEVER_SPAWNED', allowPendingAbandonment: false });
+    const ownResult = isolationProvider.cleanupRoot(createdB.handle, ownAuthorization);
+    assert.strictEqual(ownResult.ok, true, 'positive control: B handle + B own token must succeed: ' + JSON.stringify(ownResult));
+  } finally {
+    cleanupDir(tmp);
+  }
+});
+
+test('P1A-COMPLETE11FIELD-OWNER-RECORD-01 RED: normal (non-crash-recovery) instance-record retirement must validate the complete 11-field owner record shape before tombstoning it, never blindly copy an incomplete/malformed record forward', () => {
+  const repoId = crypto.randomBytes(16).toString('hex');
+  const instanceId = crypto.randomBytes(16).toString('hex');
+  try {
+    const sourcePath = instanceRecordPathFor(repoId, instanceId);
+    fs.mkdirSync(path.dirname(sourcePath), { recursive: true });
+    // Deliberately missing 9 of the 11 required fields (only instance_id +
+    // driver present) -- a genuinely incomplete record, never a legitimate
+    // BORN publication.
+    fs.writeFileSync(sourcePath, JSON.stringify({ instance_id: instanceId, driver: 'codex-app-server' }), { mode: 0o600 });
+    const result = rbc.retireInstanceRecord({ repoId, instanceId });
+    assert.strictEqual(result.ok, false, 'retireInstanceRecord must reject an incomplete 11-field owner record on the NORMAL (non-crash-recovery) path, never silently tombstone it forward: ' + JSON.stringify(result));
+    const tombstonePath = instanceTombstonePathFor(repoId, instanceId);
+    assert.strictEqual(fs.existsSync(tombstonePath), false, 'an incomplete record must never reach the tombstone at all: ' + tombstonePath);
+  } finally {
+    cleanupRegistryFor(repoId);
+  }
+});
+
+test('P1A-DRIFT-PUBLIC-PRIVATE-CONSISTENCY-01 RED: a FAILED_FINALIZE_DRIFT outcome must update the public handle and the private ledger snapshot TOGETHER -- currently only the private snapshot transitions, leaving the caller own handle object silently stale', () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'p1a-drift-consistency-'));
+  const repoId = crypto.randomBytes(16).toString('hex');
+  try {
+    const issuer = createFakeReadViewIssuer();
+    const isolationProvider = rbc.createIsolationProvider({
+      readViewAuthority: issuer.asReadViewAuthority(),
+      strictConfigValidator: () => ({ ok: true }),
+      projectRoot: process.cwd(),
+    });
+    const instanceId = crypto.randomBytes(16).toString('hex');
+    const runId = crypto.randomBytes(16).toString('hex');
+    const created = isolationProvider.createRunRoot({ instanceId, repoId, runId, ownerIdentity: fakeOwnerIdentityBlock2() });
+    assert.strictEqual(created.ok, true, 'fixture setup: createRunRoot must succeed: ' + JSON.stringify(created));
+    assert.strictEqual(created.handle.state, 'PROFILE_PENDING', 'test precondition: the public handle starts PROFILE_PENDING: ' + JSON.stringify(created.handle));
+
+    process.env.RUNTIME_BRIDGE_CODEX_FAULT_ROOT_FINALIZE = 'post-snapshot-mutate';
+    let finalizeResult;
+    try {
+      finalizeResult = isolationProvider.finalizeRunRoot(created.handle, { role: 'verifier', capability: issuer.issue('verifier', runId).capability });
+    } finally {
+      delete process.env.RUNTIME_BRIDGE_CODEX_FAULT_ROOT_FINALIZE;
+    }
+    assert.strictEqual(finalizeResult.ok, false, 'test precondition: the injected post-snapshot-mutate fault must make finalizeRunRoot fail: ' + JSON.stringify(finalizeResult));
+    assert.strictEqual(created.handle.state, 'FAILED_FINALIZE_DRIFT', 'the SAME public handle object returned by createRunRoot must reflect FAILED_FINALIZE_DRIFT once the private ledger snapshot transitions to it -- a caller holding only the public handle must never observe a stale PROFILE_PENDING after a real drift-detected finalize failure: ' + JSON.stringify(created.handle));
+  } finally {
+    cleanupDir(tmp);
+    cleanupRegistryFor(repoId);
+  }
+});
+
+test('P1A-CACHED-SUCCESS-IDEMPOTENCY-01 RED: a second reapTombstonedRoot call after the tombstone was externally removed must never report a cached/stale success -- it must genuinely re-verify against current disk state', () => {
+  const repoId = crypto.randomBytes(16).toString('hex');
+  const instanceId = crypto.randomBytes(16).toString('hex');
+  try {
+    const intentPath = cleanupIntentPathFor(repoId, instanceId);
+    const completePath = cleanupCompletePathFor(repoId, instanceId);
+    fs.mkdirSync(path.dirname(intentPath), { recursive: true });
+    const containerDir = path.join(rll.registryRepoDir({ repoId }), '.tombstone', instanceId);
+    const finalPath = path.join(containerDir, 'root');
+    fs.mkdirSync(finalPath, { recursive: true, mode: 0o700 });
+    const finalPathStat = fs.statSync(finalPath, { bigint: true });
+    const testRunId = crypto.randomBytes(16).toString('hex');
+    const testRootInode = { dev: finalPathStat.dev.toString(), ino: finalPathStat.ino.toString() };
+    fs.writeFileSync(intentPath, JSON.stringify({
+      schema: 'coordination/cleanup-intent/v1', instanceId, repoId, runId: testRunId,
+      intendedPath: path.join(rll.registryRepoDir({ repoId }), 'isolation-roots', instanceId), rootInode: testRootInode, outcome: 'NEVER_SPAWNED',
+      intentAt: new Date().toISOString(),
+    }), { mode: 0o600 });
+    fs.writeFileSync(completePath, JSON.stringify({
+      schema: 'coordination/cleanup-complete/v1', instanceId, repoId, runId: testRunId,
+      finalPath, rootInodeAfter: testRootInode, completedAt: new Date().toISOString(),
+    }), { mode: 0o600 });
+    const instanceTombstonePath = instanceTombstonePathFor(repoId, instanceId);
+    fs.mkdirSync(path.dirname(instanceTombstonePath), { recursive: true });
+    fs.writeFileSync(instanceTombstonePath, JSON.stringify(Object.assign(makeInstanceRecordFixture(), { instance_id: instanceId })), { mode: 0o600 });
+    const provIntentPath = path.join(rll.registryRepoDir({ repoId }), 'root-provisioning', instanceId + '.intent.json');
+    fs.mkdirSync(path.dirname(provIntentPath), { recursive: true, mode: 0o700 });
+    fs.writeFileSync(provIntentPath, JSON.stringify(makeFullProvisioningIntentFixture(repoId, instanceId, testRunId)), { mode: 0o600 });
+
+    const first = rbc.reapTombstonedRoot({ repoId, instanceId });
+    assert.strictEqual(first.ok, true, 'test precondition: the first reap must genuinely succeed: ' + JSON.stringify(first));
+
+    // Externally remove the SAME reaped root the first call just proved
+    // absent -- simulates a second, independent process/interference
+    // between the two calls (never something reapTombstonedRoot itself did).
+    fs.rmSync(finalPath, { recursive: true, force: true });
+
+    const second = rbc.reapTombstonedRoot({ repoId, instanceId });
+    assert.notStrictEqual(second.ok, true, 'a second reapTombstonedRoot call must never report a cached/stale success once the reaped root it would re-verify is externally missing -- it must genuinely re-check current disk state, not merely replay the first call own memoized result: ' + JSON.stringify(second));
+  } finally {
+    cleanupRegistryFor(repoId);
+  }
 });

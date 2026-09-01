@@ -33,16 +33,100 @@ const { getWaveSlug } = require('./hook-control-plane-utils.js');
 // call. Every call site checks for both before use.
 let runtimeRoleLifecycle = null;
 let runtimeConsultationLib = null;
+let runtimeHostClaude = null;
+let runtimeCollaborationEntrypoints = null;
 try {
   runtimeRoleLifecycle = require('../../scripts/lib/runtime-role-lifecycle.cjs');
   runtimeConsultationLib = require('../../scripts/lib/runtime-consultation.cjs');
+  runtimeHostClaude = require('../../scripts/lib/runtime-host-claude.cjs');
+  runtimeCollaborationEntrypoints = require('../../scripts/lib/runtime-collaboration-entrypoints.cjs');
 } catch {
   runtimeRoleLifecycle = null;
   runtimeConsultationLib = null;
+  runtimeHostClaude = null;
+  runtimeCollaborationEntrypoints = null;
 }
 
 function sanitizeId(id) {
   return String(id).replace(/[^a-zA-Z0-9_-]/g, '-');
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Sequence 68/69 (Defect 4): classify only the EXECUTABLE Bash surface, not
+// heredoc BODY bytes. A Bash call that merely WRITES a fixture/doc file via
+// heredoc, whose payload happens to CONTAIN search-shaped prose as literal
+// file content (e.g. authoring a test fixture that itself contains a live
+// invocation of one of this hook's own trigger POSIX text-search utilities
+// as literal file content, exactly like this repo's own scripts/tests/
+// write-verdict.bats does), must not be misclassified as a live search
+// command and wrongly require CP consultation. The initiating command line
+// and any real executable shell before/after each heredoc payload remain
+// fully visible/scanned. Supports <<EOF, <<'EOF', <<"EOF", <<-EOF (and
+// their combinations), including multiple heredocs per command. Any
+// unterminated, ambiguous or unsupported structure returns the ORIGINAL
+// command unchanged -- callers then scan the full raw text exactly as
+// before, which can only match a trigger pattern as-or-more often, never
+// less (fail closed). The real durable consult/v2 -> result/v2 ->
+// accepted-result.json authority chain elsewhere in this file never reads
+// tool_input.command content as evidence in the first place, so this
+// elision changes nothing about that chain -- it only narrows what THIS
+// step-2b classification step itself scans. Duplicated verbatim in
+// .claude/hooks/kmp-test-runner-gate.js: both hooks are small, independent
+// PreToolUse gates and this wave's dispatch permits either a shared utility
+// or a local copy per hook; a local copy keeps each hook a single
+// self-contained file.
+// ─────────────────────────────────────────────────────────────────────────
+const HEREDOC_START = /<<(-)?[ \t]*(?:(['"])([A-Za-z_]\w*)\2|([A-Za-z_]\w*))/;
+
+function elideHeredocBodies(command) {
+  if (typeof command !== 'string' || command.indexOf('<<') === -1) return command;
+
+  const lines = command.split('\n');
+  const kept = [];
+  let i = 0;
+
+  while (i < lines.length) {
+    const line = lines[i];
+    const pending = [];
+    let searchFrom = 0;
+
+    // Collect every heredoc redirect that starts on this line, left to right.
+    for (;;) {
+      const rest = line.slice(searchFrom);
+      const m = rest.match(HEREDOC_START);
+      if (!m) break;
+      const matchStart = searchFrom + m.index;
+      if (matchStart > 0 && line[matchStart - 1] === '<') {
+        // '<<<' here-string (or an unsupported longer run) -- not a
+        // heredoc; bail out and let the caller scan the untouched original.
+        return command;
+      }
+      const delim = m[3] || m[4];
+      if (!delim) return command; // ambiguous/unsupported delimiter shape
+      pending.push({ dash: Boolean(m[1]), delim });
+      searchFrom = matchStart + m[0].length;
+    }
+
+    kept.push(line);
+    i += 1;
+
+    for (const { dash, delim } of pending) {
+      let terminated = false;
+      while (i < lines.length) {
+        const bodyLine = lines[i];
+        const compareLine = dash ? bodyLine.replace(/^\t+/, '') : bodyLine;
+        i += 1;
+        if (compareLine === delim) {
+          terminated = true;
+          break;
+        }
+        // heredoc BODY line -- inert data, elided from the scan target.
+      }
+      if (!terminated) return command; // unterminated heredoc -- fail closed on the ORIGINAL input
+    }
+  }
+
+  return kept.join('\n');
 }
 
 // ADDITIVE (Wave 2 / ADR-001 portable disk-consult fallback) — non-specialist ONLY. OR'd in
@@ -639,6 +723,7 @@ const LIFECYCLE_BOOTSTRAP_ADMITTED_SUBCOMMANDS = Object.freeze(['probe', 'ensure
 // (e.g. attacker-controlled) directory must never be recognized as the
 // lifecycle CLI.
 const CANONICAL_LIFECYCLE_CLI_PATH = path.resolve(__dirname, '../../scripts/lib/runtime-role-lifecycle.cjs');
+const CANONICAL_ENTRYPOINT_CLI_PATH = path.resolve(__dirname, '../../scripts/lib/runtime-collaboration-entrypoints.cjs');
 
 /**
  * Recognizes ONLY the canonical `node <canonical-absolute-path> <subcommand>
@@ -671,6 +756,43 @@ function findLifecycleCliInvocation(tokens) {
   const candidate = String(tokens[1]).replace(/\\/g, '/');
   const canonical = CANONICAL_LIFECYCLE_CLI_PATH.replace(/\\/g, '/');
   return candidate === canonical ? 1 : -1;
+}
+
+function findEntrypointCliInvocation(tokens) {
+  if (tokens.length < 2 || !isRecognizedNodeToken(tokens[0])) return -1;
+  const candidate = String(tokens[1]).replace(/\\/g, '/');
+  const canonical = CANONICAL_ENTRYPOINT_CLI_PATH.replace(/\\/g, '/');
+  return candidate === canonical ? 1 : -1;
+}
+
+// R131/P4: the five canonical skills document a closed bare direct command
+// beginning `node scripts/lib/runtime-collaboration-entrypoints.cjs execute`
+// (relative script path, no quoting) -- runtime-role-lifecycle.cjs own
+// parsePosixDirect deliberately accepts only every-token-single-quoted
+// canonical text, so that documented bare command can never parse through
+// the existing canonical path. This helper recognizes ONLY that specific,
+// closed bare-word grammar for this one entrypoint CLI invocation (relative
+// or absolute script token) and rewrites it into the exact token array the
+// existing canonical renderPosixDirect form already produces, before any
+// downstream validation/mint/re-render runs. It does not loosen
+// parsePosixDirect or any other hook surface, and is not exported.
+const ENTRYPOINT_BARE_COMMAND_RE = /^[A-Za-z0-9_.\/:@+-]+(?: [A-Za-z0-9_.\/:@+-]+)*$/;
+const ENTRYPOINT_RELATIVE_CLI_PATH = 'scripts/lib/runtime-collaboration-entrypoints.cjs';
+
+function parseEntrypointCliCommand(command, event) {
+  const canonicalTokens = runtimeRoleLifecycle.parsePosixDirect(command);
+  if (canonicalTokens) return canonicalTokens;
+  if (typeof command !== 'string' || !ENTRYPOINT_BARE_COMMAND_RE.test(command)) return null;
+  const tokens = command.split(' ');
+  if (tokens.length < 3 || !isRecognizedNodeToken(tokens[0]) || tokens[2] !== 'execute') return null;
+  const scriptToken = tokens[1];
+  if (scriptToken === CANONICAL_ENTRYPOINT_CLI_PATH) return tokens;
+  if (scriptToken !== ENTRYPOINT_RELATIVE_CLI_PATH) return null;
+  if (typeof event.cwd !== 'string' || event.cwd.length === 0 || !path.isAbsolute(event.cwd)) return null;
+  if (path.resolve(event.cwd, scriptToken) !== CANONICAL_ENTRYPOINT_CLI_PATH) return null;
+  const rewritten = tokens.slice();
+  rewritten[1] = CANONICAL_ENTRYPOINT_CLI_PATH;
+  return rewritten;
 }
 
 // SUBCOMMAND_SPEC's own per-subcommand `repeatable` contract (runtime-role-
@@ -1069,6 +1191,81 @@ function tryInjectLifecycleGrant(toolInput, sessionId) {
         updatedInput: Object.assign({}, toolInput, { command: rewritten }),
       },
     },
+  };
+}
+
+function tryInjectEntrypointComposition(toolInput, event) {
+  const command = toolInput && toolInput.command;
+  if (typeof command !== 'string' || command.length === 0 ||
+      !runtimeRoleLifecycle || !runtimeHostClaude || !runtimeCollaborationEntrypoints) return null;
+  if (/[;&|`\n]|\$\(/.test(command)) return null;
+  const tokens = parseEntrypointCliCommand(command, event);
+  if (!tokens) return null;
+  const cliIdx = findEntrypointCliInvocation(tokens);
+  if (cliIdx === -1 || tokens[cliIdx + 1] !== 'execute') return null;
+  const values = extractFlagValues(tokens.slice(cliIdx + 2), []);
+  if (!values || typeof values['--entrypoint'] !== 'string' ||
+      typeof values['--project-root'] !== 'string' || typeof values['--intent'] !== 'string') {
+    return m7DenyResult('[R131/P3] malformed canonical collaboration entrypoint command.');
+  }
+  if (values['--host-composition'] !== undefined || values['--lifecycle-binding'] !== undefined) {
+    return m7DenyResult('[R131/P3] host composition and lifecycle binding are hook-owned and must not be caller supplied.');
+  }
+  if (typeof event.session_id !== 'string' || event.session_id.length === 0) {
+    return m7DenyResult('[R131/P3] a genuine top-level session identity is required.');
+  }
+  let intent;
+  let plan;
+  let scope;
+  try {
+    const bytes = Buffer.from(values['--intent'], 'base64url');
+    if (bytes.toString('base64url') !== values['--intent']) throw new Error('noncanonical-intent');
+    intent = JSON.parse(bytes.toString('utf8'));
+    plan = runtimeCollaborationEntrypoints.planEntrypointStep(
+      values['--entrypoint'], intent, values['--project-root'],
+    );
+    const rootScope = resolveProjectRootScope(values['--project-root']);
+    if (!rootScope) throw new Error('scope-unavailable');
+    scope = {
+      projectRootDescriptor: values['--project-root'],
+      role: plan.role_scope,
+      argvDigest: plan.argv_digest,
+      actionId: plan.command === 'root-source-status'
+        ? runtimeCollaborationEntrypoints.plannedEntrypointCommandArgument(plan)
+        : null,
+      worktreeId: rootScope.worktreeId,
+      planDigest: rootScope.planDigest,
+    };
+  } catch {
+    return m7DenyResult('[R131/P3] collaboration entrypoint intent or scope is invalid.');
+  }
+  let lifecycleBinding = null;
+  if (plan.command !== null) {
+    try { lifecycleBinding = resolveOrMintLifecycleGrant(plan.command, scope, event.session_id); } catch { lifecycleBinding = null; }
+    if (!lifecycleBinding) return m7DenyResult('[R131/P3] unable to mint the exact lifecycle grant for this entrypoint step.');
+  }
+  let composition;
+  try {
+    composition = runtimeHostClaude.mintProductionHostComposition({
+      projectRoot: values['--project-root'], event,
+      entrypoint: values['--entrypoint'], argvDigest: plan.argv_digest,
+      roleScope: plan.role_scope,
+    });
+  } catch {
+    composition = null;
+  }
+  if (!composition || !composition.ok) {
+    return m7DenyResult('[R131/P3] genuine claude-sonnet-5 host composition evidence is unavailable.');
+  }
+  const appended = ['--host-composition', composition.compositionId];
+  if (lifecycleBinding) appended.push('--lifecycle-binding', lifecycleBinding);
+  const rewritten = runtimeRoleLifecycle.renderPosixDirect(tokens.concat(appended));
+  return {
+    exitCode: 0,
+    body: { hookSpecificOutput: {
+      hookEventName: 'PreToolUse', permissionDecision: 'allow',
+      updatedInput: Object.assign({}, toolInput, { command: rewritten }),
+    } },
   };
 }
 
@@ -1629,6 +1826,18 @@ process.stdin.on('end', () => {
           { sessionId: data.session_id, agentId: data.agent_id, agentType: data.agent_type, toolUseId: data.tool_use_id }
         );
       } catch { /* best-effort -- never fatal to the gate */ }
+      // P3 peer-custody integration: once the bounded CLAUDE-ID-01 trace is
+      // complete, correlate this exact observed actor to its already-minted
+      // role action/actor binding and persist the canonical peer binding.
+      // Earlier tool calls legitimately return UNAVAILABLE until the proof is
+      // complete; the first qualifying later call materializes it. This is
+      // best-effort observation only and grants no tool permission by itself.
+      try {
+        runtimeRoleLifecycle.ensureClaudePeerBindingForObservedActor(
+          process.env.CLAUDE_PROJECT_DIR || process.cwd(),
+          { sessionId: data.session_id, agentId: data.agent_id, agentType: data.agent_type }
+        );
+      } catch { /* authority stays unavailable; the normal gate still decides */ }
     }
 
     // M7/WP4 second-pass correction: REQUESTER role-command-grant/v1
@@ -1681,6 +1890,15 @@ process.stdin.on('end', () => {
     if (agentType === '') {
       if (toolName === 'Bash') {
         let injectionResult = null;
+        try {
+          injectionResult = tryInjectEntrypointComposition(data.tool_input, data);
+        } catch {
+          injectionResult = null;
+        }
+        if (injectionResult) {
+          process.stdout.write(JSON.stringify(injectionResult.body));
+          process.exit(injectionResult.exitCode);
+        }
         try {
           // M7 Correction (§2.C): pass the raw field, never the
           // 'unknown'-substituted `sessionId` local (that substitution is
@@ -1812,8 +2030,17 @@ process.stdin.on('end', () => {
     // 2b. Bash allow-list: non-search bash commands pass through
     if (toolName === 'Bash') {
       const cmd = data.tool_input?.command || '';
+      // Sequence 68/69 Defect 4: classify only the EXECUTABLE Bash surface --
+      // elide heredoc BODY bytes (inert data) before testing the trigger
+      // patterns below, so a command that merely WRITES a fixture/doc file
+      // whose heredoc payload happens to contain search-shaped prose is not
+      // misclassified as a live search invocation. The initiating redirect
+      // line and any real command text before/after a heredoc remain fully
+      // scanned. Any unterminated/ambiguous/unsupported heredoc structure
+      // makes elideHeredocBodies return `cmd` UNCHANGED (fail closed).
+      const scanTarget = elideHeredocBodies(cmd);
       // Block only if command contains search patterns
-      if (!/grep\b|rg\b|find\b|cat\s+.*\.(kt|ts|md)/.test(cmd)) {
+      if (!/grep\b|rg\b|find\b|cat\s+.*\.(kt|ts|md)/.test(scanTarget)) {
         process.exit(0); // build/git/gradlew bash commands — allow
       }
     }

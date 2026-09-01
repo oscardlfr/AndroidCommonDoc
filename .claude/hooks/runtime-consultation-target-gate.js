@@ -60,6 +60,7 @@ const rc = require('../../scripts/lib/runtime-consultation.cjs');
 const CANONICAL_LIFECYCLE_CLI_PATH = path.resolve(__dirname, '../../scripts/lib/runtime-role-lifecycle.cjs');
 const CANONICAL_CONSULTATION_CLI_PATH = path.resolve(__dirname, '../../scripts/lib/runtime-consultation.cjs');
 const CONSULTATION_TARGET_SUBCOMMANDS = Object.freeze(['claim', 'lease-heartbeat', 'publish-result', 'worker-stop-ack']);
+const RESOLVED_NODE_EXECUTABLE = rll.resolvedNodePath().replace(/\\/g, '/');
 
 // Generic `--flag value` linear scan (mirrors context-provider-gate.js's own
 // extractFlagValues, minus repeatable-flag support -- none of the four
@@ -86,7 +87,9 @@ function extractFlagValues(tokens) {
 // findLifecycleCliInvocation exactly (exact string match after backslash
 // normalization, never a basename-only/substring match).
 function findCliInvocation(tokens, canonicalPath) {
-  if (tokens.length < 2 || tokens[0] !== 'node') return -1;
+  if (tokens.length < 2) return -1;
+  const executable = String(tokens[0]).replace(/\\/g, '/');
+  if (executable !== 'node' && executable !== RESOLVED_NODE_EXECUTABLE) return -1;
   const candidate = String(tokens[1]).replace(/\\/g, '/');
   const canonical = canonicalPath.replace(/\\/g, '/');
   return candidate === canonical ? 1 : -1;

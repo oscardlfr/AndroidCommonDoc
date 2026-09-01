@@ -3319,7 +3319,7 @@ const R33_EXPORTS_GATE_CLOSED = Object.freeze([
   'hostBridgeObserveAndCompleteRootConsult', 'hostBridgeObserveChildResult',
   'hostBridgePublishChildRequest', 'hostBridgePublishPatternEvidence',
   'hostBridgePublishTerminalResult', 'hostBridgeRecordTurnStartAccepted', 'hostBridgeScheduleTurn',
-  'isValidLockTokenFor', 'listResultFiles', 'materializePlanRef', 'materializeRoutingPolicy',
+  'isSafeRelativeEntryPath', 'isValidLockTokenFor', 'listResultFiles', 'materializePlanRef', 'materializeRoutingPolicy',
   'materializeSubjectBundle', 'parseApprovedContext7Directive', 'patternEvidencePathFor', 'publishNoClobber',
   'publishPreallocatedRequest', 'readRootConsultTerminalStatus', 'readRootSourceTerminalArtifacts',
   'realpathOrSelf', 'reconcileOneNoClobberTemp', 'releaseLock', 'resolveActivationForRequestPath',
@@ -3364,7 +3364,7 @@ function probeExportsUnderEnv(envRow) {
   return JSON.parse(r.stdout);
 }
 
-test('R33-GATE: the module exports EXACTLY the 64-key base set unless NODE_ENV=test AND a non-empty capability are both present, in which case it exports EXACTLY 75', () => {
+test('R33-GATE: the module exports EXACTLY the 65-key base set unless NODE_ENV=test AND a non-empty capability are both present, in which case it exports EXACTLY 76', () => {
   const rows = [
     ['no env at all', {}, R33_EXPORTS_GATE_CLOSED],
     ['NODE_ENV=test alone', { NODE_ENV: 'test' }, R33_EXPORTS_GATE_CLOSED],
@@ -3395,8 +3395,8 @@ test('R33-GATE: the module exports EXACTLY the 64-key base set unless NODE_ENV=t
   // discriminating property explicitly so the intent survives a refactor.
   const open = probeExportsUnderEnv({ NODE_ENV: 'test', RUNTIME_CONSULTATION_TEST_CAPABILITY: TEST_CAPABILITY });
   const closed = probeExportsUnderEnv({});
-  assert.strictEqual(closed.length, 64, 'base surface is 64 exports');
-  assert.strictEqual(open.length, 75, 'gated-open surface is 75 exports');
+  assert.strictEqual(closed.length, 65, 'base surface is 65 exports');
+  assert.strictEqual(open.length, 76, 'gated-open surface is 76 exports');
   assert.strictEqual(
     open.length - closed.length, 11,
     'exactly 11 exports are gated; a change to that count is a deliberate decision that must be reflected in both frozen sets above',

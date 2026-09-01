@@ -3,7 +3,7 @@
 #
 # USAGE
 #   write-verdict.sh --role <arch-role> --phase <prep|verify-final> [--slug <wave-slug>]
-#                    [--supersede]
+#                    [--supersede] [--publication-nonce <32-lower-hex>]
 #
 # PHASES
 #   prep          Creates the verdict file with an APPROVED-PREP header.
@@ -77,6 +77,8 @@ ROLE=""
 PHASE=""
 SLUG_OVERRIDE=""
 SUPERSEDE=0
+PUBLICATION_NONCE=""
+PUBLICATION_NONCE_SET=0
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -95,6 +97,15 @@ while [[ $# -gt 0 ]]; do
     --supersede)
       SUPERSEDE=1
       shift
+      ;;
+    --publication-nonce)
+      if [[ $# -lt 2 || -z "${2:-}" ]]; then
+        echo "[write-verdict] ERROR: --publication-nonce requires a non-empty value" >&2
+        exit 2
+      fi
+      PUBLICATION_NONCE="$2"
+      PUBLICATION_NONCE_SET=1
+      shift 2
       ;;
     -h|--help)
       sed -n '2,/^$/p' "$0"
@@ -137,6 +148,19 @@ done
 if [[ "$phase_valid" -ne 1 ]]; then
   echo "[write-verdict] ERROR: Invalid phase '$PHASE'. Must be one of: ${VALID_PHASES[*]}" >&2
   exit 2
+fi
+
+# ── Validate publication nonce (P2 GREEN-B) ───────────────────────────────────
+
+if [[ "$PUBLICATION_NONCE_SET" -eq 1 ]]; then
+  if [[ "$PHASE" != "prep" ]]; then
+    echo "[write-verdict] ERROR: --publication-nonce is only valid with --phase prep" >&2
+    exit 2
+  fi
+  if [[ ! "$PUBLICATION_NONCE" =~ ^[0-9a-f]{32}$ ]]; then
+    echo "[write-verdict] ERROR: Invalid --publication-nonce '$PUBLICATION_NONCE'. Must match ^[0-9a-f]{32}\$" >&2
+    exit 2
+  fi
 fi
 
 # ── Repo root + slug resolution ───────────────────────────────────────────────
@@ -330,7 +354,12 @@ run_prep() {
 
   mkdir -p "$WAVE_DIR"
 
-  cat > "$VERDICT_FILE" <<EOF
+  # PREP verdicts are later consumed through the fd-bound durable classifier,
+  # whose canonical owner-confined mode is exactly 0600.
+  umask 077
+
+  {
+    cat <<EOF
 # $ROLE verdict — wave-$WAVE_SLUG
 
 **Phase**: PREP
@@ -338,8 +367,12 @@ run_prep() {
 **Status**: APPROVED-PREP
 **PREP-HEAD**: $head_sha
 **PLAN_SHA256**: $plan_sha256
-
 EOF
+    if [[ "$PUBLICATION_NONCE_SET" -eq 1 ]]; then
+      printf '**PUBLICATION-NONCE**: %s\n' "$PUBLICATION_NONCE"
+    fi
+    printf '\n'
+  } > "$VERDICT_FILE"
 
   echo "[write-verdict] PREP written: $VERDICT_FILE" >&2
 }
@@ -378,10 +411,14 @@ _sanitize_stdin() {
   printf '%s' "$sanitized"
 }
 
-# _append_delimited_block — write a fresh delimited VERIFY-FINAL block to VERDICT_FILE.
+# _render_delimited_block — build a fresh delimited VERIFY-FINAL block and print
+# it to stdout, WITHOUT writing anywhere. The sole rendering primitive shared by
+# both the direct-append path and --supersede's content-equality comparison /
+# atomic rewrite (Sequence 68/69 Defect 3) -- never two independently
+# hand-maintained block-shape implementations.
 # Args: $1=head_sha, $2=raw stdin_content (may be empty), $3=now_ts
-# B1 fix: sanitizes stdin_content before writing to prevent reserved-line injection.
-_append_delimited_block() {
+# B1 fix: sanitizes stdin_content before rendering to prevent reserved-line injection.
+_render_delimited_block() {
   local head_sha="$1"
   local stdin_content
   # Sanitize raw stdin body before write (B1 fix).
@@ -391,18 +428,22 @@ _append_delimited_block() {
     stdin_content=""
   fi
   local now_ts="$3"
-  {
-    printf '%s\n' "$DELIM_BEGIN"
-    if [[ -n "$stdin_content" ]]; then
-      printf '%s\n' "$stdin_content"
-      printf '\n---\n\n'
-    fi
-    printf '**HEAD**: %s\n' "$head_sha"
-    printf '**Phase**: VERIFY-FINAL\n'
-    printf '**Timestamp**: %s\n' "$now_ts"
-    printf '**Status**: APPROVED-VERIFY-FINAL\n\n'
-    printf '%s\n' "$DELIM_END"
-  } >> "$VERDICT_FILE"
+  printf '%s\n' "$DELIM_BEGIN"
+  if [[ -n "$stdin_content" ]]; then
+    printf '%s\n' "$stdin_content"
+    printf '\n---\n\n'
+  fi
+  printf '**HEAD**: %s\n' "$head_sha"
+  printf '**Phase**: VERIFY-FINAL\n'
+  printf '**Timestamp**: %s\n' "$now_ts"
+  printf '**Status**: APPROVED-VERIFY-FINAL\n\n'
+  printf '%s\n' "$DELIM_END"
+}
+
+# _append_delimited_block — write a fresh delimited VERIFY-FINAL block to VERDICT_FILE.
+# Args: $1=head_sha, $2=raw stdin_content (may be empty), $3=now_ts
+_append_delimited_block() {
+  _render_delimited_block "$1" "$2" "$3" >> "$VERDICT_FILE"
 }
 
 run_verify_final() {
@@ -453,6 +494,22 @@ run_verify_final() {
       local begin_line=""
       begin_line="$(grep -n "^${DELIM_BEGIN}$" "$VERDICT_FILE" | tail -1 | cut -d: -f1)" || true
 
+      # Sequence 68/69 Defect 3: a mismatched BEGIN/END delimiter count is an
+      # unterminated/malformed block structure -- fail CLOSED before any
+      # mutation (never truncate through to EOF and report success).
+      local begin_count end_count
+      begin_count="$(grep -c "^${DELIM_BEGIN}$" "$VERDICT_FILE" || true)"
+      end_count="$(grep -c "^${DELIM_END}$" "$VERDICT_FILE" || true)"
+      if [[ -n "$begin_line" && "$begin_count" != "$end_count" ]]; then
+        echo "[write-verdict] ERROR: malformed VERIFY-FINAL block structure — $begin_count BEGIN delimiter(s) but $end_count END delimiter(s) in $VERDICT_FILE (unterminated/mismatched block); refusing to mutate a corrupt file." >&2
+        exit 2
+      fi
+
+      # tmp_file holds the COMPLETE new file content; a single atomic mv replaces
+      # VERDICT_FILE at the very end, never a truncate-then-append window.
+      local tmp_file=""
+      tmp_file="$(mktemp)"
+
       if [[ -n "$begin_line" ]]; then
         # Find the END delimiter following this BEGIN (first END after begin_line).
         local end_line=""
@@ -460,38 +517,49 @@ run_verify_final() {
           'NR > start && /^<!-- END VERIFY-FINAL -->$/ { print NR; exit }' \
           "$VERDICT_FILE")"
 
+        if [[ -z "$end_line" ]]; then
+          rm -f "$tmp_file"
+          echo "[write-verdict] ERROR: malformed VERIFY-FINAL block — BEGIN delimiter at line $begin_line has no matching END delimiter after it: $VERDICT_FILE (unterminated block); refusing to mutate a corrupt file." >&2
+          exit 2
+        fi
+
         # B1a fix: extract stored HEAD from LAST **HEAD**: line in the block (tail -1).
         # The block writes HEAD after any stdin body, so tail -1 is the real record.
         local stored_head=""
-        if [[ -n "$end_line" ]]; then
-          stored_head="$(sed -n "${begin_line},${end_line}p" "$VERDICT_FILE" \
-            | grep '^\*\*HEAD\*\*: ' | tail -1 | sed 's/^\*\*HEAD\*\*: //')" || true
-        fi
-
-        local begin_count
-        begin_count="$(grep -c "^${DELIM_BEGIN}$" "$VERDICT_FILE" || true)"
+        stored_head="$(sed -n "${begin_line},${end_line}p" "$VERDICT_FILE" \
+          | grep '^\*\*HEAD\*\*: ' | tail -1 | sed 's/^\*\*HEAD\*\*: //')" || true
 
         if [[ "$begin_count" -eq 1 && "$stored_head" == "$head_sha" ]]; then
-          # Idempotent NO-OP: single canonical block, same HEAD already in file — exit 0 without rewriting.
-          echo "[write-verdict] VERIFY-FINAL --supersede: stored HEAD == current HEAD ($head_sha) — no-op." >&2
-          exit 0
+          # Sequence 68/69 Defect 3: same HEAD alone no longer proves the block
+          # is genuinely unchanged -- compare the FULL rendered block (Timestamp
+          # excluded, since it legitimately differs run to run) against what THIS
+          # invocation's stdin would produce. Only a byte-for-byte content match
+          # is a true idempotent no-op; any difference (a hand-corrupted or stale
+          # body, or genuinely new architect content) must be repaired, never
+          # silently left in place.
+          local existing_block rendered_new
+          existing_block="$(sed -n "${begin_line},${end_line}p" "$VERDICT_FILE" | grep -v '^\*\*Timestamp\*\*:' || true)"
+          rendered_new="$(_render_delimited_block "$head_sha" "$stdin_content" "$NOW" | grep -v '^\*\*Timestamp\*\*:' || true)"
+          if [[ "$existing_block" == "$rendered_new" ]]; then
+            rm -f "$tmp_file"
+            echo "[write-verdict] VERIFY-FINAL --supersede: stored HEAD == current HEAD ($head_sha) and content unchanged — no-op." >&2
+            exit 0
+          fi
         fi
 
-        # Different HEAD: excise ALL delimited blocks via awk (handles VS-12 degenerate
-        # case of two blocks), then append fresh block. Temp file for MSYS portability.
-        local tmp_file=""
-        tmp_file="$(mktemp)"
+        # Different HEAD, different content, or multiple blocks: excise ALL
+        # delimited blocks via awk (handles VS-12/VS-13's own multi-block
+        # normalization; safe now every BEGIN above already proved a matching
+        # END via the count/end_line checks), into tmp_file only -- nothing is
+        # written to VERDICT_FILE itself yet.
         awk '
           /^<!-- BEGIN VERIFY-FINAL -->$/ { skip=1 }
           !skip { print }
           /^<!-- END VERIFY-FINAL -->$/ { skip=0 }
         ' "$VERDICT_FILE" > "$tmp_file"
-        mv "$tmp_file" "$VERDICT_FILE"
       else
         # Legacy fallback: un-delimited VERIFY-FINAL block present (pre-wave file).
-        # Excise from the first **HEAD**: line through EOF, then append fresh delimited block.
-        local tmp_file=""
-        tmp_file="$(mktemp)"
+        # Excise from the first **HEAD**: line through EOF, into tmp_file only.
         local head_line_num=""
         head_line_num="$(awk '/^\*\*HEAD\*\*: /{ print NR; exit }' "$VERDICT_FILE")"
         if [[ -n "$head_line_num" ]]; then
@@ -506,10 +574,12 @@ run_verify_final() {
           # No **HEAD**: line found — keep the whole file (nothing to excise).
           cp "$VERDICT_FILE" "$tmp_file"
         fi
-        mv "$tmp_file" "$VERDICT_FILE"
       fi
 
-      _append_delimited_block "$head_sha" "$stdin_content" "$NOW"
+      # Single atomic replacement: the excised existing content plus the fresh
+      # block are both already/about-to-be in tmp_file before the one mv.
+      _render_delimited_block "$head_sha" "$stdin_content" "$NOW" >> "$tmp_file"
+      mv "$tmp_file" "$VERDICT_FILE"
       echo "[write-verdict] VERIFY-FINAL --supersede: replaced with HEAD=$head_sha: $VERDICT_FILE" >&2
       return
     fi

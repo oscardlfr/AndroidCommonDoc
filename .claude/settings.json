@@ -121,6 +121,16 @@
             "timeout": 5
           }
         ]
+      },
+      {
+        "matcher": "Task|SendMessage",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/runtime-host-boundary.js",
+            "timeout": 5
+          }
+        ]
       }
     ],
     "PreToolUse": [
@@ -291,6 +301,16 @@
             "timeout": 5
           }
         ]
+      },
+      {
+        "matcher": "Task|SendMessage",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/runtime-host-boundary.js",
+            "timeout": 5
+          }
+        ]
       }
     ],
     "SubagentStart": [
@@ -313,6 +333,28 @@
             "type": "command",
             "command": "node \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/subagent-start-context-bundle.js",
             "timeout": 10
+          }
+        ]
+      }
+    ],
+    "PostToolUseFailure": [
+      {
+        "matcher": "Agent|SendMessage",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/tool-use-logger.js",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "Task|SendMessage",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/runtime-host-boundary.js",
+            "timeout": 5
           }
         ]
       }

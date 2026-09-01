@@ -15,6 +15,18 @@ Resume session with a CEO/CTO dashboard — shows status by department from last
 /resume-work
 ```
 
+## Canonical Runtime Entrypoint
+
+Resume through the shared product flow using the validated checkpoint reference:
+
+```bash
+node scripts/lib/runtime-collaboration-entrypoints.cjs execute --entrypoint resume-work --project-root <absolute> --intent <base64url canonical JSON>
+```
+
+The Bash call must be one standalone direct Node command. Replace `<absolute>` with the literal absolute project path before invoking it. Never use `$(pwd)`, `$PWD`, `cd`, shell variables, command substitution, pipes, redirects, or command separators in this authenticated entrypoint call.
+
+The decoded intent is exactly `{"checkpoint_ref":"checkpoint:<sha256>"}`. Reuse `READY` bindings, execute only returned `ACTION_REQUIRED` actions, and surface `BLOCKED|UNAVAILABLE|FAILED` without treating historical memory as live authority.
+
 ## Steps
 
 1. **Discover the active wave and runtime presence**: Resolve the active wave slug (`CLAUDE_WAVE_SLUG` env, else the git branch's last segment, else a single `.planning/wave-*/PLAN.md` match). If a wave is active, read its `PLAN.md`, checkpoint state, and artifacts (`arch-*-verdict.md`, `quality-gate-report.json`). Then `probe` the role-lifecycle manager for current presence of the support-plane roles (`arch-platform`, `arch-testing`, `arch-integration`, `context-provider`, `doc-updater`). A healthy canonical binding is reused as-is; a dead, ambiguous, or restart-invalidated binding triggers canonical respawn/reconnect and rehydration from the validated disk context bundle (`context-bundles/<role>.md`). Reading historical Claude memory alone is never treated as runtime resume.

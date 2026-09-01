@@ -128,6 +128,33 @@ setup() {
   PROJ_REGISTRY_DIR="$(node -e 'const rll=require(process.argv[1]); process.stdout.write(rll.registryRepoDir(process.argv[2]));' "$RLL_IMPL" "$PROJ")"
   mkdir -p "$PROJ/.planning/wave-tg-wave"
   printf '# fixture PLAN for runtime-consultation-target-gate tests\n' > "$PROJ/.planning/wave-tg-wave/PLAN.md"
+  # The supervisor/action half of this suite deliberately exercises the
+  # retained Codex compatibility lane, whereas production's current v2 pair
+  # pins Claude-native selection. Install the canonical v1 projection only in
+  # this hermetic fixture so those tests reach their own gate assertions.
+  mkdir -p "$PROJ/scripts/lib"
+  cp "$BATS_TEST_DIRNAME/../lib/runtime-collaboration-policy.json" "$PROJ/scripts/lib/runtime-collaboration-policy.json"
+  cp "$BATS_TEST_DIRNAME/../lib/runtime-routing.json" "$PROJ/scripts/lib/runtime-routing.json"
+  node -e '
+    const fs = require("fs");
+    const p = process.argv[1];
+    const policy = JSON.parse(fs.readFileSync(p, "utf8"));
+    policy.schema = "runtime-collaboration-policy/v1";
+    policy.version = 1;
+    delete policy.selection;
+    fs.writeFileSync(p, JSON.stringify(policy, null, 2) + "\n");
+  ' "$PROJ/scripts/lib/runtime-collaboration-policy.json"
+  TEST_HOME="$PROJ/test-home"
+  mkdir -p "$TEST_HOME/.codex"
+  node -e '
+    const fs = require("fs");
+    const enc = (v) => Buffer.from(JSON.stringify(v)).toString("base64url");
+    const token = enc({ alg: "none", typ: "JWT" }) + "." + enc({ exp: Math.floor(Date.now() / 1000) + 3600 }) + ".fixture";
+    fs.writeFileSync(process.argv[1], JSON.stringify({ tokens: { access_token: token, account_id: "role-gate-test-account", id_token: token } }), { mode: 0o600 });
+  ' "$TEST_HOME/.codex/auth.json"
+  FAKE_CODEX="$PROJ/fake-codex"
+  printf '#!/bin/sh\nexit 0\n' > "$FAKE_CODEX"
+  chmod 0755 "$FAKE_CODEX"
   INPUT_FILE="$(mktemp "$BATS_TEST_TMPDIR/target-gate-input.XXXXXX.json")"
 }
 
@@ -1126,6 +1153,36 @@ _assert_pretooluse_deny() {
   [ "$status" -eq 0 ]
 }
 
+@test "TG-READY-ABSOLUTE-NODE PASS: accepted resolved-Node bootstrap command mints+injects --lifecycle-binding" {
+  local out action_id worktree_id plan_digest gen_id
+  out="$(_mint_pending_role_spawn_full arch-testing tg-ready-absolute-node-session)"
+  read -r action_id worktree_id plan_digest gen_id <<< "$out"
+  [ -n "$action_id" ]
+  _mint_role_actor_binding arch-testing "$worktree_id" "$plan_digest" "$gen_id" 60
+
+  local resolved_node
+  resolved_node="$(node -e 'const rll=require(process.argv[1]); process.stdout.write(rll.resolvedNodePath());' "$RLL_IMPL")"
+  [ -n "$resolved_node" ]
+  [[ "$resolved_node" = /* ]]
+
+  local cmd; cmd="$(_render_posix_direct "$resolved_node" "$RLL_IMPL" ready --action "$action_id")"
+  _make_input "$cmd" arch-testing tg-ready-absolute-node-caller
+  _run_hook
+  [ "$status" -eq 0 ]
+  [ -n "$output" ]
+  local grant_id; grant_id="$(_extract_injected lifecycle-binding)"
+  [ -n "$grant_id" ]
+
+  run node -e '
+    const rll = require(process.argv[1]);
+    const crypto = require("crypto");
+    const argvDigest = crypto.createHash("sha256").update("ready:" + process.argv[3]).digest("hex");
+    const result = rll.validateAndConsumeLifecycleCommandGrant(process.argv[2], process.argv[4], argvDigest, "arch-testing", "ready", process.argv[3]);
+    if (!result.ok) { process.stderr.write(JSON.stringify(result)); process.exit(1); }
+  ' "$RLL_IMPL" "$PROJ" "$action_id" "$grant_id"
+  [ "$status" -eq 0 ]
+}
+
 @test "TG-READY-2 BLOCK: a caller-supplied --lifecycle-binding on a 'ready' command is rejected outright, never trusted" {
   local out action_id worktree_id plan_digest gen_id
   out="$(_mint_pending_role_spawn_full arch-testing tg-ready-2-session)"
@@ -1692,7 +1749,11 @@ _m6a_mint_supervisor_start_action() {
     args.push("--lifecycle-binding", grant.grantId);
     const out = execFileSync("node", args, {
       encoding: "utf8",
-      env: Object.assign({}, process.env, { RUNTIME_ROLE_LIFECYCLE_FAKE_CAPABILITIES: JSON.stringify(["codex-app-server"]) }),
+      env: Object.assign({}, process.env, {
+        HOME: process.argv[4],
+        CODEX_CLI_PATH: process.argv[5],
+        RUNTIME_ROLE_LIFECYCLE_FAKE_CAPABILITIES: JSON.stringify(["codex-app-server"]),
+      }),
     });
     const result = JSON.parse(out.trim().split("\n").pop());
     // M67-ROLE-GATE-FLAKE-01: explicit shape/status assertions BEFORE ever
@@ -1715,7 +1776,7 @@ _m6a_mint_supervisor_start_action() {
       process.exit(1);
     }
     process.stdout.write(action.payload.bridge_command);
-  ' "$RLL_IMPL" "$PROJ" "$session_key"
+  ' "$RLL_IMPL" "$PROJ" "$session_key" "$TEST_HOME" "$FAKE_CODEX"
 }
 
 @test "CPG-SUPERVISOR-EXTRAFLAG: an extra trailing flag appended to the canonical bridge_command is explicitly DENIED by context-provider-gate.js -- mirrors bash-cli-spawn-gate.js's own established recognition discipline (BRIDGE_MARKER_RE substring match -> full scrutiny -> fail-closed on non-round-trip, GATE-inject-extraflag's own precedent), independently enforced here" {
@@ -3071,7 +3132,15 @@ _s16e2e_bootstrap_project() {
   mkdir -p "$PROJ/.planning/coordination"
   chmod 0700 "$PROJ/.planning/coordination"
   mkdir -p "$PROJ/scripts"
-  cp -R "$BATS_TEST_DIRNAME/../lib" "$PROJ/scripts/lib"
+  # setup() already creates scripts/lib and its hermetic v1 policy fixture.
+  # Preserve that projection while copying the canonical module CONTENTS;
+  # copying the directory itself would create scripts/lib/lib and leave the
+  # exact bridge path below absent.
+  local fixture_policy
+  fixture_policy="$(mktemp)"
+  cp "$PROJ/scripts/lib/runtime-collaboration-policy.json" "$fixture_policy"
+  cp -R "$BATS_TEST_DIRNAME/../lib/." "$PROJ/scripts/lib/"
+  cp "$fixture_policy" "$PROJ/scripts/lib/runtime-collaboration-policy.json"
   S16E2E_BRIDGE="$PROJ/scripts/lib/runtime-bridge-codex.cjs"
   if [ -n "$routing_override_role" ]; then
     _s16e2e_reorder_routing_codex_first "$PROJ/scripts/lib/runtime-routing.json" "$routing_override_role"
@@ -4229,7 +4298,7 @@ _r2c_s16_integrity_postdispatch() {
 # generic non-zero exit. An ORDINARY (non-root-source) requester dispatch in
 # the SAME fixture is the control: canonical routing is untouched for it, so
 # it still selects claude-agent.
-@test "S16-ROOT-SOURCE-CANONICAL-ROUTING-01: canonical runtime-routing.json, live claude-agent AND codex-app-server candidates for the retained arch-platform -- a root-source-authenticated dispatch selects codex-app-server; an ordinary requester dispatch control still selects claude-agent" {
+@test "S16-ROOT-SOURCE-CANONICAL-ROUTING-01: canonical runtime-routing.json applies capability order to root-source and ordinary requester dispatches; retained Codex remains a fallback, not an authority-derived override" {
   # No routing_override_role argument: frozen canonical routing, no seam.
   _s16e2e_setup_through_ingress "s16e2e-canon-session" "s16e2e-canon-agent"
   [ -z "${RUNTIME_CONSULTATION_TEST_ROUTING_POLICY_PATH:-}" ]
@@ -4280,11 +4349,11 @@ _r2c_s16_integrity_postdispatch() {
   [ "$status" -eq 0 ]
   local activation_path; activation_path="$(node -e 'process.stdout.write(JSON.parse(process.argv[1]).artifact_ref)' "$output")"
   local root_selected; root_selected="$(node -e 'process.stdout.write(JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).selected_driver)' "$activation_path")"
-  echo "ROOT-SOURCE-DISPATCH selected_driver=$root_selected expected=codex-app-server"
+  echo "ROOT-SOURCE-DISPATCH selected_driver=$root_selected expected=claude-agent"
   node -e '
     const selected = process.argv[1];
-    if (selected !== "codex-app-server") {
-      process.stderr.write("S16-ROOT-SOURCE-CANONICAL-ROUTING-01: root-source dispatch selected_driver=" + selected + " expected=codex-app-server\n");
+    if (selected !== "claude-agent") {
+      process.stderr.write("S16-ROOT-SOURCE-CANONICAL-ROUTING-01: root-source dispatch selected_driver=" + selected + " expected=claude-agent\n");
       process.exit(1);
     }
   ' "$root_selected"
@@ -6012,7 +6081,7 @@ _s16e2e_cp_evidence_expect_shutdown_signal() {
     # PID confirmed dead: wait/reap, then recheck completion is still absent
     # (closes the gap between the last poll tick and the process actually
     # exiting) before trusting anything the process wrote on its way out.
-    wait "$S16E2E_BG_PID" 2>/dev/null
+    wait "$S16E2E_BG_PID" 2>/dev/null || true
     S16E2E_BG_PID=""
     if [ -f "$completion_path" ]; then
       echo "DEBUG: a completion record appeared between the final poll and process reap -- this must never happen:" >&2

@@ -205,7 +205,7 @@ _run_lifecycle() {
 # array); `action_id` defaults to null (only action-failed/ready/wait-ready
 # need a real one).
 _mint_lifecycle_grant() {
-  local role_json="$1" subcommand="$2" argv_digest="$3" action_id="${4:-null}"
+  local role_json="$1" subcommand="$2" argv_digest="$3" action_id="${4:-null}" runtime_session_key="${5:-}"
   NODE_ENV=test RUNTIME_ROLE_LIFECYCLE_TEST_CAPABILITY="$TEST_CAPABILITY" node -e '
     const rll = require(process.argv[1]);
     const crypto = require("crypto");
@@ -214,7 +214,7 @@ _mint_lifecycle_grant() {
     const subcommand = process.argv[4];
     const argvDigest = process.argv[5];
     const actionId = process.argv[6] === "null" ? null : process.argv[6];
-    const identity = { ok: true, provider: "claude-hook", runtime_session_key: "rll-bats-session-" + crypto.randomBytes(4).toString("hex") };
+    const identity = { ok: true, provider: "claude-hook", runtime_session_key: process.argv[7] || "rll-bats-session-" + crypto.randomBytes(4).toString("hex") };
     const worktreeId = rll.computeWorktreeId(projectRoot);
     const planResult = rll.discoverPlan(projectRoot);
     if (!planResult.ok) { process.stderr.write("no PLAN discovered"); process.exit(1); }
@@ -223,7 +223,7 @@ _mint_lifecycle_grant() {
     const grantResult = rll.mintLifecycleCommandGrant(projectRoot, bindingResult.binding, argvDigest, role, subcommand, "main-orchestrator", "orchestrator", "normal", actionId);
     if (!grantResult.ok) { process.stderr.write("grant mint failed: " + JSON.stringify(grantResult)); process.exit(1); }
     process.stdout.write(grantResult.grantId);
-  ' "$IMPL" "$PROJ" "$role_json" "$subcommand" "$argv_digest" "$action_id"
+  ' "$IMPL" "$PROJ" "$role_json" "$subcommand" "$argv_digest" "$action_id" "$runtime_session_key"
 }
 
 # ── Policy/routing fixture builders (runtime-collaboration-policy/v1, PLAN.md
@@ -261,6 +261,15 @@ _write_policy() {
     }
     fs.writeFileSync(outPath, JSON.stringify(merged));
   ' "$overrides" "$PROJ/scripts/lib/runtime-collaboration-policy.json"
+}
+
+_upgrade_policy_v2() {
+  node -e '
+    const fs=require("fs"); const p=process.argv[1]; const value=JSON.parse(fs.readFileSync(p,"utf8"));
+    value.schema="runtime-collaboration-policy/v2"; value.version=2;
+    value.selection={requested_host:"claude",requested_role_engine:"claude",required_continuity:"session-persistent",model_profile_ref:".claude/model-profiles.json#current",fallback:{mode:"deny",allowed:[]}};
+    fs.writeFileSync(p,JSON.stringify(value));
+  ' "$PROJ/scripts/lib/runtime-collaboration-policy.json"
 }
 
 _write_routing() {
@@ -829,4 +838,92 @@ _assert_lifecycle_result() {
   _run_lifecycle probe --project-root "$PROJ" --policy-path "/tmp/attacker-controlled-policy.json"
   [ "$status" -eq 2 ]
   _assert_lifecycle_result "" "" ""
+}
+
+@test "R131-LRL-57 v2 policy pair resolves and projects an exact v1 object" {
+  _write_policy '{}'
+  _upgrade_policy_v2
+  _write_routing "$PROJ/scripts/lib/runtime-routing.json" '{}'
+  run node -e '
+    const r=require(process.argv[1]); const pair=r.resolvePolicyPair(process.argv[2]);
+    if(!pair.ok||pair.policy.schema!=="runtime-collaboration-policy/v2"||pair.policyV1.schema!=="runtime-collaboration-policy/v1"||pair.policyV1.version!==1||!r.isValidPolicy(pair.policyV1)) process.exit(1);
+  ' "$IMPL" "$PROJ"
+  [ "$status" -eq 0 ]
+}
+
+@test "R131-LRL-58 signed composition qualifies claude-sendmessage capability" {
+  _write_policy '{}'
+  _upgrade_policy_v2
+  _write_routing "$PROJ/scripts/lib/runtime-routing.json" '{}'
+  run node -e '
+    const crypto=require("crypto"); const r=require(process.argv[1]); const h=require(process.argv[2]); const root=process.argv[3];
+    const digest=crypto.createHash("sha256").update("entrypoint:monitor-docs:readonly").digest("hex");
+    const minted=h.mintProductionHostComposition({projectRoot:root,event:{hook_event_name:"PreToolUse",tool_name:"Bash",model:"claude-sonnet-5"},entrypoint:"monitor-docs",argvDigest:digest,roleScope:null});
+    const manifest=r.getCapabilityManifest(root); if(!minted.ok||!manifest.availableDrivers.includes("claude-sendmessage")) process.exit(1);
+  ' "$IMPL" "$BATS_TEST_DIRNAME/../lib/runtime-host-claude.cjs" "$PROJ"
+  [ "$status" -eq 0 ]
+}
+
+@test "R131-LRL-59 ensure emits direct role-spawn Agent action and no team-ensure" {
+  _write_policy '{}'
+  _upgrade_policy_v2
+  _write_routing "$PROJ/scripts/lib/runtime-routing.json" '{}'
+  node -e '
+    const crypto=require("crypto"); const h=require(process.argv[1]); const root=process.argv[2];
+    const digest=crypto.createHash("sha256").update("entrypoint:monitor-docs:readonly").digest("hex");
+    const minted=h.mintProductionHostComposition({projectRoot:root,event:{hook_event_name:"PreToolUse",tool_name:"Bash",model:"claude-sonnet-5"},entrypoint:"monitor-docs",argvDigest:digest,roleScope:null});
+    if(!minted.ok) process.exit(1);
+  ' "$BATS_TEST_DIRNAME/../lib/runtime-host-claude.cjs" "$PROJ"
+  local digest grant_id runtime_session_key fake_identity
+  digest="$(_sha256_string 'ensure:arch-platform')"
+  runtime_session_key="rll-bats-r131-lrl-59"
+  fake_identity="{\"ok\":true,\"provider\":\"claude-hook\",\"runtime_session_key\":\"$runtime_session_key\"}"
+  grant_id="$(_mint_lifecycle_grant '"arch-platform"' ensure "$digest" null "$runtime_session_key")"
+  run env NODE_ENV=test \
+    RUNTIME_ROLE_LIFECYCLE_TEST_CAPABILITY="$TEST_CAPABILITY" \
+    RUNTIME_ROLE_LIFECYCLE_FAKE_IDENTITY="$fake_identity" \
+    RUNTIME_ROLE_LIFECYCLE_FAKE_CAPABILITIES='["claude-sendmessage"]' \
+    node "$IMPL" ensure --project-root "$PROJ" --role arch-platform --lifecycle-binding "$grant_id"
+  [ "$status" -eq 0 ]
+  run node -e '
+    const value=JSON.parse(process.argv[1]); if(value.status!=="ACTION_REQUIRED") process.exit(1);
+    if(value.actions.length!==1||value.actions[0].kind!=="role-spawn"||value.actions[0].operation!=="Agent") process.exit(1);
+    if(value.actions.some((a)=>a.kind==="team-ensure")) process.exit(1);
+  ' "$output"
+  [ "$status" -eq 0 ]
+}
+
+@test "R131-LRL-60 historical team-ensure reader remains compatible and absent is not authority" {
+  run node -e '
+    const r=require(process.argv[1]); const root=process.argv[2];
+    if(typeof r.readTeamEnsureState!=="function") process.exit(1);
+    const value=r.readTeamEnsureState(root,"0".repeat(64),"1".repeat(64),"2".repeat(64));
+    if(!value||value.ok!==true||value.state!=="ABSENT") process.exit(1);
+  ' "$IMPL" "$PROJ"
+  [ "$status" -eq 0 ]
+}
+
+@test "R131-LRL-61 expired or foreign composition does not qualify Claude" {
+  _write_policy '{}'
+  _upgrade_policy_v2
+  _write_routing "$PROJ/scripts/lib/runtime-routing.json" '{}'
+  run node -e '
+    const fs=require("fs"),path=require("path"),crypto=require("crypto"); const r=require(process.argv[1]); const h=require(process.argv[2]); const root=process.argv[3];
+    const digest=crypto.createHash("sha256").update("entrypoint:monitor-docs:readonly").digest("hex");
+    const minted=h.mintProductionHostComposition({projectRoot:root,event:{hook_event_name:"PreToolUse",tool_name:"Bash",model:"claude-sonnet-5"},entrypoint:"monitor-docs",argvDigest:digest,roleScope:null});
+    const file=path.join(r.registryRepoDir(root),"host-compositions",minted.compositionId+".json"); const record=JSON.parse(fs.readFileSync(file,"utf8")); record.expires_at=new Date(Date.now()-1000).toISOString(); fs.writeFileSync(file,JSON.stringify(record));
+    if(r.getCapabilityManifest(root).availableDrivers.includes("claude-sendmessage")) process.exit(1);
+  ' "$IMPL" "$BATS_TEST_DIRNAME/../lib/runtime-host-claude.cjs" "$PROJ"
+  [ "$status" -eq 0 ]
+}
+
+@test "R131-LRL-62 environment claims never qualify Claude capability" {
+  _write_policy '{}'
+  _upgrade_policy_v2
+  _write_routing "$PROJ/scripts/lib/runtime-routing.json" '{}'
+  run env CLAUDE_MODEL=claude-sonnet-5 CLAUDE_ROLE_ENGINE=claude RUNTIME_HOST_COMPOSITION_ID="faked" node -e '
+    const r=require(process.argv[1]); const manifest=r.getCapabilityManifest(process.argv[2]);
+    if(manifest.availableDrivers.includes("claude-sendmessage")) process.exit(1);
+  ' "$IMPL" "$PROJ"
+  [ "$status" -eq 0 ]
 }
