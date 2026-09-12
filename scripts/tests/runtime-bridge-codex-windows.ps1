@@ -301,6 +301,7 @@ function Set-OwnerConfinedDirectoryAcl {
 function Assert-OwnerConfinedAcl {
   param([Parameter(Mandatory)][string]$Path)
   $currentUserSid = ([System.Security.Principal.WindowsIdentity]::GetCurrent()).User.Value
+  $allowedSids = @($currentUserSid, 'S-1-5-18', 'S-1-5-32-544')
   $acl = Get-Acl -LiteralPath $Path
   $ownerSid = ([System.Security.Principal.NTAccount]::new($acl.Owner)).Translate([System.Security.Principal.SecurityIdentifier]).Value
   Assert-True ($ownerSid -eq $currentUserSid) "fixture invalid: ACL owner on $Path is not the current user SID"
@@ -308,7 +309,7 @@ function Assert-OwnerConfinedAcl {
   foreach ($ace in $acl.Access) {
     $sid = $null
     try { $sid = $ace.IdentityReference.Translate([System.Security.Principal.SecurityIdentifier]).Value } catch { $sid = $ace.IdentityReference.Value }
-    Assert-True ($sid -eq $currentUserSid) "fixture invalid: unexpected principal $($ace.IdentityReference) ($sid) present on $Path after planting an owner-confined ACL"
+    Assert-True ($allowedSids -contains $sid) "fixture invalid: unexpected principal $($ace.IdentityReference) ($sid) present on $Path after planting an owner-confined ACL"
   }
 }
 

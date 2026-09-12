@@ -1236,13 +1236,19 @@ function readRegistryRecord(artifactPath, opts) {
  *   is exhausted, rather than spuriously failing on ordinary contention.
  */
 function withRegistryLock(lockDir, fn, opts) {
-  fs.mkdirSync(path.dirname(lockDir), { recursive: true, mode: 0o700 });
+  const lockParentResult = ensureSecureRegistryDir(path.dirname(lockDir));
+  if (!lockParentResult.ok) return lockParentResult;
   const maxAttempts = 2000;
   const maxWaitMs = (opts && Number.isFinite(opts.maxWaitMs) && opts.maxWaitMs > 0) ? opts.maxWaitMs : 0;
   let acquired = false;
   for (let i = 0; i < maxAttempts; i += 1) {
     try {
       fs.mkdirSync(lockDir, { mode: 0o700 });
+      const lockSecurity = ensureSecureRegistryDir(lockDir);
+      if (!lockSecurity.ok) {
+        try { fs.rmdirSync(lockDir); } catch (err) { /* best-effort rollback */ }
+        return lockSecurity;
+      }
       acquired = true;
       break;
     } catch (err) {
@@ -1256,6 +1262,11 @@ function withRegistryLock(lockDir, fn, opts) {
     while (currentClockMsForRegistry() < deadlineMs) {
       try {
         fs.mkdirSync(lockDir, { mode: 0o700 });
+        const lockSecurity = ensureSecureRegistryDir(lockDir);
+        if (!lockSecurity.ok) {
+          try { fs.rmdirSync(lockDir); } catch (err) { /* best-effort rollback */ }
+          return lockSecurity;
+        }
         acquired = true;
         break;
       } catch (err) {
