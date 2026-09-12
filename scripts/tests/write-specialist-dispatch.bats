@@ -310,7 +310,20 @@ else:
   # replace just the specialist-dispatches parent with a symlink to the sibling, so
   # DISPATCH_DIR's literal string still reads ".planning/wave-.../specialist-dispatches/
   # test-specialist" but its REAL resolved location is ".planning-evil/test-specialist".
-  ln -s "$evil_dir" "$PROJ/.planning/wave-$WAVE_SLUG/specialist-dispatches"
+  # fs.symlinkSync(..., 'junction' on win32) -- plain `ln -s` silently no-ops into a
+  # disconnected real directory on a non-elevated/non-Developer-Mode Windows sandbox (no
+  # error, no symlink: confirmed empirically), which would make this BEHAVIORAL escape
+  # attempt vacuous (nothing to resolve through, so the confinement guard correctly finds
+  # no escape and exits 0 -- not a guard regression, just a dead attack fixture). NTFS
+  # junctions need no elevation and are still followed by realpath -m/os.path.realpath()/
+  # `pwd -P`, so the guard is exercised identically to a real POSIX symlink. Mirrors the
+  # same cross-platform idiom already used in subagent-start-context-bundle.bats.
+  node - "$evil_dir" "$PROJ/.planning/wave-$WAVE_SLUG/specialist-dispatches" <<'NODE'
+const fs = require('fs');
+const target = process.argv[2];
+const linkPath = process.argv[3];
+fs.symlinkSync(target, linkPath, process.platform === 'win32' ? 'junction' : 'dir');
+NODE
 
   run bash -c "cd '$PROJ' && printf 'task\n' | CLAUDE_WAVE_SLUG='$WAVE_SLUG' \
     bash '$SCRIPT' --architect arch-testing --specialist test-specialist \
@@ -343,4 +356,67 @@ else:
   local root="/tmp/bl-w4-9-fixture/.planning"
   local nested="/tmp/bl-w4-9-fixture/.planning/wave-x/specialist-dispatches/test-specialist"
   [[ "$nested" == "$root" || "$nested" == "$root"/* ]] || return 1
+}
+
+# ── R131 follow-up (context-provider review finding, this session): _file_in_repo()'s
+#    OWN absolute-path pre-check (L309-312) had the identical no-leading-slash blind
+#    spot as _shell_physical_resolve()'s, fixed above -- but here it was a genuine
+#    CONTAINMENT BYPASS, not just breakage: a drive-letter --file argument (no leading
+#    slash) fell to the relative-path arm and got REPO_ROOT prepended, which lexically
+#    nests ANY absolute drive-letter path under REPO_ROOT regardless of where it
+#    actually points. Empirically confirmed before the fix: an --file argument pointing
+#    genuinely OUTSIDE the repo (e.g. C:/Users/x/SomewhereElse/evil.md) was ACCEPTED.
+#    Bounded in the gated dispatch path by the JS hook's independent Node
+#    path.resolve()+path.relative() re-validation, but a real gap for any standalone
+#    caller of this script.
+
+@test "R131 CONFINEMENT IDIOM: old absolute-path pre-check accepts ANY drive-letter path regardless of target (bypass)" {
+  local repo_root="C:/Users/34645/AndroidStudioProjects/AndroidCommonDoc-portable-runtime-messaging-adapters"
+  local f="C:/Users/34645/SomewhereElse/evil.md"
+  local abs
+  # Pre-fix idiom reproduction (case "$f" in /*) ... *) abs="$REPO_ROOT/$f" ;; esac).
+  case "$f" in
+    /*) abs="$f" ;;
+    *)  abs="$repo_root/$f" ;;
+  esac
+  # The garbled result is lexically nested under repo_root regardless of the fact
+  # that $f itself points somewhere else entirely -- this is the bypass.
+  [[ "$abs" == "$repo_root"/* ]] || return 1
+}
+
+@test "R131 CONFINEMENT IDIOM: fixed absolute-path pre-check recognizes drive-letter paths as already-absolute" {
+  local repo_root="C:/Users/34645/AndroidStudioProjects/AndroidCommonDoc-portable-runtime-messaging-adapters"
+  local f="C:/Users/34645/SomewhereElse/evil.md"
+  local abs
+  # Post-fix idiom -- mirrors _file_in_repo() L309-313.
+  case "$f" in
+    /*) abs="$f" ;;
+    [A-Za-z]:/*) abs="$f" ;;
+    *)  abs="$repo_root/$f" ;;
+  esac
+  # $f is used as-is now, not joined with repo_root, so the later _lexical_norm
+  # containment check can correctly evaluate it as outside the repo.
+  [ "$abs" = "$f" ] || return 1
+}
+
+@test "R131 CONFINEMENT IDIOM: fixed absolute-path pre-check still anchors a genuine relative --file at REPO_ROOT" {
+  local repo_root="C:/Users/34645/AndroidStudioProjects/AndroidCommonDoc-portable-runtime-messaging-adapters"
+  local f="docs/foo.md"
+  local abs
+  case "$f" in
+    /*) abs="$f" ;;
+    [A-Za-z]:/*) abs="$f" ;;
+    *)  abs="$repo_root/$f" ;;
+  esac
+  [ "$abs" = "$repo_root/$f" ] || return 1
+}
+
+@test "WSD-16 FAIL: --file with Windows drive-letter absolute path (C:/Windows/System32/evil.dll) exits 2" {
+  _seed_plan "$WAVE_SLUG"
+  run bash -c "cd '$PROJ' && printf 'task\n' | CLAUDE_WAVE_SLUG='$WAVE_SLUG' \
+    bash '$SCRIPT' --architect arch-testing --specialist test-specialist \
+    --file 'C:/Windows/System32/evil.dll' --slug '$WAVE_SLUG'"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"outside the repository root"* ]] || return 1
+  [ ! -d "$PROJ/.planning/wave-$WAVE_SLUG/specialist-dispatches/test-specialist" ] || return 1
 }

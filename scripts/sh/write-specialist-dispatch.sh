@@ -275,16 +275,21 @@ fi
 # `|| echo "$REPO_ROOT/$f"` fallback left the LITERAL unresolved path, which lexically starts with
 # "$REPO_ROOT/" and so passed containment (status=0, dispatch written). This mirrors the gate's
 # Node path.resolve()+path.relative() so writer and gate agree on what "inside the repo" means.
-_file_in_repo() {
-  local f="$1" abs norm seg rest
-  # Anchor relative paths at REPO_ROOT; keep absolutes as-is.
-  case "$f" in
-    /*) abs="$f" ;;
-    *)  abs="$REPO_ROOT/$f" ;;
-  esac
-  # Collapse '.' and '..' via a string stack (no arrays -> bash-3.2 + set -u safe).
-  norm=""
-  rest="$abs"
+# _lexical_norm <path> — collapse '.' and '..' via a string stack (no arrays -> bash-3.2 +
+# set -u safe), emitting a leading-'/'-anchored form. Extracted so BOTH sides of the
+# containment comparison in _file_in_repo() are normalized by the SAME function.
+#
+# WINDOWS CORRECTNESS (R131): on Git-Bash/MSYS, `git rev-parse --show-toplevel` returns a
+# drive-letter path with NO leading slash (e.g. C:/Users/foo/repo), whereas this walk always
+# prepends '/' to its first pushed segment (/C:/Users/foo/repo). Comparing the walked target
+# against the RAW REPO_ROOT therefore differed at the very first character for every input,
+# so _file_in_repo() rejected every genuinely in-repo --file path unconditionally on Windows,
+# blocking --file entirely. Normalizing both sides through this one function makes the
+# comparison symmetric on every platform. Containment semantics are otherwise unchanged: '..'
+# still pops, so a mid-path escape (foo/../../bar) still resolves outside and is still
+# rejected.
+_lexical_norm() {
+  local rest="$1" norm="" seg
   while [[ -n "$rest" ]]; do
     seg="${rest%%/*}"
     if [[ "$rest" == */* ]]; then rest="${rest#*/}"; else rest=""; fi
@@ -295,8 +300,26 @@ _file_in_repo() {
     esac
   done
   if [[ -z "$norm" ]]; then norm="/"; fi
-  # Containment: the normalized target must equal REPO_ROOT or sit under REPO_ROOT/.
-  if [[ "$norm" != "$REPO_ROOT" && "$norm" != "$REPO_ROOT"/* ]]; then
+  printf '%s' "$norm"
+}
+
+_file_in_repo() {
+  local f="$1" abs norm root_norm
+  # Anchor relative paths at REPO_ROOT; keep absolutes as-is. Windows/Git-Bash: a
+  # caller-supplied --file may itself be a drive-letter absolute path (C:/Users/...,
+  # no leading slash) -- without the second arm it is wrongly treated as relative and
+  # gets REPO_ROOT double-prepended, corrupting containment (same root cause as
+  # _shell_physical_resolve's fix above; _lexical_norm below is symmetric either way,
+  # but only once abs itself is built correctly).
+  case "$f" in
+    /*) abs="$f" ;;
+    [A-Za-z]:/*) abs="$f" ;;
+    *)  abs="$REPO_ROOT/$f" ;;
+  esac
+  norm="$(_lexical_norm "$abs")"
+  root_norm="$(_lexical_norm "$REPO_ROOT")"
+  # Containment: the normalized target must equal the normalized REPO_ROOT or sit under it.
+  if [[ "$norm" != "$root_norm" && "$norm" != "$root_norm"/* ]]; then
     return 1
   fi
   return 0
@@ -360,6 +383,12 @@ _shell_physical_resolve() {
   local p="$1"
   case "$p" in
     /*) : ;;
+    # Windows/Git-Bash: `git rev-parse --show-toplevel`-derived paths (and anything
+    # built from them, e.g. PLANNING_DIR/VERDICT_FILE) come back as a bare drive-letter
+    # path with NO leading slash (C:/Users/...). Without this arm such a path is
+    # wrongly treated as relative and gets $PWD prepended, corrupting resolution and
+    # silently defeating the confinement check's pure-shell fallback tier.
+    [A-Za-z]:/*) : ;;
     *)  p="$PWD/$p" ;;
   esac
   local tail="" cur="$p" base parent

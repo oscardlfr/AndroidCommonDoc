@@ -934,7 +934,19 @@ _real_sha256() {
   local evil_dir="$PROJ/.planning-evil"
   mkdir -p "$evil_dir"
   mkdir -p "$PROJ/.planning"
-  ln -s "$evil_dir" "$PROJ/.planning/wave-$WAVE_SLUG"
+  # fs.symlinkSync(..., 'junction' on win32) -- plain `ln -s` silently no-ops into a
+  # disconnected real directory on a non-elevated/non-Developer-Mode Windows sandbox (no
+  # error, no symlink: confirmed empirically), which would make this BEHAVIORAL escape
+  # attempt vacuous. NTFS junctions need no elevation and are still followed by
+  # realpath -m/os.path.realpath()/`pwd -P`, so the guard is exercised identically to a
+  # real POSIX symlink. Mirrors the same cross-platform idiom already used in
+  # subagent-start-context-bundle.bats.
+  node - "$evil_dir" "$PROJ/.planning/wave-$WAVE_SLUG" <<'NODE'
+const fs = require('fs');
+const target = process.argv[2];
+const linkPath = process.argv[3];
+fs.symlinkSync(target, linkPath, process.platform === 'win32' ? 'junction' : 'dir');
+NODE
 
   run bash -c "cd '$PROJ' && CLAUDE_WAVE_SLUG='$WAVE_SLUG' \
     bash '$SCRIPT' --role arch-testing --phase prep --slug '$WAVE_SLUG'"
@@ -1007,7 +1019,19 @@ _real_sha256() {
   local evil_dir="$PROJ/.planning-evil"
   mkdir -p "$evil_dir"
   mkdir -p "$PROJ/.planning"
-  ln -s "$evil_dir" "$PROJ/.planning/wave-$WAVE_SLUG"
+  # fs.symlinkSync(..., 'junction' on win32) -- plain `ln -s` silently no-ops into a
+  # disconnected real directory on a non-elevated/non-Developer-Mode Windows sandbox (no
+  # error, no symlink: confirmed empirically), which would make this BEHAVIORAL escape
+  # attempt vacuous. NTFS junctions need no elevation and are still followed by
+  # realpath -m/os.path.realpath()/`pwd -P`, so the guard is exercised identically to a
+  # real POSIX symlink. Mirrors the same cross-platform idiom already used in
+  # subagent-start-context-bundle.bats.
+  node - "$evil_dir" "$PROJ/.planning/wave-$WAVE_SLUG" <<'NODE'
+const fs = require('fs');
+const target = process.argv[2];
+const linkPath = process.argv[3];
+fs.symlinkSync(target, linkPath, process.platform === 'win32' ? 'junction' : 'dir');
+NODE
 
   run bash -c "
     realpath() { return 1; }

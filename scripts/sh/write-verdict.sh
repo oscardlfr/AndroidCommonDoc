@@ -249,6 +249,12 @@ _shell_physical_resolve() {
   local p="$1"
   case "$p" in
     /*) : ;;
+    # Windows/Git-Bash: `git rev-parse --show-toplevel`-derived paths (and anything
+    # built from them, e.g. PLANNING_DIR/VERDICT_FILE) come back as a bare drive-letter
+    # path with NO leading slash (C:/Users/...). Without this arm such a path is
+    # wrongly treated as relative and gets $PWD prepended, corrupting resolution and
+    # silently defeating the confinement check's pure-shell fallback tier.
+    [A-Za-z]:/*) : ;;
     *)  p="$PWD/$p" ;;
   esac
   local tail="" cur="$p" base parent
