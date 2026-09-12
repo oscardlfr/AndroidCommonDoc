@@ -143,6 +143,7 @@ process.env.RUNTIME_CONSULTATION_TEST_CAPABILITY = TEST_CAPABILITY;
 // this same process (Node module caching) -- confirmed empirically: this
 // exact ordering mistake broke R33-GV-1/2/3/CORR-COVERAGE/CORR-MUTATION.
 const rll = require(path.resolve(__dirname, '../lib/runtime-role-lifecycle.cjs'));
+const claudeId01Fixture = require('./fixtures/runtime-claude-id01-v2-fixture.cjs');
 // M7 GREEN correction round 2, R5: same ordering-sensitivity as rll above
 // (isTestCapability() gated exports) -- required immediately adjacent, never
 // earlier, for the identical reason.
@@ -1670,6 +1671,22 @@ function r2cWriteOverrideFixture(dir, filename, obj) {
 /** Spawns the REAL CLI binary directly (bypasses GRANT_WRAPPER -- see section header). Same undefined-deletes-key convention as spawnCli. */
 function r2cSpawnRealCliDirect(args, envOverrides) {
   const env = Object.assign({}, process.env, envOverrides || {});
+  // This file's registry-isolation preload propagates through NODE_OPTIONS
+  // and intentionally makes its private root the child's os.tmpdir(). R2-C
+  // tests that explicitly supply TMPDIR are testing that same containment
+  // boundary, so bind the descendant preload to the requested fixture root.
+  // The contract is platform-neutral; TEMP/TMP below merely mirrors Node's
+  // Windows temp-variable precedence.
+  if (envOverrides && envOverrides.TMPDIR !== undefined) {
+    env.ANDROID_COMMON_DOC_TEST_PRIVATE_REGISTRY_ROOT = envOverrides.TMPDIR;
+  }
+  // Node's os.tmpdir() follows TEMP/TMP on Windows (not TMPDIR). Keep the
+  // child fixture's requested temp root equivalent across platforms without
+  // changing production resolution semantics.
+  if (process.platform === 'win32' && envOverrides && envOverrides.TMPDIR !== undefined) {
+    if (!Object.prototype.hasOwnProperty.call(envOverrides, 'TEMP')) env.TEMP = envOverrides.TMPDIR;
+    if (!Object.prototype.hasOwnProperty.call(envOverrides, 'TMP')) env.TMP = envOverrides.TMPDIR;
+  }
   for (const k of Object.keys(env)) {
     if (env[k] === undefined) delete env[k];
   }
@@ -1804,7 +1821,7 @@ test('R2-C RED 8: a directory at the override path is rejected file-security-inv
   assert.deepStrictEqual(snapshotDirDigests(tmpBase), before, 'zero writes to the fixture scope on a rejected override');
 });
 
-test('R2-C RED 9: an override file with mode 0644 (not exactly 0600) is rejected file-security-invalid', () => {
+test('R2-C RED 9: an override file with mode 0644 (not exactly 0600) is rejected file-security-invalid', { skip: process.platform === 'win32' }, () => {
   const tmpBase = r2cMakeTmpBase('r2c-mode-');
   const overridePath = r2cWriteOverrideFixture(tmpBase, 'wrong-mode.json');
   fs.chmodSync(overridePath, 0o644);
@@ -1851,7 +1868,7 @@ test('R2-C RED 11: an override path outside the child\'s own real TMPDIR is reje
   assert.deepStrictEqual(snapshotDirDigests(siblingDir), before, 'zero writes to the fixture scope on a rejected override');
 });
 
-test('R2-C RED 12: a child whose own TMPDIR resolves to a directory with mode 0755 (not exactly 0700) is rejected tmpdir-not-secure, even for an otherwise perfectly valid override file placed inside it', () => {
+test('R2-C RED 12: a child whose own TMPDIR resolves to a directory with mode 0755 (not exactly 0700) is rejected tmpdir-not-secure, even for an otherwise perfectly valid override file placed inside it', { skip: process.platform === 'win32' }, () => {
   const insecureTmpdir = r2cMakeTmpBase('r2c-tmpdirmode-');
   fs.chmodSync(insecureTmpdir, 0o755);
   const overridePath = r2cWriteOverrideFixture(insecureTmpdir, 'inside-insecure-tmpdir.json');
@@ -1910,7 +1927,7 @@ test('R2-C RED 15: well-formed schema string but routes is an array instead of a
   assert.deepStrictEqual(snapshotDirDigests(tmpBase), before, 'zero writes to the fixture scope on a rejected override');
 });
 
-test('R2-C RED 16 (owner mismatch, isolated fs.fstatSync instrumentation before require -- never a production seam): an otherwise fully valid override file whose STATED owner uid the durability primitive observes does not match the current process uid is rejected file-security-invalid', () => {
+test('R2-C RED 16 (owner mismatch, isolated fs.fstatSync instrumentation before require -- never a production seam): an otherwise fully valid override file whose STATED owner uid the durability primitive observes does not match the current process uid is rejected file-security-invalid', { skip: process.platform === 'win32' }, () => {
   const tmpBase = r2cMakeTmpBase('r2c-owner-');
   const overridePath = r2cWriteOverrideFixture(tmpBase, 'owner-mismatch.json');
   const targetStat = fs.statSync(overridePath, { bigint: true });
@@ -2279,14 +2296,20 @@ test('DET-deadline (W06 seam): RUNTIME_CONSULTATION_FAKE_CLOCK_ADVANCE_MS forces
 
     const t0 = Date.now();
     const result = runDeterminismCli(
-      ['await-result', '--coordination-root', ctx.coordRoot, '--request', requestPath, '--timeout', '2', '--fixed-clock'],
-      { RUNTIME_CONSULTATION_FAKE_CLOCK_ADVANCE_MS: '5000' },
+      ['await-result', '--coordination-root', ctx.coordRoot, '--request', requestPath, '--timeout', '15', '--fixed-clock'],
+      { RUNTIME_CONSULTATION_FAKE_CLOCK_ADVANCE_MS: '20000' },
     );
     const elapsedMs = Date.now() - t0;
 
     assertCliResult(result, { command: 'await-result', status: 'TIMEOUT', detail_code: 'DEADLINE_EXCEEDED' });
-    assert.ok(elapsedMs < 1000,
-      'RUNTIME_CONSULTATION_FAKE_CLOCK_ADVANCE_MS must force the deadline check to fire instantly (no real sleep) -- elapsed wall time was ' + elapsedMs + 'ms; today this reliably takes >=2000ms because await-result unconditionally polls a real Date.now()/Atomics.wait loop against its own --timeout, ignoring the fake-clock-advance seam entirely');
+    // Native Windows additionally performs the real SID/DACL validation in a
+    // hidden PowerShell child, so process startup can exceed one second even
+    // though the await loop itself performs zero sleeps. Keep the assertion
+    // materially below the 15-second control deadline while allowing that
+    // platform preflight; POSIX retains the tighter historical bound.
+    const noSleepBoundMs = process.platform === 'win32' ? 5000 : 1000;
+    assert.ok(elapsedMs < noSleepBoundMs,
+      'RUNTIME_CONSULTATION_FAKE_CLOCK_ADVANCE_MS must bypass the 15-second await loop (platform preflight only) -- elapsed wall time was ' + elapsedMs + 'ms, bound=' + noSleepBoundMs + 'ms');
   });
 });
 
@@ -2326,7 +2349,7 @@ test('Gap#1: total argv exceeding 28672 UTF-16 units (well under the 131072-byte
   }
 });
 
-test('Gap#1 contrast: the identical oversized-but-under-POSIX-cap argv WITHOUT RUNTIME_CONSULTATION_FORCE_PLATFORM (real, non-win32 platform) is NOT rejected by the Windows-cap branch -- it is rejected instead by the unrelated, pure-argv-grammar --reason enum check, distinguishable from the win32 cap ONLY by status (USAGE_ERROR vs INVALID), since both currently share the INVALID_ARGUMENT detail_code', () => {
+test('Gap#1 contrast: the identical oversized-but-under-POSIX-cap argv WITHOUT RUNTIME_CONSULTATION_FORCE_PLATFORM (real, non-win32 platform) is NOT rejected by the Windows-cap branch -- it is rejected instead by the unrelated, pure-argv-grammar --reason enum check, distinguishable from the win32 cap ONLY by status (USAGE_ERROR vs INVALID), since both currently share the INVALID_ARGUMENT detail_code', { skip: process.platform === 'win32' }, () => {
   // M7 completeness (2026-08-09): cancel is now grant-mandatory (PLAN.md
   // §15b) and validateAndConsumeRoleCommandGrantForCommand runs BEFORE
   // cmdCancel's own body -- a bare, non-git mkdtemp coordination-root (this
@@ -2373,7 +2396,7 @@ test('Gap#1 contrast: the identical oversized-but-under-POSIX-cap argv WITHOUT R
   });
 });
 
-test('Gap#1: RUNTIME_CONSULTATION_FORCE_PLATFORM is honored ONLY under the test capability -- without NODE_ENV=test/capability, the override is ignored and the real (non-win32) platform applies, so the same oversized-but-under-POSIX argv is rejected only by the unrelated --reason enum check, never the win32 cap', () => {
+test('Gap#1: RUNTIME_CONSULTATION_FORCE_PLATFORM is honored ONLY under the test capability -- without NODE_ENV=test/capability, the override is ignored and the real (non-win32) platform applies, so the same oversized-but-under-POSIX argv is rejected only by the unrelated --reason enum check, never the win32 cap', { skip: process.platform === 'win32' }, () => {
   // M7 completeness (2026-08-09): same withProject() fix as the contrast test
   // above, for the identical reason (grant-mandatory cancel needs a
   // resolvable project scope to mint against before cmdCancel's own body --
@@ -2436,7 +2459,7 @@ test('WP3 ACL_PROBE: root-validate under simulated win32 with RUNTIME_CONSULTATI
     assertCliResult(initResult, { command: 'root-init', status: 'SUCCESS', detail_code: 'NONE' });
 
     const validateResult = spawnCli(
-      ['root-validate', '--coordination-root', coordRoot],
+      ['root-validate', '--coordination-root', coordRoot, '--fixed-ids', '--fixed-clock'],
       {
         NODE_ENV: 'test',
         RUNTIME_CONSULTATION_TEST_CAPABILITY: TEST_CAPABILITY,
@@ -2462,7 +2485,7 @@ test('WP3 ACL_PROBE contrast: root-validate under simulated win32 WITHOUT the pr
     assertCliResult(initResult, { command: 'root-init', status: 'SUCCESS', detail_code: 'NONE' });
 
     const validateResult = spawnCli(
-      ['root-validate', '--coordination-root', coordRoot],
+      ['root-validate', '--coordination-root', coordRoot, '--fixed-ids', '--fixed-clock'],
       {
         NODE_ENV: 'test',
         RUNTIME_CONSULTATION_TEST_CAPABILITY: TEST_CAPABILITY,
@@ -2486,6 +2509,24 @@ test('WP3 ACL_PROBE contrast: root-validate under simulated win32 WITHOUT the pr
 // never actually hang whether or not the guard exists), then requires the guard's
 // own no-progress error to surface. Pre-fix, the stub's cap sentinel (a DISTINCT
 // message) escapes instead, so the /made no progress/ match fails RED.
+test('PORT-W12: Windows no-clobber publication proves both directory barriers and leaves one durable link', {
+  skip: process.platform !== 'win32',
+}, () => {
+  const rc = require(IMPL);
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rc-w12-dir-barriers-'));
+  const target = path.join(dir, 'winner.json');
+  const bytes = Buffer.from('{"winner":true}\n', 'utf8');
+  try {
+    rc.publishNoClobber(target, bytes);
+    assert.deepStrictEqual(fs.readFileSync(target), bytes,
+      'the winning target must contain the complete published bytes');
+    assert.strictEqual(fs.statSync(target).nlink, 1,
+      'the writer may return only after temp unlink and directory barrier 2');
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test('DUR-A: writeAllSync fails closed on a stuck zero-progress writeSync instead of looping forever', () => {
   const rc = require(IMPL);
   assert.strictEqual(typeof rc.writeAllSync, 'function',
@@ -3308,10 +3349,19 @@ test('R33-CORR-COVERAGE: every key in the exported R33_TUPLE_CORRELATION_KEYS ha
 // primitive (resolveRootEvidenceAuthority's own root-source directive
 // parser) exported specifically so its own edge cases can be exercised
 // directly, not because anything outside this file calls it.
+// PORT-01 Windows closure (2026-09-02): 3 further names joined the UNGATED
+// base set. classifyCanonicalResultForRequest is consumed unconditionally by
+// runtime-bridge-codex.cjs so the bridge observes only the authoritative,
+// fully validated result for a request. windowsPrivateDirectoryAcl is consumed
+// unconditionally by runtime-role-lifecycle.cjs so the coordination core and
+// host-private registry share one SID/DACL implementation rather than drifting
+// security copies. resolvedWindowsPowerShellPath is likewise consumed by the
+// bridge so both modules share one validated PowerShell-host selection policy.
+// None of these primitives is test-capability-gated.
 const R33_EXPORTS_GATE_CLOSED = Object.freeze([
   'DURABLE_ABSENT', 'DURABLE_PENDING', 'DURABLE_PRESENT', 'ROUTING_POLICY_DIGEST',
   'ROUTING_POLICY_VERSION', 'acceptedResultPathFor', 'ackPathFor', 'acquireLock', 'buildCanonicalRequest', 'cancelPathFor',
-  'canonicalJSONStringify', 'classifyDurableRead', 'codexStructuredRuntimeTurnEnvelopeSchema',
+  'canonicalJSONStringify', 'classifyCanonicalResultForRequest', 'classifyDurableRead', 'codexStructuredRuntimeTurnEnvelopeSchema',
   'createHostBridgeCapability', 'dispatchCanonical', 'findLiveClaudeAgentActivations',
   'findResultWithStatus', 'gitRevParse', 'gitTopologySealsMatch', 'hostBridgeAdvanceRootConsult',
   'hostBridgeAllowedChildRoles',
@@ -3329,6 +3379,7 @@ const R33_EXPORTS_GATE_CLOSED = Object.freeze([
   'sha256Buffer', 'sha256File',
   'sha256String', 'targetRoleProfileDigestFor', 'unwrapAndValidateCodexStructuredRuntimeTurnEnvelope',
   'validateConsultationDependencySet', 'validateContext7LibraryId', 'validateRootConfinement',
+  'windowsAclSnapshotsEqual', 'windowsPrivateDirectoryAcl', 'resolvedWindowsPowerShellPath',
   'validateRuntimeTurnEnvelope', 'writeAllSync',
 ].sort());
 
@@ -3340,6 +3391,8 @@ const R33_EXPORTS_GATE_OPEN = Object.freeze([
   'checkR33ProfileTupleConformance',
   'checkRootProfileV3Conformance',
   'checkRuntimeProfileBindingV2Conformance',
+  'localComputePrincipalId',
+  'localRegistryRepoDir',
   'providerSessionDigestV3',
   'resolveSafeM7RendezvousDir',
   'rootProfileDigestV3',
@@ -3364,7 +3417,7 @@ function probeExportsUnderEnv(envRow) {
   return JSON.parse(r.stdout);
 }
 
-test('R33-GATE: the module exports EXACTLY the 65-key base set unless NODE_ENV=test AND a non-empty capability are both present, in which case it exports EXACTLY 76', () => {
+test('R33-GATE: the module exports EXACTLY the 69-key base set unless NODE_ENV=test AND a non-empty capability are both present, in which case it exports EXACTLY 82', () => {
   const rows = [
     ['no env at all', {}, R33_EXPORTS_GATE_CLOSED],
     ['NODE_ENV=test alone', { NODE_ENV: 'test' }, R33_EXPORTS_GATE_CLOSED],
@@ -3395,11 +3448,11 @@ test('R33-GATE: the module exports EXACTLY the 65-key base set unless NODE_ENV=t
   // discriminating property explicitly so the intent survives a refactor.
   const open = probeExportsUnderEnv({ NODE_ENV: 'test', RUNTIME_CONSULTATION_TEST_CAPABILITY: TEST_CAPABILITY });
   const closed = probeExportsUnderEnv({});
-  assert.strictEqual(closed.length, 65, 'base surface is 65 exports');
-  assert.strictEqual(open.length, 76, 'gated-open surface is 76 exports');
+  assert.strictEqual(closed.length, 69, 'base surface is 69 exports');
+  assert.strictEqual(open.length, 82, 'gated-open surface is 82 exports');
   assert.strictEqual(
-    open.length - closed.length, 11,
-    'exactly 11 exports are gated; a change to that count is a deliberate decision that must be reflected in both frozen sets above',
+    open.length - closed.length, 13,
+    'exactly 13 exports are gated; a change to that count is a deliberate decision that must be reflected in both frozen sets above',
   );
   assert.deepStrictEqual(
     closed.filter((k) => !open.includes(k)), [],
@@ -3476,6 +3529,10 @@ test('R33-CORR-MUTATION: each of the 17 PRODUCTION correlation comparisons is ei
     const coordRoot = path.join(proj, '.planning', 'coordination');
     fs.mkdirSync(coordRoot, { recursive: true });
     fs.chmodSync(coordRoot, 0o700);
+    if (process.platform === 'win32') {
+      const acl = rc.windowsPrivateDirectoryAcl(coordRoot, { mode: 'ensure' });
+      assert.strictEqual(acl.ok, true, 'R33 mutation fixture must establish the native Windows root precondition: ' + JSON.stringify(acl));
+    }
 
     const h64 = (p) => p.repeat(32);
     const h32 = (q) => q.repeat(8);
@@ -3498,7 +3555,11 @@ test('R33-CORR-MUTATION: each of the 17 PRODUCTION correlation comparisons is ei
       handle_protocol: 'transition-lock/provider-handle/v2', clock_domain_id: CD,
       created_at_diagnostic_utc: '2026-07-25T00:00:00Z',
       lock_profile: 'transition-lock/file-posix/v2', local_filesystem_profile: 'local-posix/v2',
-      platform: process.platform, architecture: process.arch,
+      // R33 is the frozen POSIX provider profile; on Windows this remains a
+      // pure schema/correlation mutation fixture, so use its accredited Linux
+      // tuple while separately satisfying the native root ACL precondition.
+      platform: process.platform === 'win32' ? 'linux' : process.platform,
+      architecture: process.arch,
     }, shared);
     const sessionBase = Object.assign({
       schema: 'coordination/provider-session/v3', provider_abi: 3,
@@ -3564,8 +3625,9 @@ test('R33-CORR-MUTATION: each of the 17 PRODUCTION correlation comparisons is ei
 
       const patchedModule = loadPatched(key);
       let slipped = false;
-      try { patchedModule.checkR33ProfileTupleConformance(bindingPath, coordRoot); slipped = true; } catch (e) { /* still caught */ }
-      rows.push(key + ' -> ' + (slipped ? 'slipped through (comparison is load-bearing)' : 'still rejected'));
+      let patchedError = null;
+      try { patchedModule.checkR33ProfileTupleConformance(bindingPath, coordRoot); slipped = true; } catch (e) { patchedError = e; }
+      rows.push(key + ' -> ' + (slipped ? 'slipped through (comparison is load-bearing)' : 'still rejected: ' + String(patchedError && patchedError.message)));
 
       if (R33_REDUNDANTLY_GUARDED_KEYS.includes(key)) {
         assert.strictEqual(
@@ -3784,14 +3846,18 @@ function m7PrimeClaudeId01TraceForWrapperIdentity(dir, agentType, sessionId, age
     return actionId;
   };
   const actionA = mintAction('a-' + agentId);
-  const actionB = mintAction('b-' + agentId);
-  rll.recordClaudeId01SubagentStartObservation(dir, { sessionId, agentId, agentType, actionId: actionA });
-  rll.recordClaudeId01PreToolUseObservation(dir, { sessionId, agentId, agentType, toolUseId: 'rcc-node-m7-prime-1-' + sessionId + '-' + agentId });
-  rll.recordClaudeId01PreToolUseObservation(dir, { sessionId, agentId, agentType, toolUseId: 'rcc-node-m7-prime-2-' + sessionId + '-' + agentId });
-  rll.recordClaudeId01SubagentStartObservation(dir, { sessionId, agentId, agentType, actionId: actionA });
-  rll.recordClaudeId01PreToolUseObservation(dir, { sessionId, agentId, agentType, toolUseId: 'rcc-node-m7-prime-3-' + sessionId + '-' + agentId });
-  rll.recordClaudeId01SubagentStartObservation(dir, { sessionId, agentId: agentId + '-distinct-peer-b', agentType, actionId: actionB });
-  const proof = rll.checkClaudeId01RuntimeCapability(dir, sessionId, rll.computeWorktreeId(dir), rll.discoverPlan(dir).planDigest);
+  claudeId01Fixture.primeClaudeId01V2ActorProof({
+    projectRoot: dir,
+    sessionId,
+    agentId,
+    agentType,
+    actionId: actionA,
+    prefix: 'rcc-node-m7-prime',
+  });
+  const proof = rll.checkClaudeId01RuntimeCapability(
+    dir, sessionId, rll.computeWorktreeId(dir), rll.discoverPlan(dir).planDigest,
+    agentType, agentId,
+  );
   assert.strictEqual(proof.ok, true, 'm7PrimeClaudeId01TraceForWrapperIdentity: global CLAUDE-ID-01 capability must be complete: ' + JSON.stringify(proof));
 }
 
@@ -3836,6 +3902,10 @@ async function m7DriveCliRendezvousRace(cliArgv, stage, rendezvousDir, competing
       RUNTIME_M7_TEST_RENDEZVOUS_DIR: rendezvousDir,
     }, envExtra || {}),
   });
+  // Arm close observation immediately. Once the rendezvous is released the
+  // child can exit before the competing operation returns; registering the
+  // listener only at the end loses that one-shot event and hangs forever.
+  const closePromise = new Promise((resolve) => child.once('close', resolve));
   let stdout = '';
   let stderr = '';
   child.stdout.on('data', (d) => { stdout += d.toString('utf8'); });
@@ -3854,7 +3924,7 @@ async function m7DriveCliRendezvousRace(cliArgv, stage, rendezvousDir, competing
 
   fs.writeFileSync(goPath, Buffer.from('go\n', 'utf8'), { mode: 0o600, flag: 'wx' });
 
-  const exitCode = await new Promise((resolve) => child.on('close', resolve));
+  const exitCode = await closePromise;
   return { exitCode, stdout, stderr };
 }
 
@@ -4103,7 +4173,7 @@ test('M7-ONESHOT-TERMINAL-CUT-17 (RED): mintRoleCommandGrant must deny a further
 // claude-one-shot-binding-red.bats's own COSB-SUBAGENTSTOP-ONESHOT-LOOKUP-ERROR-BLOCKS
 // technique exactly (rename the real directory aside, plant a plain file at
 // its path).
-test('M7-ONESHOT-TERMINAL-READ-ERROR-10 (RED): mintRoleCommandGrant must fail closed when a genuine filesystem read error (ENOTDIR, never ENOENT) prevents verifying whether accepted-result.json/cancel.json exist for a one-shot binding\'s own transaction directory -- today the error is silently swallowed into terminalExists=false (treated as absent) and the mint wrongly succeeds exactly as if no terminal existed at all', () => {
+test('M7-ONESHOT-TERMINAL-READ-ERROR-10 (RED): mintRoleCommandGrant must fail closed when a genuine filesystem read error (ENOTDIR, never ENOENT) prevents verifying whether accepted-result.json/cancel.json exist for a one-shot binding\'s own transaction directory -- today the error is silently swallowed into terminalExists=false (treated as absent) and the mint wrongly succeeds exactly as if no terminal existed at all', { skip: process.platform === 'win32' }, () => {
   withProject('m7-red10-oneshot-wave', (ctx) => {
     const intentB64 = base64urlIntent({
       target_role: 'arch-testing',
@@ -6424,4 +6494,394 @@ test('[REGRESSION GUARD, GREEN before and after the fix -- not mandatory RED] M6
     );
     assertCliResult(result, { command: 'await-result', status: 'TIMEOUT', detail_code: 'DEADLINE_EXCEEDED' });
   });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// RED: Windows P4 native-Claude persistence correction (bounded RED-test
+// authorship only -- no production changes here). dispatchCanonical's own
+// `candidate === 'claude-sendmessage'` branch (runtime-consultation.cjs)
+// today consults ONLY rll.findUniqueClaudePeerBindingForTarget -- confirmed
+// by direct source read -- with no fallback for the bootstrap case this
+// correction adds: a live resume handle (proposed
+// runtime/claude-resume-handle/v1, parked by subagent-start-context-
+// bundle.js's SubagentStop; see runtime-claude-peer-binding.test.js's own
+// RED section and its proposed 'claude-resume-handles' registry directory)
+// but no full ClaudePeerBinding yet. The fixture below builds the REAL
+// registry prerequisites (live session generation, genuine RoleActorBinding,
+// a genuine but deliberately-incomplete first-start CLAUDE-ID-01 trace) and
+// hand-writes only the closed-shape resume-handle record itself (no mint
+// primitive exists yet either) -- the full frozen shape a correct
+// implementation must accept, never the under-specified short one. This RED
+// is attributable solely to dispatchCanonical's own missing fallback.
+// ═══════════════════════════════════════════════════════════════════════════
+
+// Closed full shape a live runtime/claude-resume-handle/v1 record must carry:
+// binding_id, actor_binding_id, raw session, raw agent_id,
+// session_generation_id, canonical role + teammate_name, worktree_id,
+// plan_digest, created_at, expiry. Builds the REAL RoleActorBinding + live
+// session generation + a genuine (deliberately incomplete -- no PreToolUse
+// observation yet) first-start CLAUDE-ID-01 trace, mirroring the exact
+// bootstrap moment before the first post-resume PreToolUse can complete the
+// chain (see runtime-claude-peer-binding.test.js's own 'RED startup action'
+// test for the completed-proof counterpart).
+function buildResumeHandleFixture(ctx, sessionKey, role) {
+  const identity = { ok: true, provider: 'claude-hook', runtime_session_key: sessionKey };
+  const generation = rll.resolveSessionGeneration(ctx.projDir, identity);
+  assert.strictEqual(generation.ok, true, 'fixture: session generation must resolve: ' + JSON.stringify(generation));
+  const actorBinding = rll.createRoleActorBinding(ctx.projDir, role, ctx.worktreeId, ctx.planDigest, generation.generationId, 120);
+  assert.strictEqual(actorBinding.ok, true, 'fixture: RoleActorBinding must mint: ' + JSON.stringify(actorBinding));
+
+  const agentId = 'p4-resumehandle-agent-' + crypto.randomBytes(4).toString('hex');
+  const probeActionId = rll.generateActionId();
+  const probePayload = rll.buildRoleSpawnPayload('p4-resumehandle-probe', role, role, 'fixture', 'fixture');
+  const probeExpiry = new Date(Date.now() + 600000).toISOString().replace(/\.\d{3}Z$/, 'Z');
+  const probeMint = rll.mintRoleLifecycleAction(
+    ctx.projDir, probeActionId, 'role-spawn', 'claude-native', rll.computeRepoId(ctx.projDir), ctx.worktreeId,
+    ctx.planDigest, crypto.createHash('sha256').update('p4-resumehandle-probe:' + agentId).digest('hex'),
+    generation.generationId, role, probePayload, probeExpiry,
+  );
+  assert.strictEqual(probeMint.ok, true, 'fixture: probe role-spawn action must mint: ' + JSON.stringify(probeMint));
+  rll.recordClaudeId01SubagentStartObservation(ctx.projDir, { sessionId: sessionKey, agentId, agentType: role, actionId: probeActionId });
+
+  const handleId = crypto.randomBytes(16).toString('hex');
+  const handleDir = path.join(rll.registryRepoDir(ctx.projDir), 'claude-resume-handles');
+  fs.mkdirSync(handleDir, { recursive: true, mode: 0o700 });
+  const handleRecord = {
+    schema: 'runtime/claude-resume-handle/v1',
+    binding_id: handleId,
+    actor_binding_id: actorBinding.binding.binding_id,
+    session: sessionKey,
+    agent_id: agentId,
+    session_generation_id: generation.generationId,
+    role,
+    teammate_name: role,
+    worktree_id: ctx.worktreeId,
+    plan_digest: ctx.planDigest,
+    created_at: new Date().toISOString().replace(/\.\d{3}Z$/, 'Z'),
+    expiry: new Date(Date.now() + 3600000).toISOString().replace(/\.\d{3}Z$/, 'Z'),
+  };
+  return { handleDir, handleRecord, agentId, actorBinding: actorBinding.binding };
+}
+
+function writeResumeHandleFixture(fx, overrides) {
+  const record = Object.assign({}, fx.handleRecord, overrides || {});
+  fs.writeFileSync(path.join(fx.handleDir, record.binding_id + '.json'), JSON.stringify(record), { mode: 0o600 });
+  return record;
+}
+
+function buildConsumedBusyResumeHandleFixture(ctx, sessionKey, role) {
+  const fx = buildResumeHandleFixture(ctx, sessionKey, role);
+  const profileDigest = rll.roleProfileDigestFor(role);
+  const starting = rll.transitionRoleBinding(
+    ctx.projDir, ctx.worktreeId, ctx.planDigest, profileDigest,
+    fx.handleRecord.session_generation_id, role, 'ABSENT', 'STARTING', null,
+    { driver: 'claude-sendmessage', respawn_count: 0, pending_action_id: rll.generateActionId() },
+  );
+  assert.strictEqual(starting.ok, true, 'fixture: Claude target must enter STARTING: ' + JSON.stringify(starting));
+  const ready = rll.transitionRoleBinding(
+    ctx.projDir, ctx.worktreeId, ctx.planDigest, profileDigest,
+    fx.handleRecord.session_generation_id, role, 'STARTING', 'READY', starting.record, {},
+  );
+  assert.strictEqual(ready.ok, true, 'fixture: Claude target must enter READY: ' + JSON.stringify(ready));
+  const event = { sessionId: sessionKey, agentId: fx.agentId, agentType: role };
+  const parked = rll.parkClaudeResumeHandleForRoleActor(ctx.projDir, event);
+  assert.strictEqual(parked.ok, true, 'fixture: Claude target must park one resume handle: ' + JSON.stringify(parked));
+  const consumed = rll.consumeClaudeResumeHandleForObservedActor(ctx.projDir, event);
+  assert.strictEqual(consumed.ok, true, 'fixture: exact resumed actor must consume its handle: ' + JSON.stringify(consumed));
+  const busy = rll.readRoleBindingState(
+    ctx.projDir, ctx.worktreeId, ctx.planDigest, profileDigest,
+    fx.handleRecord.session_generation_id, role,
+  );
+  assert.strictEqual(busy.ok, true, 'fixture: BUSY role binding must remain readable: ' + JSON.stringify(busy));
+  assert.strictEqual(busy.state, 'BUSY', 'fixture: consumed resume must leave the target BUSY');
+  assert.strictEqual(fs.existsSync(path.join(rll.registryRepoDir(ctx.projDir), 'claude-peer-bindings')), false,
+    'fixture: no post-resume PreToolUse exists, so no ClaudePeerBinding may be fabricated');
+  return { busy: busy.record, consumed: consumed.record };
+}
+
+// P4 fixture correction (reported explicitly): getCapabilityManifest's own
+// 'claude-sendmessage' entry, even under RUNTIME_ROLE_LIFECYCLE_FAKE_
+// CAPABILITIES, is additionally gated on hasCurrentClaudeId01Capability --
+// at least one live session generation in this repo must already carry a
+// COMPLETE CLAUDE-ID-01 proof (direct source read of getCapabilityManifest,
+// runtime-role-lifecycle.cjs). This proves the SendMessage MECHANISM is
+// available at all; it is deliberately a DIFFERENT identity/role than this
+// fixture's own bootstrap actor (buildResumeHandleFixture), whose proof
+// stays genuinely incomplete -- that gap is exactly what the resume-handle
+// fallback exists to bridge. Mirrors runtime-claude-peer-binding.test.js's
+// own primeCompleteProof recipe exactly.
+function primeClaudeSendMessageMechanismProof(ctx, sessionKey) {
+  const generation = rll.resolveSessionGeneration(ctx.projDir, { ok: true, provider: 'claude-hook', runtime_session_key: sessionKey });
+  assert.strictEqual(generation.ok, true, 'fixture: mechanism-proof session generation must resolve: ' + JSON.stringify(generation));
+  function mintProofAction(suffix) {
+    const actionId = rll.generateActionId();
+    const payload = rll.buildRoleSpawnPayload('claude-id01-probe', 'arch-platform', 'arch-platform', 'fixture', 'fixture');
+    const expiry = new Date(Date.now() + 600000).toISOString().replace(/\.\d{3}Z$/, 'Z');
+    const minted = rll.mintRoleLifecycleAction(
+      ctx.projDir, actionId, 'role-spawn', 'claude-native', rll.computeRepoId(ctx.projDir), ctx.worktreeId,
+      ctx.planDigest, crypto.createHash('sha256').update('p4-mechanism-proof:' + suffix).digest('hex'),
+      generation.generationId, 'arch-platform', payload, expiry,
+    );
+    assert.strictEqual(minted.ok, true, 'fixture: mechanism-proof probe action must mint: ' + JSON.stringify(minted));
+    return actionId;
+  }
+  const actionA = mintProofAction('a');
+  const actionB = mintProofAction('b');
+  const primaryAgentId = 'p4-mechanism-proof-primary';
+  rll.recordClaudeId01SubagentStartObservation(ctx.projDir, { sessionId: sessionKey, agentId: primaryAgentId, agentType: 'arch-platform', actionId: actionA });
+  rll.recordClaudeId01PreToolUseObservation(ctx.projDir, { sessionId: sessionKey, agentId: primaryAgentId, agentType: 'arch-platform', toolUseId: 'p4-mechanism-tu-1' });
+  rll.recordClaudeId01PreToolUseObservation(ctx.projDir, { sessionId: sessionKey, agentId: primaryAgentId, agentType: 'arch-platform', toolUseId: 'p4-mechanism-tu-2' });
+  rll.recordClaudeId01SubagentStartObservation(ctx.projDir, { sessionId: sessionKey, agentId: primaryAgentId, agentType: 'arch-platform', actionId: actionA });
+  rll.recordClaudeId01PreToolUseObservation(ctx.projDir, { sessionId: sessionKey, agentId: primaryAgentId, agentType: 'arch-platform', toolUseId: 'p4-mechanism-tu-3' });
+  rll.recordClaudeId01SubagentStartObservation(ctx.projDir, { sessionId: sessionKey, agentId: primaryAgentId + '-b', agentType: 'arch-platform', actionId: actionB });
+}
+
+test('RED dispatch: requiredDriver=claude-sendmessage selects claude-sendmessage through a live, fully-shaped resume handle when no full ClaudePeerBinding exists, storing the exact handle id as native_target_binding_id', () => {
+  process.env.RUNTIME_ROLE_LIFECYCLE_TEST_CAPABILITY = 'rcc-node-resumehandle-fixture-capability';
+  process.env.RUNTIME_ROLE_LIFECYCLE_FAKE_CAPABILITIES = '["claude-sendmessage"]';
+  try {
+    withProject('rcc-node-dispatch-resumehandle-wave', (ctx) => {
+      const sessionKey = 'p4-resumehandle-session-' + crypto.randomBytes(4).toString('hex');
+      const bindingResult = rll.createMainOrchestratorBinding(
+        ctx.projDir, { ok: true, provider: 'claude-hook', runtime_session_key: sessionKey }, ctx.worktreeId, ctx.planDigest, 3600,
+      );
+      assert.strictEqual(bindingResult.ok, true, 'fixture: createMainOrchestratorBinding must succeed: ' + JSON.stringify(bindingResult));
+      primeClaudeSendMessageMechanismProof(ctx, sessionKey);
+
+      const fx = buildResumeHandleFixture(ctx, sessionKey, 'arch-testing');
+      const record = writeResumeHandleFixture(fx);
+
+      const intentB64 = base64urlIntent({
+        target_role: 'arch-testing',
+        question: 'dispatch-resumehandle-bootstrap fixture question',
+        expected_result_kind: 'TEST_RESULT',
+        expiry: isoInFuture(1800000),
+      });
+      const published = runTestCli([
+        'publish-request', '--coordination-root', ctx.coordRoot, '--plan', ctx.planPath,
+        '--subject-bundle', ctx.subjectBundlePath, '--intent', intentB64,
+      ]);
+      const publishedData = assertCliResult(published, { command: 'publish-request', status: 'SUCCESS', detail_code: 'NONE' });
+
+      const dispatched = rc.dispatchCanonical(
+        { 'coordination-root': ctx.coordRoot, request: publishedData.artifact_ref },
+        { requiredDriver: 'claude-sendmessage' },
+      );
+      assert.ok(dispatched && dispatched.artifact_ref, 'dispatchCanonical must return a real activation artifact_ref: ' + JSON.stringify(dispatched));
+      const activationObj = JSON.parse(fs.readFileSync(dispatched.artifact_ref, 'utf8'));
+      assert.strictEqual(activationObj.schema, 'coordination/activation/v1');
+      assert.strictEqual(activationObj.selected_driver, 'claude-sendmessage', 'a live resume handle for this exact target must select claude-sendmessage even with no full ClaudePeerBinding yet: ' + JSON.stringify(activationObj));
+      assert.strictEqual(activationObj.native_target_binding_id, record.binding_id, 'the activation must store the exact resume handle id as native_target_binding_id: ' + JSON.stringify(activationObj));
+    });
+  } finally {
+    delete process.env.RUNTIME_ROLE_LIFECYCLE_TEST_CAPABILITY;
+    delete process.env.RUNTIME_ROLE_LIFECYCLE_FAKE_CAPABILITIES;
+  }
+});
+
+test('P4 RED dispatch: a same-session Claude target that consumed its exact resume handle and is BUSY remains selectable without a fabricated ClaudePeerBinding', () => {
+  process.env.RUNTIME_ROLE_LIFECYCLE_TEST_CAPABILITY = 'rcc-node-consumed-busy-resumehandle-capability';
+  process.env.RUNTIME_ROLE_LIFECYCLE_FAKE_CAPABILITIES = '["claude-sendmessage"]';
+  try {
+    withProject('rcc-node-dispatch-consumed-busy-resumehandle-wave', (ctx) => {
+      const sessionKey = 'p4-consumed-busy-resumehandle-session-' + crypto.randomBytes(4).toString('hex');
+      const bindingResult = rll.createMainOrchestratorBinding(
+        ctx.projDir, { ok: true, provider: 'claude-hook', runtime_session_key: sessionKey }, ctx.worktreeId, ctx.planDigest, 3600,
+      );
+      assert.strictEqual(bindingResult.ok, true, 'fixture: MainOrchestratorBinding must mint: ' + JSON.stringify(bindingResult));
+      primeClaudeSendMessageMechanismProof(ctx, sessionKey);
+      const target = buildConsumedBusyResumeHandleFixture(ctx, sessionKey, 'arch-platform');
+      const consumedProof = rll.findUniqueConsumedClaudeResumeHandleForBusyTarget(ctx.projDir, {
+        generationId: target.consumed.session_generation_id,
+        sessionDigest: crypto.createHash('sha256').update(sessionKey).digest('hex'),
+        worktreeId: ctx.worktreeId,
+        planDigest: ctx.planDigest,
+        targetRole: 'arch-platform',
+      }, target.busy);
+      assert.strictEqual(consumedProof.ok, true,
+        'fixture: consumed-handle/BUSY proof must validate before dispatch: ' + JSON.stringify(consumedProof));
+
+      const intentB64 = base64urlIntent({
+        target_role: 'arch-platform',
+        question: 'dispatch-consumed-busy-resumehandle fixture question',
+        expected_result_kind: 'TEST_RESULT',
+        expiry: isoInFuture(1800000),
+      });
+      const published = runTestCli([
+        'publish-request', '--coordination-root', ctx.coordRoot, '--plan', ctx.planPath,
+        '--subject-bundle', ctx.subjectBundlePath, '--intent', intentB64,
+      ]);
+      const publishedData = assertCliResult(published, { command: 'publish-request', status: 'SUCCESS', detail_code: 'NONE' });
+
+      const dispatched = rc.dispatchCanonical(
+        { 'coordination-root': ctx.coordRoot, request: publishedData.artifact_ref },
+        { requiredDriver: 'claude-sendmessage' },
+      );
+      const activationObj = JSON.parse(fs.readFileSync(dispatched.artifact_ref, 'utf8'));
+      assert.strictEqual(activationObj.selected_driver, 'claude-sendmessage');
+      assert.strictEqual(activationObj.native_target_binding_id, target.consumed.binding_id,
+        'the activation must retain the exact consumed resume-handle id that proves the BUSY transition');
+      assert.strictEqual(dispatched.activation_action.target_name, target.consumed.teammate_name,
+        'SendMessage must target the exact teammate name from the correlated consumed handle');
+      const requestObj = JSON.parse(fs.readFileSync(publishedData.artifact_ref, 'utf8'));
+      const expectedMessage = {
+        artifact_path: publishedData.artifact_ref,
+        kind: 'consult',
+        request_id: requestObj.request_id,
+        role: requestObj.source_role,
+        target_role: requestObj.target_role,
+      };
+      const messagePrefix = 'COORDINATION_CONSULT/v1\n';
+      assert.strictEqual(typeof dispatched.activation_action.message, 'string',
+        'claude-sendmessage must expose its closed pointer as a native SendMessage-compatible string');
+      assert.strictEqual(dispatched.activation_action.message,
+        messagePrefix + JSON.stringify(expectedMessage),
+        'the native transport string must use an unmistakable string marker followed by the five-field pointer in canonical key order');
+      assert.deepStrictEqual(
+        JSON.parse(dispatched.activation_action.message.slice(messagePrefix.length)),
+        expectedMessage,
+        'the marked native transport string must round-trip to exactly the correlated five-field pointer');
+    });
+  } finally {
+    delete process.env.RUNTIME_ROLE_LIFECYCLE_TEST_CAPABILITY;
+    delete process.env.RUNTIME_ROLE_LIFECYCLE_FAKE_CAPABILITIES;
+  }
+});
+
+test('P4 RED dispatch: root-source may use an exact live Claude target after the short-lived entrypoint composition expires', () => {
+  process.env.RUNTIME_ROLE_LIFECYCLE_TEST_CAPABILITY = 'rcc-node-root-source-live-peer-capability';
+  process.env.RUNTIME_ROLE_LIFECYCLE_FAKE_CAPABILITIES = '["claude-sendmessage"]';
+  try {
+    withProject('rcc-node-dispatch-root-source-live-peer-wave', (ctx) => {
+      const sessionKey = 'p4-root-source-live-peer-session-' + crypto.randomBytes(4).toString('hex');
+      const bindingResult = rll.createMainOrchestratorBinding(
+        ctx.projDir, { ok: true, provider: 'claude-hook', runtime_session_key: sessionKey }, ctx.worktreeId, ctx.planDigest, 3600,
+      );
+      assert.strictEqual(bindingResult.ok, true, 'fixture: MainOrchestratorBinding must mint: ' + JSON.stringify(bindingResult));
+      primeClaudeSendMessageMechanismProof(ctx, sessionKey);
+      const currentTarget = buildResumeHandleFixture(ctx, sessionKey, 'context-provider');
+      const target = { consumed: writeResumeHandleFixture(currentTarget) };
+
+      // Real host registries retain immutable history across sessions. A
+      // structurally valid but expired handle for an unrelated actor is
+      // routine stale history, not corruption, and must not poison lookup of
+      // the exact current target. The live P4 registry that exposed this gap
+      // contained prior-session handles alongside the current one.
+      const stale = buildResumeHandleFixture(
+        ctx, 'p4-expired-history-session-' + crypto.randomBytes(4).toString('hex'), 'arch-testing',
+      );
+      writeResumeHandleFixture(stale, {
+        created_at: new Date(Date.now() - 7200000).toISOString().replace(/\.\d{3}Z$/, 'Z'),
+        expiry: new Date(Date.now() - 3600000).toISOString().replace(/\.\d{3}Z$/, 'Z'),
+      });
+
+      // Models the live P4 chronology: the two-minute entrypoint composition
+      // is no longer advertised by the generic capability manifest, while
+      // the hour-bounded main-session and exact observed target remain live.
+      process.env.RUNTIME_ROLE_LIFECYCLE_FAKE_CAPABILITIES = '[]';
+      assert.deepStrictEqual(rll.getCapabilityManifest(ctx.projDir), { ok: true, availableDrivers: [] });
+
+      const intentB64 = base64urlIntent({
+        target_role: 'context-provider',
+        question: 'dispatch-root-source-live-peer-after-composition-expiry fixture question',
+        expected_result_kind: 'TEST_RESULT',
+        expiry: isoInFuture(1800000),
+      });
+      const published = runTestCli([
+        'publish-request', '--coordination-root', ctx.coordRoot, '--plan', ctx.planPath,
+        '--subject-bundle', ctx.subjectBundlePath, '--intent', intentB64,
+      ]);
+      const publishedData = assertCliResult(published, { command: 'publish-request', status: 'SUCCESS', detail_code: 'NONE' });
+
+      const dispatched = rc.dispatchCanonical(
+        { 'coordination-root': ctx.coordRoot, request: publishedData.artifact_ref },
+        { requiredDriver: 'claude-sendmessage', rootSourceDispatch: true },
+      );
+      const activationObj = JSON.parse(fs.readFileSync(dispatched.artifact_ref, 'utf8'));
+      assert.strictEqual(activationObj.selected_driver, 'claude-sendmessage');
+      assert.strictEqual(activationObj.native_target_binding_id, target.consumed.binding_id,
+        'root-source dispatch must retain the exact live target binding, never fabricate generic capability');
+      assert.strictEqual(dispatched.activation_action.target_name, target.consumed.teammate_name);
+    });
+  } finally {
+    delete process.env.RUNTIME_ROLE_LIFECYCLE_TEST_CAPABILITY;
+    delete process.env.RUNTIME_ROLE_LIFECYCLE_FAKE_CAPABILITIES;
+  }
+});
+
+test('RED dispatch: wrong session, wrong role, wrong worktree, wrong plan, an expired handle, ambiguous handles, a present identity fence, or a no-longer-live RoleActorBinding must all remain DRIVER_UNAVAILABLE for requiredDriver=claude-sendmessage', () => {
+  const cases = [
+    { label: 'wrong-session', corrupt: (fx) => writeResumeHandleFixture(fx, { session: 'wrong-session-does-not-correlate' }) },
+    { label: 'wrong-role', corrupt: (fx) => writeResumeHandleFixture(fx, { role: 'arch-platform', teammate_name: 'arch-platform' }) },
+    { label: 'wrong-worktree', corrupt: (fx) => writeResumeHandleFixture(fx, { worktree_id: crypto.randomBytes(32).toString('hex') }) },
+    { label: 'wrong-plan', corrupt: (fx) => writeResumeHandleFixture(fx, { plan_digest: crypto.randomBytes(32).toString('hex') }) },
+    { label: 'expired', corrupt: (fx) => writeResumeHandleFixture(fx, { expiry: new Date(Date.now() - 3600000).toISOString().replace(/\.\d{3}Z$/, 'Z') }) },
+    {
+      label: 'ambiguous',
+      corrupt: (fx) => {
+        writeResumeHandleFixture(fx);
+        writeResumeHandleFixture(fx, { binding_id: crypto.randomBytes(16).toString('hex') });
+      },
+    },
+    {
+      label: 'fenced-identity',
+      corrupt: (fx, ctx) => {
+        writeResumeHandleFixture(fx);
+        const fencePublish = rll.publishClaudeAuthorityFence(
+          ctx.projDir, rll.computeClaudeAuthorityIdentityId(ctx.projDir, 'claude-hook', fx.handleRecord.session, fx.agentId),
+        );
+        assert.strictEqual(fencePublish.ok, true, 'fixture: fence publish must succeed');
+      },
+    },
+    {
+      // Proxy for a terminal (STOPPING/STOPPED/QUARANTINED) role actor: the
+      // resume handle's own backing RoleActorBinding is no longer live.
+      label: 'actor-binding-no-longer-live',
+      corrupt: (fx, ctx) => {
+        writeResumeHandleFixture(fx);
+        fs.rmSync(rll.roleActorBindingPathFor(ctx.projDir, fx.actorBinding.binding_id), { force: true });
+      },
+    },
+  ];
+
+  for (const { label, corrupt } of cases) {
+    process.env.RUNTIME_ROLE_LIFECYCLE_TEST_CAPABILITY = 'rcc-node-resumehandle-fixture-capability';
+    process.env.RUNTIME_ROLE_LIFECYCLE_FAKE_CAPABILITIES = '["claude-sendmessage"]';
+    try {
+      withProject('rcc-node-dispatch-resumehandle-neg-' + label, (ctx) => {
+        const sessionKey = 'p4-resumehandle-neg-session-' + crypto.randomBytes(4).toString('hex');
+        const bindingResult = rll.createMainOrchestratorBinding(
+          ctx.projDir, { ok: true, provider: 'claude-hook', runtime_session_key: sessionKey }, ctx.worktreeId, ctx.planDigest, 3600,
+        );
+        assert.strictEqual(bindingResult.ok, true, label + ' fixture: createMainOrchestratorBinding must succeed');
+        primeClaudeSendMessageMechanismProof(ctx, sessionKey);
+        const fx = buildResumeHandleFixture(ctx, sessionKey, 'arch-testing');
+        corrupt(fx, ctx);
+
+        const intentB64 = base64urlIntent({
+          target_role: 'arch-testing',
+          question: 'dispatch-resumehandle-negative-' + label + ' fixture question',
+          expected_result_kind: 'TEST_RESULT',
+          expiry: isoInFuture(1800000),
+        });
+        const published = runTestCli([
+          'publish-request', '--coordination-root', ctx.coordRoot, '--plan', ctx.planPath,
+          '--subject-bundle', ctx.subjectBundlePath, '--intent', intentB64,
+        ]);
+        const publishedData = assertCliResult(published, { command: 'publish-request', status: 'SUCCESS', detail_code: 'NONE' });
+
+        assert.throws(
+          () => rc.dispatchCanonical(
+            { 'coordination-root': ctx.coordRoot, request: publishedData.artifact_ref },
+            { requiredDriver: 'claude-sendmessage', rootSourceDispatch: true },
+          ),
+          (err) => err && err.status === 'UNAVAILABLE' && err.detailCode === 'DRIVER_UNAVAILABLE',
+          label + ': expected DRIVER_UNAVAILABLE for a resume handle that must never correlate',
+        );
+      });
+    } finally {
+      delete process.env.RUNTIME_ROLE_LIFECYCLE_TEST_CAPABILITY;
+      delete process.env.RUNTIME_ROLE_LIFECYCLE_FAKE_CAPABILITIES;
+    }
+  }
 });

@@ -23,6 +23,11 @@ const HOOK = path.resolve(__dirname, '../../.claude/hooks/context-provider-gate.
 const rll = require(path.resolve(__dirname, '../lib/runtime-role-lifecycle.cjs'));
 const rc = require(path.resolve(__dirname, '../lib/runtime-consultation.cjs'));
 const rbc = require(path.resolve(__dirname, '../lib/runtime-bridge-codex.cjs'));
+const {
+  primeClaudeId01V2ActorProof,
+  claudeId01V2SessionEvidenceFor,
+} = require('./fixtures/runtime-claude-id01-v2-fixture.cjs');
+const CLAUDE_SESSION_IDENTITY_PRELOAD = path.resolve(__dirname, 'fixtures/runtime-claude-session-identity-preload.cjs');
 const S16_RLL_PATH = path.resolve(__dirname, '../lib/runtime-role-lifecycle.cjs');
 const S16_TEST_CAPABILITY = 'cp-gate-s16-fixture-capability';
 const S16_EXECUTOR_CAPABILITY = 'cp-gate-s16-executor-capability';
@@ -53,9 +58,15 @@ function runHook(payload, env = {}) {
   // that still wins over this deletion (object-spread order below).
   const baseEnv = { ...process.env };
   delete baseEnv.CLAUDE_PROJECT_DIR;
-  const result = spawnSync('node', [HOOK], {
+  const childEnv = { ...baseEnv, ...env };
+  if (childEnv.RUNTIME_TEST_CLAUDE_SESSION_EVIDENCE) {
+    childEnv.NODE_OPTIONS = [childEnv.NODE_OPTIONS, '--require', CLAUDE_SESSION_IDENTITY_PRELOAD]
+      .filter(Boolean)
+      .join(' ');
+  }
+  const result = spawnSync('node', ['--require', CLAUDE_SESSION_IDENTITY_PRELOAD, HOOK], {
     input,
-    env: { ...baseEnv, ...env },
+    env: childEnv,
     encoding: 'utf8',
   });
   return { exit: result.status, stdout: result.stdout, stderr: result.stderr };
@@ -101,6 +112,7 @@ function writeJsonSessionFlag(sessionId, payload) {
 if (process.env.S16_RED_CASE) {
   const s16Cases = {
     'S16-LG-CONSULT-ROOT-INJECT-01': s16LgConsultRootInject01,
+    'S16-LG-MIXED-REVIEW-REQUEST-INJECT-01': s16LgMixedReviewRequestInject01,
     'S16-LG-CONSULT-ROOT-STATUS-INJECT-01': s16LgConsultRootStatusInject01,
     'S16-LG-ROOT-SOURCE-INJECT-01': s16LgRootSourceInject01,
     'S16-LG-ROOT-SOURCE-STATUS-INJECT-01': s16LgRootSourceStatusInject01,
@@ -816,13 +828,28 @@ function validateCanonicalArtifactAsCaller(proj, planDigest, sessionId, agentTyp
     null,
   );
   assert.strictEqual(grant.ok, true, 'validation caller grant must mint: ' + JSON.stringify(grant));
+  const evidence = claudeId01V2SessionEvidenceFor(proj, sessionId);
+  assert.ok(evidence, 'validation caller session evidence must resolve');
   const result = spawnSync(process.execPath, [
+    '--require', CLAUDE_SESSION_IDENTITY_PRELOAD,
     path.resolve(__dirname, '../lib/runtime-consultation.cjs'),
     'validate',
     ...rest,
     '--requester-binding',
     grant.grantId,
-  ], { cwd: proj, encoding: 'utf8' });
+  ], {
+    cwd: proj,
+    encoding: 'utf8',
+    env: {
+      ...process.env,
+      RUNTIME_TEST_CLAUDE_SESSION_EVIDENCE: Buffer.from(JSON.stringify({
+        projectRoot: proj,
+        repoId: rll.computeRepoId(proj),
+        sessionId,
+        record: evidence.record,
+      })).toString('base64url'),
+    },
+  });
   result.grantId = grant.grantId;
   result.grantRecord = rll.readRegistryRecord(rll.roleCommandGrantPathFor(proj, grant.grantId));
   result.consumedRecord = rll.readRegistryRecord(rll.roleCommandGrantConsumedMarkerPathFor(proj, grant.grantId));
@@ -1576,6 +1603,18 @@ function writeLifecyclePlanFixture(projectRoot, waveSlug) {
   const waveDir = path.join(projectRoot, '.planning', 'wave-' + waveSlug);
   fs.mkdirSync(waveDir, { recursive: true });
   fs.writeFileSync(path.join(waveDir, 'PLAN.md'), '# fixture plan for context-provider-gate.test.js lifecycle-grant-injection tests (' + waveSlug + ')\n');
+  const claudeDir = path.join(projectRoot, '.claude');
+  fs.mkdirSync(claudeDir, { recursive: true });
+  fs.writeFileSync(path.join(claudeDir, 'model-profiles.json'), JSON.stringify({
+    current: 'balanced',
+    profiles: {
+      balanced: {
+        description: 'context-provider gate test profile',
+        default_model: 'sonnet',
+        overrides: {},
+      },
+    },
+  }));
 }
 
 function lgEnsureDigest(roles) {
@@ -2942,8 +2981,14 @@ function extractRequesterBinding(command) {
 // _run_cli_command helper.
 function runRewrittenCliCommand(rewrittenCommand) {
   const tokens = rll.parsePosixDirect(rewrittenCommand);
-  assert.ok(Array.isArray(tokens) && tokens[0] === 'node', 'runRewrittenCliCommand: rewritten command must still be a canonical direct node invocation: ' + rewrittenCommand);
-  const result = spawnSync('node', tokens.slice(1), { encoding: 'utf8' });
+  const nodeExecutable = Array.isArray(tokens) && typeof tokens[0] === 'string' ? tokens[0] : '';
+  const isCanonicalNode = nodeExecutable === 'node'
+    || (fs.existsSync(nodeExecutable)
+      && fs.realpathSync(nodeExecutable) === fs.realpathSync(process.execPath));
+  assert.ok(isCanonicalNode, 'runRewrittenCliCommand: rewritten command must still use the current canonical Node executable: ' + rewrittenCommand);
+  const result = spawnSync(nodeExecutable, ['--require', CLAUDE_SESSION_IDENTITY_PRELOAD, ...tokens.slice(1)], {
+    encoding: 'utf8',
+  });
   return { exit: result.status, stdout: result.stdout, stderr: result.stderr };
 }
 
@@ -3031,6 +3076,23 @@ function mintClaudeId01ProbeAction(projDir, agentType, sessionId, suffix) {
 }
 
 function primeClaudeId01Trace(projDir, agentType, sessionId, agentId) {
+  const plan = rll.discoverPlan(projDir);
+  const existing = plan.ok
+    ? rll.checkClaudeId01ProofComplete(
+      projDir, sessionId, rll.computeWorktreeId(projDir), plan.planDigest, agentType, agentId,
+    )
+    : { ok: false };
+  if (existing.ok) {
+    const existingEvidence = claudeId01V2SessionEvidenceFor(projDir, sessionId);
+    assert.ok(existingEvidence, 'existing CLAUDE-ID-01 proof must retain session evidence');
+    process.env.RUNTIME_TEST_CLAUDE_SESSION_EVIDENCE = Buffer.from(JSON.stringify({
+      projectRoot: projDir,
+      repoId: rll.computeRepoId(projDir),
+      sessionId,
+      record: existingEvidence.record,
+    })).toString('base64url');
+    return;
+  }
   const actionA = mintClaudeId01ProbeAction(projDir, agentType, sessionId, 'a-' + agentId);
   const actionB = mintClaudeId01ProbeAction(projDir, agentType, sessionId, 'b-' + agentId);
   rll.recordClaudeId01SubagentStartObservation(projDir, { sessionId, agentId, agentType, actionId: actionA });
@@ -3044,15 +3106,17 @@ function primeClaudeId01Trace(projDir, agentType, sessionId, agentId) {
     agentType,
     actionId: actionB,
   });
-  const proof = rll.checkClaudeId01ProofComplete(
-    projDir,
+  primeClaudeId01V2ActorProof({
+    projectRoot: projDir, agentType, sessionId, agentId, actionId: actionA,
+    prefix: 'context-provider-v2',
+  });
+  const evidence = claudeId01V2SessionEvidenceFor(projDir, sessionId);
+  process.env.RUNTIME_TEST_CLAUDE_SESSION_EVIDENCE = Buffer.from(JSON.stringify({
+    projectRoot: projDir,
+    repoId: rll.computeRepoId(projDir),
     sessionId,
-    rll.computeWorktreeId(projDir),
-    rll.discoverPlan(projDir).planDigest,
-    agentType,
-    agentId,
-  );
-  assert.strictEqual(proof.ok, true, 'global CLAUDE-ID-01 capability must be complete: ' + JSON.stringify(proof));
+    record: evidence.record,
+  })).toString('base64url');
 }
 
 // RQ1-CLAUDEID01 (M7/WP4 FINAL COMPLETENESS correction, 2026-08-09):
@@ -3346,6 +3410,18 @@ function writeGroupAFixtures(proj, waveSlug) {
   // diagnostic before this fixture helper was fixed to pre-create it.
   const coordRootDir = path.join(proj, '.planning', 'coordination');
   fs.mkdirSync(coordRootDir, { recursive: true });
+  const claudeDir = path.join(proj, '.claude');
+  fs.mkdirSync(claudeDir, { recursive: true });
+  fs.writeFileSync(path.join(claudeDir, 'model-profiles.json'), JSON.stringify({
+    current: 'balanced',
+    profiles: {
+      balanced: {
+        description: 'context-provider gate Group A/S16 test profile',
+        default_model: 'sonnet',
+        overrides: {},
+      },
+    },
+  }));
   return { planFile, subjectBundleFile, coordRootDir };
 }
 
@@ -3595,7 +3671,7 @@ function publishRequestCommand(coordRootDir, planFile, subjectBundleFile, intent
     assert.strictEqual(mintResult.ok, true, 'GROUPC-1 fixture: grant mint must succeed: ' + JSON.stringify(mintResult));
 
     const argv = rest.concat(['--requester-binding', mintResult.grantId]);
-    const cliResult = spawnSync('node', [IMPL_RC, 'publish-request'].concat(argv), { encoding: 'utf8' });
+    const cliResult = spawnSync('node', ['--require', CLAUDE_SESSION_IDENTITY_PRELOAD, IMPL_RC, 'publish-request'].concat(argv), { encoding: 'utf8' });
     let parsed = null;
     try { parsed = JSON.parse(cliResult.stdout); } catch { /* handled by the assertion below */ }
     assert.ok(parsed && parsed.ok === true, 'GROUPC-1 fixture: a genuinely-granted publish-request must succeed: ' + JSON.stringify({ cliResult, parsed }));
@@ -3660,7 +3736,7 @@ function publishRequestCommand(coordRootDir, planFile, subjectBundleFile, intent
     assert.strictEqual(mintResult.ok, true, 'GROUPC-2 fixture: grant mint must succeed: ' + JSON.stringify(mintResult));
 
     const argv = rest.concat(['--requester-binding', mintResult.grantId]);
-    const cliResult = spawnSync('node', [IMPL_RC, 'accept-result'].concat(argv), { encoding: 'utf8' });
+    const cliResult = spawnSync('node', ['--require', CLAUDE_SESSION_IDENTITY_PRELOAD, IMPL_RC, 'accept-result'].concat(argv), { encoding: 'utf8' });
     let parsed = null;
     try { parsed = JSON.parse(cliResult.stdout); } catch { /* handled by the assertion below */ }
     assert.ok(parsed && parsed.ok === true, 'GROUPC-2 fixture: a genuinely-granted, same-actor accept-result against a real ANSWERED candidate must succeed: ' + JSON.stringify({ cliResult, parsed }));
@@ -3712,7 +3788,7 @@ function publishRequestCommand(coordRootDir, planFile, subjectBundleFile, intent
     assert.strictEqual(mintResult.ok, true, 'GROUPC-3 fixture: grant mint must succeed: ' + JSON.stringify(mintResult));
 
     const argv = rest.concat(['--requester-binding', mintResult.grantId]);
-    const cliResult = spawnSync('node', [IMPL_RC, 'accept-result'].concat(argv), { encoding: 'utf8' });
+    const cliResult = spawnSync('node', ['--require', CLAUDE_SESSION_IDENTITY_PRELOAD, IMPL_RC, 'accept-result'].concat(argv), { encoding: 'utf8' });
     let parsed = null;
     try { parsed = JSON.parse(cliResult.stdout); } catch { /* handled by the assertion below */ }
     assert.ok(parsed && parsed.ok === false, 'GROUPC-3: a different, same-role actor accept-result attempt against the SAME already-open request must be REJECTED, never silently accepted: ' + JSON.stringify({ cliResult, parsed }));
@@ -4258,6 +4334,37 @@ function s16LgConsultRootInject01() {
 }
 s16HookCase('S16-LG-CONSULT-ROOT-INJECT-01', s16LgConsultRootInject01);
 
+// P5 U2 live-wiring: LIFECYCLE_SUBCOMMAND_SCOPE_RESOLVERS had no entry for
+// mixed-review-request at all -- confirmed by direct repro (spawning the
+// real hook against a real mixed-review-request Bash command string
+// returned ordinary passthrough, never a rewrite), meaning the real,
+// intended invocation path (an agent issuing a direct Bash tool call,
+// relying on this hook to auto-mint+inject --lifecycle-binding, exactly
+// like consult-root) never worked. Mirrors s16LgConsultRootInject01 exactly,
+// with mixed-review-request's own intent shape (question/requester_role/
+// reviewed_head/target_role, no expected_result_kind/evidence_policy) and
+// its one extra required flag, --subject-text-file.
+function s16LgMixedReviewRequestInject01() {
+  const proj = fs.realpathSync(makeTempProject());
+  try {
+    writeLifecyclePlanFixture(proj, 's16-lg-mixed-review-request');
+    const intent = s16IntentToken({
+      requester_role: 'arch-testing', target_role: 'arch-platform',
+      question: 'S16 mixed-review-request hook injection fixture',
+      reviewed_head: 'a'.repeat(40),
+    });
+    const subjectTextFile = path.join(proj, 's16-mixed-review-subject.txt');
+    fs.writeFileSync(subjectTextFile, 'S16 mixed-review-request hook injection fixture subject text');
+    s16AssertInjectedGrant(
+      proj, 's16-lg-mixed-review-request-session', 'mixed-review-request',
+      ['--project-root', proj, '--intent', intent, '--subject-text-file', subjectTextFile], 'arch-testing',
+      s16GrantDigest('mixed-review-request', intent),
+    );
+    console.log('S16-LG-MIXED-REVIEW-REQUEST-INJECT-01: PASS');
+  } finally { cleanupLifecycleFixture(proj); }
+}
+s16HookCase('S16-LG-MIXED-REVIEW-REQUEST-INJECT-01', s16LgMixedReviewRequestInject01);
+
 function s16LgConsultRootStatusInject01() {
   const proj = fs.realpathSync(makeTempProject());
   try {
@@ -4364,6 +4471,7 @@ s16HookCase('S16-LG-ROOT-SOURCE-STATUS-INJECT-01', s16LgRootSourceStatusInject01
 // ════════════════════════════════════════════════════════════════════════
 
 const AGENT_SPAWN_GATE_HOOK_FOR_HARNESS_SUFFIX = path.resolve(__dirname, '../../.claude/hooks/agent-spawn-execution-gate.js');
+const PREMATURE_EXECUTION_GATE_HOOK_FOR_ROOT_SOURCE = path.resolve(__dirname, '../../.claude/hooks/premature-execution-gate.js');
 
 // Mints the real root-source action AND returns the action's own spawn
 // payload ({agentTypeP, nameP, bootstrapMessage} -- the bare, canonical
@@ -4460,6 +4568,21 @@ function runRootSourceRequesterBash(command, projDir, claimedAgentType, sessionI
   );
 }
 
+function runPrematureRootSourceBash(command, projDir, claimedAgentType, sessionId, agentId) {
+  const result = spawnSync('node', [PREMATURE_EXECUTION_GATE_HOOK_FOR_ROOT_SOURCE], {
+    input: JSON.stringify({
+      tool_name: 'Bash',
+      tool_input: { command },
+      session_id: sessionId,
+      agent_type: claimedAgentType,
+      agent_id: agentId,
+    }),
+    env: Object.assign({}, process.env, { NODE_ENV: 'test', CLAUDE_PROJECT_DIR: projDir, CLAUDE_WAVE_SLUG: '' }),
+    encoding: 'utf8',
+  });
+  return { exit: result.status, stdout: result.stdout, stderr: result.stderr };
+}
+
 // HARNESS-SUFFIX-POSITIVE-UNSUFFIXED (regression guard, must ALREADY pass
 // today -- requirement 4): an UNSUFFIXED toolkit-specialist (bare canonical
 // agent_type, the harness's own first-spawn-in-session shape) with a real,
@@ -4496,6 +4619,74 @@ function runRootSourceRequesterBash(command, projDir, claimedAgentType, sessionI
     const grantId = extractRequesterBinding(body.hookSpecificOutput.updatedInput.command);
     assert.match(grantId || '', /^[0-9a-f]{32}$/, 'HARNESS-SUFFIX-POSITIVE-UNSUFFIXED: a genuine 128-bit hex grant id must be injected: ' + JSON.stringify(body));
     console.log('HARNESS-SUFFIX-POSITIVE-UNSUFFIXED unsuffixed toolkit-specialist with a real live matching root-source binding receives a genuine injected grant (regression guard): PASS');
+  } finally {
+    cleanupLifecycleFixture(proj);
+  }
+}
+
+// P4-ROOT-FIRST-BASH-CANONICALIZATION: a live root-source actor's first Bash
+// value is a proposal, not authority. A diagnostic/decoding proposal must be
+// replaced by the immutable action's publish_command and receive the same
+// genuine requester grant as an already-exact proposal.
+{
+  const proj = fs.realpathSync(makeTempProject());
+  try {
+    const waveSlug = 'root-first-bash-canonical-wave';
+    spawnSync('git', ['branch', '-m', waveSlug], { cwd: proj, encoding: 'utf8' });
+    writeGroupAFixtures(proj, waveSlug);
+    const sessionId = 'root-first-bash-canonical-session';
+    const agentId = 'root-first-bash-canonical-agent';
+    const minted = harnessSuffixMintRootSourceAction(proj, sessionId, 'P4 root first Bash canonicalization fixture');
+    harnessSuffixRealAgentGate(proj, sessionId, minted.agentTypeP, minted.nameP, minted.bootstrapMessage);
+    harnessSuffixRealSubagentStart(proj, 'toolkit-specialist', sessionId, agentId);
+    const expectedPublishCommand = minted.bootstrapMessage.split('\n')[3].slice('publish_command='.length);
+    const proposedDiagnostic = "printf '%s' 'opaque-intent' | base64 -d; echo";
+    const premature = runPrematureRootSourceBash(
+      proposedDiagnostic, proj, 'toolkit-specialist', sessionId, agentId,
+    );
+    assert.strictEqual(
+      premature.exit,
+      0,
+      'the PREP gate must defer an authenticated root-source first Bash proposal to the sole canonicalizing hook: ' + JSON.stringify(premature),
+    );
+    assert.strictEqual(
+      premature.stdout,
+      '',
+      'the PREP gate must not emit an independent allow/rewrite that races the canonicalizing hook',
+    );
+    const r = runRootSourceRequesterBash(
+      proposedDiagnostic, proj, 'toolkit-specialist', sessionId, agentId,
+    );
+    const body = assertPreToolUseAllowRewrite(r,
+      'P4 root-source initial Bash proposal must canonicalize to the immutable publish_command');
+    const rewritten = body.hookSpecificOutput.updatedInput.command;
+    const grantId = extractRequesterBinding(rewritten);
+    assert.match(grantId || '', /^[0-9a-f]{32}$/,
+      'canonicalized initial publish must receive a genuine one-use requester grant');
+    assert.strictEqual(
+      rewritten,
+      expectedPublishCommand + " '--requester-binding' '" + grantId + "'",
+      'only the action-derived publish_command plus its hook-owned grant may execute',
+    );
+    assert.strictEqual(rewritten.includes('base64 -d'), false,
+      'the model-proposed diagnostic command must not survive updatedInput');
+    const executed = runRewrittenCliCommand(rewritten);
+    assert.strictEqual(
+      executed.exit,
+      0,
+      'the canonicalized initial publish must execute and create durable ingress: ' + JSON.stringify(executed),
+    );
+    const afterIngress = runPrematureRootSourceBash(
+      proposedDiagnostic, proj, 'toolkit-specialist', sessionId, agentId,
+    );
+    assert.strictEqual(
+      afterIngress.exit,
+      2,
+      'after ingress, an arbitrary root-source Bash proposal must return to the ordinary PREP denial path',
+    );
+    assert.match(afterIngress.stdout, /"decision":"block"/,
+      'the post-ingress denial must remain explicit and machine-readable');
+    console.log('P4-ROOT-FIRST-BASH-CANONICALIZATION proposal replaced by exact action-derived publish command: PASS');
   } finally {
     cleanupLifecycleFixture(proj);
   }
@@ -4788,5 +4979,23 @@ const HARNESS_SUFFIX_NEGATIVE_TABLE = [
     ].join('\n');
     const r = runSeq73HeredocCase(cmd, 'seq73-heredoc-b2');
     assertPreToolUseDeny(r, 'SEQ73-HEREDOC-B2');
+  });
+}
+
+{
+  const { test: windowsHookBudgetTest } = require('node:test');
+
+  windowsHookBudgetTest('WINDOWS-HOOK-BUDGET: context-provider gate timeout exceeds its process-observation budget', () => {
+    const settingsPath = path.resolve(__dirname, '../../.claude/settings.json');
+    const settings = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
+    const registrations = settings.hooks.PreToolUse.flatMap((group) => group.hooks || []);
+    const registration = registrations.find((hook) =>
+      typeof hook.command === 'string' && hook.command.includes('context-provider-gate.js'));
+
+    assert.ok(registration, 'context-provider-gate.js must be registered as a PreToolUse hook');
+    assert.ok(
+      registration.timeout >= 20,
+      'Claude hook timeout must exceed the 15-second Windows process-observation budget',
+    );
   });
 }

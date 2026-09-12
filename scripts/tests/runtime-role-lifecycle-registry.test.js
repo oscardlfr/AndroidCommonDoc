@@ -31,6 +31,15 @@ const path = require('node:path');
 const IMPL = path.resolve(__dirname, '../lib/runtime-role-lifecycle.cjs');
 const rll = require(IMPL);
 const rc = require(path.resolve(__dirname, '../lib/runtime-consultation.cjs'));
+const claudeHost = require(path.resolve(__dirname, '../lib/runtime-host-claude.cjs'));
+
+const claudeId01SessionEvidence = new Map();
+const originalProductionSessionIdentity = claudeHost.getProductionSessionIdentity;
+claudeHost.getProductionSessionIdentity = (projectRoot, sessionId) => {
+  const key = path.resolve(projectRoot) + '\0' + sessionId;
+  return claudeId01SessionEvidence.get(key)
+    || originalProductionSessionIdentity(projectRoot, sessionId);
+};
 
 function makeGitProject() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rll-registry-'));
@@ -48,6 +57,86 @@ function writePlanFixture(projectRoot, waveSlug) {
   fs.writeFileSync(planPath, '# fixture plan for runtime-role-lifecycle-registry.test.js\n');
   return planPath;
 }
+
+function p1NativeRoleAction() {
+  return {
+    kind: 'role-spawn',
+    runtime: 'claude-native',
+    payload: {
+      agent_type: 'arch-platform',
+      teammate_name: 'arch-platform',
+      bootstrap_message: 'bootstrap-Ã±\r\nsecond-line',
+    },
+  };
+}
+
+test('P1-A01-A06 canonical renderer repairs presentation bytes and emits the closed five-key persistent support input', () => {
+  const action = p1NativeRoleAction();
+  for (const proposed of [
+    { subagent_type: 'arch-platform', prompt: `prefix:${action.payload.bootstrap_message}`, name: 'arch-platform' },
+    { subagent_type: 'arch-platform', prompt: `${action.payload.bootstrap_message}:suffix`, name: 'model-name', run_in_background: true },
+    { subagent_type: 'arch-platform', prompt: action.payload.bootstrap_message.replaceAll('\r\n', '\n') },
+    { subagent_type: 'arch-platform', prompt: `Explanation\n${action.payload.bootstrap_message}`, model: 'sonnet' },
+  ]) {
+    const rendered = rll.renderCanonicalNativeAgentInput(action, proposed, 'sonnet');
+    assert.strictEqual(rendered.ok, true, JSON.stringify(rendered));
+    assert.deepStrictEqual(rendered.canonicalInput, {
+      description: 'arch-platform runtime bootstrap',
+      subagent_type: 'arch-platform',
+      name: 'arch-platform',
+      prompt: action.payload.bootstrap_message,
+      run_in_background: true,
+    });
+    assert.strictEqual(Object.keys(rendered.canonicalInput).length, 5);
+    assert.strictEqual(rendered.modelDeviation, true);
+    assert.match(rendered.canonicalInputDigest, /^[0-9a-f]{64}$/);
+    assert.match(rendered.proposedInputDigest, /^[0-9a-f]{64}$/);
+  }
+});
+
+test('P1-A07-A10/A27-A30 canonical renderer denies authority and execution-changing fields', () => {
+  const action = p1NativeRoleAction();
+  const base = { subagent_type: 'arch-platform', prompt: action.payload.bootstrap_message };
+  const cases = [
+    [{ ...base, subagent_type: 'arch-testing' }, 'native-agent-input-subtype-mismatch'],
+    [{ ...base, run_in_background: false }, 'native-agent-input-background-mismatch'],
+    [{ ...base, model: 'opus' }, 'native-agent-input-model-mismatch'],
+    [{ ...base, resume: 'actor-id' }, 'native-agent-input-unknown-field'],
+    [{ ...base, isolation: 'worktree' }, 'native-agent-input-unknown-field'],
+    [{ ...base, team_name: 'team' }, 'native-agent-input-unknown-field'],
+    [{ ...base, invented: true }, 'native-agent-input-unknown-field'],
+  ];
+  for (const [proposed, reason] of cases) {
+    assert.deepStrictEqual(rll.renderCanonicalNativeAgentInput(action, proposed, 'sonnet'), { ok: false, reason });
+  }
+});
+
+test('P4 expiry correction keeps root-source foreground while support role startup is background', () => {
+  const support = rll.canonicalNativeAgentInputForAction(p1NativeRoleAction());
+  assert.strictEqual(support.run_in_background, true);
+
+  const rootSource = rll.canonicalNativeAgentInputForAction({
+    kind: 'root-source-spawn',
+    runtime: 'claude-native',
+    payload: {
+      agent_type: 'toolkit-specialist',
+      name: 'toolkit-specialist',
+      bootstrap_message: 'publish one bounded request then return',
+    },
+  });
+  assert.strictEqual(rootSource.run_in_background, false);
+  assert.deepStrictEqual(
+    rll.renderCanonicalNativeAgentInput(
+      { kind: 'root-source-spawn', runtime: 'claude-native', payload: {
+        agent_type: 'toolkit-specialist', name: 'toolkit-specialist',
+        bootstrap_message: 'publish one bounded request then return',
+      } },
+      { subagent_type: 'toolkit-specialist', run_in_background: true },
+      'sonnet',
+    ),
+    { ok: false, reason: 'native-agent-input-background-mismatch' },
+  );
+});
 
 // ── Identity ─────────────────────────────────────────────────────────────────
 
@@ -213,7 +302,7 @@ test('ensureSecureRegistryDir: creates a fresh directory at exactly mode 0700', 
     assert.strictEqual(result.ok, true);
     const st = fs.lstatSync(target);
     assert.ok(st.isDirectory());
-    assert.strictEqual(st.mode & 0o777, 0o700);
+    if (process.platform !== 'win32') assert.strictEqual(st.mode & 0o777, 0o700);
   } finally {
     fs.rmSync(rll.registryRepoDir(dir), { recursive: true, force: true });
     fs.rmSync(dir, { recursive: true, force: true });
@@ -226,13 +315,14 @@ test('ensureSecureRegistryDir: rejects a pre-existing symlink at the leaf BEFORE
     const realTarget = path.join(rll.registryRepoDir(dir), 'real-target-outside-scope');
     fs.mkdirSync(realTarget, { recursive: true });
     fs.chmodSync(realTarget, 0o755);
+    const targetModeBefore = fs.lstatSync(realTarget).mode & 0o777;
     const linkPath = path.join(rll.registryRepoDir(dir), 'symlinked-leaf');
     fs.symlinkSync(realTarget, linkPath);
     const result = rll.ensureSecureRegistryDir(linkPath);
     assert.strictEqual(result.ok, false);
     assert.strictEqual(result.reason, 'symlink');
     const stAfter = fs.lstatSync(realTarget);
-    assert.strictEqual(stAfter.mode & 0o777, 0o755, 'the real target directory must be completely untouched');
+    assert.strictEqual(stAfter.mode & 0o777, targetModeBefore, 'the real target directory must be completely untouched');
     assert.ok(fs.lstatSync(linkPath).isSymbolicLink(), 'the symlink itself must remain, unresolved');
   } finally {
     fs.rmSync(rll.registryRepoDir(dir), { recursive: true, force: true });
@@ -249,7 +339,7 @@ test('writeRegistryRecordReplace + readRegistryRecord: round-trips exact bytes a
     const payload = { schema: 'test/v1', value: 42 };
     const writeResult = rll.writeRegistryRecordReplace(recPath, Buffer.from(JSON.stringify(payload), 'utf8'));
     assert.strictEqual(writeResult.ok, true);
-    assert.strictEqual(fs.lstatSync(recPath).mode & 0o777, 0o600);
+    if (process.platform !== 'win32') assert.strictEqual(fs.lstatSync(recPath).mode & 0o777, 0o600);
     const readResult = rll.readRegistryRecord(recPath);
     assert.strictEqual(readResult.ok, true);
     assert.deepStrictEqual(readResult.obj, payload);
@@ -622,6 +712,96 @@ test('computeActionTtlSeconds: a binding with <1s remaining fails closed -- neve
   void nowIso;
 });
 
+test('P1-NATIVE-TTL-POLICY: policy v2 accepts omitted/default/max native startup budgets and rejects an over-limit value', () => {
+  const shipped = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../lib/runtime-collaboration-policy.json'), 'utf8'));
+  const omitted = JSON.parse(JSON.stringify(shipped));
+  delete omitted.claude_native_startup_timeout_seconds;
+  assert.strictEqual(rll.isValidPolicyV2(omitted), true, 'omitted native startup budget must retain the 480s default');
+  assert.strictEqual(rll.isValidPolicyV2(Object.assign({}, omitted, { claude_native_startup_timeout_seconds: 1 })), true);
+  assert.strictEqual(rll.isValidPolicyV2(Object.assign({}, omitted, { claude_native_startup_timeout_seconds: 600 })), true);
+  assert.strictEqual(rll.isValidPolicyV2(Object.assign({}, omitted, { claude_native_startup_timeout_seconds: 601 })), false);
+});
+
+test('P1-NATIVE-TTL-SCOPE: only supported claude-native Agent startups receive the separate budget; supervisor and wrong pairs stay capped at 120', () => {
+  // This contract was briefly changed to give a supervisor-start its own startup budget, on the
+  // reasoning that a batch which must stand up one app-server per role needs more than the ordinary
+  // ceiling. The full functional Bats roster, run under WSL where that suite is qualified, showed
+  // why that was wrong: four ratified invariants in runtime-consultation-bridge.bats depend on this
+  // action window staying bounded by ready_timeout_seconds, and one of them -- TTL-02 -- tampers a
+  // claim to created_at + 60s under a 10s policy and requires consumption to be REJECTED. Widening
+  // the window widens exactly what a tampered one-use execution claim can get away with. The launch
+  // authority stays short-lived; retained service authority is bounded separately by
+  // --session-expiry, the min of the main binding's expiry and the session generation's.
+  const policy = { ready_timeout_seconds: 120, claude_native_startup_timeout_seconds: 480 };
+  const longBinding = new Date(Date.now() + 540000).toISOString().replace(/\.\d{3}Z$/, 'Z');
+  const shortBinding = new Date(Date.now() + 90000).toISOString().replace(/\.\d{3}Z$/, 'Z');
+  for (const kind of ['role-spawn', 'root-source-spawn']) {
+    const native = rll.effectiveActionTtlSeconds(policy, longBinding, { kind, runtime: 'claude-native' });
+    assert.strictEqual(native.ok, true);
+    assert.ok(native.ttlSeconds >= 478 && native.ttlSeconds <= 480, JSON.stringify(native));
+  }
+  const boundedByAuthority = rll.effectiveActionTtlSeconds(policy, shortBinding, { kind: 'role-spawn', runtime: 'claude-native' });
+  assert.strictEqual(boundedByAuthority.ok, true);
+  assert.ok(boundedByAuthority.ttlSeconds >= 88 && boundedByAuthority.ttlSeconds <= 90, JSON.stringify(boundedByAuthority));
+
+  // Everything that is NOT a supported native startup pair stays on the ordinary ceiling. The
+  // supervisor-start + claude-native mismatch is covered here too; it was not before.
+  for (const scope of [
+    { kind: 'supervisor-start', runtime: 'host-process' },
+    { kind: 'supervisor-start', runtime: 'claude-native' },
+    { kind: 'role-spawn', runtime: 'host-process' },
+    { kind: 'team-ensure', runtime: 'claude-native' },
+  ]) {
+    const ordinary = rll.effectiveActionTtlSeconds(policy, longBinding, scope);
+    assert.strictEqual(ordinary.ok, true);
+    assert.ok(ordinary.ttlSeconds >= 118 && ordinary.ttlSeconds <= 120, JSON.stringify({ scope, ordinary }));
+  }
+
+  // And a policy key that no longer grants anything must not quietly grant something: a
+  // codex_supervisor_startup_timeout_seconds in the policy cannot lift the supervisor's ceiling.
+  const withDeadKey = Object.assign({}, policy, { codex_supervisor_startup_timeout_seconds: 300 });
+  const stillCapped = rll.effectiveActionTtlSeconds(withDeadKey, longBinding, { kind: 'supervisor-start', runtime: 'host-process' });
+  assert.strictEqual(stillCapped.ok, true);
+  assert.ok(stillCapped.ttlSeconds >= 118 && stillCapped.ttlSeconds <= 120,
+    'a supervisor start must stay on the ordinary ceiling even if the policy carries the retired key: '
+    + JSON.stringify(stillCapped));
+});
+
+test('P1-NATIVE-TTL-BOUNDARIES: fake-clock 121s/479s startup budgets are exact and authority fails at its exact expiry', () => {
+  const prior = {
+    nodeEnv: process.env.NODE_ENV,
+    capability: process.env.RUNTIME_ROLE_LIFECYCLE_TEST_CAPABILITY,
+    fixedNow: process.env.RUNTIME_ROLE_LIFECYCLE_FIXED_NOW_MS,
+  };
+  const fixedNow = 1700000000000;
+  process.env.NODE_ENV = 'test';
+  process.env.RUNTIME_ROLE_LIFECYCLE_TEST_CAPABILITY = 'p1-native-ttl-fixed-clock';
+  process.env.RUNTIME_ROLE_LIFECYCLE_FIXED_NOW_MS = String(fixedNow);
+  try {
+    const binding600 = new Date(fixedNow + 600000).toISOString().replace(/\.\d{3}Z$/, 'Z');
+    for (const seconds of [121, 479]) {
+      const policy = { ready_timeout_seconds: 120, claude_native_startup_timeout_seconds: seconds };
+      assert.deepStrictEqual(
+        rll.effectiveActionTtlSeconds(policy, binding600, { kind: 'role-spawn', runtime: 'claude-native' }),
+        { ok: true, ttlSeconds: seconds },
+      );
+    }
+    const exactExpiry = new Date(fixedNow).toISOString().replace(/\.\d{3}Z$/, 'Z');
+    assert.deepStrictEqual(
+      rll.effectiveActionTtlSeconds(
+        { ready_timeout_seconds: 120, claude_native_startup_timeout_seconds: 480 },
+        exactExpiry,
+        { kind: 'root-source-spawn', runtime: 'claude-native' },
+      ),
+      { ok: false, reason: 'binding-remaining-lifetime-insufficient' },
+    );
+  } finally {
+    if (prior.nodeEnv === undefined) delete process.env.NODE_ENV; else process.env.NODE_ENV = prior.nodeEnv;
+    if (prior.capability === undefined) delete process.env.RUNTIME_ROLE_LIFECYCLE_TEST_CAPABILITY; else process.env.RUNTIME_ROLE_LIFECYCLE_TEST_CAPABILITY = prior.capability;
+    if (prior.fixedNow === undefined) delete process.env.RUNTIME_ROLE_LIFECYCLE_FIXED_NOW_MS; else process.env.RUNTIME_ROLE_LIFECYCLE_FIXED_NOW_MS = prior.fixedNow;
+  }
+});
+
 test('ensure: a binding with <1s remaining lifetime is rejected end-to-end, never mints a surviving action (point A.5 adversarial)', () => {
   const dir = makeGitProject();
   try {
@@ -822,7 +1002,16 @@ test('createRoleActorBinding: rejects a malformed worktree_id/plan_digest (not e
     assert.strictEqual(badGenerationWrongLength.ok, false, 'a 64-hex value must never satisfy the 32-exact CSPRNG contract: ' + JSON.stringify(badGenerationWrongLength));
     assert.strictEqual(badGenerationWrongLength.reason, 'invalid-session-generation-id');
 
-    for (const badTtl of [-1, 0, 1.5, NaN, Infinity, 121, '120']) {
+    // P4 correction: RoleActorBinding is a PERSISTENT support-plane lifecycle
+    // primitive (READY/WAITING/BUSY across idle gaps), not a role-spawn-
+    // action-scoped one -- its own TTL ceiling is now
+    // ROLE_ACTOR_BINDING_TTL_CEILING_SECONDS (3600, matching
+    // SESSION_GENERATION_TTL_SECONDS), genuinely separate from
+    // ACTION_TTL_CEILING_SECONDS (120, unchanged for startup actions and
+    // every other existing caller). 121 is deliberately NO LONGER in this
+    // rejected-ttl list (it used to be, when 120 was this binding's own
+    // ceiling too) -- 3601 is the new boundary-plus-one.
+    for (const badTtl of [-1, 0, 1.5, NaN, Infinity, 3601, '120']) {
       const result = rll.createRoleActorBinding(dir, 'arch-testing', worktreeId, planDigest, generationId, badTtl);
       assert.strictEqual(result.ok, false, 'ttlSeconds=' + badTtl + ' must be rejected: ' + JSON.stringify(result));
       assert.strictEqual(result.reason, 'invalid-ttl');
@@ -834,9 +1023,12 @@ test('createRoleActorBinding: rejects a malformed worktree_id/plan_digest (not e
     assert.deepStrictEqual(bindingFiles, [], 'a rejected createRoleActorBinding call must never publish a role-actor-bindings/ file: ' + JSON.stringify(bindingFiles));
 
     // A genuinely well-formed call still succeeds, proving the checks are
-    // not simply over-rejecting.
+    // not simply over-rejecting -- both a modest TTL and the new 3600-second
+    // ceiling itself (the exact bound the hook now requests) must succeed.
     const good = rll.createRoleActorBinding(dir, 'arch-testing', worktreeId, planDigest, generationId, 120);
     assert.strictEqual(good.ok, true, JSON.stringify(good));
+    const goodAtCeiling = rll.createRoleActorBinding(dir, 'arch-testing', worktreeId, planDigest, generationId, 3600);
+    assert.strictEqual(goodAtCeiling.ok, true, 'the new 3600-second persistent RoleActorBinding ceiling must be accepted: ' + JSON.stringify(goodAtCeiling));
   } finally {
     fs.rmSync(rll.registryRepoDir(dir), { recursive: true, force: true });
     fs.rmSync(dir, { recursive: true, force: true });
@@ -1929,6 +2121,16 @@ test('validateRequesterBindingFor (GROUP-A follow-up): a durable RequesterBindin
 const CLAUDEID01_SUBAGENT_START_HOOK = path.resolve(__dirname, '../../.claude/hooks/subagent-start-context-bundle.js');
 const CLAUDEID01_CONTEXT_PROVIDER_GATE_HOOK = path.resolve(__dirname, '../../.claude/hooks/context-provider-gate.js');
 const CLAUDEID01_RC_IMPL = path.resolve(__dirname, '../lib/runtime-consultation.cjs');
+const CLAUDEID01_SESSION_PRELOAD = path.resolve(__dirname, 'fixtures/runtime-claude-session-identity-preload.cjs');
+
+function claudeId01ChildEvidenceEnv(dir, sessionId, extra) {
+  const evidence = claudeId01SessionEvidence.get(path.resolve(dir) + '\0' + sessionId);
+  return Object.assign({}, process.env, extra || {}, evidence ? {
+    RUNTIME_TEST_CLAUDE_SESSION_EVIDENCE: Buffer.from(JSON.stringify({
+      projectRoot: path.resolve(dir), sessionId, record: evidence.record,
+    }), 'utf8').toString('base64url'),
+  } : {});
+}
 
 function claudeId01MakeGitProjectOnWaveBranch(waveSlug) {
   const dir = makeGitProject();
@@ -1982,10 +2184,10 @@ function claudeId01DrivePreToolUseRootInit(dir, agentType, sessionId, agentId, t
 // same hook file (subagent-start-context-bundle.js handles both events),
 // different hook_event_name. Added for the HARD NO-GO correction's
 // SubagentStop-focused regression tests (item 8 bullets 3/5).
-function claudeId01DriveSubagentStop(dir, agentType, sessionId, agentId) {
-  return spawnSync('node', [CLAUDEID01_SUBAGENT_START_HOOK], {
+function claudeId01DriveSubagentStop(dir, agentType, sessionId, agentId, extraEnv) {
+  return spawnSync(process.execPath, ['--require', CLAUDEID01_SESSION_PRELOAD, CLAUDEID01_SUBAGENT_START_HOOK], {
     input: JSON.stringify({ hook_event_name: 'SubagentStop', agent_type: agentType, session_id: sessionId, agent_id: agentId }),
-    env: Object.assign({}, process.env, { CLAUDE_PROJECT_DIR: dir }),
+    env: claudeId01ChildEvidenceEnv(dir, sessionId, Object.assign({ CLAUDE_PROJECT_DIR: dir }, extraEnv || {})),
     encoding: 'utf8',
   });
 }
@@ -2044,6 +2246,22 @@ function claudeId01CapabilityRecordPath(dir, sessionId) {
     rll.computeWorktreeId(dir),
     plan.planDigest,
   );
+}
+
+function claudeId01CapabilityV2RecordPath(dir) {
+  const capabilityDir = path.join(rll.registryRepoDir(dir), 'claude-id01-capabilities');
+  const records = fs.readdirSync(capabilityDir)
+    .filter((name) => name.endsWith('.json'))
+    .map((name) => path.join(capabilityDir, name))
+    .filter((candidate) => {
+      try {
+        return JSON.parse(fs.readFileSync(candidate, 'utf8')).schema === rll.CLAUDE_ID01_CAPABILITY_V2_SCHEMA;
+      } catch {
+        return false;
+      }
+    });
+  assert.strictEqual(records.length, 1, 'fixture must contain exactly one actor-scoped CLAUDE-ID-01 v2 capability');
+  return records[0];
 }
 
 // Boundedly scans requester-bindings/ for LIVE (validateRequesterBindingFor-passing)
@@ -2119,8 +2337,105 @@ function primeClaudeId01Trace(dir, agentType, sessionId, agentId) {
   rll.recordClaudeId01SubagentStartObservation(dir, { sessionId, agentId, agentType, actionId: actionA });
   rll.recordClaudeId01PreToolUseObservation(dir, { sessionId, agentId, agentType, toolUseId: 'registry-prime-tu-3-' + sessionId + '-' + agentId });
   rll.recordClaudeId01SubagentStartObservation(dir, { sessionId, agentId: peerB, agentType, actionId: actionB });
-  const proof = rll.checkClaudeId01ProofComplete(dir, sessionId, rll.computeWorktreeId(dir), rll.discoverPlan(dir).planDigest, agentType, agentId);
-  assert.strictEqual(proof.ok, true, 'global CLAUDE-ID-01 capability must be complete: ' + JSON.stringify(proof));
+
+  // The counter-based v1 trace above remains historical fixture data for the
+  // legacy-validation tests in this file. Current requester authority is v2
+  // and must be proven for this exact actor through a consumed spawn claim,
+  // authenticated SubagentStart, target-gated ready and successful outcome.
+  const identity = { ok: true, provider: 'claude-hook', runtime_session_key: sessionId };
+  const generation = rll.resolveSessionGeneration(dir, identity);
+  const worktreeId = rll.computeWorktreeId(dir);
+  const planDigest = rll.discoverPlan(dir).planDigest;
+  const action = rll.findActionAcrossRepos(actionA).action;
+  const main = rll.createMainOrchestratorBinding(dir, identity, worktreeId, planDigest, 600);
+  assert.strictEqual(main.ok, true, 'v2 fixture main binding must mint: ' + JSON.stringify(main));
+  const canonicalInput = rll.canonicalNativeAgentInputForAction(action);
+  const claim = rll.mintRoleSpawnExecutionClaim(
+    { repoId: action.repo_id }, action, main.binding.binding_id,
+    {
+      runtimeSessionId: sessionId,
+      sourceToolUseId: 'registry-v2-agent-' + agentId,
+      canonicalInputDigest: rc.sha256String(rc.canonicalJSONStringify(canonicalInput)),
+      proposedInputDigest: rc.sha256String(rc.canonicalJSONStringify(canonicalInput)),
+      modelDeviation: false,
+    },
+    240,
+  );
+  assert.strictEqual(claim.ok, true, 'v2 fixture claim must mint: ' + JSON.stringify(claim));
+  const consumedClaim = rll.validateAndConsumeRoleSpawnExecutionClaim(
+    dir, action, { sessionId, agentId, agentType }, dir,
+  );
+  assert.strictEqual(consumedClaim.ok, true, 'v2 fixture claim must consume: ' + JSON.stringify(consumedClaim));
+  const actorBinding = rll.createRoleActorBinding(
+    dir, agentType, worktreeId, planDigest, generation.generationId, 600,
+  );
+  assert.strictEqual(actorBinding.ok, true, 'v2 fixture actor binding must mint: ' + JSON.stringify(actorBinding));
+  const profileDigest = rll.roleProfileDigestFor(agentType);
+  const starting = rll.transitionRoleBinding(
+    dir, worktreeId, planDigest, profileDigest, generation.generationId,
+    agentType, 'ABSENT', 'STARTING', null,
+    { driver: 'claude-sendmessage', respawn_count: 0, pending_action_id: actionA },
+  );
+  assert.strictEqual(starting.ok, true, 'v2 fixture role must enter STARTING: ' + JSON.stringify(starting));
+  const savedIdentityReader = claudeHost.getProductionSessionIdentity;
+  const fixtureSessionEvidence = {
+    ok: true,
+    record: {
+      worktree_id: worktreeId,
+      plan_digest: planDigest,
+      host_contract_digest: rc.sha256String('registry-v2-host-contract'),
+      expires_at: new Date(Date.now() + 600000).toISOString(),
+    },
+  };
+  claudeId01SessionEvidence.set(path.resolve(dir) + '\0' + sessionId, {
+    ok: true,
+    record: fixtureSessionEvidence.record,
+  });
+  claudeHost.getProductionSessionIdentity = (projectRoot, observedSessionId) => (
+    projectRoot === dir && observedSessionId === sessionId
+      ? fixtureSessionEvidence
+      : savedIdentityReader(projectRoot, observedSessionId)
+  );
+  try {
+    const actor = rll.recordClaudeStartupActorObservation(dir, {
+      sessionId, agentId, agentType, action, claim: consumedClaim.claim,
+      actorBinding: actorBinding.binding,
+    });
+    assert.strictEqual(actor.ok, true, 'v2 fixture actor observation must record: ' + JSON.stringify(actor));
+    const readyToolUseId = 'registry-v2-ready-' + actionA;
+    const argvDigest = rc.sha256String('ready:' + actionA);
+    const grant = rll.mintLifecycleCommandGrant(
+      dir, actorBinding.binding, argvDigest, agentType, 'ready',
+      'role-actor', 'target', 'target', actionA,
+    );
+    assert.strictEqual(grant.ok, true, 'v2 fixture ready grant must mint: ' + JSON.stringify(grant));
+    const pre = rll.recordClaudeStartupReadyPreObservation(dir, {
+      sessionId, agentId, agentType, toolUseId: readyToolUseId,
+      action, actorBinding: actorBinding.binding, grantId: grant.grantId,
+    });
+    assert.strictEqual(pre.ok, true, 'v2 fixture ready pre must record: ' + JSON.stringify(pre));
+    const consumedGrant = rll.validateAndConsumeLifecycleCommandGrant(
+      dir, grant.grantId, argvDigest, agentType, 'ready', actionA,
+    );
+    assert.strictEqual(consumedGrant.ok, true, 'v2 fixture ready grant must consume: ' + JSON.stringify(consumedGrant));
+    const ready = rll.transitionRoleBinding(
+      dir, worktreeId, planDigest, profileDigest, generation.generationId,
+      agentType, 'STARTING', 'READY', starting.record, {},
+    );
+    assert.strictEqual(ready.ok, true, 'v2 fixture role must enter READY: ' + JSON.stringify(ready));
+    const outcome = rll.recordClaudeStartupReadyOutcome(dir, {
+      hook_event_name: 'PostToolUse', tool_name: 'Bash', session_id: sessionId,
+      tool_use_id: readyToolUseId, agent_id: agentId, agent_type: agentType,
+    });
+    assert.strictEqual(outcome.ok, true, 'v2 fixture ready outcome must record: ' + JSON.stringify(outcome));
+    const proof = rll.checkClaudeId01ProofComplete(
+      dir, sessionId, worktreeId, planDigest, agentType, agentId,
+    );
+    assert.strictEqual(proof.ok, true, 'actor-scoped CLAUDE-ID-01 v2 capability must be complete: ' + JSON.stringify(proof));
+    return { action, readyToolUseId };
+  } finally {
+    claudeHost.getProductionSessionIdentity = savedIdentityReader;
+  }
 }
 
 test('CLAUDE-ID-01 (Group 1, case 1, locking-in): a single SubagentStart plus a single PreToolUse carrying a real, distinct tool_use_id -- the minimal possible trace, falling short of the full multi-event CLAUDE-ID-01 proof -- must NOT be sufficient to mint a persistent RequesterBinding', () => {
@@ -2310,32 +2625,20 @@ test('CLAUDE-ID-01 (Group 1, case 8, locking-in): once a trace completes, the ra
   }
 });
 
-// A different agent in the same runtime session is also a different exact
-// tuple. The global capability proves the host identity mechanism for the
-// generation; each RequesterBinding still binds its own observed agent key.
-test('CLAUDE-ID-01 (Group 1, case 7, locking-in): a genuinely DIFFERENT agent_id (same session/role/worktree/PLAN) mints a genuinely NEW, independent binding -- pre-existing GROUP-A "different tuple -> different binding" semantics, confirmed still correct; deliberately varies agent_id (not session) to stay clear of case 4\'s own same-agent-id/different-session collision shape entirely', () => {
+test('CLAUDE-ID-01 v2: an unproved different actor in the same session/role cannot borrow the proved actor capability', () => {
   const dir = makeGitProject();
   try {
     const { worktreeId, planDigest } = requesterBindingFixtureBase(dir);
     const role = 'arch-testing';
     const sharedSession = 'c7-shared-session';
     const identity = { ok: true, provider: 'claude-hook', runtime_session_key: sharedSession };
-    // M6+M7 FULL CLOSURE (2026-08-11): this test is case 4's own repurposed
-    // complement (same file section, same CLAUDE-ID-01 peer-identity domain,
-    // per its own "locking-in" comment block) -- stays claude-hook, primed
-    // per-agent_id (two DIFFERENT agent_ids under the SAME session).
     primeClaudeId01Trace(dir, role, sharedSession, 'c7-agent-one');
     const first = rll.createRequesterBinding(dir, identity, 'c7-agent-one', role, worktreeId, planDigest, 3600);
     assert.strictEqual(first.ok, true, JSON.stringify(first));
 
-    primeClaudeId01Trace(dir, role, sharedSession, 'c7-agent-two');
     const second = rll.createRequesterBinding(dir, identity, 'c7-agent-two', role, worktreeId, planDigest, 3600);
-    assert.strictEqual(second.ok, true, JSON.stringify(second));
-    assert.notStrictEqual(
-      second.binding.binding_id, first.binding.binding_id,
-      'a genuinely different agent_id must mint a NEW, independent binding_id, never reuse or collide with a different agent\'s binding'
-    );
-    assert.notStrictEqual(second.binding.actor_instance_id, first.binding.actor_instance_id, 'and a different actor_instance_id too');
+    assert.strictEqual(second.ok, false, JSON.stringify(second));
+    assert.strictEqual(second.reason, 'requester-binding-claude-id01-unproven');
   } finally {
     fs.rmSync(rll.registryRepoDir(dir), { recursive: true, force: true });
     fs.rmSync(dir, { recursive: true, force: true });
@@ -2375,37 +2678,32 @@ test('CLAUDE-ID-01 (Group 1, case 9b, RED): a RequesterBinding minted with genui
 // explicitly unchanged per the correction spec's own item 1) are used instead.
 // ════════════════════════════════════════════════════════════════════════════
 
-test('CLAUDE-ID-01 (item 1 regression, RED): two DIFFERENT same-role peers (distinct agent_id, same session/role/worktree/PLAN) both complete their own trace and BOTH remain independently live/valid via validateRequesterBindingFor AFTER both complete -- proves peer B completing does not silently invalidate peer A\'s already-minted binding', () => {
+test('CLAUDE-ID-01 v2: two independently started actors in different roles remain independently live in one session', () => {
   const dir = makeGitProject();
   try {
     const { worktreeId, planDigest } = requesterBindingFixtureBase(dir);
-    const role = 'arch-testing';
+    const roleA = 'arch-testing';
+    const roleB = 'arch-platform';
     const sharedSession = 'item1-shared-session';
     const identity = { ok: true, provider: 'claude-hook', runtime_session_key: sharedSession };
 
-    primeClaudeId01Trace(dir, role, sharedSession, 'item1-peer-a');
-    const peerA = rll.createRequesterBinding(dir, identity, 'item1-peer-a', role, worktreeId, planDigest, 3600);
+    primeClaudeId01Trace(dir, roleA, sharedSession, 'item1-peer-a');
+    const peerA = rll.createRequesterBinding(dir, identity, 'item1-peer-a', roleA, worktreeId, planDigest, 3600);
     assert.strictEqual(peerA.ok, true, 'peer A must mint successfully after its own complete trace: ' + JSON.stringify(peerA));
-    const peerAValidBeforePeerB = rll.validateRequesterBindingFor(dir, peerA.binding.binding_id, role, worktreeId, planDigest);
+    const peerAValidBeforePeerB = rll.validateRequesterBindingFor(dir, peerA.binding.binding_id, roleA, worktreeId, planDigest);
     assert.strictEqual(peerAValidBeforePeerB.ok, true, 'fixture sanity: peer A validates immediately after its own mint');
 
-    // Peer B (a genuinely DIFFERENT agent_id, same session/role) now primes
-    // its OWN complete trace -- item 1's bug: recordClaudeId01SubagentStartObservation's
-    // primary-SubagentStart branch OVERWRITES whatever occupies this exact
-    // {session,worktree,plan,role} slot the moment it sees a DIFFERENT
-    // agent_digest already there, destroying peer A's already-completed
-    // attestation before peer B's own trace even begins.
-    primeClaudeId01Trace(dir, role, sharedSession, 'item1-peer-b');
-    const peerB = rll.createRequesterBinding(dir, identity, 'item1-peer-b', role, worktreeId, planDigest, 3600);
+    primeClaudeId01Trace(dir, roleB, sharedSession, 'item1-peer-b');
+    const peerB = rll.createRequesterBinding(dir, identity, 'item1-peer-b', roleB, worktreeId, planDigest, 3600);
     assert.strictEqual(peerB.ok, true, 'peer B must ALSO mint successfully after its own complete trace: ' + JSON.stringify(peerB));
     assert.notStrictEqual(peerA.binding.binding_id, peerB.binding.binding_id, 'fixture sanity: peer A and peer B must be genuinely different bindings');
 
-    const peerAValidAfterPeerB = rll.validateRequesterBindingFor(dir, peerA.binding.binding_id, role, worktreeId, planDigest);
+    const peerAValidAfterPeerB = rll.validateRequesterBindingFor(dir, peerA.binding.binding_id, roleA, worktreeId, planDigest);
     assert.strictEqual(
       peerAValidAfterPeerB.ok, true,
       'CLAUDE-ID-01 (regression, item 1): peer A\'s already-minted, already-valid binding must remain valid after peer B (a genuinely different agent_id, same session/role) completes ITS OWN trace -- pre-fix the single {session,worktree,plan,role} lookup key has no agent dimension, so peer B\'s primary SubagentStart overwrites peer A\'s completed attestation on disk, and validateRequesterBindingFor\'s own per-read checkClaudeId01ProofComplete re-check then finds an attestation whose agent_digest no longer matches peer A\'s agentKey, silently invalidating a binding that was never itself touched: ' + JSON.stringify(peerAValidAfterPeerB)
     );
-    const peerBValidAfterBoth = rll.validateRequesterBindingFor(dir, peerB.binding.binding_id, role, worktreeId, planDigest);
+    const peerBValidAfterBoth = rll.validateRequesterBindingFor(dir, peerB.binding.binding_id, roleB, worktreeId, planDigest);
     assert.strictEqual(peerBValidAfterBoth.ok, true, 'peer B must also remain valid: ' + JSON.stringify(peerBValidAfterBoth));
   } finally {
     fs.rmSync(rll.registryRepoDir(dir), { recursive: true, force: true });
@@ -2413,26 +2711,27 @@ test('CLAUDE-ID-01 (item 1 regression, RED): two DIFFERENT same-role peers (dist
   }
 });
 
-test('CLAUDE-ID-01 (item 1 regression, RED): peer A\'s SubagentStop deletes ONLY peer A\'s own CLAUDE-ID-01 trace/attestation slot -- peer B (a genuinely different agent_id, same session/role) stays fully unaffected and its own already-minted binding remains valid', () => {
+test('CLAUDE-ID-01 v2: stopping actor A fences only A while a different-role actor B remains valid', () => {
   const dir = makeGitProject();
   try {
     const { worktreeId, planDigest } = requesterBindingFixtureBase(dir);
-    const role = 'arch-testing';
+    const roleA = 'arch-testing';
+    const roleB = 'arch-platform';
     const sharedSession = 'item1-stop-shared-session';
     const identity = { ok: true, provider: 'claude-hook', runtime_session_key: sharedSession };
 
-    primeClaudeId01Trace(dir, role, sharedSession, 'item1-stop-peer-a');
-    const peerA = rll.createRequesterBinding(dir, identity, 'item1-stop-peer-a', role, worktreeId, planDigest, 3600);
+    primeClaudeId01Trace(dir, roleA, sharedSession, 'item1-stop-peer-a');
+    const peerA = rll.createRequesterBinding(dir, identity, 'item1-stop-peer-a', roleA, worktreeId, planDigest, 3600);
     assert.strictEqual(peerA.ok, true, JSON.stringify(peerA));
 
-    primeClaudeId01Trace(dir, role, sharedSession, 'item1-stop-peer-b');
-    const peerB = rll.createRequesterBinding(dir, identity, 'item1-stop-peer-b', role, worktreeId, planDigest, 3600);
+    primeClaudeId01Trace(dir, roleB, sharedSession, 'item1-stop-peer-b');
+    const peerB = rll.createRequesterBinding(dir, identity, 'item1-stop-peer-b', roleB, worktreeId, planDigest, 3600);
     assert.strictEqual(peerB.ok, true, JSON.stringify(peerB));
 
-    const stopResult = claudeId01DriveSubagentStop(dir, role, sharedSession, 'item1-stop-peer-a');
+    const stopResult = claudeId01DriveSubagentStop(dir, roleA, sharedSession, 'item1-stop-peer-a');
     assert.strictEqual(stopResult.status, 0, 'SubagentStop hook must exit 0: ' + stopResult.stderr);
 
-    const peerBStillValid = rll.validateRequesterBindingFor(dir, peerB.binding.binding_id, role, worktreeId, planDigest);
+    const peerBStillValid = rll.validateRequesterBindingFor(dir, peerB.binding.binding_id, roleB, worktreeId, planDigest);
     assert.strictEqual(
       peerBStillValid.ok, true,
       'CLAUDE-ID-01 (regression, item 1): stopping peer A must NEVER revoke peer B\'s (a genuinely different agent_id) own proof -- pre-fix deleteClaudeId01TraceForSession takes no agent dimension at all and unlinks the SAME shared {session,worktree,plan,role} path regardless of which peer is stopping, so peer A\'s stop deletes whatever currently occupies that slot (by this point, peer B\'s own completed attestation, since peer B primed AFTER peer A and overwrote it there): ' + JSON.stringify(peerBStillValid)
@@ -2544,13 +2843,15 @@ test('CLAUDE-ID-01 (item 4 regression, RED): an injected unlink failure during S
     const role = 'arch-testing';
     const sessionId = 'stop-unlinkfail-session';
     const agentId = 'stop-unlinkfail-agent';
-    primeClaudeId01Trace(dir, role, sessionId, agentId);
+    const primed = primeClaudeId01Trace(dir, role, sessionId, agentId);
     const recordPath = claudeId01FindSoleTraceRecordPath(dir);
-    const tracesDir = path.dirname(recordPath);
-    const originalMode = fs.statSync(tracesDir).mode & 0o777;
-    fs.chmodSync(tracesDir, 0o500); // read+execute only -- unlink requires write permission on the containing directory.
-    try {
-      const stopResult = claudeId01DriveSubagentStop(dir, role, sessionId, agentId);
+    fs.unlinkSync(rll.roleBindingPathFor(
+      dir, primed.action.worktree_id, primed.action.plan_digest,
+      rll.roleProfileDigestFor(role), primed.action.session_generation_id, role,
+    ));
+    const stopResult = claudeId01DriveSubagentStop(dir, role, sessionId, agentId, {
+      RUNTIME_TEST_UNLINK_FAILURE_PATH: recordPath,
+    });
       assert.strictEqual(stopResult.status, 0, 'SubagentStop must still exit 0 per the official hook protocol (block is expressed via the JSON decision field, never a nonzero exit): ' + stopResult.stderr);
       let parsed = null;
       try { parsed = JSON.parse((stopResult.stdout || '').trim()); } catch { /* handled by the assertion below */ }
@@ -2558,9 +2859,6 @@ test('CLAUDE-ID-01 (item 4 regression, RED): an injected unlink failure during S
         parsed && parsed.decision === 'block',
         'CLAUDE-ID-01 (regression, item 4): a genuine unlink failure while deleting the CLAUDE-ID-01 trace must block the stop -- pre-fix deleteClaudeId01TraceForSession swallows ANY unlink failure silently (try{fs.unlinkSync}catch{}) and handleSubagentStop never even inspects its return value, so the stop always silently exits 0 with no decision field regardless: ' + JSON.stringify(stopResult)
       );
-    } finally {
-      fs.chmodSync(tracesDir, originalMode);
-    }
   } finally {
     fs.rmSync(rll.registryRepoDir(dir), { recursive: true, force: true });
     fs.rmSync(dir, { recursive: true, force: true });
@@ -2645,17 +2943,24 @@ test('CLAUDE-ID-01 (item 2 regression, RED): the SAME tool_use_id observed in BO
   }
 });
 
-test('CLAUDE-ID-01 capability expiry: a fresh valid probe can replace an expired generation capability', () => {
+test('CLAUDE-ID-01 v2 capability expiry is terminal for that startup proof and replay cannot extend it', () => {
   const dir = makeGitProject();
   try {
     const { worktreeId, planDigest } = requesterBindingFixtureBase(dir);
     const role = 'arch-testing';
     const sessionId = 'expiry-reaccredit-session';
     const agentId = 'expiry-reaccredit-agent';
-    primeClaudeId01Trace(dir, role, sessionId, agentId);
-    const recordPath = claudeId01CapabilityRecordPath(dir, sessionId);
+    const startup = primeClaudeId01Trace(dir, role, sessionId, agentId);
+    const capabilityDir = path.join(rll.registryRepoDir(dir), 'claude-id01-capabilities');
+    const recordPath = fs.readdirSync(capabilityDir)
+      .map((name) => path.join(capabilityDir, name))
+      .find((candidate) => {
+        try { return JSON.parse(fs.readFileSync(candidate, 'utf8')).schema === 'runtime/claude-id01-capability/v2'; }
+        catch { return false; }
+      });
+    assert.ok(recordPath, 'fixture sanity: one actor-scoped v2 capability must exist');
     const rec = JSON.parse(fs.readFileSync(recordPath, 'utf8'));
-    assert.strictEqual(rec.proof_complete, true, 'fixture sanity: a genuinely complete capability must exist before aging it');
+    assert.strictEqual(rec.startup_actor_observed, true, 'fixture sanity: a genuinely complete capability must exist before aging it');
     rec.expiry = '2000-01-01T00:00:00Z';
     fs.chmodSync(recordPath, 0o600);
     fs.writeFileSync(recordPath, JSON.stringify(rec), { mode: 0o600 });
@@ -2664,14 +2969,13 @@ test('CLAUDE-ID-01 capability expiry: a fresh valid probe can replace an expired
     assert.strictEqual(beforeReaccredit.ok, false, 'fixture sanity: the aged attestation must genuinely read as expired first');
     assert.strictEqual(beforeReaccredit.reason, 'claude-id01-capability-invalid');
 
-    // The SAME agent_id, SAME session, genuinely re-primes a brand new trace
-    // from scratch after the old one expired.
-    primeClaudeId01Trace(dir, role, sessionId, agentId);
-    const afterReaccredit = rll.checkClaudeId01ProofComplete(dir, sessionId, worktreeId, planDigest, role, agentId);
-    assert.strictEqual(
-      afterReaccredit.ok, true,
-      'a fresh valid probe must replace an expired generation capability: ' + JSON.stringify(afterReaccredit)
-    );
+    const replay = rll.recordClaudeStartupReadyOutcome(dir, {
+      hook_event_name: 'PostToolUse', tool_name: 'Bash', session_id: sessionId,
+      tool_use_id: startup.readyToolUseId, agent_id: agentId, agent_type: role,
+    });
+    assert.strictEqual(replay.ok, false, 'replaying the original ready outcome must not overwrite or extend an expired capability');
+    const afterReplay = rll.checkClaudeId01ProofComplete(dir, sessionId, worktreeId, planDigest, role, agentId);
+    assert.strictEqual(afterReplay.ok, false, 'the expired startup proof must remain invalid after replay');
   } finally {
     fs.rmSync(rll.registryRepoDir(dir), { recursive: true, force: true });
     fs.rmSync(dir, { recursive: true, force: true });
@@ -2792,9 +3096,9 @@ test('createRequesterBinding (Section B, item 2): a different session using the 
     // Expire the first SESSION GENERATION'S global capability, not one
     // agent-scoped source attestation. Bindings consume the generation
     // capability by design.
-    const firstRecordPath = claudeId01CapabilityRecordPath(dir, 'item2-diffsession-session-one');
+    const firstRecordPath = claudeId01CapabilityV2RecordPath(dir);
     const firstRec = JSON.parse(fs.readFileSync(firstRecordPath, 'utf8'));
-    assert.strictEqual(firstRec.proof_complete, true, 'fixture sanity: the first generation capability must be complete before aging it');
+    assert.strictEqual(firstRec.startup_actor_observed, true, 'fixture sanity: the first generation capability must be complete before aging it');
     firstRec.expiry = '2000-01-01T00:00:00Z';
     fs.chmodSync(firstRecordPath, 0o600);
     fs.writeFileSync(firstRecordPath, JSON.stringify(firstRec), { mode: 0o600 });
@@ -2878,21 +3182,10 @@ test('CLAUDE-ID-01 (Section C / item 3, RED): a raw trace record forged directly
   }
 });
 
-// Item 4 (Section C: "Attestation con count enorme, completed_at futuro o
-// completed_at>expiry es rechazada en ambos consumidores"). Confirmed by
-// direct read of isClaudeId01AttestationWellFormed: counts are checked with a
-// LOWER bound only (`< 2`, `< 1`), never an upper one; completed_at is never
-// compared against the current clock anywhere; completed_at<=expiry is
-// DELIBERATELY not checked there (its own comment: "Deliberately NOT
-// completedMs<=expiryMs here"), and checkClaudeId01ProofComplete's own
-// separate expiry check only ever compares expiry-vs-now, never
-// completed_at-vs-expiry. "Ambos consumidores" (both consumers) = the two call
-// sites of checkClaudeId01ProofComplete inside this file: the MINT-time path
-// (createRequesterBinding, exercised here directly via
-// checkClaudeId01ProofComplete itself) and the VALIDATE-time path
-// (validateRequesterBindingFor, re-checked on every read) -- each of the three
-// tests below drives BOTH against the identical tampered attestation.
-test('CLAUDE-ID-01 capability validator: an enormous primary observation count is rejected by both binding consumers', () => {
+// The corrected v2 contract is actor-scoped and contains no aggregate event
+// counters. Historical v1 records remain readable for audit, but they are not
+// authoritative for requester-binding mint or revalidation.
+test('CLAUDE-ID-01 capability validator: historical v1 observation counts cannot influence v2 actor authority', () => {
   const dir = makeGitProject();
   try {
     const { worktreeId, planDigest } = requesterBindingFixtureBase(dir);
@@ -2905,23 +3198,24 @@ test('CLAUDE-ID-01 capability validator: an enormous primary observation count i
     const minted = rll.createRequesterBinding(dir, identity, agentId, role, worktreeId, planDigest, 3600);
     assert.strictEqual(minted.ok, true, 'fixture: a genuine binding must mint before tampering: ' + JSON.stringify(minted));
 
-    const recordPath = claudeId01CapabilityRecordPath(dir, sessionId);
-    const rec = JSON.parse(fs.readFileSync(recordPath, 'utf8'));
-    assert.strictEqual(rec.proof_complete, true, 'fixture sanity: a genuinely complete capability must exist before tampering');
-    rec.primary_pretooluse_before_count = Number.MAX_SAFE_INTEGER;
-    fs.chmodSync(recordPath, 0o600);
-    fs.writeFileSync(recordPath, JSON.stringify(rec), { mode: 0o600 });
+    const v2RecordPath = claudeId01CapabilityV2RecordPath(dir);
+    const v2Record = JSON.parse(fs.readFileSync(v2RecordPath, 'utf8'));
+    assert.strictEqual(v2Record.startup_actor_observed, true, 'fixture sanity: a genuinely complete v2 capability must exist');
+    assert.strictEqual(Object.prototype.hasOwnProperty.call(v2Record, 'primary_pretooluse_before_count'), false,
+      'actor-scoped v2 capability must not carry a generation-wide observation count');
+
+    const legacyRecordPath = claudeId01CapabilityRecordPath(dir, sessionId);
+    const legacyRecord = JSON.parse(fs.readFileSync(legacyRecordPath, 'utf8'));
+    legacyRecord.primary_pretooluse_before_count = Number.MAX_SAFE_INTEGER;
+    fs.chmodSync(legacyRecordPath, 0o600);
+    fs.writeFileSync(legacyRecordPath, JSON.stringify(legacyRecord), { mode: 0o600 });
 
     const mintPathResult = rll.checkClaudeId01ProofComplete(dir, sessionId, worktreeId, planDigest, role, agentId);
-    assert.notStrictEqual(
-      mintPathResult.ok, true,
-      'Section C (item 4, RED), mint-time consumer: an attestation with an enormous subagent_start_count must be rejected -- pre-fix isClaudeId01AttestationWellFormed only enforces a LOWER bound (< 2) on every count field, never an upper one: ' + JSON.stringify(mintPathResult)
-    );
+    assert.strictEqual(mintPathResult.ok, true,
+      'mint-time authority must remain bound to the untouched actor-scoped v2 proof: ' + JSON.stringify(mintPathResult));
     const validatePathResult = rll.validateRequesterBindingFor(dir, minted.binding.binding_id, role, worktreeId, planDigest);
-    assert.notStrictEqual(
-      validatePathResult.ok, true,
-      'Section C (item 4, RED), validate-time consumer: the SAME already-minted binding must ALSO fail re-validation once its backing attestation carries an enormous count: ' + JSON.stringify(validatePathResult)
-    );
+    assert.strictEqual(validatePathResult.ok, true,
+      'validate-time authority must ignore non-authoritative historical v1 counters: ' + JSON.stringify(validatePathResult));
   } finally {
     fs.rmSync(rll.registryRepoDir(dir), { recursive: true, force: true });
     fs.rmSync(dir, { recursive: true, force: true });
@@ -2941,9 +3235,9 @@ test('CLAUDE-ID-01 capability validator: a future completed_at is rejected by bo
     const minted = rll.createRequesterBinding(dir, identity, agentId, role, worktreeId, planDigest, 3600);
     assert.strictEqual(minted.ok, true, 'fixture: a genuine binding must mint before tampering: ' + JSON.stringify(minted));
 
-    const recordPath = claudeId01CapabilityRecordPath(dir, sessionId);
+    const recordPath = claudeId01CapabilityV2RecordPath(dir);
     const rec = JSON.parse(fs.readFileSync(recordPath, 'utf8'));
-    assert.strictEqual(rec.proof_complete, true, 'fixture sanity: a genuinely complete attestation must exist before tampering');
+    assert.strictEqual(rec.startup_actor_observed, true, 'fixture sanity: a genuinely complete v2 capability must exist before tampering');
     // Far in the future, but still comfortably BEFORE the record's own expiry
     // (created_at<=completed_at still holds too) -- isolates "completed_at
     // must not be in the future" from the separate created_at<=completed_at
@@ -2983,9 +3277,9 @@ test('CLAUDE-ID-01 capability validator: completed_at after expiry is rejected b
     const minted = rll.createRequesterBinding(dir, identity, agentId, role, worktreeId, planDigest, 3600);
     assert.strictEqual(minted.ok, true, 'fixture: a genuine binding must mint before tampering: ' + JSON.stringify(minted));
 
-    const recordPath = claudeId01CapabilityRecordPath(dir, sessionId);
+    const recordPath = claudeId01CapabilityV2RecordPath(dir);
     const rec = JSON.parse(fs.readFileSync(recordPath, 'utf8'));
-    assert.strictEqual(rec.proof_complete, true, 'fixture sanity: a genuinely complete attestation must exist before tampering');
+    assert.strictEqual(rec.startup_actor_observed, true, 'fixture sanity: a genuinely complete v2 capability must exist before tampering');
     const futureExpiry = new Date(Date.now() + 3600 * 1000).toISOString().replace(/\.\d{3}Z$/, 'Z');
     const completedAfterExpiry = new Date(Date.now() + 7200 * 1000).toISOString().replace(/\.\d{3}Z$/, 'Z');
     rec.expiry = futureExpiry;
@@ -3011,12 +3305,10 @@ test('CLAUDE-ID-01 capability validator: completed_at after expiry is rejected b
   }
 });
 
-// Item 10 / Case 9a: even the test-only fake-capability seam must not advertise
-// claude-sendmessage until the current registry contains a complete,
-// generation-scoped CLAUDE-ID-01 capability. Production remains stricter: it
-// derives availability only from live registry evidence and never from this
-// test seam.
-test('getCapabilityManifest excludes test-advertised claude-sendmessage when no CLAUDE-ID-01 capability exists', () => {
+// The double-gated fake manifest proves only driver-selection plumbing. Actor
+// authority is enforced later by the actor-scoped v2 startup proof and can
+// never be inferred from this test-only availability seam.
+test('getCapabilityManifest test seam reports its explicit driver without fabricating actor authority', () => {
   const dir = makeGitProject();
   const savedNodeEnv = process.env.NODE_ENV;
   const savedCap = process.env.RUNTIME_ROLE_LIFECYCLE_TEST_CAPABILITY;
@@ -3029,10 +3321,14 @@ test('getCapabilityManifest excludes test-advertised claude-sendmessage when no 
 
     const manifest = rll.getCapabilityManifest(dir);
     assert.strictEqual(manifest.ok, true, 'fixture sanity: getCapabilityManifest must resolve: ' + JSON.stringify(manifest));
-    assert.ok(
-      !manifest.availableDrivers.includes('claude-sendmessage'),
-      'Case 9a: getCapabilityManifest must not advertise claude-sendmessage while the current registry lacks a complete CLAUDE-ID-01 capability: ' + JSON.stringify(manifest)
+    assert.ok(manifest.availableDrivers.includes('claude-sendmessage'), JSON.stringify(manifest));
+    const identity = { ok: true, provider: 'claude-hook', runtime_session_key: 'item10-unproved-session' };
+    const denied = rll.createRequesterBinding(
+      dir, identity, 'item10-unproved-agent', 'arch-testing',
+      rll.computeWorktreeId(dir), rll.discoverPlan(dir).planDigest, 3600,
     );
+    assert.strictEqual(denied.ok, false, 'test driver availability must not fabricate v2 actor authority');
+    assert.strictEqual(denied.reason, 'requester-binding-claude-id01-unproven');
   } finally {
     if (savedNodeEnv === undefined) delete process.env.NODE_ENV; else process.env.NODE_ENV = savedNodeEnv;
     if (savedCap === undefined) delete process.env.RUNTIME_ROLE_LIFECYCLE_TEST_CAPABILITY; else process.env.RUNTIME_ROLE_LIFECYCLE_TEST_CAPABILITY = savedCap;
@@ -3048,20 +3344,35 @@ test('getCapabilityManifest excludes test-advertised claude-sendmessage when no 
 // findActionAcrossRepos's bounded scan (opendirSync/readSync streaming,
 // MAX_ACTION_REPO_SCAN_ENTRIES=1024, for the 3 callers with no --project-root
 // in their frozen argv: action-failed/ready/wait-ready). registryBaseDir()
-// resolves purely from os.tmpdir() + this OS user's uid, read fresh on every
-// call -- overriding process.env.TMPDIR for the span of one test isolates
-// every write these tests perform (including thousands of decoy directories)
-// away from the real canonical registry.
+// resolves through the private test capability when the preload is active,
+// otherwise from os.tmpdir() + this OS user's uid.  The isolated span must
+// therefore move both the temp environment and the process-local capability;
+// the shared-root environment makes descendants preload that same isolated
+// capability instead of escaping back to the file-wide registry.
 // ─────────────────────────────────────────────────────────────────────────────
 
 function withIsolatedRegistryTmp(fn) {
+  const savedTemp = process.env.TEMP;
+  const savedTmp = process.env.TMP;
   const savedTmpdir = process.env.TMPDIR;
+  const sharedRootEnv = 'ANDROID_COMMON_DOC_TEST_PRIVATE_REGISTRY_ROOT';
+  const registryCapability = Symbol.for('android-common-doc.runtime-private-registry-base');
+  const savedSharedRoot = process.env[sharedRootEnv];
+  const savedRegistryCapability = globalThis[registryCapability];
   const isolatedRoot = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'rll-registry-scan-isolated-')));
+  process.env.TEMP = isolatedRoot;
+  process.env.TMP = isolatedRoot;
   process.env.TMPDIR = isolatedRoot;
+  process.env[sharedRootEnv] = isolatedRoot;
+  globalThis[registryCapability] = path.join(isolatedRoot, 'registry');
   try {
     return fn();
   } finally {
+    if (savedTemp === undefined) delete process.env.TEMP; else process.env.TEMP = savedTemp;
+    if (savedTmp === undefined) delete process.env.TMP; else process.env.TMP = savedTmp;
     if (savedTmpdir === undefined) delete process.env.TMPDIR; else process.env.TMPDIR = savedTmpdir;
+    if (savedSharedRoot === undefined) delete process.env[sharedRootEnv]; else process.env[sharedRootEnv] = savedSharedRoot;
+    if (savedRegistryCapability === undefined) delete globalThis[registryCapability]; else globalThis[registryCapability] = savedRegistryCapability;
     fs.rmSync(isolatedRoot, { recursive: true, force: true });
   }
 }
@@ -3258,6 +3569,7 @@ test('resolveSealedGitCache RED: a linked worktree whose .git gitdir pointer is 
     execFileSync('git', ['-C', repoA, 'worktree', 'add', '-q', worktreeDir, '-b', 'rll-registry-seal-wt-branch']);
     const gitFilePath = path.join(worktreeDir, '.git');
     const originalGitFileBytes = fs.readFileSync(gitFilePath);
+    const originalGitFileMode = fs.statSync(gitFilePath).mode & 0o777;
     assert.match(originalGitFileBytes.toString('utf8'), /^gitdir:/, 'fixture sanity: a linked worktree\'s own .git must be a gitdir-pointer FILE, not a directory');
 
     const cache = new Map();
@@ -3269,7 +3581,18 @@ test('resolveSealedGitCache RED: a linked worktree whose .git gitdir pointer is 
     // Synchronous substitution toward a DIFFERENT, independently valid repo
     // (repoB's own real .git directory) -- no await, same tick as the next
     // resolution below.
-    fs.writeFileSync(gitFilePath, 'gitdir: ' + path.join(repoB, '.git') + '\n');
+    if (process.platform === 'win32') {
+      execFileSync(path.join(process.env.SystemRoot, 'System32', 'attrib.exe'), ['-R', gitFilePath]);
+    } else {
+      fs.chmodSync(gitFilePath, 0o600);
+    }
+    const swappedFd = fs.openSync(gitFilePath, 'r+');
+    try {
+      fs.ftruncateSync(swappedFd, 0);
+      fs.writeFileSync(swappedFd, 'gitdir: ' + path.join(repoB, '.git') + '\n');
+    } finally {
+      fs.closeSync(swappedFd);
+    }
 
     const second = rc.resolveSealedGitCache(cache, worktreeDir, simpleGitTopologyDerive);
     assert.deepStrictEqual(
@@ -3282,7 +3605,19 @@ test('resolveSealedGitCache RED: a linked worktree whose .git gitdir pointer is 
     );
 
     // Restoration -- ONLY this fixture's own .git file, nothing else.
-    fs.writeFileSync(gitFilePath, originalGitFileBytes);
+    if (process.platform === 'win32') {
+      execFileSync(path.join(process.env.SystemRoot, 'System32', 'attrib.exe'), ['-R', gitFilePath]);
+    } else {
+      fs.chmodSync(gitFilePath, 0o600);
+    }
+    const restoredFd = fs.openSync(gitFilePath, 'r+');
+    try {
+      fs.ftruncateSync(restoredFd, 0);
+      fs.writeFileSync(restoredFd, originalGitFileBytes);
+    } finally {
+      fs.closeSync(restoredFd);
+    }
+    if (process.platform !== 'win32') fs.chmodSync(gitFilePath, originalGitFileMode);
     const third = rc.resolveSealedGitCache(cache, worktreeDir, simpleGitTopologyDerive);
     assert.strictEqual(third.ok, true, 'after restoring the exact original .git bytes, resolution must succeed again: ' + JSON.stringify(third));
     assert.strictEqual(third.derived.projectReal, first.derived.projectReal, 'the restored resolution must match the ORIGINAL identity exactly');
@@ -3489,7 +3824,7 @@ test('resolveSealedGitCache RED: a deriveFn returning a gitCommonDirReal that di
   }
 });
 
-test('resolveSealedGitCache POSITIVE: ordinary subdirectory churn under a linked worktree\'s own gitdir-target administrative directory (nlink drift on gitdirTargetStat, the same directory that now also hosts the sealed commondir file) does not invalidate the seal', () => {
+test('resolveSealedGitCache POSITIVE: ordinary subdirectory churn under a linked worktree gitdir target does not invalidate the seal', () => {
   const repoA = makeGitProjectAt('rll-registry-seal-cd-nlink-A-');
   const worktreeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'rll-registry-seal-cd-nlink-wt-'));
   fs.rmdirSync(worktreeDir);
@@ -3510,7 +3845,9 @@ test('resolveSealedGitCache POSITIVE: ordinary subdirectory churn under a linked
     const churnDirs = ['churn-a', 'churn-b', 'churn-c'].map((name) => path.join(seal.gitdirTargetReal, name));
     for (const d of churnDirs) fs.mkdirSync(d);
     const nlinkDuringChurn = fs.lstatSync(seal.gitdirTargetReal).nlink;
-    assert.notStrictEqual(nlinkDuringChurn, nlinkBefore, 'fixture sanity: creating 3 sibling subdirectories must actually change nlink, otherwise this test proves nothing');
+    if (process.platform !== 'win32') {
+      assert.notStrictEqual(nlinkDuringChurn, nlinkBefore, 'fixture sanity: POSIX directory churn must change nlink');
+    }
 
     const second = rc.resolveSealedGitCache(cache, worktreeDir, simpleGitTopologyDerive);
     assert.strictEqual(second.ok, true, 'ordinary nlink churn on the gitdir-target directory must NOT invalidate the seal: ' + JSON.stringify(second));
@@ -3774,7 +4111,7 @@ test('M7-CLASSIFIER-CLOSED-06 (RED): classifyClaudeAuthorityForIdentity must exi
   }
 });
 
-test('M7-CLASSIFIER-CROSS-SCOPE-07 (RED): a current unexpired v2 RequesterBinding for the exact session+agent must still classify as ONE even after the PLAN content (and therefore plan_digest) it was minted under has since rotated -- today the classifier does not exist at all', () => {
+test('M7-CLASSIFIER-CROSS-SCOPE-07: PLAN rotation makes prior actor authority stale under the corrected v2 contract', () => {
   const dir = makeGitProject();
   try {
     const { worktreeId, planDigest } = requesterBindingFixtureBase(dir);
@@ -3806,10 +4143,9 @@ test('M7-CLASSIFIER-CROSS-SCOPE-07 (RED): a current unexpired v2 RequesterBindin
     };
     const result = rll.classifyClaudeAuthorityForIdentity({ repoId: authIdentity.repo_id }, authIdentity);
     assert.strictEqual(result.ok, true, JSON.stringify(result));
-    assert.strictEqual(
-      result.state, 'ONE',
-      'M7 section 6: a current unexpired v2 candidate must still classify as ONE even after the PLAN content it was originally minted under has since rotated -- scope rotation must never hide it: ' + JSON.stringify(result)
-    );
+    assert.strictEqual(result.state, 'ABSENT',
+      'corrected PLAN section 6.8 makes PLAN rotation terminal for actor authority: ' + JSON.stringify(result));
+    assert.strictEqual(result.stale_count, 1, 'the prior record remains durable historical evidence, never deleted or promoted');
   } finally {
     fs.rmSync(rll.registryRepoDir(dir), { recursive: true, force: true });
     fs.rmSync(dir, { recursive: true, force: true });
@@ -3945,7 +4281,7 @@ test('M7-FENCE-STOP-ZERO-11 (RED): a real SubagentStop for a canonical owning ro
   }
 });
 
-test('M7-FENCE-STOP-ACTIVE-12 (RED): a real SubagentStop for a canonical owning role with an ACTIVE existing RequesterBinding must publish an identity fence, without synchronously deleting the binding itself -- today the stop retires nothing for the requester family (it is not scanned by handleSubagentStop at all) and writes no fence either', () => {
+test('P1 persistent actor stop parks a READY Claude role without fencing or deleting its requester binding', () => {
   const dir = claudeId01MakeGitProjectOnWaveBranch('m7-red12-fence-active');
   try {
     const worktreeId = rll.computeWorktreeId(dir);
@@ -3966,14 +4302,15 @@ test('M7-FENCE-STOP-ACTIVE-12 (RED): a real SubagentStop for a canonical owning 
 
     const authorityIdentityId = computeExpectedM7AuthorityIdentityId(dir, 'claude-hook', sessionId, agentId);
     const fencePath = m7AuthorityFencePathFor(dir, authorityIdentityId);
-    assert.strictEqual(
-      fs.existsSync(fencePath), true,
-      'M7 section 8.4 bullet 1: an owning-role stop with an ACTIVE candidate must ALSO publish the fence -- today handleSubagentStop never scans requester-bindings/ at all (only claude-one-shot and root-source), so a live RequesterBinding produces zero live candidates for either scanned family and the stop is a silent no-op'
-    );
+    assert.strictEqual(fs.existsSync(fencePath), false,
+      'corrected PLAN preserves a healthy persistent actor by parking it; an ordinary native Task stop is not terminal fencing');
     assert.strictEqual(
       fs.existsSync(bindingPath), true,
-      'M7 section 8.4: "no primary binding is synchronously deleted" -- the binding record itself must remain on disk; authority is revoked via the fence, never via deletion'
+      'the requester binding remains durable for same-session resume'
     );
+    const resumeDir = path.join(rll.registryRepoDir(dir), 'claude-resume-handles');
+    assert.strictEqual(fs.readdirSync(resumeDir).filter((name) => name.endsWith('.json')).length, 1,
+      'parking must publish exactly one resumable handle for this actor');
   } finally {
     fs.rmSync(rll.registryRepoDir(dir), { recursive: true, force: true });
     fs.rmSync(dir, { recursive: true, force: true });
@@ -4014,7 +4351,10 @@ function m7MakeRendezvousDir() {
 async function m7DriveRendezvousRace(childArgv, envExtra, stage, rendezvousDir, competingOp) {
   const readyPath = path.join(rendezvousDir, stage + '.ready');
   const goPath = path.join(rendezvousDir, stage + '.go');
-  const child = spawn(process.execPath, childArgv, {
+  const effectiveArgv = envExtra && envExtra.RUNTIME_TEST_CLAUDE_SESSION_EVIDENCE
+    ? ['--require', CLAUDEID01_SESSION_PRELOAD].concat(childArgv)
+    : childArgv;
+  const child = spawn(process.execPath, effectiveArgv, {
     stdio: ['ignore', 'pipe', 'pipe'],
     env: Object.assign({}, process.env, envExtra, {
       NODE_ENV: 'test',
@@ -4077,6 +4417,8 @@ function m7PlantFence(dir, provider, sessionId, agentId) {
 // action -> reservation(ISSUED) -> consumed marker -> binding(v2) flow).
 function mintReservedRootSourceViaRealSurfaces(dir, sessionId) {
   writePlanFixture(dir, 'm7-stagec-race-rootsource');
+  fs.mkdirSync(path.join(dir, '.claude'), { recursive: true });
+  fs.copyFileSync(path.resolve(__dirname, '../../.claude/model-profiles.json'), path.join(dir, '.claude', 'model-profiles.json'));
   const retainedFixture = require(path.resolve(__dirname, 'fixtures/runtime-consultation-grant-wrapper.cjs'));
   const agentGate = path.resolve(__dirname, '../../.claude/hooks/agent-spawn-execution-gate.js');
 
@@ -4191,6 +4533,8 @@ function mintPendingRootSourceActionAndContext(dir, sessionId, label) {
   const envelope = JSON.parse(cli.stdout);
   assert.strictEqual(envelope.status, 'ACTION_REQUIRED', 'mint-discriminant fixture: root-source did not return ACTION_REQUIRED: ' + JSON.stringify(envelope));
   const action = envelope.actions[0];
+  const proposedInput = { subagent_type: action.payload.agent_type, name: action.payload.name, prompt: action.payload.bootstrap_message };
+  const canonicalInput = rll.canonicalNativeAgentInputForAction(action);
   return {
     action,
     context: {
@@ -4198,7 +4542,10 @@ function mintPendingRootSourceActionAndContext(dir, sessionId, label) {
       sessionGenerationId: generation.generationId,
       runtimeSessionKey: sessionId,
       toolUseId: 'rll-registry-mint-discriminant-' + label + '-tool-use-01',
-      toolInput: { subagent_type: action.payload.agent_type, name: action.payload.name, prompt: action.payload.bootstrap_message },
+      toolInput: canonicalInput,
+      canonicalInputDigest: rc.sha256String(rc.canonicalJSONStringify(canonicalInput)),
+      proposedInputDigest: rc.sha256String(rc.canonicalJSONStringify(proposedInput)),
+      modelDeviation: rc.canonicalJSONStringify(canonicalInput) !== rc.canonicalJSONStringify(proposedInput),
     },
   };
 }
@@ -4365,7 +4712,7 @@ test('M7-CREATE-RACE-FENCE-13 (RED, admission-first race): a fence landing DURIN
     ].join('');
     const result = await m7DriveRendezvousRace(
       ['-e', childSource, IMPL, dir, provider, sessionId, agentId, role, worktreeId, planDigest],
-      { RUNTIME_ROLE_LIFECYCLE_TEST_CAPABILITY: M7_RACE_CAPABILITY },
+      Object.assign({ RUNTIME_ROLE_LIFECYCLE_TEST_CAPABILITY: M7_RACE_CAPABILITY }, claudeId01ChildEvidenceEnv(dir, sessionId)),
       'create-after-admission-before-write',
       rendezvousDir,
       async () => { m7PlantFence(dir, provider, sessionId, agentId); },
@@ -4448,7 +4795,7 @@ test('M7-GRANT-RACE-FENCE-14 (RED, admission-first race): a fence landing DURING
     ].join('');
     const result = await m7DriveRendezvousRace(
       ['-e', childSource, IMPL, RC_IMPL, dir, bindingPath],
-      { RUNTIME_ROLE_LIFECYCLE_TEST_CAPABILITY: M7_RACE_CAPABILITY },
+      Object.assign({ RUNTIME_ROLE_LIFECYCLE_TEST_CAPABILITY: M7_RACE_CAPABILITY }, claudeId01ChildEvidenceEnv(dir, sessionId)),
       'grant-after-admission-before-write',
       rendezvousDir,
       async () => { m7PlantFence(dir, provider, sessionId, agentId); },
@@ -4554,7 +4901,7 @@ test('M7-STAGEC-ROOT-POSTWRITE-RACE (RED): a root-source ingress record that lan
     ].join('');
     const result = await m7DriveRendezvousRace(
       ['-e', childSource, IMPL, RC_IMPL, dir, bindingPath],
-      { RUNTIME_ROLE_LIFECYCLE_TEST_CAPABILITY: M7_RACE_CAPABILITY },
+      Object.assign({ RUNTIME_ROLE_LIFECYCLE_TEST_CAPABILITY: M7_RACE_CAPABILITY }, claudeId01ChildEvidenceEnv(dir, sessionId)),
       'grant-after-admission-before-write',
       rendezvousDir,
       async () => {
@@ -4684,7 +5031,7 @@ test('M7-REQUESTER-CREATE-RACE-CROSS-FAMILY-AMBIGUOUS (RED, admission-first race
     ].join('');
     const result = await m7DriveRendezvousRace(
       ['-e', childSource, IMPL, dir, provider, sessionId, agentId, role, worktreeId, planDigest],
-      { RUNTIME_ROLE_LIFECYCLE_TEST_CAPABILITY: M7_RACE_CAPABILITY },
+      Object.assign({ RUNTIME_ROLE_LIFECYCLE_TEST_CAPABILITY: M7_RACE_CAPABILITY }, claudeId01ChildEvidenceEnv(dir, sessionId)),
       'create-after-admission-before-write',
       rendezvousDir,
       async () => {
@@ -4933,16 +5280,17 @@ test('M7-TRACE-CLEANUP-NONAUTH-23 (RED): a durable fence must already be written
     const role = 'arch-testing';
     const sessionId = 'm7-red23-session';
     const agentId = 'm7-red23-agent';
-    primeClaudeId01Trace(dir, role, sessionId, agentId);
+    const primed = primeClaudeId01Trace(dir, role, sessionId, agentId);
     const recordPath = claudeId01FindSoleTraceRecordPath(dir);
-    const tracesDir = path.dirname(recordPath);
-    const originalMode = fs.statSync(tracesDir).mode & 0o777;
-    // Same fault-injection technique the pre-existing "item 4 regression"
-    // test already uses: unlink requires write permission on the containing
-    // directory, so read+execute-only forces a genuine cleanup failure.
-    fs.chmodSync(tracesDir, 0o500);
-    try {
-      const stopResult = claudeId01DriveSubagentStop(dir, role, sessionId, agentId);
+    fs.unlinkSync(rll.roleBindingPathFor(
+      dir, primed.action.worktree_id, primed.action.plan_digest,
+      rll.roleProfileDigestFor(role), primed.action.session_generation_id, role,
+    ));
+    // Windows ignores POSIX directory mode bits, so inject the exact unlink
+    // failure in the real hook subprocess through the test-only preload.
+    const stopResult = claudeId01DriveSubagentStop(dir, role, sessionId, agentId, {
+      RUNTIME_TEST_UNLINK_FAILURE_PATH: recordPath,
+    });
       assert.strictEqual(stopResult.status, 0, 'SubagentStop must exit 0 per the official hook protocol: ' + stopResult.stderr);
       let parsed = null;
       try { parsed = JSON.parse((stopResult.stdout || '').trim()); } catch { /* handled by the assertion below */ }
@@ -4957,9 +5305,6 @@ test('M7-TRACE-CLEANUP-NONAUTH-23 (RED): a durable fence must already be written
         fs.existsSync(fencePath), true,
         'M7 section 8.4: "publishes the identity fence first" -- fence-writing must be ordered BEFORE trace cleanup even attempts to run, so a cleanup failure (which correctly still blocks the stop, per the unchanged assertion above) can never prevent the fence from being durably written. Today handleSubagentStop has no fence-writing logic at all, so the fence is absent regardless of cleanup outcome: ' + JSON.stringify({ fencePath, stopResult })
       );
-    } finally {
-      fs.chmodSync(tracesDir, originalMode);
-    }
   } finally {
     fs.rmSync(rll.registryRepoDir(dir), { recursive: true, force: true });
     fs.rmSync(dir, { recursive: true, force: true });
@@ -5215,7 +5560,7 @@ test('M7-ONESHOT-CREATE-RACE-CROSS-FAMILY-AMBIGUOUS (regression): a real createR
     ].join('');
     const result = await m7DriveRendezvousRace(
       ['-e', childSource, IMPL, dir, sessionId, agentId, oneShotRole, worktreeId, planDigest],
-      { RUNTIME_ROLE_LIFECYCLE_TEST_CAPABILITY: M7_RACE_CAPABILITY },
+      Object.assign({ RUNTIME_ROLE_LIFECYCLE_TEST_CAPABILITY: M7_RACE_CAPABILITY }, claudeId01ChildEvidenceEnv(dir, sessionId)),
       'create-after-admission-before-write',
       rendezvousDir,
       async () => {
@@ -5254,7 +5599,7 @@ test('M7-ONESHOT-CREATE-RACE-CROSS-FAMILY-AMBIGUOUS (regression): a real createR
       schema: 'runtime/claude-authority-identity/v1', provider: 'claude-hook',
       repo_id: rll.computeRepoId(dir), runtime_session_key: sessionId, agent_id: agentId,
     };
-    const freshClassification = rll.classifyClaudeAuthorityForIdentity({ repoId: authIdentity.repo_id }, authIdentity);
+    const freshClassification = rll.classifyClaudeAuthorityForIdentity(dir, authIdentity);
     assert.strictEqual(
       freshClassification.ok, false,
       'a fresh classification after the race must still report genuine cross-family ambiguity: ' + JSON.stringify(freshClassification)
@@ -5374,12 +5719,17 @@ test('M7-CROSS-FAMILY-AMBIGUITY-21 (RED): classifyClaudeAuthorityForIdentity mus
       mintedRequester.binding.role, oneShotRecord.role,
       'fixture sanity: the two live candidates genuinely have DIFFERENT role fields -- proves this collision is detected despite role differing, never merely because the fixture happened to reuse one role'
     );
+    const requesterStillLive = rll.validateRequesterBindingFor(
+      dir, mintedRequester.binding.binding_id, requesterRole, worktreeId, planDigest,
+    );
+    assert.strictEqual(requesterStillLive.ok, true,
+      'fixture sanity: directly planting a different-family record must not invalidate the existing requester proof: ' + JSON.stringify(requesterStillLive));
 
     const authIdentity = {
       schema: 'runtime/claude-authority-identity/v1', provider: 'claude-hook',
       repo_id: rll.computeRepoId(dir), runtime_session_key: sessionId, agent_id: agentId,
     };
-    const result = rll.classifyClaudeAuthorityForIdentity({ repoId: authIdentity.repo_id }, authIdentity);
+    const result = rll.classifyClaudeAuthorityForIdentity(dir, authIdentity);
     assert.strictEqual(
       result.ok, false,
       'M7 section 6: "more than one current candidate is never selected" -- a requester-family AND a one-shot-family binding BOTH currently live for the identical (repo,session,agent) identity must reject closed, never silently resolve to either single family (which a result.state of ONE would imply): ' + JSON.stringify(result)
@@ -6058,9 +6408,17 @@ test('M7-CLASSIFIER-ADVERSARY-READ-UNREADABLE-R12-4 (RED): a genuine per-record 
     const unreadableId = 'b'.repeat(32);
     const unreadablePath = path.join(requesterBindingsDir, unreadableId + '.json');
     fs.writeFileSync(unreadablePath, JSON.stringify({ placeholder: true }), { mode: 0o600 });
-    fs.chmodSync(unreadablePath, 0o000);
 
     let result;
+    const originalOpenSync = fs.openSync;
+    fs.openSync = function injectedUnreadableRecord(target, ...args) {
+      if (path.resolve(String(target)) === path.resolve(unreadablePath)) {
+        const error = new Error('fixture EACCES');
+        error.code = 'EACCES';
+        throw error;
+      }
+      return originalOpenSync.call(this, target, ...args);
+    };
     try {
       const identity = {
         schema: 'runtime/claude-authority-identity/v1', provider: 'claude-hook',
@@ -6068,7 +6426,7 @@ test('M7-CLASSIFIER-ADVERSARY-READ-UNREADABLE-R12-4 (RED): a genuine per-record 
       };
       result = rll.classifyClaudeAuthorityForIdentity(dir, identity);
     } finally {
-      fs.chmodSync(unreadablePath, 0o600);
+      fs.openSync = originalOpenSync;
     }
     assert.strictEqual(
       result.ok, false,

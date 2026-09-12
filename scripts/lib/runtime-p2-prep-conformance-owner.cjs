@@ -592,10 +592,14 @@ function resolveSourceFacts() {
   if (toplevel !== projectRoot) throw ownerError('owner-source-root-mismatch', 'git toplevel does not match projectRoot');
   const head = gitRead(['rev-parse', 'HEAD']);
   if (!/^[0-9a-f]{40}$/.test(head)) throw ownerError('owner-source-head-invalid', 'HEAD is not exactly 40 lowercase hex characters');
-  const gitCommonDir = gitRead(['rev-parse', '--git-common-dir']);
-  if (!path.isAbsolute(gitCommonDir) || path.normalize(gitCommonDir) !== gitCommonDir) {
-    throw ownerError('owner-source-git-common-invalid', 'git-common-dir is not an absolute normalized path');
-  }
+  const gitCommonDirRaw = gitRead(['rev-parse', '--git-common-dir']);
+  // `git rev-parse --git-common-dir` is allowed to return a path relative to
+  // the command's working tree (for a regular checkout this is commonly
+  // `.git`). Resolve that trusted Git result against the already-proven
+  // project root, then apply the same lstat/realpath checks below to the
+  // canonical absolute directory. Worktrees that return an absolute common
+  // directory continue through the identical path.
+  const gitCommonDir = path.resolve(projectRoot, gitCommonDirRaw);
   let commonLstat, commonReal;
   try {
     commonLstat = fs.lstatSync(gitCommonDir);
@@ -824,6 +828,11 @@ function materializeDetachedGitMetadata(rootPath, head) {
 
 const MAX_TREE_ENTRIES = 512;
 const MAX_TREE_TOTAL_BYTES = 64 * 1024 * 1024;
+// Executable source files are not protocol records. Keep their copy bound
+// finite but separate from MAX_RECORD_BYTES/SEED_CAPS: the generated bridge
+// legitimately exceeds 1 MiB, while subject-bundle entries remain capped at
+// the sealed 1 MiB contract.
+const MAX_SOURCE_FILE_BYTES = 2 * 1024 * 1024;
 
 function copyPlainTreeNoClobber(sourceRoot, targetRoot, relativeDir, maxBytesPerFile) {
   const isBoundRoot = (value) => typeof value === 'string' && value.length > 0 && path.isAbsolute(value) && path.resolve(value) === value;
@@ -968,7 +977,7 @@ function materializeRootSkeleton(buildDir, rootName) {
   ];
   for (const subdir of subdirs) makeOwnedDirectoryNoClobber(path.join(rootPath, subdir));
   const treeDirs = ['scripts/lib', 'setup/agent-templates', '.claude/agents'];
-  const treeResults = treeDirs.map((relativeDir) => copyPlainTreeNoClobber(sourceFacts.projectRoot, rootPath, relativeDir, MAX_RECORD_BYTES));
+  const treeResults = treeDirs.map((relativeDir) => copyPlainTreeNoClobber(sourceFacts.projectRoot, rootPath, relativeDir, MAX_SOURCE_FILE_BYTES));
   const fileResults = ROOT_SINGLE_FILES.map((entry) => copyFdBoundFileNoClobber(
     path.join(sourceFacts.projectRoot, entry.path), path.join(rootPath, entry.path), MAX_RECORD_BYTES, entry.mode,
   ));

@@ -34,8 +34,25 @@ ADR-001 §1 separately draws a three-*concept* distinction (portable orchestrato
 | [runtime-messaging-drivers](runtime-messaging-drivers.md) | Activation driver table, routing, fallback matrix, context7-preferred evidence policy, driver-fallback recovery |
 | [runtime-messaging-bridges](runtime-messaging-bridges.md) | Host bridge contracts: Claude `SendMessage`/`claude-agent`, Codex app-server/MCP, registered disk consumer |
 | [runtime-messaging-cp-writer](runtime-messaging-cp-writer.md) | context-provider's narrow result-publication boundary + PATTERN-GAP ingestion workflow |
+| [runtime-messaging-modes](runtime-messaging-modes.md) | Standalone (Claude-only) vs mixed (Codex worker opt-in) operation, and the preconditions a consumer repository must satisfy |
 
-## Current Measured Status (2026-08)
+## Current Measured Status (2026-09)
+
+- **Mixed operation is live-qualified.** A real session drove the split support plane end to end: one
+  batched `supervisor-start` owning the two opted-in Codex roles plus three native `role-spawn`
+  actions, all five roles healthy, a correlated mixed-review verdict published by the retained Codex
+  reviewer, and a documentation consultation answered through the toolkit's own MCP `search-docs`
+  with all six correlated refs. Modes, preconditions and operating notes are in
+  [runtime-messaging-modes](runtime-messaging-modes.md).
+- **A parked role is a healthy role.** An admitted Claude-native role parks in `WAITING` once its
+  startup turn ends; `READY`, `WAITING` and `BUSY` are all usable, and any check that demands exactly
+  `READY` will be unsatisfiable in a plane that has finished starting.
+- **Refusals are named on stderr**, never in the stdout envelope, whose schema is frozen and whose
+  detail-code vocabulary is closed. Look for `[<command>] retained pair unresolved: …`,
+  `[ensure] roles unavailable: <role>:<reason>` and `[session-run] transport stopped: …`.
+- **R33 native** remains deferred and unclaimed; its own CI gate stays pending/opt-in.
+
+## Historical Measured Status (2026-08)
 
 - **context7-preferred** evidence policy shipped alongside the existing strict `context7-required` — detail in [runtime-messaging-drivers § Context7 Evidence Policy](runtime-messaging-drivers.md#context7-evidence-policy).
 - **Driver fallback** (takeover-and-redispatch on lease loss) implemented and end-to-end verified, including a real inbox-ref `created_at` collision bug found and fixed this session — detail in [runtime-messaging-drivers § Driver Fallback](runtime-messaging-drivers.md#driver-fallback-takeover-and-redispatch).

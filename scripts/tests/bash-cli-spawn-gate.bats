@@ -45,9 +45,15 @@ _assert_isolated_runtime_tmp() {
     try { st = fs.lstatSync(process.argv[1]); } catch (err) { console.error("runtime-tmp stat failed: " + err.message); process.exit(1); }
     if (st.isSymbolicLink()) { console.error("runtime-tmp is a symlink"); process.exit(1); }
     if (!st.isDirectory()) { console.error("runtime-tmp is not a directory"); process.exit(1); }
-    if ((st.mode & 0o777) !== 0o700) { console.error("runtime-tmp wrong mode: " + (st.mode & 0o777).toString(8)); process.exit(1); }
-    if (typeof process.getuid === "function" && st.uid !== process.getuid()) { console.error("runtime-tmp wrong owner"); process.exit(1); }
-  ' "$dir"
+    if (process.platform === "win32") {
+      const rc = require(process.argv[2]);
+      const acl = rc.windowsPrivateDirectoryAcl(process.argv[1], { mode: "ensure" });
+      if (!acl.ok) { console.error("runtime-tmp Windows ACL is not private: " + JSON.stringify(acl)); process.exit(1); }
+    } else {
+      if ((st.mode & 0o777) !== 0o700) { console.error("runtime-tmp wrong mode: " + (st.mode & 0o777).toString(8)); process.exit(1); }
+      if (typeof process.getuid === "function" && st.uid !== process.getuid()) { console.error("runtime-tmp wrong owner"); process.exit(1); }
+    }
+  ' "$dir" "$BATS_TEST_DIRNAME/../lib/runtime-consultation.cjs"
 }
 
 setup() {
@@ -73,15 +79,13 @@ setup() {
   printf '# Fixture PLAN for bash-cli-spawn-gate.bats\n' > "$PROJ/.planning/wave-$WAVE_SLUG/PLAN.md"
   mkdir -p "$PROJ/scripts/lib"
   # This suite validates the Codex supervisor-start gate, not the repository's
-  # current host-selection preference. Pin a project-local v1 policy so a future
-  # toolkit-level v2 selection (for example Claude with fallback=deny) cannot
-  # silently redirect this deliberately single-driver Codex fixture.
+  # default standalone-Claude route. Keep the current closed v2 policy and opt
+  # this fixture's verifier role into the existing mixed-review Codex worker;
+  # downgrading to v1 would no longer represent an admissible entrypoint policy.
   node -e '
     const fs = require("fs");
     const policy = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
-    policy.schema = "runtime-collaboration-policy/v1";
-    policy.version = 1;
-    delete policy.selection;
+    policy.selection.codex_worker_opt_in_roles = ["verifier"];
     fs.writeFileSync(process.argv[2], JSON.stringify(policy) + "\n", { mode: 0o600 });
   ' "$BATS_TEST_DIRNAME/../lib/runtime-collaboration-policy.json" "$PROJ/scripts/lib/runtime-collaboration-policy.json"
   cp "$BATS_TEST_DIRNAME/../lib/runtime-routing.json" "$PROJ/scripts/lib/runtime-routing.json"
@@ -129,7 +133,10 @@ _mint_action() {
     const grant = rll.mintLifecycleCommandGrant(projectRoot, binding, argvDigest, role, "ensure", "main-orchestrator", "orchestrator", "normal", null);
     const out = execFileSync("node", [process.argv[1], "ensure", "--project-root", projectRoot, "--role", role, "--lifecycle-binding", grant.grantId], {
       encoding: "utf8",
-      env: Object.assign({}, process.env, { RUNTIME_ROLE_LIFECYCLE_FAKE_CAPABILITIES: capability }),
+      env: Object.assign({}, process.env, {
+        RUNTIME_ROLE_LIFECYCLE_TEST_BACKEND: "deterministic-app-server-v1",
+        RUNTIME_ROLE_LIFECYCLE_FAKE_CAPABILITIES: capability,
+      }),
     });
     const result = JSON.parse(out.trim().split("\n").pop());
     const action = result.actions[0];

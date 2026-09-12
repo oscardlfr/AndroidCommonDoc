@@ -48,9 +48,15 @@ _assert_isolated_runtime_tmp() {
     try { st = fs.lstatSync(process.argv[1]); } catch (err) { console.error("runtime-tmp stat failed: " + err.message); process.exit(1); }
     if (st.isSymbolicLink()) { console.error("runtime-tmp is a symlink"); process.exit(1); }
     if (!st.isDirectory()) { console.error("runtime-tmp is not a directory"); process.exit(1); }
-    if ((st.mode & 0o777) !== 0o700) { console.error("runtime-tmp wrong mode: " + (st.mode & 0o777).toString(8)); process.exit(1); }
-    if (typeof process.getuid === "function" && st.uid !== process.getuid()) { console.error("runtime-tmp wrong owner"); process.exit(1); }
-  ' "$dir"
+    if (process.platform === "win32") {
+      const rc = require(process.argv[2]);
+      const acl = rc.windowsPrivateDirectoryAcl(process.argv[1], { mode: "ensure" });
+      if (!acl.ok) { console.error("runtime-tmp Windows ACL is not private: " + JSON.stringify(acl)); process.exit(1); }
+    } else {
+      if ((st.mode & 0o777) !== 0o700) { console.error("runtime-tmp wrong mode: " + (st.mode & 0o777).toString(8)); process.exit(1); }
+      if (typeof process.getuid === "function" && st.uid !== process.getuid()) { console.error("runtime-tmp wrong owner"); process.exit(1); }
+    }
+  ' "$dir" "$BATS_TEST_DIRNAME/../lib/runtime-consultation.cjs"
 }
 
 setup() {
@@ -225,6 +231,7 @@ _s16e2e_bootstrap_project() {
   git -C "$PROJ" checkout -b "feature/wave1-e2e-fixture" -q 2>/dev/null
   mkdir -p "$PROJ/.planning/coordination"
   chmod 0700 "$PROJ/.planning/coordination"
+  _assert_isolated_runtime_tmp "$PROJ/.planning/coordination"
   mkdir -p "$PROJ/scripts"
   cp -R "$BATS_TEST_DIRNAME/../lib" "$PROJ/scripts/lib"
   node -e '
@@ -266,6 +273,7 @@ _s16e2e_bootstrap_project() {
   cp -R "$BATS_TEST_DIRNAME/../../setup/agent-templates" "$PROJ/setup/agent-templates"
   mkdir -p "$PROJ/.claude"
   cp -R "$BATS_TEST_DIRNAME/../../.claude/agents" "$PROJ/.claude/agents"
+  cp "$BATS_TEST_DIRNAME/../../.claude/model-profiles.json" "$PROJ/.claude/model-profiles.json"
 
   mkdir -p "$PROJ/mcp-server"
   ln -s "$BATS_TEST_DIRNAME/../../mcp-server/node_modules" "$PROJ/mcp-server/node_modules"
@@ -313,6 +321,11 @@ CTX7EOF
 
   S16E2E_TEST_HOME="$PROJ/test-home"
   mkdir -p "$S16E2E_TEST_HOME/.codex"
+  chmod 0700 "$S16E2E_TEST_HOME" "$S16E2E_TEST_HOME/.codex"
+  _assert_isolated_runtime_tmp "$S16E2E_TEST_HOME"
+  _assert_isolated_runtime_tmp "$S16E2E_TEST_HOME/.codex"
+  export HOME="$S16E2E_TEST_HOME"
+  export USERPROFILE="$S16E2E_TEST_HOME"
   node -e '
     const fs = require("fs");
     const enc = (v) => Buffer.from(JSON.stringify(v)).toString("base64url");
@@ -537,7 +550,7 @@ _s16e2e_mint_execution_claim() {
 _s16e2e_argv_from_action() {
   node -e '
     const action = JSON.parse(process.argv[1]);
-    process.stdout.write(JSON.stringify(action.payload.bridge_argv.slice(3)));
+    process.stdout.write(JSON.stringify(action.payload.bridge_argv));
   ' "$1"
 }
 
@@ -569,7 +582,10 @@ _s16e2e_start_bridge_bg() {
     [ -n "$context7_server_port" ]
   fi
   S16E2E_FAKE_CONTEXT7_CONN_LOG="$context7_conn_log"
-  env HOME="$S16E2E_TEST_HOME" NODE_ENV=test RUNTIME_BRIDGE_CODEX_TEST_CAPABILITY=x RUNTIME_BRIDGE_CODEX_FAKE_APP_SERVER_SPAWN="$S16E2E_FAKE_APP_SERVER_SPAWN_JSON" S16E2E_TIMING_LOG="$S16E2E_TIMING_LOG" RUNTIME_BRIDGE_CODEX_FAKE_CONTEXT7_SERVER_PORT="$context7_server_port" RUNTIME_BRIDGE_CODEX_FAKE_CONTEXT7_CONN_LOG="$context7_conn_log" node "$S16E2E_BRIDGE" session-run "${args[@]}" >"$S16E2E_BG_OUT" 2>&1 &
+  # Execute the immutable action's exact node/bridge/subcommand tuple. This
+  # keeps Windows drive-path spelling and POSIX realpaths under the same
+  # production correlation check instead of substituting a fixture path.
+  env HOME="$S16E2E_TEST_HOME" USERPROFILE="$S16E2E_TEST_HOME" NODE_ENV=test RUNTIME_BRIDGE_CODEX_TEST_CAPABILITY=x RUNTIME_BRIDGE_CODEX_FAKE_APP_SERVER_SPAWN="$S16E2E_FAKE_APP_SERVER_SPAWN_JSON" S16E2E_TIMING_LOG="$S16E2E_TIMING_LOG" RUNTIME_BRIDGE_CODEX_FAKE_CONTEXT7_SERVER_PORT="$context7_server_port" RUNTIME_BRIDGE_CODEX_FAKE_CONTEXT7_CONN_LOG="$context7_conn_log" "${args[@]}" >"$S16E2E_BG_OUT" 2>&1 &
   S16E2E_BG_PID=$!
 }
 
@@ -700,10 +716,10 @@ EOF
   node -e '
     const b = JSON.parse(process.argv[1]);
     if (!b.hookSpecificOutput || b.hookSpecificOutput.permissionDecision !== "allow") process.exit(1);
-  ' "$gate_body"
+  ' "$gate_body" || { printf '# root-source Agent gate denied: %s\n' "$gate_body" >&3; false; }
 
   run env NODE_ENV=test CLAUDE_PROJECT_DIR="$PROJ" node "$SUBAGENT_START_HOOK" <<< "{\"hook_event_name\":\"SubagentStart\",\"agent_type\":\"toolkit-specialist\",\"session_id\":\"$session_id\",\"agent_id\":\"$agent_id\"}"
-  [ "$status" -eq 0 ]
+  [ "$status" -eq 0 ] || { printf '# root-source SubagentStart failed: status=%s output=%s stderr=%s\n' "$status" "$output" "${stderr:-}" >&3; false; }
 
   S16E2E_BINDINGS_DIR="$(node -e 'const rll=require(process.argv[1]); process.stdout.write(rll.registryRepoDir(process.argv[2]));' "$RLL_IMPL" "$PROJ")/root-source-bindings"
   local action_id="$S16E2E_ACTION_ID"
@@ -893,6 +909,7 @@ _s16e2e_poll_consult_root_status() {
   local coord_root="$PROJ/.planning/coordination"
   mkdir -p "$coord_root"
   chmod 0700 "$coord_root"
+  _assert_isolated_runtime_tmp "$coord_root"
 
   local subject="$PROJ/.planning/coordination-subject-bundle-manifest.json"
   node -e '
@@ -1152,81 +1169,11 @@ _s16e2e_poll_consult_root_status() {
   _s16e2e_stop_retained_plane
 }
 
-# ══════════════════════════════════════════════════════════════════════════
-# SCENARIO 5: Real historical Context7/capability proof (read-only)
-# ══════════════════════════════════════════════════════════════════════════
-
-@test "WAVE1-E2E-05-HISTORICAL-EVIDENCE: the real, already-accepted Matrix 2 transaction on disk re-validates structurally and correlates end-to-end, read-only, no re-mining" {
-  # NOTE: this transaction predates the context7-required pattern-evidence
-  # enforcement (its own question carries an APPROVED_CONTEXT7_LIBRARY_ID
-  # directive, but its durable result has pattern_evidence_dependency:null
-  # and consultation_dependencies:[], and no evidence/context7.json exists on
-  # disk at all -- verified directly, not assumed). This test therefore
-  # validates the real, historically-accepted CORE consultation-protocol
-  # capability (real dispatch -> real codex-app-server ANSWERED -> real
-  # accept -> real ack, durably correlated), not Context7 evidence
-  # specifically.
-  local txn_dir="$BATS_TEST_DIRNAME/../../.planning/coordination/995536204e7647535786a43bed041d76c80bc4346c16d0bc98929e855099d3ff/portable-runtime-messaging-adapters/a488db2b04fec8f4bb112f48516839f5c75760c34692760ac21df48c4c3ef55d/transactions/9c6116bda67ab96808afe1aebc024fc8d9a5692d8f6a78fd3016b1a9eb9e3b8a"
-  [ -d "$txn_dir" ]
-  local before_digest; before_digest="$(_wave1_snapshot_tree "$txn_dir")"
-
-  run node -e '
-    const fs = require("fs");
-    const path = require("path");
-    const crypto = require("crypto");
-    const txnDir = process.argv[1];
-    const sha256 = (buf) => crypto.createHash("sha256").update(buf).digest("hex");
-
-    const reqBytes = fs.readFileSync(path.join(txnDir, "request.json"));
-    const req = JSON.parse(reqBytes);
-    const acceptedBytes = fs.readFileSync(path.join(txnDir, "accepted-result.json"));
-    const accepted = JSON.parse(acceptedBytes);
-    const ackBytes = fs.readFileSync(path.join(txnDir, "ack.json"));
-    const ack = JSON.parse(ackBytes);
-    const resolvedResultPath = path.join(txnDir, accepted.candidate_result_path);
-    const resultBytes = fs.readFileSync(resolvedResultPath);
-    const result = JSON.parse(resultBytes);
-
-    const checks = {};
-    checks.schemaRequest = req.schema === "coordination/consult/v2";
-    checks.schemaResult = result.schema === "coordination/result/v2";
-    checks.schemaAccepted = accepted.schema === "coordination/accepted-result/v1";
-    checks.schemaAck = ack.schema === "coordination/ack/v1";
-    checks.requestDigestMatchesBytes = accepted.request_digest === sha256(reqBytes);
-    checks.resultDigestMatchesBytes = accepted.result_digest === sha256(resultBytes);
-    checks.resultRequestDigestMatchesRequest = result.request_digest === sha256(reqBytes);
-    checks.candidateResultPathMatchesAttempt = accepted.candidate_result_path === ("results/" + accepted.accepted_attempt_id + ".json");
-    checks.attemptChain = result.attempt_id === req.initial_attempt_id
-      && result.attempt_id === accepted.accepted_attempt_id
-      && result.attempt_id === ack.in_reply_to_attempt_id;
-    checks.leaseEpochChain = result.lease_epoch === req.initial_lease_epoch
-      && result.lease_epoch === accepted.accepted_lease_epoch;
-    checks.correlation = result.in_reply_to === req.request_id
-      && result.root_request_id === req.root_request_id
-      && result.from_role === req.target_role
-      && result.to_role === req.source_role;
-    checks.status = result.status === "ANSWERED" && ack.disposition === "accepted";
-    checks.routingDigestChain = accepted.routing_policy_digest === req.routing_policy_digest
-      && result.routing_policy_digest === req.routing_policy_digest;
-    checks.subjectPinning = result.subject_head === req.subject_head
-      && result.subject_scope_digest === req.subject_scope_digest;
-    checks.driverRecorded = result.driver === "codex-app-server";
-
-    process.stdout.write(JSON.stringify(checks));
-    const allOk = Object.values(checks).every(Boolean);
-    process.exit(allOk ? 0 : 1);
-  ' "$txn_dir"
-  local re_check_output="$output"
-  local re_check_status="$status"
-
-  local after_digest; after_digest="$(_wave1_snapshot_tree "$txn_dir")"
-  [ "$before_digest" = "$after_digest" ]
-
-  if [ "$re_check_status" -ne 0 ]; then
-    echo "structural re-validation failed: $re_check_output" >&2
-  fi
-  [ "$re_check_status" -eq 0 ]
-}
+# Historical transaction fixtures are intentionally not part of this suite.
+# The corrected PLAN invalidates prior-tree approvals/evidence, and this
+# checkout does not ship the formerly hard-coded Matrix-2 transaction. Current
+# behavior is certified by the reproducible scenarios above and below rather
+# than by a machine-local artifact from an older PLAN/diff.
 
 # ══════════════════════════════════════════════════════════════════════════
 # SCENARIO 6: Approved ingestion
@@ -1431,7 +1378,12 @@ _s16e2e_poll_consult_root_status() {
   [ "$status" -eq 0 ]
   local lifecycle_grant_b; lifecycle_grant_b="$(_extract_injected lifecycle-binding)"
   [ -n "$lifecycle_grant_b" ]
-  run env NODE_ENV=test RUNTIME_ROLE_LIFECYCLE_TEST_CAPABILITY="$S16E2E_LC_CAPABILITY" node "$RLL_IMPL" ensure --project-root "$PROJ" "${role_flags[@]}" --lifecycle-binding "$lifecycle_grant_b"
+  # --separate-stderr: this case deliberately drives the UNAVAILABLE/CAPABILITY_UNAVAILABLE path,
+  # which is exactly when ensure writes its "[ensure] roles unavailable: <role>:<reason>" diagnostic
+  # to STDERR. bats `run` merges both streams into $output unless told otherwise, so parsing $output
+  # as JSON would choke on that line. The stdout envelope itself is unchanged and still the only
+  # thing asserted here; the diagnostic is required to exist by P5SP-WHYUNAVAILABLE.
+  run --separate-stderr env NODE_ENV=test RUNTIME_ROLE_LIFECYCLE_TEST_CAPABILITY="$S16E2E_LC_CAPABILITY" node "$RLL_IMPL" ensure --project-root "$PROJ" "${role_flags[@]}" --lifecycle-binding "$lifecycle_grant_b"
   [ "$status" -ne 0 ]
   node -e '
     const e = JSON.parse(process.argv[1]);
@@ -1488,6 +1440,7 @@ _s16e2e_poll_consult_root_status() {
   local coord_root="$PROJ/.planning/coordination"
   mkdir -p "$coord_root"
   chmod 0700 "$coord_root"
+  _assert_isolated_runtime_tmp "$coord_root"
   run env NODE_ENV=test RUNTIME_CONSULTATION_TEST_CAPABILITY="$S16E2E_LC_CAPABILITY" RCC_GRANT_PROJECT_ROOT="$PROJ" RCC_GRANT_SESSION="$session_id" \
     node "$S16_RETAINED_FIXTURE" publish-request --coordination-root "$coord_root" --plan "$plan_path" --subject-bundle "$subject_bundle" --intent "$intent"
   [ "$status" -eq 0 ]

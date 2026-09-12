@@ -324,8 +324,13 @@ function parseFlags(argv, command) {
   // --fixed-ids/--fixed-clock (PLAN.md ~L752) but is an env var, not an argv flag,
   // so it is checked unconditionally here rather than via the allowlist above
   // (RCC-determinism-4).
-  if (process.env.RUNTIME_CONSULTATION_ACL_PROBE && !isTestCapability()) {
-    throw new CliError('INVALID', 'INVALID_ARGUMENT', 'RUNTIME_CONSULTATION_ACL_PROBE requires the test capability');
+  if (process.env.RUNTIME_CONSULTATION_ACL_PROBE) {
+    if (process.env.RUNTIME_CONSULTATION_ACL_PROBE !== 'unverifiable') {
+      throw new CliError('INVALID', 'INVALID_ARGUMENT', 'RUNTIME_CONSULTATION_ACL_PROBE has an unsupported value');
+    }
+    if (!isTestCapability() || !out['fixed-ids'] || !out['fixed-clock']) {
+      throw new CliError('INVALID', 'INVALID_ARGUMENT', 'RUNTIME_CONSULTATION_ACL_PROBE requires the test capability plus both --fixed-ids and --fixed-clock');
+    }
   }
   return out;
 }
@@ -347,7 +352,8 @@ function resolveAbsolute(p) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 function gitRevParse(cwd, args) {
-  return execFileSync('git', ['-C', cwd].concat(args), { encoding: 'utf8' }).trim();
+  return execFileSync('git', ['-C', cwd].concat(args),
+    { encoding: 'utf8', windowsHide: true }).trim();
 }
 
 function realpathOrSelf(p) {
@@ -400,6 +406,7 @@ function statIdentityOrNull(p) {
     const st = fs.lstatSync(p);
     return {
       dev: st.dev, ino: st.ino, mode: st.mode, uid: st.uid, nlink: st.nlink,
+      birthtimeMs: st.birthtimeMs,
       isDirectory: st.isDirectory(), isFile: st.isFile(), isSymbolicLink: st.isSymbolicLink(),
     };
   } catch (err) {
@@ -563,6 +570,7 @@ function statIdentityEqual(a, b) {
   // genuine tamper signal (permission/ownership swap) without nlink's
   // volatility.
   return a.dev === b.dev && a.ino === b.ino && a.mode === b.mode && a.uid === b.uid
+    && a.birthtimeMs === b.birthtimeMs
     && a.isDirectory === b.isDirectory && a.isFile === b.isFile
     && a.isSymbolicLink === b.isSymbolicLink;
 }
@@ -1096,7 +1104,11 @@ function fsyncDir(dirPath, barrierLabel, suppressFaultInjection) {
   let proven = false;
   let primaryClosed = false;
   try {
-    fd = fs.openSync(dirPath, 'r');
+    // libuv maps a Windows directory opened read-only to a handle on which
+    // FlushFileBuffers fails with EPERM. Opening that same directory read/write
+    // yields a flush-capable handle; POSIX directories must remain read-only
+    // because O_RDWR is rejected there (typically EISDIR).
+    fd = fs.openSync(dirPath, process.platform === 'win32' ? 'r+' : 'r');
     if (!suppressFaultInjection && isDirFsyncFaultActive(barrierLabel)) {
       dirFsyncFaultInjectedCount += 1;
       const injected = new Error('simulated directory-fsync failure (RUNTIME_CONSULTATION_FAULT_DIR_FSYNC)');
@@ -1301,8 +1313,10 @@ function publishNoClobber(targetPath, bytes, opts) {
     // byte-identical content. Isolates that the post-link revalidation's identity
     // binding (dev/ino), not merely a byte comparison, is what rejects the foreign
     // inode: a byte-only check would see identical content and wrongly accept it.
+    const replacementPath = tempPath + '.same-bytes-replacement';
+    fs.writeFileSync(replacementPath, buf, { mode: 0o600, flag: 'wx' });
     try { fs.unlinkSync(tempPath); } catch (e) { /* best-effort test setup */ }
-    fs.writeFileSync(tempPath, buf, { mode: 0o600 });
+    fs.renameSync(replacementPath, tempPath);
   }
   if (typeof options.revalidateBeforeLink === 'function') {
     try {
@@ -1782,8 +1796,10 @@ function publishReplace(targetPath, bytes) {
       // this revalidation opening it. Isolates that the tempIdentity dev/ino
       // binding (not merely a byte comparison) is what rejects the foreign
       // inode.
+      const replacementPath = targetPath + '.same-bytes-replacement';
+      fs.writeFileSync(replacementPath, bytes, { mode: 0o600, flag: 'wx' });
       try { fs.unlinkSync(targetPath); } catch (e) { /* best-effort test setup */ }
-      fs.writeFileSync(targetPath, bytes, { mode: 0o600 });
+      fs.renameSync(replacementPath, targetPath);
     }
     if (isReplacePostRenameFaultActive('open')) throw new Error('injected post-rename open fault');
     const checkFd = fs.openSync(targetPath, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW);
@@ -2596,7 +2612,7 @@ function testM7Rendezvous(stage, coordRoot) {
       preLstat = null;
     }
     if (preLstat !== null) {
-      if (preLstat.isSymbolicLink() || !preLstat.isFile() || (preLstat.mode & 0o777) !== 0o600) {
+      if (preLstat.isSymbolicLink() || !preLstat.isFile() || (process.platform !== 'win32' && (preLstat.mode & 0o777) !== 0o600)) {
         throw new Error('M7_RENDEZVOUS_INVALID_GO_SENTINEL: .go sentinel is not a genuine owner-only regular file');
       }
       let fd;
@@ -2610,7 +2626,7 @@ function testM7Rendezvous(stage, coordRoot) {
         const st = fs.fstatSync(fd);
         const identityStable = typeof preLstat.dev !== 'number' || typeof preLstat.ino !== 'number'
           || (st.dev === preLstat.dev && st.ino === preLstat.ino);
-        if (!st.isFile() || (st.mode & 0o777) !== 0o600 || !identityStable) {
+        if (!st.isFile() || (process.platform !== 'win32' && (st.mode & 0o777) !== 0o600) || !identityStable) {
           throw new Error('M7_RENDEZVOUS_INVALID_GO_SENTINEL: .go sentinel identity/shape changed between lstat and open');
         }
         goBytes = fs.readFileSync(fd);
@@ -2932,7 +2948,22 @@ function acquireLock(txnDir, coordRoot) {
       if (openedSt.dev !== lockStAfterMkdir.dev || openedSt.ino !== lockStAfterMkdir.ino) {
         throw new CliError('INVALID', 'SECURITY_INVALID', 'transition lock directory was substituted between this invocation\'s own mkdirSync and its immediately-following open (dev/ino mismatch): ' + lockDir);
       }
-      fs.fchmodSync(lockFd, 0o700);
+      if (process.platform === 'win32') {
+        // Windows does not implement fchmod for directory handles. The newly
+        // created lock initially inherits from its parent; replace that with a
+        // protected owner-only DACL, then bind the path back to the same inode
+        // already opened above before accepting the lock identity.
+        assertWindowsPrivateDirectoryAcl(
+          windowsPrivateDirectoryAcl(lockDir, { mode: 'ensure' }),
+          lockDir,
+        );
+        const pathStAfterAcl = fs.lstatSync(lockDir, { bigint: true });
+        if (pathStAfterAcl.dev !== openedSt.dev || pathStAfterAcl.ino !== openedSt.ino) {
+          throw new CliError('INVALID', 'SECURITY_INVALID', 'transition lock directory was substituted while applying its Windows ACL: ' + lockDir);
+        }
+      } else {
+        fs.fchmodSync(lockFd, 0o700);
+      }
       st = fs.fstatSync(lockFd, { bigint: true });
     } finally {
       try { fs.closeSync(lockFd); } catch (e) { /* best-effort cleanup */ }
@@ -4442,6 +4473,45 @@ function assertRequestIdentityMatches(preflightRec, laterRec, requestPath) {
   }
 }
 
+/**
+ * Read-only bridge primitive for a canonical request's authoritative result.
+ * The request is accredited twice around the candidate read so an immutable
+ * request replacement/rewrite is never silently adopted.  The candidate path
+ * is derived exclusively from the request's current authoritative attempt;
+ * callers never supply it.  PRESENT is returned only after the complete
+ * result-v2 validator (correlation, authority and dependency chain) succeeds.
+ *
+ * @returns {{status:'absent'|'pending',request:object,requestDigest:string,candidatePath:string,attemptId:string,leaseEpoch:number}|{status:'present',request:object,requestDigest:string,candidatePath:string,attemptId:string,leaseEpoch:number,result:object,resultDigest:string}}
+ */
+function classifyCanonicalResultForRequest(coordRootRaw, requestPathRaw) {
+  validateRootConfinement(coordRootRaw);
+  const coordRoot = realpathOrSelf(coordRootRaw);
+  const before = accreditCanonicalRequest(coordRoot, requestPathRaw);
+  const txnDir = path.dirname(requestPathRaw);
+  const authority = resolveAuthoritativeAttempt(before.obj, txnDir);
+  const candidatePath = resultPathFor(txnDir, authority.attemptId);
+  const classified = classifyDurableRead(candidatePath, {});
+  const after = accreditCanonicalRequest(coordRoot, requestPathRaw);
+  assertRequestIdentityMatches(before, after, requestPathRaw);
+  const summary = {
+    request: before.obj,
+    requestDigest: before.digest,
+    candidatePath,
+    attemptId: authority.attemptId,
+    leaseEpoch: authority.leaseEpoch,
+  };
+  if (classified.state === DURABLE_ABSENT) return Object.assign({ status: 'absent' }, summary);
+  if (classified.state === DURABLE_PENDING) return Object.assign({ status: 'pending' }, summary);
+  const validated = validateResultV2(candidatePath, coordRoot);
+  const finalRequest = accreditCanonicalRequest(coordRoot, requestPathRaw);
+  assertRequestIdentityMatches(before, finalRequest, requestPathRaw);
+  return Object.assign({
+    status: 'present',
+    result: validated.obj,
+    resultDigest: validated.digest,
+  }, summary);
+}
+
 function accreditCancelRecord(cancelObj, cancelPath, coordRoot) {
   assertCanonicalFilename(cancelPath, 'cancel.json');
   assertGenuinelyConfinedUnderRoot(coordRoot, cancelPath);
@@ -5857,6 +5927,317 @@ COMMANDS.validate = cmdValidate;
 // `root-init` / `root-validate` (PLAN.md ~L758-759)
 // ─────────────────────────────────────────────────────────────────────────────
 
+// Ancestor-reparse-point investigation (arch-platform TOCTOU verdict, STEP 6,
+// wave-portable-runtime-messaging-adapters): this script's Get-Acl/DirectoryInfo
+// read below only inspects reparse-point status at the LEAF target path, and
+// this module's own path.resolve() only does lexical dot/dot-dot collapsing,
+// never symlink resolution -- so neither, on its own, proves an ancestor
+// directory (e.g. a symlinked grandparent of a credential-pin directory)
+// isn't silently redirecting the target elsewhere. Confirmed (not assumed):
+// both this embedded PowerShell script's own filesystem access and the
+// paired Node fs.* calls in the caller resolve ancestor reparse points
+// identically, transparently, via the OS's own normal path resolution --
+// O_NOFOLLOW / FILE_FLAG_OPEN_REPARSE_POINT-equivalent behavior only ever
+// applies to the LAST path component, never an ancestor. Both sides therefore
+// observe the same final resolved target; there is no ancestor-reparse-point
+// bypass here, and no code change is needed for it.
+const WINDOWS_PRIVATE_DIRECTORY_ACL_SCRIPT = String.raw`
+$ErrorActionPreference = 'Stop'
+$ProgressPreference = 'SilentlyContinue'
+[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
+$targetsJson = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String($env:RUNTIME_ACL_TARGETS_BASE64))
+$targetsPayload = $targetsJson | ConvertFrom-Json
+$targets = @($targetsPayload.targets)
+$mode = $env:RUNTIME_ACL_MODE
+$currentSid = [System.Security.Principal.WindowsIdentity]::GetCurrent().User
+$results = @()
+foreach ($target in $targets) {
+  $directoryInfo = [System.IO.DirectoryInfo]::new([string]$target)
+  if ($mode -eq 'ensure' -and -not $directoryInfo.Exists) {
+    [void][System.IO.Directory]::CreateDirectory([string]$target)
+    $directoryInfo.Refresh()
+  }
+  if (-not $directoryInfo.Exists) { throw 'ACL target directory does not exist' }
+  if (($directoryInfo.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) {
+    throw 'ACL target directory is a reparse point'
+  }
+  if ($mode -eq 'ensure') {
+    # Avoid rewriting an already-compliant DACL. Besides being unnecessary,
+    # SetAccessControl briefly races concurrent registry readers on Windows.
+    # The preflight uses the same acceptance predicate as the final result;
+    # any missing/ambiguous property still takes the hardening path and is
+    # re-read below before success can be reported.
+    $existingAcl = [System.IO.FileSystemAclExtensions]::GetAccessControl(
+      $directoryInfo,
+      [System.Security.AccessControl.AccessControlSections]::Owner -bor [System.Security.AccessControl.AccessControlSections]::Access
+    )
+    $existingOwnerSid = $existingAcl.GetOwner([System.Security.Principal.SecurityIdentifier]).Value
+    $existingRules = @($existingAcl.GetAccessRules($true, $true, [System.Security.Principal.SecurityIdentifier]))
+    $allowlist = @($currentSid.Value, 'S-1-5-18', 'S-1-5-32-544')
+    $existingDisallowed = @($existingRules | Where-Object { $allowlist -notcontains $_.IdentityReference.Value })
+    $existingNonAllow = @($existingRules | Where-Object { $_.AccessControlType -ne [System.Security.AccessControl.AccessControlType]::Allow })
+    $fullMask = [int64][System.Security.AccessControl.FileSystemRights]::FullControl
+    $existingCurrentFull = @($existingRules | Where-Object {
+      $_.IdentityReference.Value -eq $currentSid.Value -and
+      $_.AccessControlType -eq [System.Security.AccessControl.AccessControlType]::Allow -and
+      (([int64]$_.FileSystemRights -band $fullMask) -eq $fullMask)
+    }).Count -gt 0
+    $alreadyPrivate = (
+      $existingOwnerSid -eq $currentSid.Value -and
+      [bool]$existingAcl.AreAccessRulesProtected -and
+      $existingDisallowed.Count -eq 0 -and
+      $existingNonAllow.Count -eq 0 -and
+      $existingCurrentFull
+    )
+    if (-not $alreadyPrivate) {
+      $security = [System.Security.AccessControl.DirectorySecurity]::new()
+      $security.SetOwner($currentSid)
+      $security.SetAccessRuleProtection($true, $false)
+      $inheritance = [System.Security.AccessControl.InheritanceFlags]::ContainerInherit -bor [System.Security.AccessControl.InheritanceFlags]::ObjectInherit
+      $rule = [System.Security.AccessControl.FileSystemAccessRule]::new(
+        $currentSid,
+        [System.Security.AccessControl.FileSystemRights]::FullControl,
+        $inheritance,
+        [System.Security.AccessControl.PropagationFlags]::None,
+        [System.Security.AccessControl.AccessControlType]::Allow
+      )
+      [void]$security.AddAccessRule($rule)
+      [System.IO.FileSystemAclExtensions]::SetAccessControl($directoryInfo, $security)
+    }
+  }
+  $acl = [System.IO.FileSystemAclExtensions]::GetAccessControl(
+    $directoryInfo,
+    [System.Security.AccessControl.AccessControlSections]::Owner -bor [System.Security.AccessControl.AccessControlSections]::Access
+  )
+  $ownerSid = $acl.GetOwner([System.Security.Principal.SecurityIdentifier]).Value
+  $rules = @($acl.GetAccessRules($true, $true, [System.Security.Principal.SecurityIdentifier]))
+  $allowlist = @($currentSid.Value, 'S-1-5-18', 'S-1-5-32-544')
+  $aceSids = @($rules | ForEach-Object { $_.IdentityReference.Value } | Sort-Object -Unique)
+  $disallowed = @($aceSids | Where-Object { $allowlist -notcontains $_ } | Sort-Object -Unique)
+  $nonAllow = @($rules | Where-Object { $_.AccessControlType -ne [System.Security.AccessControl.AccessControlType]::Allow })
+  $fullMask = [int64][System.Security.AccessControl.FileSystemRights]::FullControl
+  $currentFull = @($rules | Where-Object {
+    $_.IdentityReference.Value -eq $currentSid.Value -and
+    $_.AccessControlType -eq [System.Security.AccessControl.AccessControlType]::Allow -and
+    (([int64]$_.FileSystemRights -band $fullMask) -eq $fullMask)
+  }).Count -gt 0
+  $results += [ordered]@{
+    owner_sid = $ownerSid
+    current_sid = $currentSid.Value
+    protected = [bool]$acl.AreAccessRulesProtected
+    current_full_control = [bool]$currentFull
+    ace_sids = @($aceSids)
+    disallowed_sids = @($disallowed)
+    non_allow_count = $nonAllow.Count
+  }
+}
+[Console]::Out.WriteLine(([ordered]@{ results = @($results) } | ConvertTo-Json -Compress -Depth 5))
+`;
+
+/**
+ * Applies or validates the Windows owner-private directory ACL contract.
+ * The result deliberately distinguishes an observed policy failure from an
+ * indeterminate probe/tool failure so callers can fail closed without claiming
+ * they observed an ACL violation they could not actually inspect.
+ * @param {string|string[]} dirPath
+ * @param {{mode:'ensure'|'validate'}} options
+ * @returns {{ok:true,owner_sid:string,current_sid:string,protected:boolean,current_full_control:boolean,ace_sids:string[],disallowed_sids:string[]}|{ok:false,status:'failed'|'indeterminate',reason:string,disallowed_sids?:string[]}}
+ */
+// TOCTOU fix (arch-platform verdict, wave-portable-runtime-messaging-adapters):
+// module-scoped call counter, keyed by the resolved target path(s), lets a
+// test simulate a real attacker-timed ACL change between a caller's own
+// before/after probes of the SAME path within one process -- production
+// code never reads this counter or the env var it gates.
+const __windowsAclProbeCallCounts = new Map();
+
+/**
+ * Resolve one installed Windows PowerShell host without trusting PATH. Prefer
+ * supported PowerShell 7 because the legacy 5.1 CLR host can crash under the
+ * sustained, process-isolated ACL workload used by the runtime. Every
+ * candidate must remain inside its resolved installation root and be a real
+ * regular file; legacy 5.1 is retained only as a compatibility fallback.
+ *
+ * @returns {string|null}
+ */
+function resolvedWindowsPowerShellPath() {
+  if (process.platform !== 'win32') return null;
+  const candidates = [];
+  for (const programFilesRoot of [process.env.ProgramW6432, process.env.ProgramFiles]) {
+    if (typeof programFilesRoot === 'string' && path.isAbsolute(programFilesRoot)) {
+      candidates.push({ root: programFilesRoot, parts: ['PowerShell', '7', 'pwsh.exe'] });
+    }
+  }
+  const systemRoot = process.env.SystemRoot || process.env.WINDIR;
+  if (typeof systemRoot === 'string' && path.isAbsolute(systemRoot)) {
+    candidates.push({ root: systemRoot, parts: ['System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe'] });
+  }
+
+  const seen = new Set();
+  for (const candidate of candidates) {
+    try {
+      const resolvedRoot = fs.realpathSync(candidate.root);
+      const resolved = fs.realpathSync(path.join(resolvedRoot, ...candidate.parts));
+      const key = resolved.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      if (!isPathWithin(resolvedRoot, resolved)) continue;
+      const stat = fs.statSync(resolved);
+      if (stat.isFile()) return resolved;
+    } catch (err) {
+      // Missing or unprovable candidates are unavailable, never guessed.
+    }
+  }
+  return null;
+}
+
+function windowsPrivateDirectoryAcl(dirPath, options) {
+  const mode = options && options.mode;
+  if (mode !== 'ensure' && mode !== 'validate') {
+    return { ok: false, status: 'indeterminate', reason: 'invalid-mode' };
+  }
+  if (process.platform !== 'win32') {
+    return { ok: false, status: 'indeterminate', reason: 'windows-acl-unavailable-on-platform' };
+  }
+  const isBatch = Array.isArray(dirPath);
+  const rawPaths = isBatch ? dirPath : [dirPath];
+  if (rawPaths.length === 0 || !rawPaths.every((item) => typeof item === 'string' && item.length > 0)) {
+    return { ok: false, status: 'indeterminate', reason: 'invalid-target' };
+  }
+  const resolvedPaths = rawPaths.map((item) => path.resolve(item));
+  const powershell = resolvedWindowsPowerShellPath();
+  if (!powershell) {
+    return { ok: false, status: 'indeterminate', reason: 'powershell-unavailable' };
+  }
+  let stdout;
+  let probeError = null;
+  const encoded = Buffer.from(WINDOWS_PRIVATE_DIRECTORY_ACL_SCRIPT, 'utf16le').toString('base64');
+  const probeOptions = {
+    encoding: 'utf8',
+    windowsHide: true,
+    maxBuffer: 1024 * 1024,
+    env: Object.assign({}, process.env, {
+      RUNTIME_ACL_MODE: mode,
+      RUNTIME_ACL_TARGETS_BASE64: Buffer.from(JSON.stringify({ targets: resolvedPaths }), 'utf8').toString('base64'),
+    }),
+  };
+  // PowerShell is an external security probe. A host-process startup failure
+  // carries no authoritative ACL result, so retry it once with a completely
+  // fresh process. A second failure remains indeterminate/fail-closed; parsed
+  // insecure or malformed results are never retried or upgraded.
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      stdout = execFileSync(
+        powershell,
+        ['-NoLogo', '-NoProfile', '-NonInteractive', '-EncodedCommand', encoded],
+        probeOptions,
+      );
+      probeError = null;
+      break;
+    } catch (err) {
+      probeError = err;
+    }
+  }
+  if (probeError) return { ok: false, status: 'indeterminate', reason: 'acl-probe-error' };
+  let observed;
+  try {
+    observed = JSON.parse(String(stdout).trim());
+  } catch (err) {
+    return { ok: false, status: 'indeterminate', reason: 'acl-probe-output-invalid' };
+  }
+  if (!observed || typeof observed !== 'object' || !Array.isArray(observed.results)
+      || observed.results.length !== resolvedPaths.length) {
+    return { ok: false, status: 'indeterminate', reason: 'acl-probe-output-invalid' };
+  }
+  const normalized = observed.results.map((entry) => normalizeWindowsAclObservation(entry));
+  const failed = normalized.find((entry) => !entry.ok);
+  if (failed) return failed;
+  // TOCTOU fix (arch-platform verdict): on the 2nd+ call for this exact
+  // resolved path within the process, under the test capability plus the
+  // explicit drift flag, mutate an otherwise-unchanged ok:true snapshot so
+  // only windowsAclSnapshotsEqual's own content comparison can catch it --
+  // simulates an attacker changing the ACL between a caller's own before/
+  // after probes without faking a real Windows ACL change.
+  const aclProbeKey = resolvedPaths.join('|');
+  const aclProbeCallCount = (__windowsAclProbeCallCounts.get(aclProbeKey) || 0) + 1;
+  __windowsAclProbeCallCounts.set(aclProbeKey, aclProbeCallCount);
+  if (isTestCapability() && process.env.RUNTIME_CONSULTATION_TEST_ACL_SNAPSHOT_DRIFT === '1' && aclProbeCallCount >= 2) {
+    for (const entry of normalized) {
+      if (entry.ok) entry.ace_sids = entry.ace_sids.concat('S-1-5-18').sort();
+    }
+  }
+  return isBatch ? { ok: true, results: normalized } : normalized[0];
+}
+
+function normalizeWindowsAclObservation(observed) {
+  if (
+    !observed || typeof observed !== 'object'
+    || typeof observed.owner_sid !== 'string'
+    || typeof observed.current_sid !== 'string'
+    || typeof observed.protected !== 'boolean'
+    || typeof observed.current_full_control !== 'boolean'
+    || !Array.isArray(observed.ace_sids)
+    || !observed.ace_sids.every((sid) => typeof sid === 'string')
+    || !Array.isArray(observed.disallowed_sids)
+    || !observed.disallowed_sids.every((sid) => typeof sid === 'string')
+    || !Number.isInteger(observed.non_allow_count)
+  ) return { ok: false, status: 'indeterminate', reason: 'acl-probe-output-invalid' };
+  if (observed.owner_sid !== observed.current_sid) {
+    return { ok: false, status: 'failed', reason: 'wrong-owner' };
+  }
+  if (!observed.protected) {
+    return { ok: false, status: 'failed', reason: 'inherited-acl' };
+  }
+  if (observed.disallowed_sids.length > 0) {
+    return {
+      ok: false,
+      status: 'failed',
+      reason: 'disallowed-principal',
+      disallowed_sids: observed.disallowed_sids.slice().sort(),
+    };
+  }
+  if (observed.non_allow_count !== 0) {
+    return { ok: false, status: 'failed', reason: 'non-allow-ace' };
+  }
+  if (!observed.current_full_control) {
+    return { ok: false, status: 'failed', reason: 'current-principal-not-full-control' };
+  }
+  return {
+    ok: true,
+    owner_sid: observed.owner_sid,
+    current_sid: observed.current_sid,
+    protected: observed.protected,
+    current_full_control: observed.current_full_control,
+    ace_sids: observed.ace_sids.slice().sort(),
+    disallowed_sids: [],
+  };
+}
+
+function assertWindowsRootAclProbeAvailable() {
+  if (process.env.RUNTIME_CONSULTATION_ACL_PROBE !== 'unverifiable') return;
+  if (!isTestCapability() || !FIXED_IDS_ACTIVE || !FIXED_CLOCK_ACTIVE) {
+    throw new CliError('INVALID', 'INVALID_ARGUMENT', 'RUNTIME_CONSULTATION_ACL_PROBE requires the test capability plus both --fixed-ids and --fixed-clock');
+  }
+  throw new CliError('INVALID', 'SECURITY_INVALID', 'coordination root ACL confinement is indeterminate (RUNTIME_CONSULTATION_ACL_PROBE=unverifiable)');
+}
+
+function assertWindowsPrivateDirectoryAcl(result, coordRoot) {
+  if (result.ok) return;
+  const suffix = Array.isArray(result.disallowed_sids) && result.disallowed_sids.length > 0
+    ? ' [' + result.disallowed_sids.join(',') + ']'
+    : '';
+  throw new CliError('INVALID', 'SECURITY_INVALID', 'coordination root ACL confinement ' + result.status + ': ' + result.reason + suffix + ': ' + coordRoot);
+}
+
+function windowsAclSnapshotsEqual(left, right) {
+  if (!left || !right || !left.ok || !right.ok) return false;
+  return left.owner_sid === right.owner_sid
+    && left.current_sid === right.current_sid
+    && left.protected === right.protected
+    && left.current_full_control === right.current_full_control
+    && JSON.stringify(left.ace_sids) === JSON.stringify(right.ace_sids)
+    && JSON.stringify(left.disallowed_sids) === JSON.stringify(right.disallowed_sids);
+}
+
 function cmdRootInit(flags) {
   requireFlags(flags, ['coordination-root']);
   const coordRoot = resolveAbsolute(flags['coordination-root']);
@@ -5877,10 +6258,20 @@ function cmdRootInit(flags) {
   const preexisting = fs.existsSync(coordRoot);
   fs.mkdirSync(coordRoot, { recursive: true });
   try {
-    fs.chmodSync(coordRoot, 0o700);
-  } catch (err) { /* best effort -- Windows ACL init is a later WP */ }
-  try {
-    assertRootConfinedToWorktree(coordRoot);
+    if (process.platform === 'win32') {
+      assertWindowsRootAclProbeAvailable();
+      // Native Windows security is never selected through the capability-gated
+      // FORCE_PLATFORM seam. A test may emulate argv behavior for another OS,
+      // but it cannot suppress the real SID/DACL check on this host.
+      assertWindowsPrivateDirectoryAcl(windowsPrivateDirectoryAcl(coordRoot, { mode: 'ensure' }), coordRoot);
+    } else if (resolveEffectivePlatform() === 'win32') {
+      // Cross-platform W10b exercises only the fail-closed probe verdict. It
+      // cannot claim a SID inspection on a host that has no Windows ACL API.
+      assertWindowsRootAclProbeAvailable();
+    } else {
+      fs.chmodSync(coordRoot, 0o700);
+    }
+    validateRootConfinement(coordRoot);
   } catch (err) {
     // Fail-closed rollback: never leave a freshly-created, non-confined
     // directory behind outside the worktree (best effort -- a directory that
@@ -5939,11 +6330,10 @@ function validateRootConfinement(coordRoot) {
   if (!stat.isDirectory()) {
     throw new CliError('INVALID', 'SCHEMA_INVALID', 'coordination root is not a directory: ' + coordRoot);
   }
-  // resolveEffectivePlatform (not raw process.platform): honors
-  // RUNTIME_CONSULTATION_FORCE_PLATFORM under the test capability (same seam
-  // Gap#1's argv-cap check already uses) so the win32 ACL_PROBE branch below is
-  // genuinely exercisable, not merely unverified dead code, on any host.
-  const isPosix = resolveEffectivePlatform() !== 'win32';
+  const nativeWindows = process.platform === 'win32';
+  const emulatedWindows = !nativeWindows && resolveEffectivePlatform() === 'win32';
+  const isPosix = !nativeWindows && !emulatedWindows;
+  let initialWindowsAcl = null;
   // Owner check mirrors assertDurableTargetMatches's own POSIX-identity
   // pattern (checked BEFORE mode, same order): a root owned by a different
   // principal can never be trusted as owner-confined regardless of its mode bits.
@@ -5953,19 +6343,12 @@ function validateRootConfinement(coordRoot) {
   if (isPosix && (stat.mode & 0o777n) !== 0o700n) {
     throw new CliError('INVALID', 'SECURITY_INVALID', 'coordination root mode is not owner-only 0700: ' + coordRoot);
   }
-  // Windows ACL confinement (PLAN.md W09/W10a/W10b, ~L1504-1506) -- UNVERIFIED,
-  // no pwsh/Windows execution is available in this environment; this wires ONLY
-  // the RUNTIME_CONSULTATION_ACL_PROBE=unverifiable test seam (W10b: forces
-  // 'indeterminate' -> sibling/shared-root mode DISABLED fail-closed, without
-  // depending on the invoking principal's real filesystem permissions -- the
-  // argv layer already gates this env var to the test capability). Full
-  // icacls-based ACL/SID inspection (W09 baseline confinement, W10a world-SID
-  // rejection) is NOT implemented here -- deliberately deferred rather than
-  // shipping unverified Windows-specific SID-parsing security logic with zero
-  // ability to prove it correct; real Windows access is required to develop and
-  // verify it safely. Stays PENDING_CI.
-  if (!isPosix && process.env.RUNTIME_CONSULTATION_ACL_PROBE === 'unverifiable') {
-    throw new CliError('INVALID', 'SECURITY_INVALID', 'coordination root ACL confinement is indeterminate (RUNTIME_CONSULTATION_ACL_PROBE=unverifiable)');
+  if (nativeWindows) {
+    assertWindowsRootAclProbeAvailable();
+    initialWindowsAcl = windowsPrivateDirectoryAcl(coordRoot, { mode: 'validate' });
+    assertWindowsPrivateDirectoryAcl(initialWindowsAcl, coordRoot);
+  } else if (emulatedWindows) {
+    assertWindowsRootAclProbeAvailable();
   }
   // Confinement is proven via a `git` subprocess call (assertRootConfinedToWorktree),
   // a measurably slower step than the pure in-process checks above -- widening the
@@ -5982,6 +6365,13 @@ function validateRootConfinement(coordRoot) {
   }
   if (stat2.isSymbolicLink() || stat2.dev !== stat.dev || stat2.ino !== stat.ino || stat2.mode !== stat.mode || stat2.uid !== stat.uid || stat2.gid !== stat.gid) {
     throw new CliError('INVALID', 'SECURITY_INVALID', 'coordination root identity changed during validation (swap/tamper): ' + coordRoot);
+  }
+  if (nativeWindows) {
+    const finalWindowsAcl = windowsPrivateDirectoryAcl(coordRoot, { mode: 'validate' });
+    assertWindowsPrivateDirectoryAcl(finalWindowsAcl, coordRoot);
+    if (!windowsAclSnapshotsEqual(initialWindowsAcl, finalWindowsAcl)) {
+      throw new CliError('INVALID', 'SECURITY_INVALID', 'coordination root ACL changed during validation (tamper): ' + coordRoot);
+    }
   }
   return coordRoot;
 }
@@ -6121,8 +6511,70 @@ function localComputePrincipalId() {
   if (typeof process.getuid === 'function') return 'uid-' + process.getuid();
   return 'user-' + sha256String(os.userInfo().username);
 }
+
+const LOCAL_TEST_PRIVATE_REGISTRY_BASE_SYMBOL = Symbol.for('android-common-doc.runtime-private-registry-base');
+let cachedWindowsCommonApplicationData = undefined;
+
+function localWindowsCommonApplicationDataRoot() {
+  if (cachedWindowsCommonApplicationData !== undefined) return cachedWindowsCommonApplicationData;
+  const powerShellPath = resolvedWindowsPowerShellPath();
+  if (!powerShellPath) {
+    cachedWindowsCommonApplicationData = null;
+    return null;
+  }
+  let observed = null;
+  let probeError = null;
+  // This is the same external-host boundary as the ACL probe above. Retry only
+  // a process failure; a successfully returned but invalid known-folder value
+  // remains a hard failure and is never retried into acceptance.
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      observed = execFileSync(powerShellPath, [
+        '-NoLogo', '-NoProfile', '-NonInteractive', '-Command',
+        '[Console]::Out.Write([Environment]::GetFolderPath("CommonApplicationData"))',
+      ], { encoding: 'utf8', windowsHide: true }).trim();
+      probeError = null;
+      break;
+    } catch (err) {
+      probeError = err;
+    }
+  }
+  if (probeError) {
+    cachedWindowsCommonApplicationData = null;
+    return null;
+  }
+  try {
+    if (!path.isAbsolute(observed)) return null;
+    const real = fs.realpathSync(observed);
+    if (!fs.statSync(real).isDirectory()) return null;
+    const homeReal = realpathOrSelf(os.homedir());
+    const relativeToHome = path.relative(homeReal, real);
+    if (relativeToHome === '' || (!relativeToHome.startsWith('..' + path.sep) && relativeToHome !== '..' && !path.isAbsolute(relativeToHome))) {
+      return null;
+    }
+    cachedWindowsCommonApplicationData = real;
+    return real;
+  } catch {
+    cachedWindowsCommonApplicationData = null;
+    return null;
+  }
+}
+
+function localRegistryBaseDir() {
+  const testPrivateBase = globalThis[LOCAL_TEST_PRIVATE_REGISTRY_BASE_SYMBOL];
+  if (typeof testPrivateBase === 'string' && path.isAbsolute(testPrivateBase)) {
+    return path.join(testPrivateBase, localComputePrincipalId());
+  }
+  if (process.platform === 'win32') {
+    const commonApplicationData = localWindowsCommonApplicationDataRoot();
+    if (!commonApplicationData) throw new Error('windows-common-application-data-unavailable');
+    return path.join(commonApplicationData, 'AndroidCommonDoc', 'runtime', localComputePrincipalId());
+  }
+  return path.join(os.tmpdir(), 'android-common-doc-runtime', localComputePrincipalId());
+}
+
 function localRegistryRepoDir(repoId) {
-  return path.join(os.tmpdir(), 'android-common-doc-runtime', localComputePrincipalId(), repoId);
+  return path.join(localRegistryBaseDir(), repoId);
 }
 function roleCommandGrantPathFor(repoId, grantId) {
   return path.join(localRegistryRepoDir(repoId), 'role-command-grants', grantId + '.json');
@@ -6147,11 +6599,30 @@ function localEnsureSecureRegistryDir(dirPath) {
   }
   try {
     fs.mkdirSync(dirPath, { recursive: true, mode: 0o700 });
-    fs.chmodSync(dirPath, 0o700);
+    if (process.platform !== 'win32') fs.chmodSync(dirPath, 0o700);
   } catch (err) {
     return { ok: false, reason: 'mkdir-failed' };
   }
-  if (process.platform !== 'win32') {
+  if (process.platform === 'win32') {
+    const registryBase = path.resolve(localRegistryBaseDir());
+    const target = path.resolve(dirPath);
+    const relative = path.relative(registryBase, target);
+    if (relative === '..' || relative.startsWith('..' + path.sep) || path.isAbsolute(relative)) {
+      return { ok: false, reason: 'registry-path-outside-base' };
+    }
+    // Keep this chain walk logic-identical to runtime-role-lifecycle.cjs:
+    // recursive mkdir on Windows does not make the principal/repo ancestors
+    // private, so every authority-bearing level must receive the shared SID
+    // ACL primitive, not only the last leaf.
+    const aclChain = [registryBase];
+    let cursor = registryBase;
+    for (const segment of relative.split(path.sep).filter(Boolean)) {
+      cursor = path.join(cursor, segment);
+      aclChain.push(cursor);
+    }
+    const acl = windowsPrivateDirectoryAcl(aclChain, { mode: 'ensure' });
+    if (!acl.ok) return { ok: false, reason: acl.status === 'failed' ? 'acl-failed' : 'acl-indeterminate' };
+  } else {
     let st;
     try {
       st = fs.lstatSync(dirPath, { bigint: true });
@@ -6250,7 +6721,7 @@ function readLocalRegistryRecord(recordPath) {
  * validateAndConsumeLifecycleCommandGrant's own established discipline in
  * the sibling module.
  */
-function validateRoleCommandGrantOrThrow(repoId, grantId, argvDigest, expectedAuthority, expectedSubcommand) {
+function validateRoleCommandGrantOrThrow(repoId, projectRoot, grantId, argvDigest, expectedAuthority, expectedSubcommand) {
   if (!HEX_CSPRNG_32_RE.test(grantId)) {
     throw new CliError('INVALID', 'AUTHORITY_INVALID', 'malformed role-command-grant id');
   }
@@ -6348,8 +6819,8 @@ function validateRoleCommandGrantOrThrow(repoId, grantId, argvDigest, expectedAu
       throw new CliError('INVALID', 'AUTHORITY_INVALID', 'requester grant backing binding namespace cardinality must equal exactly one');
     }
     bindingResult = stableHasRecord
-      ? rll.validateRequesterBindingFor({ repoId }, grant.binding_id, grant.role, grant.worktree_id, grant.plan_digest)
-      : rll.validateRootSourceBindingFor({ repoId }, grant.binding_id, grant.role, grant.worktree_id, grant.plan_digest);
+      ? rll.validateRequesterBindingFor(projectRoot, grant.binding_id, grant.role, grant.worktree_id, grant.plan_digest)
+      : rll.validateRootSourceBindingFor(projectRoot, grant.binding_id, grant.role, grant.worktree_id, grant.plan_digest);
   } else {
     const roleActorPresence = rll.readRegistryRecord(rll.roleActorBindingPathFor({ repoId }, grant.binding_id));
     if (!roleActorPresence.ok) {
@@ -6368,8 +6839,8 @@ function validateRoleCommandGrantOrThrow(repoId, grantId, argvDigest, expectedAu
     // alone) additionally proves the Claude-domain fence/generation cuts --
     // the discrimination above only decides WHICH validator to consult.
     bindingResult = roleActorHasRecord
-      ? rll.validateRoleActorBindingFor({ repoId }, grant.binding_id, grant.role, grant.worktree_id, grant.plan_digest)
-      : rll.validateClaudeOneShotBindingFor({ repoId }, grant.binding_id, {
+      ? rll.validateRoleActorBindingFor(projectRoot, grant.binding_id, grant.role, grant.worktree_id, grant.plan_digest)
+      : rll.validateClaudeOneShotBindingFor(projectRoot, grant.binding_id, {
         requestId: grant.request_id, attemptId: grant.attempt_id, leaseEpoch: grant.lease_epoch,
         role: grant.role, worktreeId: grant.worktree_id, planDigest: grant.plan_digest,
       });
@@ -6688,9 +7159,15 @@ function validateAndConsumeRoleCommandGrantForCommand(command, flags, rawArgv) {
   const coordRoot = resolveAbsolute(coordRootRaw);
 
   let repoId;
+  let projectRoot;
+  let coordRootExistingAncestor;
+  let coordRootTail;
   try {
-    const { real } = realpathDeepestExisting(coordRoot);
-    repoId = computeRepoId(real);
+    const resolved = realpathDeepestExisting(coordRoot);
+    coordRootExistingAncestor = resolved.real;
+    coordRootTail = resolved.tail;
+    repoId = computeRepoId(coordRootExistingAncestor);
+    projectRoot = gitRevParse(coordRootExistingAncestor, ['rev-parse', '--show-toplevel']);
   } catch (err) {
     throw new CliError('INVALID', 'AUTHORITY_INVALID', 'unable to resolve role-command-grant registry scope for ' + command);
   }
@@ -6698,7 +7175,7 @@ function validateAndConsumeRoleCommandGrantForCommand(command, flags, rawArgv) {
   // Validate the durable grant and its backing binding without mutating the
   // one-shot consumption state. Requester transaction scope is independently
   // re-derived below before the consumption marker is allowed to exist.
-  const validated = validateRoleCommandGrantOrThrow(repoId, grantId, argvDigest, authority, command);
+  const validated = validateRoleCommandGrantOrThrow(repoId, projectRoot, grantId, argvDigest, authority, command);
 
   // M6+M7 requester-authority closure (Group B): the grant's own scope
   // fields are re-derived HERE, independently, from the CURRENT transaction
@@ -6768,21 +7245,6 @@ function validateAndConsumeRoleCommandGrantForCommand(command, flags, rawArgv) {
     // is the canonical coordination root for it -- admission must receive
     // project scope only, never a bare {repoId} descriptor or any
     // caller-selected path/terminal summary.
-    let projectRoot;
-    let coordRootExistingAncestor;
-    let coordRootTail;
-    try {
-      // coordRoot itself may not exist yet (e.g. root-init's own job is to
-      // create it) -- resolve against the deepest EXISTING ancestor, exactly
-      // like the repoId derivation above, never `git -C` on a possibly-
-      // nonexistent leaf.
-      const resolved = realpathDeepestExisting(coordRoot);
-      coordRootExistingAncestor = resolved.real;
-      coordRootTail = resolved.tail;
-      projectRoot = gitRevParse(coordRootExistingAncestor, ['rev-parse', '--show-toplevel']);
-    } catch (err) {
-      throw new CliError('INVALID', 'AUTHORITY_INVALID', command + ': unable to resolve project scope from --coordination-root');
-    }
     let canonicalCoordRoot;
     try {
       canonicalCoordRoot = rllForConsumeGrant.coordinationRootPathFor(projectRoot);
@@ -11163,6 +11625,12 @@ COMMANDS['publish-blob'] = cmdPublishBlob;
 // the item for service, never this per-request `dispatch` call -- so they are
 // deliberately NOT members of this set.
 const REQUESTER_OWNED_DISPATCH_DRIVERS = Object.freeze(['claude-sendmessage', 'claude-agent', 'runtime-spawn']);
+// A root-source requester runs inside the toolkit-specialist subagent, which
+// can execute SendMessage but cannot invoke Agent. Keep this private execution
+// profile narrower than the public routing registry: prefer the already-live
+// canonical Claude peer, otherwise permit only the trusted retained Codex
+// worker whose activation needs no caller host action. Never degrade to noop.
+const ROOT_SOURCE_DISPATCH_DRIVERS = Object.freeze(['claude-sendmessage', 'codex-app-server']);
 
 /**
  * Derives the project/repo root `checkClaudeAgentCapabilityAvailable` expects
@@ -11197,6 +11665,7 @@ function dispatchCanonical(flags, options) {
   const reqRec = readCanonicalRequestRecord(path.join(txnDir, 'request.json'), path.basename(txnDir), { absentDetail: 'CORRELATION_INVALID', absentMessage: 'referenced request.json does not resolve' });
   const reqObj = reqRec.obj;
   const planRoot = planRootFromArtifact(coordRoot, requestPath);
+  const rootSourceDispatch = !!(options && options.rootSourceDispatch === true);
 
   // Routing policy must already be materialized at this EXACT immutable snapshot
   // (Ordered Runtime Loop step 2, PLAN.md ~L803) before any driver can be
@@ -11297,8 +11766,13 @@ function dispatchCanonical(flags, options) {
   }
   let selectedDriver = 'noop';
   let selectedClaudePeerBinding = null;
+  // P4 Windows native-Claude persistence correction: the bootstrap fallback
+  // when no full ClaudePeerBinding exists yet -- see the claude-sendmessage
+  // candidate branch below.
+  let selectedClaudeResumeHandle = null;
   let rll = null;
   for (const candidate of allowedDrivers) {
+    if (rootSourceDispatch && !ROOT_SOURCE_DISPATCH_DRIVERS.includes(candidate)) continue;
     if (requiredDriver !== undefined && candidate !== requiredDriver) continue;
     if (excludedDriver !== null && candidate === excludedDriver) continue;
     if (candidate === 'noop') {
@@ -11319,15 +11793,24 @@ function dispatchCanonical(flags, options) {
         continue;
       }
       let projectRoot;
-      let manifest;
       let mainBinding;
       let peer;
       try {
         projectRoot = gitRevParse(coordRoot, ['rev-parse', '--show-toplevel']);
-        manifest = rll.getCapabilityManifest(projectRoot);
-        if (!manifest || manifest.ok !== true
-            || !Array.isArray(manifest.availableDrivers)
-            || !manifest.availableDrivers.includes('claude-sendmessage')) continue;
+        // An ordinary caller still needs the generic, short-lived host
+        // composition advertisement. A root-source transaction has already
+        // authenticated the requester through its grant/binding and can take
+        // longer than that two-minute entrypoint composition to reach
+        // dispatch. For that path, the exact live MainOrchestratorBinding plus
+        // the exact live peer/resume-handle checks below are the current
+        // target capability proof; requiring the expired generic advert as a
+        // second proof makes valid multi-turn work structurally time out.
+        if (!rootSourceDispatch) {
+          const manifest = rll.getCapabilityManifest(projectRoot);
+          if (!manifest || manifest.ok !== true
+              || !Array.isArray(manifest.availableDrivers)
+              || !manifest.availableDrivers.includes('claude-sendmessage')) continue;
+        }
         mainBinding = rll.findLiveMainOrchestratorBindingForScope(
           projectRoot, reqObj.requester_worktree_id, reqObj.plan_digest,
         );
@@ -11341,10 +11824,59 @@ function dispatchCanonical(flags, options) {
       } catch (err) {
         continue;
       }
-      if (!peer || peer.ok !== true || !peer.record) continue;
-      selectedClaudePeerBinding = peer.record;
-      selectedDriver = 'claude-sendmessage';
-      break;
+      if (peer && peer.ok === true && peer.record) {
+        selectedClaudePeerBinding = peer.record;
+        selectedDriver = 'claude-sendmessage';
+        break;
+      }
+      // P4 Windows native-Claude persistence correction: no full
+      // ClaudePeerBinding exists yet -- first accept a unique live parked
+      // handle for the exact WAITING target. If resume-work already consumed
+      // that handle and moved the same binding to BUSY, accept only the
+      // immutable consumed marker correlated to that exact BUSY transition.
+      // Both paths revalidate session/scope/role/actor/fence; neither invents
+      // a peer binding. ClaudePeerBinding remains preferred above.
+      let resumeHandle;
+      try {
+        resumeHandle = rll.findUniqueClaudeResumeHandleForTarget(projectRoot, {
+          sessionDigest: sha256String(mainBinding.binding.runtime_session_key),
+          worktreeId: reqObj.requester_worktree_id,
+          planDigest: reqObj.plan_digest,
+          targetRole: reqObj.target_role,
+        });
+      } catch (err) {
+        resumeHandle = null;
+      }
+      if (resumeHandle && resumeHandle.ok === true && resumeHandle.record) {
+        selectedClaudeResumeHandle = resumeHandle.record;
+        selectedDriver = 'claude-sendmessage';
+        break;
+      }
+      let consumedBusyHandle;
+      try {
+        const busyRole = rll.readRoleBindingState(
+          projectRoot, reqObj.requester_worktree_id, reqObj.plan_digest,
+          rll.roleProfileDigestFor(reqObj.target_role), mainBinding.generation.generationId,
+          reqObj.target_role,
+        );
+        if (busyRole && busyRole.ok === true && busyRole.state === 'BUSY' && busyRole.record) {
+          consumedBusyHandle = rll.findUniqueConsumedClaudeResumeHandleForBusyTarget(projectRoot, {
+            generationId: mainBinding.generation.generationId,
+            sessionDigest: sha256String(mainBinding.binding.runtime_session_key),
+            worktreeId: reqObj.requester_worktree_id,
+            planDigest: reqObj.plan_digest,
+            targetRole: reqObj.target_role,
+          }, busyRole.record);
+        }
+      } catch (err) {
+        consumedBusyHandle = null;
+      }
+      if (consumedBusyHandle && consumedBusyHandle.ok === true && consumedBusyHandle.record) {
+        selectedClaudeResumeHandle = consumedBusyHandle.record;
+        selectedDriver = 'claude-sendmessage';
+        break;
+      }
+      continue;
     }
     if (candidate === 'claude-agent') {
       // Lazily require()s the sibling module -- runtime-role-lifecycle.cjs
@@ -11478,9 +12010,25 @@ function dispatchCanonical(flags, options) {
     // proof; try the next routing-permitted candidate.
   }
 
+  if (rootSourceDispatch && !ROOT_SOURCE_DISPATCH_DRIVERS.includes(selectedDriver)) {
+    throw new CliError('UNAVAILABLE', 'DRIVER_UNAVAILABLE', 'no live root-source target driver is available for ' + reqObj.target_role);
+  }
   if (requiredDriver !== undefined && selectedDriver !== requiredDriver) {
     throw new CliError('UNAVAILABLE', 'DRIVER_UNAVAILABLE', 'required dispatch driver is not currently live: ' + requiredDriver);
   }
+
+  // P4 Windows native-Claude persistence correction: claude-sendmessage's
+  // OWN native binding id/teammate name resolve from WHICHEVER of the two
+  // live proofs above actually selected it -- a full ClaudePeerBinding
+  // (preferred) or, only when that was not yet available, a unique live
+  // bootstrap resume handle for the exact same target scope. Exactly one of
+  // the two is ever non-null when selectedDriver === 'claude-sendmessage'.
+  const claudeSendMessageTargetBindingId = selectedDriver === 'claude-sendmessage'
+    ? (selectedClaudePeerBinding ? selectedClaudePeerBinding.binding_id : selectedClaudeResumeHandle.binding_id)
+    : null;
+  const claudeSendMessageTeammateName = selectedDriver === 'claude-sendmessage'
+    ? (selectedClaudePeerBinding ? selectedClaudePeerBinding.teammate_name : selectedClaudeResumeHandle.teammate_name)
+    : null;
 
   const activationPath = activationPathFor(txnDir, attemptId);
   const idempotentRecovery = !!(options && options.allowIdenticalIdempotent === true);
@@ -11500,9 +12048,7 @@ function dispatchCanonical(flags, options) {
       || existingActivation.routing_policy_version !== reqObj.routing_policy_version
       || existingActivation.routing_policy_digest !== reqObj.routing_policy_digest
       || existingActivation.selected_driver !== selectedDriver
-      || existingActivation.native_target_binding_id !== (
-        selectedDriver === 'claude-sendmessage' ? selectedClaudePeerBinding.binding_id : null
-      )
+      || existingActivation.native_target_binding_id !== claudeSendMessageTargetBindingId
       || existingActivation.activation_liveness_expiry !== activationLivenessDeadline(reqObj)
     ) throw new CliError('INVALID', 'AUTHORITY_INVALID', 'existing activation does not match deterministic dispatch recovery');
     if (!idempotentRecovery) existingActivation = null; // preserve ordinary dispatch's no-clobber replay rejection.
@@ -11526,9 +12072,7 @@ function dispatchCanonical(flags, options) {
     routing_policy_version: reqObj.routing_policy_version,
     routing_policy_digest: reqObj.routing_policy_digest,
     selected_driver: selectedDriver,
-    native_target_binding_id: selectedDriver === 'claude-sendmessage'
-      ? selectedClaudePeerBinding.binding_id
-      : null,
+    native_target_binding_id: claudeSendMessageTargetBindingId,
     native_spawn_action_id: nativeSpawnActionId,
     created_at: now,
     activation_liveness_expiry: activationLivenessDeadline(reqObj),
@@ -11648,17 +12192,22 @@ function dispatchCanonical(flags, options) {
     activation_artifact_path: activationPath,
   };
   if (selectedDriver === 'claude-sendmessage') {
+    // A JSON-looking string is semantically valid for SendMessage, but native
+    // Claude can project it as an object before PreToolUse schema validation.
+    // Keep the pointer canonical while making its string type unmistakable at
+    // the host boundary; the receiver still gets one self-contained message.
+    const message = 'COORDINATION_CONSULT/v1\n' + canonicalJSONStringify({
+      role: reqObj.source_role,
+      target_role: reqObj.target_role,
+      request_id: reqObj.request_id,
+      artifact_path: requestPath,
+      kind: 'consult',
+    });
     activationAction = {
       ...commonActivationAction,
       kind: 'claude-sendmessage',
-      target_name: selectedClaudePeerBinding.teammate_name,
-      message: {
-        role: reqObj.source_role,
-        target_role: reqObj.target_role,
-        request_id: reqObj.request_id,
-        artifact_path: requestPath,
-        kind: 'consult',
-      },
+      target_name: claudeSendMessageTeammateName,
+      message,
     };
   } else if (selectedDriver === 'claude-agent') {
     activationAction = {
@@ -11688,7 +12237,9 @@ function cmdDispatch(flags, grantContext) {
   // Codex worker. Retained Codex bridge children still use the separate
   // in-process dispatchCanonical(...,{requiredDriver:'codex-app-server'})
   // call in hostBridgePublishChildRequest above.
-  return dispatchCanonical(flags, {});
+  return dispatchCanonical(flags, {
+    rootSourceDispatch: isRootSourceGrantContext(grantContext),
+  });
 }
 COMMANDS.dispatch = cmdDispatch;
 
@@ -12914,6 +13465,14 @@ module.exports = {
   // WP3 item C: the bridge's own coordination-root check reuses this EXACT
   // confinement primitive rather than a second, weaker one.
   validateRootConfinement,
+  // W09/W10: one SID-based Windows ACL primitive shared with the lifecycle
+  // registry (which already depends on this module, so no reverse require/cycle).
+  resolvedWindowsPowerShellPath, windowsPrivateDirectoryAcl,
+  // TOCTOU fix (arch-platform re-review, wave-portable-runtime-messaging-adapters):
+  // exported so callers can re-probe and compare before/after ACL snapshots
+  // around a credential/config read, mirroring validateRootConfinement's own
+  // before/after pattern rather than trusting a single point-in-time check.
+  windowsAclSnapshotsEqual,
   // WP3 item C2 (R7): single canonical RuntimeTurnEnvelope/v1 source (PLAN.md ~L932).
   runtimeTurnEnvelopeSchema, validateRuntimeTurnEnvelope,
   codexStructuredRuntimeTurnEnvelopeSchema,
@@ -12927,6 +13486,7 @@ module.exports = {
   parseApprovedContext7Directive,
   resolveRootEvidenceAuthority,
   validateConsultationDependencySet,
+  classifyCanonicalResultForRequest,
   patternEvidencePathFor,
   materializePlanRef,
   materializeRoutingPolicy,
@@ -13036,6 +13596,17 @@ if (isTestCapability()) {
     // silently drift from it. Not a new production public surface -- usable
     // by tests under the real test capability only.
     activationLivenessDeadline,
+    // P4 wave-portable-runtime-messaging-adapters follow-up (arch-platform PREP
+    // verdict, "not independently verified" item; scope authorized via
+    // PLAN.md:6085-6086): localComputePrincipalId/localRegistryRepoDir are this
+    // file's own documented logic-identical local copies of
+    // runtime-role-lifecycle.cjs's computePrincipalId/registryRepoDir (see this
+    // file's own comment at their definition, ~L6386-6392). Exported here ONLY
+    // under the test capability so a regression test (arch-testing/
+    // test-specialist) can pin byte-identical behavior against the canonical
+    // originals -- not a new production public surface.
+    localComputePrincipalId,
+    localRegistryRepoDir,
   });
 }
 

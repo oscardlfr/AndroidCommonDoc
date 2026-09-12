@@ -122,6 +122,7 @@ function establishRetainedCodexSupportPlane(projectRoot, mainBinding) {
   fixturePolicy.schema = 'runtime-collaboration-policy/v1';
   fixturePolicy.version = 1;
   delete fixturePolicy.selection;
+  delete fixturePolicy.claude_native_startup_timeout_seconds;
   fs.writeFileSync(path.join(fixtureLibDir, 'runtime-collaboration-policy.json'), JSON.stringify(fixturePolicy, null, 2) + '\n');
   fs.copyFileSync(path.resolve(__dirname, '../../lib/runtime-routing.json'), path.join(fixtureLibDir, 'runtime-routing.json'));
   const roles = RETAINED_SUPPORT_ROLES.slice().sort();

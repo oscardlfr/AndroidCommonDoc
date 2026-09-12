@@ -28,6 +28,12 @@ test('private-registry-tmpdir-preload: normal require establishes registryBaseDi
   const r = spawnSync('node', ['-e', `
     const p = require(${JSON.stringify(PRELOAD_PATH)});
     const rll = require(${JSON.stringify(RLL_PATH)});
+    for (const name of ['TEMP', 'TMP', 'TMPDIR']) {
+      if (process.env[name] !== p.privateRoot) {
+            process.stderr.write(name + ' did not adopt the private root\\n');
+        process.exit(1);
+      }
+    }
     const base = rll.registryBaseDir();
     if (!base.startsWith(p.expectedRegistryBaseDirParent)) {
       process.stderr.write('NOT CONTAINED: ' + base + ' vs ' + p.expectedRegistryBaseDirParent + '\\n');
@@ -36,6 +42,31 @@ test('private-registry-tmpdir-preload: normal require establishes registryBaseDi
     process.exit(0);
   `], { encoding: 'utf8' });
   assert.strictEqual(r.status, 0, 'containment must hold: ' + JSON.stringify(r));
+});
+
+test('private-registry-tmpdir-preload: descendant Node processes inherit the same process-local registry capability', () => {
+  const r = spawnSync('node', ['-e', `
+    const { spawnSync } = require('node:child_process');
+    const p = require(${JSON.stringify(PRELOAD_PATH)});
+    const child = spawnSync(process.execPath, ['-e', ${JSON.stringify(`
+      const os = require('node:os');
+      const rll = require(${JSON.stringify(RLL_PATH)});
+      const capabilityRoot = globalThis[Symbol.for('android-common-doc.runtime-private-registry-base')];
+      process.stdout.write(JSON.stringify({ tmp: os.tmpdir(), capabilityRoot, registry: rll.registryBaseDir() }));
+    `)}], { encoding: 'utf8', env: process.env });
+    if (child.status !== 0) {
+      process.stderr.write('descendant failed: ' + JSON.stringify(child));
+      process.exit(1);
+    }
+    const observed = JSON.parse(child.stdout);
+    if (observed.tmp !== p.privateRoot
+        || observed.capabilityRoot !== p.expectedRegistryBaseDirParent
+        || !observed.registry.startsWith(p.expectedRegistryBaseDirParent)) {
+      process.stderr.write('descendant escaped: ' + JSON.stringify({ expected: p, observed }));
+      process.exit(1);
+    }
+  `], { encoding: 'utf8' });
+  assert.strictEqual(r.status, 0, 'descendant containment must hold: ' + JSON.stringify(r));
 });
 
 test('private-registry-tmpdir-preload: cleans up its private root on normal process exit', () => {
@@ -51,11 +82,16 @@ test('private-registry-tmpdir-preload: cleans up its private root on normal proc
   assert.strictEqual(fs.existsSync(privateRoot), false, 'private root must not survive process exit: ' + privateRoot);
 });
 
-test('private-registry-tmpdir-preload: fail-closed guard genuinely catches a corrupted mode check (hash-bound mutation proof)', () => {
+test('private-registry-tmpdir-preload: platform-aware mode guard remains fail-closed (hash-bound mutation proof)', () => {
   const original = fs.readFileSync(PRELOAD_PATH, 'utf8');
   const originalHash = crypto.createHash('sha256').update(original).digest('hex');
-  const target = "if ((rootStat.mode & 0o777) !== 0o700) fatal('private root has the wrong mode: ' + (rootStat.mode & 0o777).toString(8));";
-  const mutated = original.replace(target, target.replace('0o700', '0o701'));
+  const target = "if (process.platform !== 'win32' && (rootStat.mode & 0o777) !== 0o700) {";
+  // Enter this exact fatal branch unconditionally on every platform. A
+  // comparison against the observed Windows mode is not deterministic: NTFS
+  // can surface 0700 here, which would let the mutation test pass without
+  // proving that this guard itself fails closed.
+  const replacement = 'if (true) {';
+  const mutated = original.replace(target, replacement);
   // If the exact source text this mutation targets has drifted, fail loudly
   // here rather than silently exercising a no-op mutation that would make
   // the assertions below pass for the wrong reason (this file's own

@@ -781,7 +781,7 @@ function isV2InboxRefCandidateValid(filePath, ctx) {
     if (st.size > MAX_CONSULT_BYTES) return false; // oversized -> skip, never read
 
     const cliPath = ctx.runtimeConsultationPath
-      || path.join(ctx.projectRoot, 'scripts', 'lib', 'runtime-consultation.cjs');
+      || path.resolve(__dirname, '../../scripts/lib/runtime-consultation.cjs');
     // NOTE: --artifact uses the ORIGINAL filePath (not realFile) so its relationship to
     // --coordination-root stays textually consistent for the CLI's own
     // planRootFromArtifact path-relative math (both sides share the same caller-supplied,

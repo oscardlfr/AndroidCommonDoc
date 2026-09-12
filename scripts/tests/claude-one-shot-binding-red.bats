@@ -122,9 +122,15 @@ _assert_isolated_runtime_tmp() {
     try { st = fs.lstatSync(process.argv[1]); } catch (err) { console.error("runtime-tmp stat failed: " + err.message); process.exit(1); }
     if (st.isSymbolicLink()) { console.error("runtime-tmp is a symlink"); process.exit(1); }
     if (!st.isDirectory()) { console.error("runtime-tmp is not a directory"); process.exit(1); }
-    if ((st.mode & 0o777) !== 0o700) { console.error("runtime-tmp wrong mode: " + (st.mode & 0o777).toString(8)); process.exit(1); }
-    if (typeof process.getuid === "function" && st.uid !== process.getuid()) { console.error("runtime-tmp wrong owner"); process.exit(1); }
-  ' "$dir"
+    if (process.platform === "win32") {
+      const rc = require(process.argv[2]);
+      const acl = rc.windowsPrivateDirectoryAcl(process.argv[1], { mode: "ensure" });
+      if (!acl.ok) { console.error("runtime-tmp Windows ACL is not private: " + JSON.stringify(acl)); process.exit(1); }
+    } else {
+      if ((st.mode & 0o777) !== 0o700) { console.error("runtime-tmp wrong mode: " + (st.mode & 0o777).toString(8)); process.exit(1); }
+      if (typeof process.getuid === "function" && st.uid !== process.getuid()) { console.error("runtime-tmp wrong owner"); process.exit(1); }
+    }
+  ' "$dir" "$BATS_TEST_DIRNAME/../lib/runtime-consultation.cjs"
 }
 
 # M6+M7 Bats registry isolation: this file has no pre-existing global setup()/
@@ -612,44 +618,38 @@ _cosb_e2e_make_project() {
 # disjoint probe role avoids polluting the activation candidates exercised by
 # the one-shot tests themselves.
 _cosb_prime_claude_id01_capability() {
-  local proj="$1" session_id="$2" agent_id="$3"
+  local proj="$1" session_id="$2" agent_id="$3" role="${4:-context-provider}"
   node -e '
     const crypto = require("crypto");
     const rll = require(process.argv[1]);
-    const projectRoot = process.argv[2];
-    const sessionId = process.argv[3];
-    const agentId = process.argv[4];
-    const role = "context-provider";
+    const fixture = require(process.argv[2]);
+    const projectRoot = process.argv[3];
+    const sessionId = process.argv[4];
+    const agentId = process.argv[5];
+    const role = process.argv[6];
     const identity = { ok: true, provider: "claude-hook", runtime_session_key: sessionId };
     const generation = rll.resolveSessionGeneration(projectRoot, identity);
     const plan = rll.discoverPlan(projectRoot);
     if (!generation.ok || !plan.ok) { process.stderr.write("CLAUDE-ID-01 scope resolution failed"); process.exit(1); }
     const worktreeId = rll.computeWorktreeId(projectRoot);
-    function mintAction(suffix) {
-      const actionId = rll.generateActionId();
-      const expiry = new Date(Date.now() + 600000).toISOString().replace(/\.\d{3}Z$/, "Z");
-      const minted = rll.mintRoleLifecycleAction(
-        projectRoot, actionId, "role-spawn", "claude-native",
-        rll.computeRepoId(projectRoot), worktreeId, plan.planDigest,
-        crypto.createHash("sha256").update("cosb-claude-id01:" + suffix).digest("hex"),
-        generation.generationId, role,
-        rll.buildRoleSpawnPayload("claude-id01-probe", role, role, "fixture", "fixture"),
-        expiry,
-      );
-      if (!minted.ok) { process.stderr.write("probe action mint failed: " + JSON.stringify(minted)); process.exit(1); }
-      return actionId;
-    }
-    const actionA = mintAction("a-" + agentId);
-    const actionB = mintAction("b-" + agentId);
-    rll.recordClaudeId01SubagentStartObservation(projectRoot, { sessionId, agentId, agentType: role, actionId: actionA });
-    rll.recordClaudeId01PreToolUseObservation(projectRoot, { sessionId, agentId, agentType: role, toolUseId: "cosb-prime-1-" + agentId });
-    rll.recordClaudeId01PreToolUseObservation(projectRoot, { sessionId, agentId, agentType: role, toolUseId: "cosb-prime-2-" + agentId });
-    rll.recordClaudeId01SubagentStartObservation(projectRoot, { sessionId, agentId, agentType: role, actionId: actionA });
-    rll.recordClaudeId01PreToolUseObservation(projectRoot, { sessionId, agentId, agentType: role, toolUseId: "cosb-prime-3-" + agentId });
-    rll.recordClaudeId01SubagentStartObservation(projectRoot, { sessionId, agentId: agentId + "-distinct-peer-b", agentType: role, actionId: actionB });
-    const proof = rll.checkClaudeId01RuntimeCapability(projectRoot, sessionId, worktreeId, plan.planDigest);
-    if (!proof.ok) { process.stderr.write("global CLAUDE-ID-01 capability absent: " + JSON.stringify(proof)); process.exit(1); }
-  ' "$RLL_IMPL" "$proj" "$session_id" "$agent_id"
+    const actionId = rll.generateActionId();
+    const expiry = new Date(Date.now() + 600000).toISOString().replace(/\.\d{3}Z$/, "Z");
+    const minted = rll.mintRoleLifecycleAction(
+      projectRoot, actionId, "role-spawn", "claude-native",
+      rll.computeRepoId(projectRoot), worktreeId, plan.planDigest,
+      crypto.createHash("sha256").update("cosb-claude-id01:" + role + ":" + agentId).digest("hex"),
+      generation.generationId, role,
+      rll.buildRoleSpawnPayload("claude-id01-probe", role, role, "fixture", "fixture"),
+      expiry,
+    );
+    if (!minted.ok) { process.stderr.write("probe action mint failed: " + JSON.stringify(minted)); process.exit(1); }
+    fixture.primeClaudeId01V2ActorProof({
+      projectRoot, sessionId, agentId, agentType: role, actionId,
+      prefix: "cosb-actor-proof",
+    });
+    const proof = rll.checkClaudeId01RuntimeCapability(projectRoot, sessionId, worktreeId, plan.planDigest, role, agentId);
+    if (!proof.ok) { process.stderr.write("actor-scoped CLAUDE-ID-01 capability absent: " + JSON.stringify(proof)); process.exit(1); }
+  ' "$RLL_IMPL" "$BATS_TEST_DIRNAME/fixtures/runtime-claude-id01-v2-fixture.cjs" "$proj" "$session_id" "$agent_id" "$role"
 }
 
 # Mints a real requester role-command-grant/v1 for `publish-request` and
@@ -662,8 +662,8 @@ _cosb_prime_claude_id01_capability() {
 # process.env.CLAUDE_PROJECT_DIR, never an arbitrary --coordination-root a
 # test happens to choose. Prints "<request_id> <artifact_ref>".
 _cosb_e2e_publish_request() {
-  local proj="$1" role="${2:-arch-testing}"
-  _cosb_prime_claude_id01_capability "$proj" "cosb-e2e-grant-session" "cosb-e2e-capability-primary"
+  local proj="$1" role="${2:-arch-testing}" requester_role="${3:-context-provider}"
+  _cosb_prime_claude_id01_capability "$proj" "cosb-e2e-grant-session" "cosb-e2e-grant-agent" "$requester_role"
   local coord_root; coord_root="$(node -e 'const rll=require(process.argv[1]);process.stdout.write(rll.coordinationRootPathFor(process.argv[2]));' "$RLL_IMPL" "$proj")"
   mkdir -p "$coord_root"
   local subject_bundle_file="$proj/.planning/coordination-subject-bundle-manifest.json"
@@ -678,7 +678,8 @@ _cosb_e2e_publish_request() {
     const rll = require(process.argv[1]);
     const rc = require(process.argv[2]);
     const projectRoot = process.argv[3];
-    const rest = process.argv.slice(4);
+    const requesterRole = process.argv[4];
+    const rest = process.argv.slice(5);
     const worktreeId = rll.computeWorktreeId(projectRoot);
     const planResult = rll.discoverPlan(projectRoot);
     if (!planResult.ok) { process.stderr.write("no PLAN discovered"); process.exit(1); }
@@ -686,13 +687,13 @@ _cosb_e2e_publish_request() {
     // M6+M7 requester-authority closure (Group A): createRequesterBinding now
     // rejects an empty agentKey outright -- a stable, non-empty, explicitly
     // test-only agent id is required.
-    const bindingResult = rll.createRequesterBinding(projectRoot, identity, "cosb-e2e-grant-agent", "arch-testing", worktreeId, planResult.planDigest, 3600);
+    const bindingResult = rll.createRequesterBinding(projectRoot, identity, "cosb-e2e-grant-agent", requesterRole, worktreeId, planResult.planDigest, 3600);
     if (!bindingResult.ok) { process.stderr.write("createRequesterBinding failed: " + JSON.stringify(bindingResult)); process.exit(1); }
     const argvDigest = rc.sha256String(rc.canonicalJSONStringify(rest));
     const mintResult = rll.mintRoleCommandGrant(projectRoot, bindingResult.binding, "requester", "publish-request", argvDigest, null, null, null);
     if (!mintResult.ok) { process.stderr.write("mintRoleCommandGrant failed: " + JSON.stringify(mintResult)); process.exit(1); }
     process.stdout.write(mintResult.grantId);
-  ' "$RLL_IMPL" "$RC_IMPL" "$proj" "${rest_args[@]}")"
+  ' "$RLL_IMPL" "$RC_IMPL" "$proj" "$requester_role" "${rest_args[@]}")"
   local output
   output="$(NODE_ENV=test node "$RC_IMPL" publish-request "${rest_args[@]}" --requester-binding "$grant" 2>/dev/null)"
   node -e '
@@ -1357,12 +1358,14 @@ _cosb_e2e_mint_target_grant() {
 # generalized here over subcommand for cancel's own use below.
 _cosb_e2e_mint_requester_grant() {
   local proj="$1" subcommand="$2"; shift 2
+  local requester_role="${COSB_E2E_REQUESTER_ROLE:-context-provider}"
   node -e '
     const rll = require(process.argv[1]);
     const rc = require(process.argv[2]);
     const projectRoot = process.argv[3];
     const subcommand = process.argv[4];
-    const rest = process.argv.slice(5);
+    const requesterRole = process.argv[5];
+    const rest = process.argv.slice(6);
     const worktreeId = rll.computeWorktreeId(projectRoot);
     const planResult = rll.discoverPlan(projectRoot);
     if (!planResult.ok) { process.stderr.write("no PLAN discovered"); process.exit(1); }
@@ -1380,7 +1383,7 @@ _cosb_e2e_mint_requester_grant() {
     // binding/actor_instance_id the request was published under, never a
     // fresh, unrelated one.
     const identity = { ok: true, provider: "claude-hook", runtime_session_key: "cosb-e2e-grant-session" };
-    const bindingResult = rll.createRequesterBinding(projectRoot, identity, "cosb-e2e-grant-agent", "arch-testing", worktreeId, planResult.planDigest, 3600);
+    const bindingResult = rll.createRequesterBinding(projectRoot, identity, "cosb-e2e-grant-agent", requesterRole, worktreeId, planResult.planDigest, 3600);
     if (!bindingResult.ok) { process.stderr.write("createRequesterBinding failed: " + JSON.stringify(bindingResult)); process.exit(1); }
     // M6+M7 requester-authority closure (Group B) fix: cancel is a
     // TRANSACTIONAL requester-gated subcommand -- the grant own
@@ -1403,7 +1406,7 @@ _cosb_e2e_mint_requester_grant() {
     const mintResult = rll.mintRoleCommandGrant(projectRoot, bindingResult.binding, "requester", subcommand, argvDigest, scopeResult.requestId, scopeResult.attemptId, scopeResult.leaseEpoch);
     if (!mintResult.ok) { process.stderr.write("mintRoleCommandGrant failed: " + JSON.stringify(mintResult)); process.exit(1); }
     process.stdout.write(mintResult.grantId);
-  ' "$RLL_IMPL" "$RC_IMPL" "$proj" "$subcommand" "$@"
+  ' "$RLL_IMPL" "$RC_IMPL" "$proj" "$subcommand" "$requester_role" "$@"
 }
 
 # Drives the E2E chain through _cosb_e2e_subagent_start and prints
@@ -2591,7 +2594,10 @@ _cosb_e2e_pretooluse_agent() {
   node -e '
     const fs = require("fs");
     fs.writeFileSync(process.argv[1], JSON.stringify({
-      hook_event_name: "SubagentStop", agent_type: "context-provider",
+      // Deliberately use a different canonical role claim here so the
+      // persistent-role park path cannot short-circuit the malformed-registry
+      // classification this test is specifically exercising.
+      hook_event_name: "SubagentStop", agent_type: "arch-platform",
       session_id: "red6-session", agent_id: "red6-agent-id",
     }));
   ' "$input_file"
@@ -2893,10 +2899,26 @@ _cosb_g4_disarm_test_routing_seam() {
 # straight off disk (never trusted from the CLI's own stdout claim alone --
 # durable-record ground truth). Prints the selected_driver string.
 _cosb_g4_dispatch_and_read_selected_driver() {
-  local proj="$1" coord_root="$2" artifact_ref="$3"
+  local proj="$1" coord_root="$2" artifact_ref="$3" requester_role="${4:-arch-testing}" drop_main_proof="${5:-false}"
   local rest_dispatch=(--coordination-root "$coord_root" --request "$artifact_ref")
-  local dispatch_grant; dispatch_grant="$(_cosb_e2e_mint_requester_grant "$proj" dispatch "${rest_dispatch[@]}")"
+  local dispatch_grant
+  dispatch_grant="$(COSB_E2E_REQUESTER_ROLE="$requester_role" _cosb_e2e_mint_requester_grant "$proj" dispatch "${rest_dispatch[@]}")"
   [ -n "$dispatch_grant" ] || return 1
+  if [ "$drop_main_proof" = "true" ]; then
+    # Model the top-level Claude host disappearing after the requester grant
+    # was minted but before dispatch. Request authority remains independently
+    # testable; driver liveness must be recomputed from the now-empty main
+    # orchestrator binding family and fall through to noop.
+    node -e '
+      const fs = require("fs");
+      const path = require("path");
+      const rll = require(process.argv[1]);
+      const dir = path.join(rll.registryRepoDir(process.argv[2]), "orchestrator-bindings");
+      let entries = [];
+      try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch (err) { if (!err || err.code !== "ENOENT") throw err; }
+      for (const entry of entries) if (entry.isFile() && entry.name.endsWith(".json")) fs.unlinkSync(path.join(dir, entry.name));
+    ' "$RLL_IMPL" "$proj"
+  fi
   # Item 11 (M6+M7 RESIDUAL AUTHORITY CORRECTION, arch-testing-20260811T162225Z):
   # the CLI's own stdout envelope (printResultAndExit, runtime-consultation.cjs
   # ~L6106) is now captured to a fixed per-test path instead of discarded, so
@@ -3047,12 +3069,12 @@ _cosb_g4_assert_zero_partial_activation_txn_only() {
 @test "GROUP4-CORE (regression): dispatch, with a materialized routing policy admitting claude-agent before noop and ZERO live session/PLAN/worktree/action correlation of any kind, must select the frozen fallback (noop) -- pre-fix it wrongly selects claude-agent purely from checkClaudeAgentCapabilityAvailable's own mechanism-only (files-present + settings-registered) evidence, which is unconditionally true in this real checkout" {
   local proj; proj="$(_cosb_e2e_make_project)"
   _cosb_g4_arm_test_routing_seam "arch-testing" claude-agent noop
-  local pub; pub="$(_cosb_e2e_publish_request "$proj" "arch-testing")"
+  local pub; pub="$(_cosb_e2e_publish_request "$proj" "arch-testing" "context-provider")"
   local request_id artifact_ref; read -r request_id artifact_ref <<< "$pub"
   [ -n "$artifact_ref" ]
   local coord_root; coord_root="$(node -e 'const rll=require(process.argv[1]);process.stdout.write(rll.coordinationRootPathFor(process.argv[2]));' "$RLL_IMPL" "$proj")"
 
-  local selected; selected="$(_cosb_g4_dispatch_and_read_selected_driver "$proj" "$coord_root" "$artifact_ref")"
+  local selected; selected="$(_cosb_g4_dispatch_and_read_selected_driver "$proj" "$coord_root" "$artifact_ref" "context-provider" "true")"
   [ "$selected" = "noop" ]
   # Item 11 (M6+M7 RESIDUAL AUTHORITY CORRECTION, arch-testing-20260811T162225Z):
   # activation_action must be null on the CLI's own dispatch result too
@@ -3085,12 +3107,12 @@ _cosb_g4_assert_zero_partial_activation_txn_only() {
   [ -n "$prior_binding_id" ]
 
   _cosb_g4_arm_test_routing_seam "arch-testing" claude-agent noop
-  local pub; pub="$(_cosb_e2e_publish_request "$proj" "arch-testing")"
+  local pub; pub="$(_cosb_e2e_publish_request "$proj" "arch-testing" "context-provider")"
   local request_id artifact_ref; read -r request_id artifact_ref <<< "$pub"
   [ -n "$artifact_ref" ]
   local coord_root; coord_root="$(node -e 'const rll=require(process.argv[1]);process.stdout.write(rll.coordinationRootPathFor(process.argv[2]));' "$RLL_IMPL" "$proj")"
 
-  local selected; selected="$(_cosb_g4_dispatch_and_read_selected_driver "$proj" "$coord_root" "$artifact_ref")"
+  local selected; selected="$(_cosb_g4_dispatch_and_read_selected_driver "$proj" "$coord_root" "$artifact_ref" "context-provider" "true")"
   [ "$selected" = "noop" ]
   # Item 11 (M6+M7 RESIDUAL AUTHORITY CORRECTION, arch-testing-20260811T162225Z):
   # activation_action must be null on the CLI's own dispatch result too, same
@@ -3126,7 +3148,7 @@ _cosb_g4_assert_zero_partial_activation_txn_only() {
   # selection specifically).
   local rest_dispatch=(--coordination-root "$coord_root" --request "$artifact_ref")
   local planner_actor_instance_id
-  _cosb_prime_claude_id01_capability "$proj" "group4-planner-session" "group4-planner-capability-primary"
+  _cosb_prime_claude_id01_capability "$proj" "group4-planner-session" "group4-planner-agent" "planner"
   planner_actor_instance_id="$(node -e '
     const rll = require(process.argv[1]);
     const projectRoot = process.argv[2];
@@ -3141,7 +3163,7 @@ _cosb_g4_assert_zero_partial_activation_txn_only() {
   node -e '
     const fs = require("fs");
     const obj = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
-    if (obj.source_role !== "arch-testing") { process.stderr.write("fixture sanity failed: unexpected default source_role " + obj.source_role); process.exit(1); }
+    if (obj.source_role !== "context-provider") { process.stderr.write("fixture sanity failed: unexpected default source_role " + obj.source_role); process.exit(1); }
     obj.source_role = "planner";
     obj.requester_instance_id = process.argv[2];
     fs.writeFileSync(process.argv[1], JSON.stringify(obj), { mode: 0o600 });
@@ -4591,6 +4613,9 @@ _a1_parse_and_validate_reservation() {
   [ -n "$native_spawn_action_id" ]
   run _cosb_e2e_mint_b1_reservation "$proj" "arch-testing" "$request_id"
   [ "$status" -eq 0 ]
+  local control_reservation_path
+  control_reservation_path="$(node -e 'const rll=require(process.argv[1]);process.stdout.write(rll.claudeAgentSpawnReservationPathFor(process.argv[2], process.argv[3]));' "$RLL_IMPL" "$proj" "$native_spawn_action_id")"
+  [ -f "$control_reservation_path" ]
 
   # ONE-07: the tuple validateClaudeOneShotBindingFor will be checked
   # against below, sourced INDEPENDENTLY from the real request.json -- never
@@ -4679,7 +4704,12 @@ _a1_parse_and_validate_reservation() {
   hook_stderr="$(cat "$stderr_file")"
   rm -f "$input_file" "$stdout_file" "$stderr_file"
   [ -z "$hook_stdout" ]
-  [ -z "$hook_stderr" ]
+  [ -z "$hook_stderr" ] || {
+    local control_generation
+    control_generation="$(node -e 'const rll=require(process.argv[1]);process.stdout.write(JSON.stringify(rll.peekSessionGeneration(process.argv[2],{provider:"claude-hook",runtime_session_key:"cosb-e2e-orchestrator-session"})));' "$RLL_IMPL" "$proj" 2>&1)"
+    printf '# A-ONESHOT-CONTROL-01 unexpected stderr=[%s] reservation=[%s] current_generation=[%s]\n' "$hook_stderr" "$(cat "$control_reservation_path" 2>/dev/null)" "$control_generation" >&3
+    false
+  }
 
   run _a1_oneshot_binding_count_for_action "$proj" "$native_spawn_action_id"
   [ "$output" = "1" ]
@@ -4844,7 +4874,7 @@ _a1_parse_and_validate_reservation() {
     // a CLAUDE-ID-01 capability earlier in this test (createRequesterBinding
     // requires proof of that capability) -- never re-primes a second one.
     const identity = { ok: true, provider: "claude-hook", runtime_session_key: "cosb-e2e-grant-session" };
-    const bindingResult = rll.createRequesterBinding(projectRoot, identity, "cosb-e2e-capability-primary", "arch-testing", worktreeId, planResult.planDigest, 3600);
+    const bindingResult = rll.createRequesterBinding(projectRoot, identity, "cosb-e2e-grant-agent", "context-provider", worktreeId, planResult.planDigest, 3600);
     if (!bindingResult.ok) { process.stderr.write("createRequesterBinding failed: " + JSON.stringify(bindingResult)); process.exit(1); }
     const argvDigest = rc.sha256String(rc.canonicalJSONStringify(rest));
     const mintResult = rll.mintRoleCommandGrant(projectRoot, bindingResult.binding, "requester", "validate", argvDigest, null, null, null);

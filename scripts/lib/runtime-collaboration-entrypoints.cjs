@@ -8,6 +8,7 @@ const os = require('node:os');
 const path = require('node:path');
 const lifecycleOwner = require('./runtime-role-lifecycle.cjs');
 const consultationOwner = require('./runtime-consultation.cjs');
+const runtimeProjectContext = require('./runtime-project-context.cjs');
 const claudeHostOwner = require('./runtime-host-claude.cjs');
 
 const ENTRYPOINTS = Object.freeze([
@@ -179,13 +180,29 @@ function resolveSelection(entrypoint, ports) {
   return { ok: false, selection };
 }
 
-function allSupportRolesReady(status) {
+// Sealed plan: READY, WAITING, and BUSY are the closed healthy/liveness
+// routing set for a support role -- WAITING is the normal idle state after
+// an ordinary SubagentStop parks a role, and BUSY is a role actively
+// working. Missing/unknown/STARTING/DEAD/QUARANTINED (or any other state)
+// remain non-ready: only these three literal states ever qualify.
+const HEALTHY_SUPPORT_ROLE_STATES = Object.freeze(['READY', 'WAITING', 'BUSY']);
+
+function allSupportRolesHealthy(status) {
   const roles = status && status.roles && typeof status.roles === 'object' ? status.roles : {};
-  return SUPPORT_ROLES.every((role) => roles[role] === 'READY');
+  return SUPPORT_ROLES.every((role) => HEALTHY_SUPPORT_ROLE_STATES.includes(roles[role]));
 }
 
 function actionRefs(value) {
   return value && Array.isArray(value.actions) ? value.actions : [];
+}
+
+function completedResumeCheckpoint(value, checkpointRef) {
+  const operation = value && value.resume_checkpoint;
+  if (!operation || !hasExactKeys(operation, ['checkpoint_ref', 'resumed_roles', 'schema'])) return false;
+  return operation.schema === 'runtime/resume-checkpoint-completion/v1'
+    && operation.checkpoint_ref === checkpointRef
+    && Array.isArray(operation.resumed_roles)
+    && JSON.stringify(operation.resumed_roles) === JSON.stringify([...SUPPORT_ROLES].sort());
 }
 
 async function executeActions(ports, actions) {
@@ -236,7 +253,7 @@ function canonicalIngestionCompletion(value, expected) {
 
 async function executeInit(intent, ports, selection) {
   const current = await ports.lifecycle.status();
-  if (intent.mode === 'dashboard' || allSupportRolesReady(current)) {
+  if (intent.mode === 'dashboard' || allSupportRolesHealthy(current)) {
     return makeEnvelope('init-session', 'READY', 'support-plane-ready', selection, [], current);
   }
   const ensured = await ports.lifecycle.ensureRoles([...SUPPORT_ROLES]);
@@ -245,7 +262,7 @@ async function executeInit(intent, ports, selection) {
     return makeEnvelope('init-session', 'ACTION_REQUIRED', 'support-plane-action-required', selection, actions);
   }
   const finalStatus = await ports.lifecycle.status();
-  if (allSupportRolesReady(finalStatus)) {
+  if (allSupportRolesHealthy(finalStatus)) {
     return makeEnvelope('init-session', 'READY', 'support-plane-ready', selection, actions, finalStatus);
   }
   return makeEnvelope('init-session', 'ACTION_REQUIRED', 'support-plane-action-required', selection, actions);
@@ -253,10 +270,15 @@ async function executeInit(intent, ports, selection) {
 
 async function executeResume(intent, ports, selection) {
   const current = await ports.lifecycle.status();
+  if (completedResumeCheckpoint(current, intent.checkpoint_ref)) {
+    return makeEnvelope('resume-work', 'READY', 'runtime-resumed', selection, [], current);
+  }
   const roles = current && current.roles && typeof current.roles === 'object' ? current.roles : {};
   const actions = [];
+  let recoveryPending = false;
   for (const role of SUPPORT_ROLES) {
     if (roles[role] === 'READY') continue;
+    recoveryPending = true;
     const digest = crypto.createHash('sha256').update(`${intent.checkpoint_ref}\0${role}`).digest('hex');
     const recovered = await ports.lifecycle.recoverRole({ role, bundle_ref: `bundle:${digest}` });
     actions.push(...actionRefs(recovered));
@@ -265,6 +287,7 @@ async function executeResume(intent, ports, selection) {
     return makeEnvelope('resume-work', 'ACTION_REQUIRED', 'recovery-action-required', selection, actions);
   }
   if (actions.length > 0) return makeEnvelope('resume-work', 'ACTION_REQUIRED', 'recovery-action-required', selection, actions);
+  if (recoveryPending) return makeEnvelope('resume-work', 'ACTION_REQUIRED', 'recovery-action-required', selection, []);
   return makeEnvelope('resume-work', 'READY', 'runtime-resumed', selection, [], current);
 }
 
@@ -593,7 +616,7 @@ function planEntrypointStep(entrypoint, intent, projectRoot) {
   } else if (entrypoint === 'resume-work') {
     command = 'ensure';
     roleScope = [...SUPPORT_ROLES].sort();
-    argvDigest = digestArgv('ensure', roleScope.join(','));
+    argvDigest = digestArgv('ensure', roleScope.join(',') + ':resume:' + intent.checkpoint_ref);
   } else if (entrypoint === 'work') {
     const step = planWorkStep(intent, projectRoot);
     command = step.command;
@@ -649,7 +672,11 @@ function rolesFromLifecycle(result) {
   for (const binding of bindings) {
     if (binding && typeof binding.role === 'string' && typeof binding.state === 'string') roles[binding.role] = binding.state;
   }
-  return { roles, actions: actionRefs(result) };
+  const operation = result && result.operation;
+  const resumeCheckpoint = operation && operation.schema === 'runtime/resume-checkpoint-completion/v1'
+    ? operation
+    : null;
+  return { roles, actions: actionRefs(result), resume_checkpoint: resumeCheckpoint };
 }
 
 function createProductionPorts(parsed, plan, admission) {
@@ -664,6 +691,7 @@ function createProductionPorts(parsed, plan, admission) {
     const args = [path.join(__dirname, 'runtime-role-lifecycle.cjs'), plan.command, '--project-root', parsed.projectRoot];
     if (plan.command === 'ensure') {
       for (const role of plan.role_scope) args.push('--role', role);
+      if (parsed.entrypoint === 'resume-work') args.push('--resume-checkpoint', parsed.intent.checkpoint_ref);
     } else if (plan.command === 'status' && typeof plan.role_scope === 'string') {
       args.push('--role', plan.role_scope);
     } else if (plan.command === 'root-source' || plan.command === 'consult-root') {
@@ -694,7 +722,12 @@ function createProductionPorts(parsed, plan, admission) {
   return {
     lifecycle: {
       async status() {
-        if (plan.command === 'ensure' && !invoked) return { roles: {} };
+        // init-session/start needs one synthetic empty pre-status so its
+        // generic flow proceeds to ensureRoles(). resume-work also plans an
+        // ensure command, but its first operation is specifically a durable
+        // status read; returning the init sentinel there can falsely report
+        // READY with result.roles={} and prove no continuity at all.
+        if (parsed.entrypoint === 'init-session' && plan.command === 'ensure' && !invoked) return { roles: {} };
         return rolesFromLifecycle(runPlanned());
       },
       async ensureRoles() { return runPlanned(); },
@@ -735,8 +768,10 @@ function createProductionPorts(parsed, plan, admission) {
         const tempRoot = fs.mkdtempSync(path.join(process.env.TMPDIR || os.tmpdir(), 'androidcommondoc-monitor-'));
         const outputPath = path.join(tempRoot, 'monitoring-report.json');
         try {
-          const script = path.join(parsed.projectRoot, 'mcp-server', 'build', 'cli', 'monitor-sources.js');
-          const child = childProcess.spawnSync(process.execPath, [script, '--project-root', parsed.projectRoot, '--layer', 'L0', '--tier', 'all', '--output', outputPath], {
+          const context = runtimeProjectContext.resolveRuntimeProjectContext(parsed.projectRoot);
+          if (!context.ok) return { status: 'FAILED', observations: [], proposals: [], detail_code: context.reason };
+          const script = path.join(context.toolkitRoot, 'mcp-server', 'build', 'cli', 'monitor-sources.js');
+          const child = childProcess.spawnSync(process.execPath, [script, '--project-root', parsed.projectRoot, '--layer', context.consumerLayer, '--tier', 'all', '--output', outputPath], {
             cwd: parsed.projectRoot,
             encoding: 'utf8',
             env: { ...process.env, TMPDIR: tempRoot, TMP: tempRoot, TEMP: tempRoot },
@@ -798,6 +833,7 @@ module.exports = { ENTRYPOINTS, RESULT_STATUSES, executeEntrypoint, planEntrypoi
 if (process.env.NODE_ENV === 'test'
     && process.env.RUNTIME_COLLABORATION_ENTRYPOINTS_TEST_CAPABILITY === 'p3-entrypoints-v1') {
   module.exports.__TEST_ONLY__createTrustedHostContext = createTrustedHostContext;
+  module.exports.__TEST_ONLY__createProductionPorts = createProductionPorts;
 }
 
 if (require.main === module) main(process.argv.slice(2));

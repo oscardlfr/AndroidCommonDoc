@@ -8,6 +8,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { access, readdir } from "node:fs/promises";
+import { existsSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import path from "node:path";
 import { getToolkitRoot } from "../utils/paths.js";
@@ -15,6 +16,28 @@ import type { ValidationResult, ValidationDetail } from "../types/results.js";
 import type { RateLimiter } from "../utils/rate-limiter.js";
 import { checkRateLimit } from "../utils/rate-limit-guard.js";
 import { logger } from "../utils/logger.js";
+
+/**
+ * Resolve the Bash shipped with Git for Windows instead of accepting the
+ * Windows Store/WSL `bash.exe`, which cannot consume native Windows paths.
+ * POSIX hosts keep normal PATH resolution.
+ */
+export function resolveBashExecutable(): string {
+  if (process.platform !== "win32") return "bash";
+
+  try {
+    const gitExecPath = execFileSync("git", ["--exec-path"], {
+      encoding: "utf8",
+      windowsHide: true,
+    }).trim();
+    const gitBash = path.resolve(gitExecPath, "..", "..", "..", "bin", "bash.exe");
+    if (existsSync(gitBash)) return gitBash;
+  } catch {
+    // The caller already converts a missing/unusable shell into a WARN result.
+  }
+
+  return "bash";
+}
 
 /**
  * Check if a path exists.
@@ -31,10 +54,7 @@ async function pathExists(p: string): Promise<boolean> {
 /**
  * Check if a directory contains files matching a pattern.
  */
-async function dirHasFiles(
-  dirPath: string,
-  extension: string,
-): Promise<boolean> {
+async function dirHasFiles(dirPath: string, extension: string): Promise<boolean> {
   try {
     const entries = await readdir(dirPath);
     return entries.some((entry) => entry.endsWith(extension));
@@ -63,23 +83,17 @@ async function hasSkillFiles(skillsDir: string): Promise<boolean> {
   }
 }
 
-export function registerSetupCheckTool(
-  server: McpServer,
-  limiter?: RateLimiter,
-): void {
+export function registerSetupCheckTool(server: McpServer, limiter?: RateLimiter): void {
   server.registerTool(
     "setup-check",
     {
       title: "Setup Check",
-      description:
-        "Validate project configuration: env var, docs, scripts, skills, agents",
+      description: "Validate project configuration: env var, docs, scripts, skills, agents",
       inputSchema: z.object({
         projectRoot: z
           .string()
           .optional()
-          .describe(
-            "Path to AndroidCommonDoc root (defaults to ANDROID_COMMON_DOC env var)",
-          ),
+          .describe("Path to AndroidCommonDoc root (defaults to ANDROID_COMMON_DOC env var)"),
       }),
     },
     async ({ projectRoot }) => {
@@ -124,9 +138,7 @@ export function registerSetupCheckTool(
         details.push({
           check: "scripts-sh-directory",
           status: shExists ? "PASS" : "FAIL",
-          message: shExists
-            ? "scripts/sh/ directory exists"
-            : "scripts/sh/ directory not found",
+          message: shExists ? "scripts/sh/ directory exists" : "scripts/sh/ directory not found",
         });
         if (!shExists) failCount++;
 
@@ -174,13 +186,8 @@ export function registerSetupCheckTool(
         let hookStatus: "PASS" | "WARN" = "WARN";
         let hookMessage: string;
         try {
-          const verifyScript = path.join(
-            root,
-            "scripts",
-            "sh",
-            "verify-git-hooks.sh",
-          );
-          execFileSync("bash", [verifyScript, "--repo-root", root], {
+          const verifyScript = path.join(root, "scripts", "sh", "verify-git-hooks.sh");
+          execFileSync(resolveBashExecutable(), [verifyScript, "--repo-root", root], {
             encoding: "utf8",
             stdio: ["ignore", "pipe", "pipe"],
           });
@@ -191,8 +198,7 @@ export function registerSetupCheckTool(
             hookError instanceof Error
               ? (hookError as Error & { stdout?: unknown }).stdout
               : undefined;
-          const reasonCode =
-            typeof stdoutVal === "string" ? stdoutVal.trim() : "";
+          const reasonCode = typeof stdoutVal === "string" ? stdoutVal.trim() : "";
           hookMessage = reasonCode
             ? `pre-push hook is not installed/canonical (${reasonCode}) -- run 'make install-git-hooks' to fix`
             : "verify-git-hooks.sh could not be run (missing script or spawn failure) -- run 'make install-git-hooks' to fix";
@@ -233,9 +239,7 @@ export function registerSetupCheckTool(
         };
 
         return {
-          content: [
-            { type: "text" as const, text: JSON.stringify(errorResult, null, 2) },
-          ],
+          content: [{ type: "text" as const, text: JSON.stringify(errorResult, null, 2) }],
           isError: true,
         };
       }

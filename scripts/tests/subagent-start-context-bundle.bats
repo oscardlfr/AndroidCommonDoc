@@ -37,9 +37,15 @@ _assert_isolated_runtime_tmp() {
     try { st = fs.lstatSync(process.argv[1]); } catch (err) { console.error("runtime-tmp stat failed: " + err.message); process.exit(1); }
     if (st.isSymbolicLink()) { console.error("runtime-tmp is a symlink"); process.exit(1); }
     if (!st.isDirectory()) { console.error("runtime-tmp is not a directory"); process.exit(1); }
-    if ((st.mode & 0o777) !== 0o700) { console.error("runtime-tmp wrong mode: " + (st.mode & 0o777).toString(8)); process.exit(1); }
-    if (typeof process.getuid === "function" && st.uid !== process.getuid()) { console.error("runtime-tmp wrong owner"); process.exit(1); }
-  ' "$dir"
+    if (process.platform === "win32") {
+      const rc = require(process.argv[2]);
+      const acl = rc.windowsPrivateDirectoryAcl(process.argv[1], { mode: "ensure" });
+      if (!acl.ok) { console.error("runtime-tmp Windows ACL is not private: " + JSON.stringify(acl)); process.exit(1); }
+    } else {
+      if ((st.mode & 0o777) !== 0o700) { console.error("runtime-tmp wrong mode: " + (st.mode & 0o777).toString(8)); process.exit(1); }
+      if (typeof process.getuid === "function" && st.uid !== process.getuid()) { console.error("runtime-tmp wrong owner"); process.exit(1); }
+    }
+  ' "$dir" "$BATS_TEST_DIRNAME/../lib/runtime-consultation.cjs"
 }
 
 setup() {
@@ -56,6 +62,8 @@ setup() {
   git -C "$PROJECT_ROOT" config user.email "test@test.com"
   git -C "$PROJECT_ROOT" config user.name "Test"
   git -C "$PROJECT_ROOT" commit --allow-empty -q -m "feat(core): init"
+  mkdir -p "$PROJECT_ROOT/.claude"
+  cp "$BATS_TEST_DIRNAME/../../.claude/model-profiles.json" "$PROJECT_ROOT/.claude/model-profiles.json"
   PROJ_REGISTRY_DIR="$(node -e 'const rll=require(process.argv[1]); process.stdout.write(rll.registryRepoDir(process.argv[2]));' "$RLL_IMPL" "$PROJECT_ROOT")"
   git -C "$PROJECT_ROOT" checkout -b "feature/bl-w47-test" -q 2>/dev/null
   BUNDLE_DIR="$PROJECT_ROOT/.planning/wave-bl-w47-test/context-bundles"
@@ -144,7 +152,8 @@ write_bundle() {
   [ "$status" -eq 0 ]
   local stdout="$output"
   run node -e '
-    const body = JSON.parse(process.argv[1]);
+    const jsonLine = process.argv[1].split(/\r?\n/).filter(line => line.trim().startsWith("{")).pop();
+    const body = JSON.parse(jsonLine);
     if (typeof body.additionalContext !== "undefined") { process.stderr.write("unexpected top-level additionalContext: " + process.argv[1]); process.exit(1); }
     if (!body.hookSpecificOutput || body.hookSpecificOutput.hookEventName !== "SubagentStart") { process.stderr.write("missing/wrong hookSpecificOutput.hookEventName: " + process.argv[1]); process.exit(1); }
     if (typeof body.hookSpecificOutput.additionalContext !== "string" || !body.hookSpecificOutput.additionalContext.includes("Key patterns here")) { process.stderr.write("missing/wrong nested additionalContext: " + process.argv[1]); process.exit(1); }
@@ -317,6 +326,8 @@ write_bundle() {
 PROBE_WAVE_SLUG="bl-w47-test"
 RLL_IMPL="$BATS_TEST_DIRNAME/../lib/runtime-role-lifecycle.cjs"
 RC_IMPL="$BATS_TEST_DIRNAME/../lib/runtime-consultation.cjs"
+ID01_V2_FIXTURE="$BATS_TEST_DIRNAME/fixtures/runtime-claude-id01-v2-fixture.cjs"
+ACTOR_BINDING_FAILURE_PRELOAD="$BATS_TEST_DIRNAME/fixtures/runtime-role-actor-binding-failure-preload.cjs"
 PROBE_CAPABILITY="subagent-probe-fixture-capability"
 
 # Mints a REAL pending role-spawn action for `role` via the actual production
@@ -326,11 +337,12 @@ _mint_pending_role_spawn() {
   local role="$1" session_key="$2"
   mkdir -p "$PROJECT_ROOT/.planning/wave-$PROBE_WAVE_SLUG"
   printf '# fixture PLAN for SubagentStart lifecycle tests\n' > "$PROJECT_ROOT/.planning/wave-$PROBE_WAVE_SLUG/PLAN.md"
-  NODE_ENV=test RUNTIME_ROLE_LIFECYCLE_TEST_CAPABILITY="$PROBE_CAPABILITY" RUNTIME_ROLE_LIFECYCLE_FAKE_CAPABILITIES='["claude-sendmessage"]' node -e '
+  if ! NODE_ENV=test RUNTIME_ROLE_LIFECYCLE_TEST_CAPABILITY="$PROBE_CAPABILITY" RUNTIME_ROLE_LIFECYCLE_FAKE_CAPABILITIES='["claude-sendmessage"]' node -e '
     const rll = require(process.argv[1]);
     const projectRoot = process.argv[2];
     const role = process.argv[3];
     const sessionKey = process.argv[4];
+    const id01Fixture = require(process.argv[5]);
     const identity = { ok: true, provider: "claude-hook", runtime_session_key: sessionKey };
     const worktreeId = rll.computeWorktreeId(projectRoot);
     const planResult = rll.discoverPlan(projectRoot);
@@ -352,15 +364,14 @@ _mint_pending_role_spawn() {
       return actionId;
     }
     const actionA = mintProbeAction("a");
-    const actionB = mintProbeAction("b");
     const primary = "subagent-bats-primary";
-    rll.recordClaudeId01SubagentStartObservation(projectRoot, { sessionId: sessionKey, agentId: primary, agentType: proofRole, actionId: actionA });
-    rll.recordClaudeId01PreToolUseObservation(projectRoot, { sessionId: sessionKey, agentId: primary, agentType: proofRole, toolUseId: "subagent-bats-tu-1" });
-    rll.recordClaudeId01PreToolUseObservation(projectRoot, { sessionId: sessionKey, agentId: primary, agentType: proofRole, toolUseId: "subagent-bats-tu-2" });
-    rll.recordClaudeId01SubagentStartObservation(projectRoot, { sessionId: sessionKey, agentId: primary, agentType: proofRole, actionId: actionA });
-    rll.recordClaudeId01PreToolUseObservation(projectRoot, { sessionId: sessionKey, agentId: primary, agentType: proofRole, toolUseId: "subagent-bats-tu-3" });
-    rll.recordClaudeId01SubagentStartObservation(projectRoot, { sessionId: sessionKey, agentId: "subagent-bats-peer-b", agentType: proofRole, actionId: actionB });
-    const capability = rll.checkClaudeId01RuntimeCapability(projectRoot, sessionKey, worktreeId, planResult.planDigest);
+    id01Fixture.primeClaudeId01V2ActorProof({
+      projectRoot, agentType: proofRole, sessionId: sessionKey, agentId: primary,
+      actionId: actionA, prefix: "subagent-bats-id01-v2",
+    });
+    const capability = rll.checkClaudeId01RuntimeCapability(
+      projectRoot, sessionKey, worktreeId, planResult.planDigest, proofRole, primary,
+    );
     if (!capability.ok) { process.stderr.write("capability proof failed: " + JSON.stringify(capability)); process.exit(1); }
     const bindingResult = rll.createMainOrchestratorBinding(projectRoot, identity, worktreeId, planResult.planDigest, 120);
     if (!bindingResult.ok) { process.stderr.write("binding mint failed"); process.exit(1); }
@@ -368,10 +379,17 @@ _mint_pending_role_spawn() {
     const grantResult = rll.mintLifecycleCommandGrant(projectRoot, bindingResult.binding, argvDigest, role, "ensure", "main-orchestrator", "orchestrator", "normal", null);
     if (!grantResult.ok) { process.stderr.write("grant mint failed: " + JSON.stringify(grantResult)); process.exit(1); }
     process.stdout.write(grantResult.grantId);
-  ' "$RLL_IMPL" "$PROJECT_ROOT" "$role" "$session_key" > "$BATS_TEST_TMPDIR/probe-grant-id.txt" 2>"$BATS_TEST_TMPDIR/probe-grant-err.txt"
+  ' "$RLL_IMPL" "$PROJECT_ROOT" "$role" "$session_key" "$ID01_V2_FIXTURE" > "$BATS_TEST_TMPDIR/probe-grant-id.txt" 2>"$BATS_TEST_TMPDIR/probe-grant-err.txt"; then
+    sed 's/^/# /' "$BATS_TEST_TMPDIR/probe-grant-err.txt" >&3
+    return 1
+  fi
   local grant_id; grant_id="$(cat "$BATS_TEST_TMPDIR/probe-grant-id.txt")"
-  NODE_ENV=test RUNTIME_ROLE_LIFECYCLE_TEST_CAPABILITY="$PROBE_CAPABILITY" RUNTIME_ROLE_LIFECYCLE_FAKE_CAPABILITIES='["claude-sendmessage"]' \
-    node "$RLL_IMPL" ensure --project-root "$PROJECT_ROOT" --role "$role" --lifecycle-binding "$grant_id" >/dev/null 2>&1
+  local ensure_output
+  if ! ensure_output="$(NODE_ENV=test RUNTIME_ROLE_LIFECYCLE_TEST_CAPABILITY="$PROBE_CAPABILITY" RUNTIME_ROLE_LIFECYCLE_FAKE_CAPABILITIES='["claude-sendmessage"]' \
+    node "$RLL_IMPL" ensure --project-root "$PROJECT_ROOT" --role "$role" --lifecycle-binding "$grant_id" 2>&1)"; then
+    printf '# %s\n' "$ensure_output" >&3
+    return 1
+  fi
 }
 
 _probe_correlation_path() {
@@ -500,8 +518,15 @@ _mint_reserved_role_spawn() {
     if (!actionRead.ok || actionRead.absent) { process.stderr.write("action not found"); process.exit(1); }
     const bindingResult = rll.createMainOrchestratorBinding(projectRoot, identity, worktreeId, planResult.planDigest, 120);
     if (!bindingResult.ok) { process.stderr.write("binding mint failed: " + JSON.stringify(bindingResult)); process.exit(1); }
-    const toolInputDigest = rc.sha256String(rc.canonicalJSONStringify({ subagent_type: subagentType, name }));
-    const claimResult = rll.mintRoleSpawnExecutionClaim({ repoId: rll.computeRepoId(projectRoot) }, actionRead.action, bindingResult.binding.binding_id, toolInputDigest, 120);
+    const proposedInput = { subagent_type: subagentType, name, prompt: actionRead.action.payload.bootstrap_message };
+    const canonicalInput = rll.canonicalNativeAgentInputForAction(actionRead.action);
+    const claimResult = rll.mintRoleSpawnExecutionClaim({ repoId: rll.computeRepoId(projectRoot) }, actionRead.action, bindingResult.binding.binding_id, {
+      runtimeSessionId: sessionKey,
+      sourceToolUseId: sessionKey + "-reserved-agent-tool-use",
+      canonicalInputDigest: rc.sha256String(rc.canonicalJSONStringify(canonicalInput)),
+      proposedInputDigest: rc.sha256String(rc.canonicalJSONStringify(proposedInput)),
+      modelDeviation: rc.canonicalJSONStringify(canonicalInput) !== rc.canonicalJSONStringify(proposedInput),
+    }, 120);
     if (!claimResult.ok) { process.stderr.write("claim mint failed: " + JSON.stringify(claimResult)); process.exit(1); }
     process.stdout.write(actionId + " " + claimResult.record.reservation_id);
   ' "$RLL_IMPL" "$RC_IMPL" "$PROJECT_ROOT" "$role" "$session_key" "$subagent_type" "$name"
@@ -526,6 +551,61 @@ _role_binding_state() {
   ' "$RLL_IMPL" "$PROJECT_ROOT" "$role" "$session_key"
 }
 
+# Finds the immutable v2 startup-actor observation for the exact admitted
+# actor. The corrected PLAN separates this per-actor startup fact from the
+# generation-wide host capability; park/resume itself remains authorized by
+# the retained RoleActorBinding.
+_startup_actor_record_path_for() {
+  local role="$1" action_id="$2" agent_id="$3"
+  NODE_ENV=test RUNTIME_ROLE_LIFECYCLE_TEST_CAPABILITY="$PROBE_CAPABILITY" node -e '
+    const fs = require("fs");
+    const path = require("path");
+    const crypto = require("crypto");
+    const rll = require(process.argv[1]);
+    const projectRoot = process.argv[2];
+    const role = process.argv[3];
+    const actionId = process.argv[4];
+    const agentDigest = crypto.createHash("sha256").update(process.argv[5], "utf8").digest("hex");
+    const dir = path.join(rll.registryRepoDir(projectRoot), "claude-id01-traces");
+    let entries = [];
+    try { entries = fs.readdirSync(dir).filter((name) => name.endsWith(".json")); } catch {}
+    const matches = [];
+    for (const entry of entries) {
+      const candidate = path.join(dir, entry);
+      try {
+        const record = JSON.parse(fs.readFileSync(candidate, "utf8"));
+        if (record.schema === "runtime/claude-startup-actor/v1" && record.role === role
+            && record.action_id === actionId && record.agent_digest === agentDigest) matches.push(candidate);
+      } catch {}
+    }
+    if (matches.length !== 1) {
+      process.stderr.write("expected exactly one matching startup actor record, found " + matches.length);
+      process.exit(1);
+    }
+    process.stdout.write(matches[0]);
+  ' "$RLL_IMPL" "$PROJECT_ROOT" "$role" "$action_id" "$agent_id"
+}
+
+_registry_record_count_for_role() {
+  local directory="$1" role="$2"
+  node -e '
+    const fs = require("fs");
+    const path = require("path");
+    const rll = require(process.argv[1]);
+    const dir = path.join(rll.registryRepoDir(process.argv[2]), process.argv[3]);
+    let count = 0;
+    let entries = [];
+    try { entries = fs.readdirSync(dir).filter((name) => name.endsWith(".json")); } catch {}
+    for (const entry of entries) {
+      try {
+        const record = JSON.parse(fs.readFileSync(path.join(dir, entry), "utf8"));
+        if (record.role === process.argv[4]) count += 1;
+      } catch {}
+    }
+    process.stdout.write(String(count));
+  ' "$RLL_IMPL" "$PROJECT_ROOT" "$directory" "$role"
+}
+
 # Builds a SubagentStart payload carrying session_id/agent_id too (today's
 # make_input only ever sets hook_event_name/agent_type -- neither
 # session_id nor agent_id is read by this hook AT ALL today, which IS part
@@ -546,13 +626,50 @@ PYEOF
   [ "$status" -eq 0 ]
   [ -n "$output" ]
   write_bundle "arch-platform" "bl-w47-test"
-  _make_subagent_start_input_full "arch-platform" "rb2-session-caller" "rb2-agent-id"
+  _make_subagent_start_input_full "arch-platform" "rb2-session" "rb2-agent-id"
   run bash -c "cat '$INPUT_FILE' | CLAUDE_PROJECT_DIR='$PROJECT_ROOT' node '$HOOK'"
   [ "$status" -eq 0 ]
   [[ "$output" == *'"additionalContext"'* ]]
   [[ "$output" == *"Key patterns here"* ]]
   run _role_binding_state "arch-platform" "rb2-session"
   [ "$output" != "QUARANTINED" ]
+}
+
+@test "R131-LIFECYCLE-BOOTSTRAP: confirmed role spawn without a bundle receives authenticated ready-first context and no project-read instruction" {
+  run _mint_reserved_role_spawn "doc-updater" "r131-bootstrap-session" "doc-updater" "doc-updater"
+  [ "$status" -eq 0 ]
+  local action_id; action_id="$(printf '%s\n' "$output" | tail -n 1 | awk '{print $1}')"
+  [ -n "$action_id" ]
+
+  _make_subagent_start_input_full "doc-updater" "r131-bootstrap-session" "r131-bootstrap-agent"
+  run bash -c "cat '$INPUT_FILE' | CLAUDE_PROJECT_DIR='$PROJECT_ROOT' node '$HOOK'"
+
+  [ "$status" -eq 0 ]
+  run node -e '
+    const jsonLine = process.argv[1].split(/\r?\n/).filter(line => line.trim().startsWith("{")).pop();
+    const body = JSON.parse(jsonLine);
+    if (!body.hookSpecificOutput || body.hookSpecificOutput.hookEventName !== "SubagentStart") process.exit(1);
+    const ctx = body.hookSpecificOutput.additionalContext;
+    const actionId = process.argv[2];
+    for (const required of [
+      "AUTHENTICATED_ROLE_LIFECYCLE_BOOTSTRAP/v1",
+      "action_id=" + actionId,
+      "role=doc-updater",
+      "worktree_id=",
+      "plan_digest=",
+      "session_generation_id=",
+      "scope_doc_path=",
+      "first_command=",
+      "runtime-role-lifecycle.cjs",
+      "--action",
+      "Do not call Read, Grep, or Glob before first_command",
+    ]) {
+      if (!ctx.includes(required)) { console.error("missing: " + required + " in " + ctx); process.exit(1); }
+    }
+    if (ctx.includes("Key patterns here")) process.exit(1);
+  ' "$output" "$action_id"
+  if [ "$status" -ne 0 ]; then echo "# lifecycle bootstrap assertion failed: $output" >&3; fi
+  [ "$status" -eq 0 ]
 }
 
 @test "M7-RB3-ABSENT: SubagentStart for a role with NO live B1 reservation (no claim minted at all) quarantines the role binding, injects no bundle, and logs a distinguishable 'absent' reason" {
@@ -579,6 +696,50 @@ PYEOF
   [[ "$output" != *'"additionalContext"'* ]]
 }
 
+@test "P4-B1-EXPIRED-HISTORY: one expired unconsumed B1 claim plus one fresh live claim selects and consumes only the fresh generation" {
+  run _mint_reserved_role_spawn "arch-platform" "p4-b1-expired-history" "arch-platform" "arch-platform"
+  [ "$status" -eq 0 ]
+  local expired_action_id; expired_action_id="$(awk '{print $1}' <<< "$output")"
+  [ -n "$expired_action_id" ]
+
+  # Preserve a structurally complete immutable history record whose own
+  # lifetime has elapsed. The production scan must classify this as history,
+  # not as a second live reservation merely because the .json still exists.
+  run env NODE_ENV=test RUNTIME_ROLE_LIFECYCLE_TEST_CAPABILITY="$PROBE_CAPABILITY" node -e '
+    const fs = require("fs");
+    const rll = require(process.argv[1]);
+    const claimPath = rll.roleSpawnExecutionClaimPathFor(process.argv[2], process.argv[3]);
+    const claim = JSON.parse(fs.readFileSync(claimPath, "utf8"));
+    claim.created_at = "2000-01-01T00:00:00Z";
+    claim.expiry = "2000-01-01T00:00:01Z";
+    fs.writeFileSync(claimPath, JSON.stringify(claim));
+  ' "$RLL_IMPL" "$PROJECT_ROOT" "$expired_action_id"
+  [ "$status" -eq 0 ]
+
+  run _mint_reserved_role_spawn "arch-platform" "p4-b1-fresh-session" "arch-platform" "arch-platform"
+  [ "$status" -eq 0 ]
+  local fresh_action_id; fresh_action_id="$(awk '{print $1}' <<< "$output")"
+  [ -n "$fresh_action_id" ]
+
+  _make_subagent_start_input_full "arch-platform" "p4-b1-fresh-session" "p4-b1-fresh-agent"
+  run bash -c "cat '$INPUT_FILE' | CLAUDE_PROJECT_DIR='$PROJECT_ROOT' node '$HOOK' 2>&1"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"AUTHENTICATED_ROLE_LIFECYCLE_BOOTSTRAP/v1"* ]]
+  [[ "$output" != *"ambiguous"* ]]
+
+  local fresh_consumed_path
+  fresh_consumed_path="$(node -e 'const path=require("path");const r=require(process.argv[1]);const p=r.roleSpawnExecutionClaimPathFor(process.argv[2],process.argv[3]);process.stdout.write(p.replace(/\.json$/, ".consumed"))' "$RLL_IMPL" "$PROJECT_ROOT" "$fresh_action_id")"
+  local expired_consumed_path
+  expired_consumed_path="$(node -e 'const path=require("path");const r=require(process.argv[1]);const p=r.roleSpawnExecutionClaimPathFor(process.argv[2],process.argv[3]);process.stdout.write(p.replace(/\.json$/, ".consumed"))' "$RLL_IMPL" "$PROJECT_ROOT" "$expired_action_id")"
+  [ -f "$fresh_consumed_path" ]
+  [ ! -e "$expired_consumed_path" ]
+
+  run _role_binding_state "arch-platform" "p4-b1-fresh-session"
+  [ "$output" = "STARTING" ]
+  run _role_binding_state "arch-platform" "p4-b1-expired-history"
+  [ "$output" = "STARTING" ]
+}
+
 @test "M7-RB3-MISMATCHED: a claim that EXISTS but is scoped to a DIFFERENT session_generation_id than the one currently live is rejected with a reason DISTINGUISHABLE from ABSENT, and quarantines the binding" {
   run _mint_reserved_role_spawn "arch-platform" "rb3c-session" "arch-platform" "arch-platform"
   [ "$status" -eq 0 ]
@@ -602,6 +763,28 @@ PYEOF
   run bash -c "cat '$INPUT_FILE' | CLAUDE_PROJECT_DIR='$PROJECT_ROOT' node '$HOOK' 2>&1 1>/dev/null"
   [[ "$output" == *"mismatch"* ]] || [[ "$output" == *"MISMATCH"* ]]
   run _role_binding_state "arch-platform" "rb3c-session"
+  [ "$output" = "QUARANTINED" ]
+}
+
+@test "P1-CLAIM-V1-HISTORICAL: an old RoleSpawnExecutionClaim/v1 is never promoted or consumed as v2" {
+  run _mint_reserved_role_spawn "arch-platform" "p1-v1-session" "arch-platform" "arch-platform"
+  [ "$status" -eq 0 ]
+  local action_id; action_id="$(awk '{print $1}' <<< "$output")"
+  [ -n "$action_id" ]
+  run env NODE_ENV=test RUNTIME_ROLE_LIFECYCLE_TEST_CAPABILITY="$PROBE_CAPABILITY" node -e '
+    const rll = require(process.argv[1]);
+    const fs = require("fs");
+    const claimPath = rll.roleSpawnExecutionClaimPathFor(process.argv[2], process.argv[3]);
+    const rec = JSON.parse(fs.readFileSync(claimPath, "utf8"));
+    rec.schema = "runtime/role-spawn-execution-claim/v1";
+    fs.writeFileSync(claimPath, JSON.stringify(rec));
+  ' "$RLL_IMPL" "$PROJECT_ROOT" "$action_id"
+  [ "$status" -eq 0 ]
+  _make_subagent_start_input_full "arch-platform" "p1-v1-session" "p1-v1-agent"
+  run bash -c "cat '$INPUT_FILE' | CLAUDE_PROJECT_DIR='$PROJECT_ROOT' node '$HOOK' 2>&1 1>/dev/null"
+  [[ "$output" == *"schema"* ]] || [[ "$output" == *"invalid"* ]]
+  [ ! -e "$(node -e 'const path=require("path");const r=require(process.argv[1]);const claim=r.roleSpawnExecutionClaimPathFor(process.argv[2],process.argv[3]);process.stdout.write(path.join(path.dirname(claim),process.argv[3]+".consumed"))' "$RLL_IMPL" "$PROJECT_ROOT" "$action_id")" ]
+  run _role_binding_state "arch-platform" "p1-v1-session"
   [ "$output" = "QUARANTINED" ]
 }
 
@@ -732,7 +915,7 @@ _find_role_actor_binding() {
   read -r worktree_id plan_digest session_generation_id <<< "$output"
   [ -n "$worktree_id" ]
 
-  _make_subagent_start_input_full "arch-platform" "actorbind-session-caller" "actorbind-agent-id"
+  _make_subagent_start_input_full "arch-platform" "actorbind-session" "actorbind-agent-id"
   run bash -c "cat '$INPUT_FILE' | CLAUDE_PROJECT_DIR='$PROJECT_ROOT' node '$HOOK'"
   [ "$status" -eq 0 ]
 
@@ -759,7 +942,7 @@ _find_role_actor_binding() {
   local action_id; action_id="$(awk '{print $1}' <<< "$output")"
   [ -n "$action_id" ]
 
-  _make_subagent_start_input_full "arch-platform" "actorbindready-session-caller" "actorbindready-agent-id"
+  _make_subagent_start_input_full "arch-platform" "actorbindready-session" "actorbindready-agent-id"
   run bash -c "cat '$INPUT_FILE' | CLAUDE_PROJECT_DIR='$PROJECT_ROOT' node '$HOOK'"
   [ "$status" -eq 0 ]
 
@@ -825,15 +1008,9 @@ _find_role_actor_binding() {
   [ "$status" -eq 0 ]
   write_bundle "arch-platform" "bl-w47-test"
 
-  # Force RoleActorBinding creation to fail: pre-create role-actor-bindings/
-  # as a symlink, so createRoleActorBinding's own writeRegistryRecordReplace
-  # -> ensureSecureRegistryDir rejects the pre-existing symlink (mirrors this
-  # codebase's own established symlink-rejection precedent).
-  local actorbind_dir
-  actorbind_dir="$(NODE_ENV=test RUNTIME_ROLE_LIFECYCLE_TEST_CAPABILITY="$PROBE_CAPABILITY" node -e 'const rll=require(process.argv[1]); process.stdout.write(require("path").join(rll.registryRepoDir(process.argv[2]), "role-actor-bindings"));' "$RLL_IMPL" "$PROJECT_ROOT")"
-  mkdir -p "$(dirname "$actorbind_dir")"
-  local bogus_target; bogus_target="$(mktemp -d)"
-  ln -s "$bogus_target" "$actorbind_dir"
+  # Inject a deterministic failure only into this hook process. This keeps
+  # the v2 context-provider proof readable while proving that failure to
+  # create the new target actor binding remains fatal.
 
   # SINGLE invocation, both streams captured from that ONE call. B2
   # confirmation is one-use by pre-existing, unchanged design
@@ -843,9 +1020,9 @@ _find_role_actor_binding() {
   # already consumed), which is a different scenario than this test intends
   # to exercise. stderr is redirected to a temp file so it can be inspected
   # alongside stdout ($output/$status) from the same run.
-  _make_subagent_start_input_full "arch-platform" "actorbindfail-session-caller" "actorbindfail-agent-id"
+  _make_subagent_start_input_full "arch-platform" "actorbindfail-session" "actorbindfail-agent-id"
   local stderr_file; stderr_file="$(mktemp "$BATS_TEST_TMPDIR/actorbindfail-stderr.XXXXXX")"
-  run bash -c "cat '$INPUT_FILE' | CLAUDE_PROJECT_DIR='$PROJECT_ROOT' node '$HOOK' 2>'$stderr_file'"
+  run bash -c "cat '$INPUT_FILE' | CLAUDE_PROJECT_DIR='$PROJECT_ROOT' RUNTIME_ROLE_LIFECYCLE_IMPL='$RLL_IMPL' RUNTIME_ROLE_ACTOR_BINDING_FAILURE_ROLE='arch-platform' NODE_OPTIONS='--require=$ACTOR_BINDING_FAILURE_PRELOAD' node '$HOOK' 2>'$stderr_file'"
   [ "$status" -eq 0 ]
   # pre-fix (pre-fix): this is the FIRST assertion that fails -- the hook
   # currently DOES inject the bundle regardless of the binding-creation
@@ -1356,34 +1533,40 @@ PYEOF
 # real root-source CLI mints followed by two real gate calls in quick
 # succession therefore cannot both succeed; the second gate call denies
 # root-source-action-ambiguous before a second reservation ever exists.
-# So EXPIRED-HISTORY-LIVE-01 and EXPIRED-ONLY-DENIES-01 below use a REAL
-# wall-clock wait (bounded poll on the action's own recorded expires_at,
-# never a fixture-mutated timestamp) to let the first action naturally,
-# genuinely expire before minting the second -- zero fixture mutation for
-# either test. Only TWO-LIVE-AMBIGUOUS-01 (below), which requires two
+# EXPIRED-HISTORY-LIVE-01 and EXPIRED-ONLY-DENIES-01 use a deterministic
+# expired fixture below. Waiting for the native startup budget (now 240s)
+# would make this unit slow and flaky; production still validates the same
+# immutable action/reservation correlation on read. TWO-LIVE-AMBIGUOUS-01,
+# which requires two
 # SIMULTANEOUSLY live reservations -- structurally impossible to reach
 # through the real gate given that same "at most one live action"
 # invariant -- uses a fixture clone (a second, freshly-real-minted action
 # copied to a new valid action_id) to exercise findLiveRootSourceReservationsForRole's
 # own ambiguity branch directly.
-_s16_wait_for_action_expiry() {
+_s16_expire_action_fixture() {
   local project_root="$1" action_id="$2"
-  local expires_at_ms
-  expires_at_ms="$(node -e '
+  node -e '
     const fs = require("fs");
     const rll = require(process.argv[1]);
-    const action = JSON.parse(fs.readFileSync(rll.actionPathFor(process.argv[2], process.argv[3]), "utf8"));
-    process.stdout.write(String(Date.parse(action.expires_at)));
-  ' "$RLL_IMPL" "$project_root" "$action_id")"
-  while true; do
-    local now_ms
-    now_ms="$(node -e 'process.stdout.write(String(Date.now()))')"
-    [ "$now_ms" -ge "$expires_at_ms" ] && break
-    sleep 0.2
-  done
+    const rc = require(process.argv[2]);
+    const projectRoot = process.argv[3];
+    const actionId = process.argv[4];
+    const actionPath = rll.actionPathFor(projectRoot, actionId);
+    const reservationPath = rll.rootSourceReservationPathFor(projectRoot, actionId);
+    const action = JSON.parse(fs.readFileSync(actionPath, "utf8"));
+    const reservation = JSON.parse(fs.readFileSync(reservationPath, "utf8"));
+    const expiredAt = new Date(Date.now() - 1000).toISOString().replace(/\.\d{3}Z$/, "Z");
+    const reservedAt = new Date(Date.now() - 2000).toISOString().replace(/\.\d{3}Z$/, "Z");
+    action.expires_at = expiredAt;
+    reservation.reserved_at = reservedAt;
+    reservation.expiry = expiredAt;
+    reservation.action_digest = rc.sha256String(rc.canonicalJSONStringify(action));
+    fs.writeFileSync(actionPath, rc.canonicalJSONStringify(action));
+    fs.writeFileSync(reservationPath, rc.canonicalJSONStringify(reservation));
+  ' "$RLL_IMPL" "$RC_IMPL" "$project_root" "$action_id"
 }
 
-@test "M67-RS-RESERVATION-EXPIRED-HISTORY-LIVE-01: one genuinely (wall-clock) expired unconsumed historical reservation plus exactly one newer valid live reservation for the same role -- the real SubagentStart path consumes and binds exactly the fresh action, leaves the historical reservation bytes unchanged, and creates no consumed marker for the history entry" {
+@test "M67-RS-RESERVATION-EXPIRED-HISTORY-LIVE-01: one deterministically expired unconsumed historical reservation plus exactly one newer valid live reservation for the same role -- the real SubagentStart path consumes and binds exactly the fresh action, leaves the expired fixture bytes unchanged, and creates no consumed marker for the history entry" {
   local session_id="s16-exphist-live-session"
   local agent_id="s16-exphist-live-agent"
   run _mint_reserved_root_source_via_real_surfaces "$session_id"
@@ -1394,12 +1577,10 @@ _s16_wait_for_action_expiry() {
 
   local history_reservation_path
   history_reservation_path="$(node -e 'const rll=require(process.argv[1]); process.stdout.write(rll.rootSourceReservationPathFor(process.argv[2], process.argv[3]));' "$RLL_IMPL" "$PROJECT_ROOT" "$history_action_id")"
-  local history_bytes_at_mint
-  history_bytes_at_mint="$(cat "$history_reservation_path")"
-
-  # Real wall-clock wait -- never a fixture-mutated timestamp -- until this
-  # action's own recorded expires_at genuinely passes.
-  _s16_wait_for_action_expiry "$PROJECT_ROOT" "$history_action_id"
+  # Deterministically expire the correlated action/reservation fixture.
+  _s16_expire_action_fixture "$PROJECT_ROOT" "$history_action_id"
+  local history_bytes_at_expiry
+  history_bytes_at_expiry="$(cat "$history_reservation_path")"
 
   local session_id_2="s16-exphist-live-session-2"
   run _mint_reserved_root_source_via_real_surfaces "$session_id_2"
@@ -1424,7 +1605,7 @@ _s16_wait_for_action_expiry() {
   # at-mint snapshot -- never deleted, rewritten, or consumed at any point.
   local history_bytes_after_stop
   history_bytes_after_stop="$(cat "$history_reservation_path")"
-  [ "$history_bytes_at_mint" = "$history_bytes_after_stop" ]
+  [ "$history_bytes_at_expiry" = "$history_bytes_after_stop" ]
 
   # No consumed marker was ever written for the historical entry; exactly
   # one, correctly correlated, was written for the live entry.
@@ -1439,7 +1620,7 @@ _s16_wait_for_action_expiry() {
   [ "$status" -eq 0 ]
 }
 
-@test "M67-RS-RESERVATION-EXPIRED-ONLY-DENIES-01: only genuinely (wall-clock) expired valid history, no live sibling, retains the exact root-source-reservation-expired fail-closed result and never degrades to non-owning pass-through" {
+@test "M67-RS-RESERVATION-EXPIRED-ONLY-DENIES-01: only deterministically expired valid history, no live sibling, retains the exact root-source-reservation-expired fail-closed result and never degrades to non-owning pass-through" {
   local session_id="s16-exponly-denies-session"
   local agent_id="s16-exponly-denies-agent"
   run _mint_reserved_root_source_via_real_surfaces "$session_id"
@@ -1448,7 +1629,7 @@ _s16_wait_for_action_expiry() {
   read -r action_id main_binding_id generation_id <<< "$output"
   [ -n "$action_id" ]
 
-  _s16_wait_for_action_expiry "$PROJECT_ROOT" "$action_id"
+  _s16_expire_action_fixture "$PROJECT_ROOT" "$action_id"
 
   _make_subagent_start_input_full "toolkit-specialist" "$session_id" "$agent_id"
   run bash -c "cat '$INPUT_FILE' | CLAUDE_PROJECT_DIR='$PROJECT_ROOT' node '$HOOK'"
@@ -1527,7 +1708,7 @@ _s16_clone_reservation_to_fresh_action_id() {
   [ "$output" = "0" ]
 }
 
-@test "M67-RS-RESERVATION-MALFORMED-EXPIRED-DENIES-01: a genuinely (wall-clock) expired but malformed (tampered action_digest) reservation remains a specific validation failure, never benign history" {
+@test "M67-RS-RESERVATION-MALFORMED-EXPIRED-DENIES-01: a deterministically expired but malformed (tampered action_digest) reservation remains a specific validation failure, never benign history" {
   local session_id="s16-malformed-exp-session"
   local agent_id="s16-malformed-exp-agent"
   run _mint_reserved_root_source_via_real_surfaces "$session_id"
@@ -1536,10 +1717,10 @@ _s16_clone_reservation_to_fresh_action_id() {
   read -r action_id main_binding_id generation_id <<< "$output"
   [ -n "$action_id" ]
 
-  _s16_wait_for_action_expiry "$PROJECT_ROOT" "$action_id"
+  _s16_expire_action_fixture "$PROJECT_ROOT" "$action_id"
 
-  # Now genuinely, wall-clock expired -- tamper action_digest only (no
-  # timestamp touched at all) so it is expired AND malformed.
+  # Now deterministically expired -- tamper action_digest so it is both
+  # expired and malformed without a real wall-clock wait.
   run node -e '
     const fs = require("fs");
     const rll = require(process.argv[1]);
@@ -1638,7 +1819,7 @@ _a_root_parse_and_validate_reservation() {
 
     const valid = rll.validateRootSourceReservationRecord(record, action);
     if (!valid.ok) { process.stderr.write("validateRootSourceReservationRecord failed: " + JSON.stringify(valid)); process.exit(1); }
-    if (record.schema !== "runtime/root-source-reservation/v1") { process.stderr.write("schema literal mismatch: " + record.schema); process.exit(1); }
+    if (record.schema !== "runtime/root-source-reservation/v2") { process.stderr.write("schema literal mismatch: " + record.schema); process.exit(1); }
 
     const generation = rll.peekSessionGeneration(projectRoot, { provider: "claude-hook", runtime_session_key: sessionId });
     if (!generation.ok || generation.generationId !== record.session_generation_id) {
@@ -2001,7 +2182,30 @@ payload = {"hook_event_name": "SubagentStop", "agent_type": agent_type, "session
 with open(path, "w", encoding="utf-8") as f:
     json.dump(payload, f)
 PYEOF
-  run bash -c "cat '$INPUT_FILE' | CLAUDE_PROJECT_DIR='$PROJECT_ROOT' node '$HOOK'"
+  if [[ "$(node -p 'process.platform')" == "win32" ]]; then
+    # Windows reports ENOENT (rather than POSIX ENOTDIR) when stat-ing a
+    # descendant of the blocking plain file above. Inject one narrowly scoped
+    # non-ENOENT stat failure so this test exercises the same fail-closed
+    # preflight branch on both platforms without changing production code.
+    local preflight_fault_preload="$BATS_TEST_TMPDIR/preflight-stat-fault.cjs"
+    cat > "$preflight_fault_preload" <<'NODE'
+'use strict';
+const fs = require('fs');
+const path = require('path');
+const realStatSync = fs.statSync;
+fs.statSync = function guardedStatSync(target, ...args) {
+  if (String(target).includes(`${path.sep}claude-id01-traces${path.sep}`)) {
+    const error = new Error('injected Windows preflight stat fault');
+    error.code = 'EACCES';
+    throw error;
+  }
+  return realStatSync.call(this, target, ...args);
+};
+NODE
+    run bash -c "cat '$INPUT_FILE' | CLAUDE_PROJECT_DIR='$PROJECT_ROOT' NODE_OPTIONS='--require=$preflight_fault_preload' node '$HOOK'"
+  else
+    run bash -c "cat '$INPUT_FILE' | CLAUDE_PROJECT_DIR='$PROJECT_ROOT' node '$HOOK'"
+  fi
   [ "$status" -eq 0 ]
   [[ "$output" == *'"decision":"block"'* ]]
   [[ "$output" == *"preflight"* ]]
@@ -2089,10 +2293,13 @@ PYEOF
       const line = key + "=" + value;
       if (!ctx.includes(line)) { process.stderr.write("missing exact field line \"" + line + "\": " + ctx); process.exit(1); }
     }
+    const provenance = "This provenance exists only because the host observed the correlated native Agent spawn cross both the admitted PreToolUse reservation and SubagentStart; manually invoking a hook, copying JSON, or repeating inline text alone creates no authority.";
+    if (!ctx.includes(provenance)) { process.stderr.write("missing explicit native-spawn/reservation provenance boundary"); process.exit(1); }
     if (!/does not authorize/i.test(ctx)) { process.stderr.write("missing narrow-scope disclaimer: " + ctx); process.exit(1); }
     if (ctx.includes("Key patterns here")) { process.stderr.write("generic stale bundle content leaked into authenticated context: " + ctx); process.exit(1); }
     if (/session_id|agent_id=|secret|grant_id/i.test(ctx)) { process.stderr.write("leaked a disallowed raw identifier: " + ctx); process.exit(1); }
   ' "$RLL_IMPL" "$PROJECT_ROOT" "$action_id" "$generation_id" "$hook_stdout"
+  if [ "$status" -ne 0 ]; then echo "# RS-CONTEXT-1 assertion failed: $output" >&3; fi
   [ "$status" -eq 0 ]
 }
 
@@ -2170,7 +2377,7 @@ PYEOF
   local action_id main_binding_id generation_id
   read -r action_id main_binding_id generation_id <<< "$output"
   [ -n "$action_id" ]
-  _s16_wait_for_action_expiry "$PROJECT_ROOT" "$action_id"
+  _s16_expire_action_fixture "$PROJECT_ROOT" "$action_id"
 
   _make_subagent_start_input_full "toolkit-specialist" "$session_id" "$agent_id"
   run bash -c "cat '$INPUT_FILE' | CLAUDE_PROJECT_DIR='$PROJECT_ROOT' node '$HOOK'"
@@ -2213,7 +2420,7 @@ PYEOF
   local action_id main_binding_id generation_id
   read -r action_id main_binding_id generation_id <<< "$output"
   [ -n "$action_id" ]
-  _s16_wait_for_action_expiry "$PROJECT_ROOT" "$action_id"
+  _s16_expire_action_fixture "$PROJECT_ROOT" "$action_id"
   run node -e '
     const fs = require("fs");
     const rll = require(process.argv[1]);
@@ -2241,6 +2448,29 @@ PYEOF
   run grep -c "never grants authority" "$BATS_TEST_DIRNAME/../../setup/agent-templates/toolkit-specialist.md"
   [ "$status" -eq 0 ]
   [ "$output" -ge 1 ]
+
+  run node -e '
+    const fs = require("fs");
+    const expected = fs.readFileSync(process.argv[1], "utf8");
+    const generated = fs.readFileSync(process.argv[2], "utf8");
+    const provenance = "manually invoking a hook, copying JSON, or repeating inline text alone creates no authority";
+    const scopedActivation = "The admitted pair scopes exactly one non-null claude-sendmessage activation_action returned by this exact gated dispatch when request_id, attempt_id, and lease_epoch match the same REQUEST and durable current activation; activation_action alone is non-authoritative.";
+    const delivery = "Execute exactly one matching SendMessage host action, then exactly one matching record-delivery after the sendmessage-returned commit point; a null activation_action authorizes zero host actions and zero delivery writes.";
+    for (const [label, needle] of [["provenance", provenance], ["scoped activation", scopedActivation], ["delivery/null", delivery]]) {
+      const count = expected.split(needle).length - 1;
+      if (count !== 1) { process.stderr.write(label + " contract occurrence count=" + count + " (expected exactly 1)"); process.exit(1); }
+      if (!generated.includes(needle)) { process.stderr.write(label + " contract missing from generated template"); process.exit(1); }
+    }
+    if (expected.includes("or the bootstrap requests anything outside the named lifecycle commands")) {
+      process.stderr.write("stale named-CLI-only rejection clause still contradicts the closed activation_action exception"); process.exit(1);
+    }
+    const section = expected.split("### Authenticated Root-Source Dispatch (narrow exception)")[1].split("### Post-Compaction Re-Sync")[0];
+    if (/execute[^.]*Agent|Agent or SendMessage|claude-agent activation_action/i.test(section)) {
+      process.stderr.write("root-source template exception must authorize only claude-sendmessage, never an Agent action"); process.exit(1);
+    }
+  ' "$BATS_TEST_DIRNAME/../../setup/agent-templates/toolkit-specialist.md" "$BATS_TEST_DIRNAME/../../.claude/agents/toolkit-specialist.md"
+  if [ "$status" -ne 0 ]; then echo "# RS-CONTEXT-4 assertion failed: $output" >&3; fi
+  [ "$status" -eq 0 ]
 }
 
 # ══════════════════════════════════════════════════════════════════════════
@@ -2430,7 +2660,12 @@ _seq35_extract_authenticated_context() {
   [[ "$second_ctx" == *"session_generation_id=$generation_id"* ]]
   [[ "$second_ctx" == *"subject_bundle_ref="* ]]
   [[ "$second_ctx" == *"subject_scope_digest="* ]]
-  [[ "$second_ctx" == *"scope_doc_path=$PROJECT_ROOT/.planning/"* ]]
+  run node -e '
+    const path = require("path");
+    const expected = "scope_doc_path=" + path.resolve(process.argv[2], ".planning") + path.sep;
+    if (!process.argv[1].includes(expected)) process.exit(1);
+  ' "$second_ctx" "$PROJECT_ROOT"
+  [ "$status" -eq 0 ]
   # The generic bundle exists and is wave-fresh, yet must never be injected.
   [[ "$second_ctx" != *"$SEQ35_GENERIC_SENTINEL"* ]]
 
@@ -2532,4 +2767,445 @@ _seq35_extract_authenticated_context() {
   local stderr_content; stderr_content="$(cat "$stderr_file")"
   [[ "$stderr_content" == *"root-source resume classifier FAILED"* ]]
   rm -f "$stderr_file"
+}
+
+# ══════════════════════════════════════════════════════════════════════════
+# RED: Windows P4 native-Claude persistence correction (bounded RED-test
+# authorship only -- no production changes in this section).
+#
+# Confirmed live fact: in Claude Code 2.1.219, a completed background Task
+# resumed its IDENTICAL Task identity on a later SendMessage -- a normal
+# completed Task is natively resumable, not terminal product death.
+#
+# Confirmed harness defect (this file's own handleSubagentStop, read
+# directly): shouldFence is unconditionally true for ANY canonical-role
+# agent_type, regardless of classification state, so an ordinary
+# stop for a live persistent role actor publishes the identity fence AND
+# (once claim+preflight pass) deletes its CLAUDE-ID-01 trace. A resumed
+# SubagentStart for the SAME still-live actor then finds its role-spawn
+# reservation already consumed (B3 ABSENT) and quarantines it -- a bootstrap
+# deadlock, since dispatch can only select claude-sendmessage after a full
+# ClaudePeerBinding exists, which requires this exact resumed start to
+# already have succeeded.
+# ══════════════════════════════════════════════════════════════════════════
+
+@test "RED-P4-PARK-01: a first ordinary SubagentStop for an exactly correlated persistent claude-sendmessage role actor must NOT publish an authority fence, must NOT delete the CLAUDE-ID-01 trace, and must create exactly one live resume handle" {
+  run _mint_reserved_role_spawn "arch-platform" "p4park-session" "arch-platform" "arch-platform"
+  [ "$status" -eq 0 ]
+  local action_id; action_id="$(awk '{print $1}' <<< "$output")"
+  [ -n "$action_id" ]
+
+  local child_session="p4park-session"
+  local child_agent="p4park-child-agent"
+  _make_subagent_start_input_full "arch-platform" "$child_session" "$child_agent"
+  run bash -c "cat '$INPUT_FILE' | CLAUDE_PROJECT_DIR='$PROJECT_ROOT' node '$HOOK'"
+  [ "$status" -eq 0 ]
+
+  # Drive role-binding STARTING -> READY via the real 'ready' CLI (mirrors
+  # M7-B2-ACTORBINDING-READY's own established recipe) -- required so the
+  # first ordinary stop below has a genuine READY actor to park as WAITING.
+  run env NODE_ENV=test RUNTIME_ROLE_LIFECYCLE_TEST_CAPABILITY="$PROBE_CAPABILITY" node -e '
+    const rll = require(process.argv[1]);
+    const fs = require("fs");
+    const path = require("path");
+    const crypto = require("crypto");
+    const { spawnSync } = require("child_process");
+    const projectRoot = process.argv[2];
+    const actionId = process.argv[3];
+    const actionRead = rll.findActionAcrossRepos(actionId);
+    if (!actionRead.ok || actionRead.absent) { process.stderr.write("action not found"); process.exit(1); }
+    const action = actionRead.action;
+    const dir = path.join(rll.registryRepoDir(projectRoot), "role-actor-bindings");
+    let bindingId = null;
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      if (!entry.isFile() || !entry.name.endsWith(".json")) continue;
+      const candidateId = entry.name.replace(/\.json$/, "");
+      const result = rll.validateRoleActorBindingFor(projectRoot, candidateId, action.role, action.worktree_id, action.plan_digest);
+      if (result.ok) { bindingId = candidateId; break; }
+    }
+    if (!bindingId) { process.stderr.write("no live RoleActorBinding found"); process.exit(1); }
+    const bindingRead = rll.readRegistryRecord(rll.roleActorBindingPathFor(projectRoot, bindingId));
+    const argvDigest = crypto.createHash("sha256").update("ready:" + actionId).digest("hex");
+    const mintResult = rll.mintLifecycleCommandGrant(projectRoot, bindingRead.obj, argvDigest, action.role, "ready", "role-actor", "target", "target", actionId);
+    if (!mintResult.ok) { process.stderr.write("grant mint failed: " + JSON.stringify(mintResult)); process.exit(1); }
+    const readyToolUseId = "p4park-ready-" + actionId;
+    const pre = rll.recordClaudeStartupReadyPreObservation(projectRoot, {
+      sessionId: process.argv[4], agentId: process.argv[5], agentType: action.role,
+      toolUseId: readyToolUseId, action, actorBinding: bindingRead.obj, grantId: mintResult.grantId,
+    });
+    if (!pre.ok) { process.stderr.write("ready pre failed: " + JSON.stringify(pre)); process.exit(1); }
+    const result = spawnSync("node", [process.argv[1], "ready", "--action", actionId, "--lifecycle-binding", mintResult.grantId], { encoding: "utf8" });
+    if (result.status !== 0) { process.stderr.write("ready CLI exit " + result.status + ": " + result.stderr); process.exit(1); }
+    const outcome = rll.recordClaudeStartupReadyOutcome(projectRoot, {
+      hook_event_name: "PostToolUse", tool_name: "Bash", session_id: process.argv[4],
+      tool_use_id: readyToolUseId, agent_id: process.argv[5], agent_type: action.role,
+    });
+    if (!outcome.ok) { process.stderr.write("ready outcome failed: " + JSON.stringify(outcome)); process.exit(1); }
+  ' "$RLL_IMPL" "$PROJECT_ROOT" "$action_id" "$child_session" "$child_agent"
+  [ "$status" -eq 0 ]
+  run _role_binding_state "arch-platform" "p4park-session"
+  [ "$output" = "READY" ]
+
+  # The B2-confirm flow must have persisted the corrected PLAN's immutable
+  # v2 startup-actor observation for this exact child identity. Parking must
+  # preserve it byte-for-byte; it does not require a completed requester
+  # capability.
+  local record_path
+  run _startup_actor_record_path_for "arch-platform" "$action_id" "$child_agent"
+  [ "$status" -eq 0 ]
+  record_path="$output"
+  [ -n "$record_path" ]
+  [ -f "$record_path" ]
+  local before_bytes; before_bytes="$(cat "$record_path")"
+
+  python3 - "$INPUT_FILE" "$child_session" "$child_agent" <<'PYEOF'
+import json, sys
+path, session, agent = sys.argv[1], sys.argv[2], sys.argv[3]
+payload = {"hook_event_name": "SubagentStop", "agent_type": "arch-platform", "session_id": session, "agent_id": agent}
+with open(path, "w", encoding="utf-8") as f:
+    json.dump(payload, f)
+PYEOF
+  run bash -c "cat '$INPUT_FILE' | CLAUDE_PROJECT_DIR='$PROJECT_ROOT' node '$HOOK'"
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision":"block"'* ]]
+
+  # RED 1: no authority fence for this exact actor identity.
+  run node -e '
+    const rll = require(process.argv[1]);
+    const projectRoot = process.argv[2];
+    const repoDescriptor = { repoId: rll.computeRepoId(projectRoot) };
+    const authorityIdentityId = rll.computeClaudeAuthorityIdentityId(repoDescriptor, "claude-hook", process.argv[3], process.argv[4]);
+    const fenceRead = rll.readClaudeAuthorityFence(repoDescriptor, authorityIdentityId);
+    if (!fenceRead.ok) { process.stderr.write("fence read failed: " + JSON.stringify(fenceRead)); process.exit(1); }
+    if (fenceRead.absent !== true) { process.stderr.write("fence is PRESENT -- must stay ABSENT for a parked resumable actor"); process.exit(1); }
+  ' "$RLL_IMPL" "$PROJECT_ROOT" "$child_session" "$child_agent"
+  [ "$status" -eq 0 ]
+
+  # RED 2: CLAUDE-ID-01 trace bytes untouched.
+  [ -f "$record_path" ]
+  local after_bytes; after_bytes="$(cat "$record_path")"
+  [ "$before_bytes" = "$after_bytes" ]
+
+  # RED 3: exactly one live host-private resume handle now exists for this
+  # exact actor (proposed runtime/claude-resume-handle/v1 registry -- no
+  # production writer exists yet, so this directory must never appear today).
+  run node -e '
+    const rll = require(process.argv[1]);
+    const fs = require("fs");
+    const path = require("path");
+    const dir = path.join(rll.registryRepoDir(process.argv[2]), "claude-resume-handles");
+    let entries = [];
+    try { entries = fs.readdirSync(dir).filter((n) => n.endsWith(".json")); } catch {}
+    process.stdout.write(String(entries.length));
+  ' "$RLL_IMPL" "$PROJECT_ROOT"
+  [ "$output" = "1" ]
+
+  # RED 4: the READY role is parked WAITING, never left untouched or fenced.
+  run _role_binding_state "arch-platform" "p4park-session"
+  [ "$output" = "WAITING" ]
+}
+
+@test "RED-P4-RESUME-01: the resumed same-identity SubagentStart after a park bypasses the initial role-spawn-claim path, never creates a second RoleActorBinding, does not quarantine, and keeps bundle injection" {
+  run _mint_reserved_role_spawn "arch-platform" "p4resume-session" "arch-platform" "arch-platform"
+  [ "$status" -eq 0 ]
+  local action_id; action_id="$(awk '{print $1}' <<< "$output")"
+  [ -n "$action_id" ]
+  write_bundle "arch-platform" "bl-w47-test"
+
+  local child_session="p4resume-session"
+  local child_agent="p4resume-child-agent"
+  _make_subagent_start_input_full "arch-platform" "$child_session" "$child_agent"
+  run bash -c "cat '$INPUT_FILE' | CLAUDE_PROJECT_DIR='$PROJECT_ROOT' node '$HOOK'"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *'"additionalContext"'* ]]
+
+  # Drive role-binding STARTING -> READY via the real 'ready' CLI (mirrors
+  # M7-B2-ACTORBINDING-READY's own established recipe) -- required so the
+  # stop below has a genuine READY actor to park as WAITING.
+  run env NODE_ENV=test RUNTIME_ROLE_LIFECYCLE_TEST_CAPABILITY="$PROBE_CAPABILITY" node -e '
+    const rll = require(process.argv[1]);
+    const fs = require("fs");
+    const path = require("path");
+    const crypto = require("crypto");
+    const { spawnSync } = require("child_process");
+    const projectRoot = process.argv[2];
+    const actionId = process.argv[3];
+    const actionRead = rll.findActionAcrossRepos(actionId);
+    if (!actionRead.ok || actionRead.absent) { process.stderr.write("action not found"); process.exit(1); }
+    const action = actionRead.action;
+    const dir = path.join(rll.registryRepoDir(projectRoot), "role-actor-bindings");
+    let bindingId = null;
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      if (!entry.isFile() || !entry.name.endsWith(".json")) continue;
+      const candidateId = entry.name.replace(/\.json$/, "");
+      const result = rll.validateRoleActorBindingFor(projectRoot, candidateId, action.role, action.worktree_id, action.plan_digest);
+      if (result.ok) { bindingId = candidateId; break; }
+    }
+    if (!bindingId) { process.stderr.write("no live RoleActorBinding found"); process.exit(1); }
+    const bindingRead = rll.readRegistryRecord(rll.roleActorBindingPathFor(projectRoot, bindingId));
+    const argvDigest = crypto.createHash("sha256").update("ready:" + actionId).digest("hex");
+    const mintResult = rll.mintLifecycleCommandGrant(projectRoot, bindingRead.obj, argvDigest, action.role, "ready", "role-actor", "target", "target", actionId);
+    if (!mintResult.ok) { process.stderr.write("grant mint failed: " + JSON.stringify(mintResult)); process.exit(1); }
+    const readyToolUseId = "p4resume-ready-" + actionId;
+    const pre = rll.recordClaudeStartupReadyPreObservation(projectRoot, {
+      sessionId: process.argv[4], agentId: process.argv[5], agentType: action.role,
+      toolUseId: readyToolUseId, action, actorBinding: bindingRead.obj, grantId: mintResult.grantId,
+    });
+    if (!pre.ok) { process.stderr.write("ready pre failed: " + JSON.stringify(pre)); process.exit(1); }
+    const result = spawnSync("node", [process.argv[1], "ready", "--action", actionId, "--lifecycle-binding", mintResult.grantId], { encoding: "utf8" });
+    if (result.status !== 0) { process.stderr.write("ready CLI exit " + result.status + ": " + result.stderr); process.exit(1); }
+    const outcome = rll.recordClaudeStartupReadyOutcome(projectRoot, {
+      hook_event_name: "PostToolUse", tool_name: "Bash", session_id: process.argv[4],
+      tool_use_id: readyToolUseId, agent_id: process.argv[5], agent_type: action.role,
+    });
+    if (!outcome.ok) { process.stderr.write("ready outcome failed: " + JSON.stringify(outcome)); process.exit(1); }
+  ' "$RLL_IMPL" "$PROJECT_ROOT" "$action_id" "$child_session" "$child_agent"
+  [ "$status" -eq 0 ]
+  run _role_binding_state "arch-platform" "p4resume-session"
+  [ "$output" = "READY" ]
+
+  python3 - "$INPUT_FILE" "$child_session" "$child_agent" <<'PYEOF'
+import json, sys
+path, session, agent = sys.argv[1], sys.argv[2], sys.argv[3]
+payload = {"hook_event_name": "SubagentStop", "agent_type": "arch-platform", "session_id": session, "agent_id": agent}
+with open(path, "w", encoding="utf-8") as f:
+    json.dump(payload, f)
+PYEOF
+  run bash -c "cat '$INPUT_FILE' | CLAUDE_PROJECT_DIR='$PROJECT_ROOT' node '$HOOK'"
+  [ "$status" -eq 0 ]
+
+  # Resumed SubagentStart: the SAME exact session_id/agent_id/agent_type
+  # fires again (native Claude Code resuming the identical stopped Task).
+  _make_subagent_start_input_full "arch-platform" "$child_session" "$child_agent"
+  run bash -c "cat '$INPUT_FILE' | CLAUDE_PROJECT_DIR='$PROJECT_ROOT' node '$HOOK'"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *'"additionalContext"'* ]]
+
+  run _role_binding_state "arch-platform" "p4resume-session"
+  [ "$output" = "BUSY" ]
+
+  run _registry_record_count_for_role "role-actor-bindings" "arch-platform"
+  [ "$output" = "1" ]
+
+  # The resume handle consumed by the resumed start must carry a separate
+  # immutable consumed marker (never rewritten/deleted handle bytes).
+  run node -e '
+    const rll = require(process.argv[1]);
+    const fs = require("fs");
+    const path = require("path");
+    const dir = path.join(rll.registryRepoDir(process.argv[2]), "claude-resume-handles");
+    let entries = [];
+    try { entries = fs.readdirSync(dir).filter((n) => n.endsWith(".json")); } catch {}
+    if (entries.length !== 1) { process.stdout.write("false"); process.exit(0); }
+    process.stdout.write(String(fs.existsSync(path.join(dir, entries[0] + ".consumed"))));
+  ' "$RLL_IMPL" "$PROJECT_ROOT"
+  [ "$output" = "true" ]
+}
+
+@test "RED-P4-FULLCYCLE-01: first start, pre-resume PreToolUse pair, ordinary stop to WAITING, same-identity resume, post-resume PreToolUse completing the full ClaudePeerBinding, a later stop back to WAITING with a fresh unconsumed handle, and a final resume to BUSY -- never a second RoleActorBinding or ClaudePeerBinding" {
+  run _mint_reserved_role_spawn "arch-platform" "p4cycle-session" "arch-platform" "arch-platform"
+  [ "$status" -eq 0 ]
+  local action_id; action_id="$(awk '{print $1}' <<< "$output")"
+  [ -n "$action_id" ]
+  write_bundle "arch-platform" "bl-w47-test"
+
+  run env NODE_ENV=test RUNTIME_ROLE_LIFECYCLE_TEST_CAPABILITY="$PROBE_CAPABILITY" node -e '
+    const rll = require(process.argv[1]);
+    const actionRead = rll.findActionAcrossRepos(process.argv[2]);
+    if (!actionRead.ok || actionRead.absent) process.exit(1);
+    process.stdout.write(actionRead.action.worktree_id + " " + actionRead.action.plan_digest);
+  ' "$RLL_IMPL" "$action_id"
+  [ "$status" -eq 0 ]
+  local worktree_id plan_digest
+  read -r worktree_id plan_digest <<< "$output"
+  [ -n "$worktree_id" ]
+
+  local child_session="p4cycle-session"
+  local child_agent="p4cycle-child-agent"
+
+  # First SubagentStart: B2-confirm, creates the ORIGINAL RoleActorBinding.
+  _make_subagent_start_input_full "arch-platform" "$child_session" "$child_agent"
+  run bash -c "cat '$INPUT_FILE' | CLAUDE_PROJECT_DIR='$PROJECT_ROOT' node '$HOOK'"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *'"additionalContext"'* ]]
+
+  run _find_role_actor_binding "arch-platform" "$worktree_id" "$plan_digest"
+  [ "$status" -eq 0 ]
+  local original_actor_binding_id="$output"
+  [ -n "$original_actor_binding_id" ]
+
+  # Drive STARTING -> READY via the real 'ready' CLI (mirrors
+  # M7-B2-ACTORBINDING-READY's own established recipe).
+  run env NODE_ENV=test RUNTIME_ROLE_LIFECYCLE_TEST_CAPABILITY="$PROBE_CAPABILITY" node -e '
+    const rll = require(process.argv[1]);
+    const crypto = require("crypto");
+    const { spawnSync } = require("child_process");
+    const projectRoot = process.argv[2];
+    const actionId = process.argv[3];
+    const actionRead = rll.findActionAcrossRepos(actionId);
+    if (!actionRead.ok || actionRead.absent) { process.stderr.write("action not found"); process.exit(1); }
+    const action = actionRead.action;
+    const bindingRead = rll.readRegistryRecord(rll.roleActorBindingPathFor(projectRoot, process.argv[4]));
+    if (!bindingRead.ok || bindingRead.absent) { process.stderr.write("actor binding not found"); process.exit(1); }
+    const argvDigest = crypto.createHash("sha256").update("ready:" + actionId).digest("hex");
+    const mintResult = rll.mintLifecycleCommandGrant(projectRoot, bindingRead.obj, argvDigest, action.role, "ready", "role-actor", "target", "target", actionId);
+    if (!mintResult.ok) { process.stderr.write("grant mint failed: " + JSON.stringify(mintResult)); process.exit(1); }
+    const readyToolUseId = "p4cycle-ready-" + actionId;
+    const pre = rll.recordClaudeStartupReadyPreObservation(projectRoot, {
+      sessionId: process.argv[5], agentId: process.argv[6], agentType: action.role,
+      toolUseId: readyToolUseId, action, actorBinding: bindingRead.obj, grantId: mintResult.grantId,
+    });
+    if (!pre.ok) { process.stderr.write("ready pre failed: " + JSON.stringify(pre)); process.exit(1); }
+    const result = spawnSync("node", [process.argv[1], "ready", "--action", actionId, "--lifecycle-binding", mintResult.grantId], { encoding: "utf8" });
+    if (result.status !== 0) { process.stderr.write("ready CLI exit " + result.status + ": " + result.stderr); process.exit(1); }
+    const outcome = rll.recordClaudeStartupReadyOutcome(projectRoot, {
+      hook_event_name: "PostToolUse", tool_name: "Bash", session_id: process.argv[5],
+      tool_use_id: readyToolUseId, agent_id: process.argv[6], agent_type: action.role,
+    });
+    if (!outcome.ok) { process.stderr.write("ready outcome failed: " + JSON.stringify(outcome)); process.exit(1); }
+  ' "$RLL_IMPL" "$PROJECT_ROOT" "$action_id" "$original_actor_binding_id" "$child_session" "$child_agent"
+  [ "$status" -eq 0 ]
+  run _role_binding_state "arch-platform" "p4cycle-session"
+  [ "$output" = "READY" ]
+
+  # At least two DISTINCT pre-resume PreToolUse observations (direct
+  # lifecycle recorder -- no real PreToolUse hook fixture exists in this
+  # file for this driver).
+  run node -e '
+    const rll = require(process.argv[1]);
+    rll.recordClaudeId01PreToolUseObservation(process.argv[2], { sessionId: process.argv[3], agentId: process.argv[4], agentType: "arch-platform", toolUseId: "p4cycle-pre-tu-1" });
+    rll.recordClaudeId01PreToolUseObservation(process.argv[2], { sessionId: process.argv[3], agentId: process.argv[4], agentType: "arch-platform", toolUseId: "p4cycle-pre-tu-2" });
+  ' "$RLL_IMPL" "$PROJECT_ROOT" "$child_session" "$child_agent"
+  [ "$status" -eq 0 ]
+
+  # Exact v2 startup-actor observation for the byte-preservation check.
+  local record_path
+  run _startup_actor_record_path_for "arch-platform" "$action_id" "$child_agent"
+  [ "$status" -eq 0 ]
+  record_path="$output"
+  [ -n "$record_path" ]
+  [ -f "$record_path" ]
+  local before_stop_bytes; before_stop_bytes="$(cat "$record_path")"
+
+  # First ordinary stop.
+  python3 - "$INPUT_FILE" "$child_session" "$child_agent" <<'PYEOF'
+import json, sys
+path, session, agent = sys.argv[1], sys.argv[2], sys.argv[3]
+payload = {"hook_event_name": "SubagentStop", "agent_type": "arch-platform", "session_id": session, "agent_id": agent}
+with open(path, "w", encoding="utf-8") as f:
+    json.dump(payload, f)
+PYEOF
+  run bash -c "cat '$INPUT_FILE' | CLAUDE_PROJECT_DIR='$PROJECT_ROOT' node '$HOOK'"
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision":"block"'* ]]
+
+  # RED: no fence for this exact actor identity -- expected first failure.
+  run node -e '
+    const rll = require(process.argv[1]);
+    const projectRoot = process.argv[2];
+    const repoDescriptor = { repoId: rll.computeRepoId(projectRoot) };
+    const authorityIdentityId = rll.computeClaudeAuthorityIdentityId(repoDescriptor, "claude-hook", process.argv[3], process.argv[4]);
+    const fenceRead = rll.readClaudeAuthorityFence(repoDescriptor, authorityIdentityId);
+    if (!fenceRead.ok) { process.stderr.write("fence read failed: " + JSON.stringify(fenceRead)); process.exit(1); }
+    if (fenceRead.absent !== true) { process.stderr.write("fence is PRESENT -- must stay ABSENT"); process.exit(1); }
+  ' "$RLL_IMPL" "$PROJECT_ROOT" "$child_session" "$child_agent"
+  [ "$status" -eq 0 ]
+
+  # RED: trace bytes preserved across the stop.
+  [ -f "$record_path" ]
+  local after_stop_bytes; after_stop_bytes="$(cat "$record_path")"
+  [ "$before_stop_bytes" = "$after_stop_bytes" ]
+
+  # RED: role parked WAITING.
+  run _role_binding_state "arch-platform" "p4cycle-session"
+  [ "$output" = "WAITING" ]
+
+  # ── Everything below is a prerequisite for later waves of this correction
+  # -- non-vacuous once the fence/trace/WAITING defect above is fixed, but
+  # unreachable in THIS run (bats stops at the first failing assertion
+  # above).
+
+  # Resumed SubagentStart: same exact identity.
+  _make_subagent_start_input_full "arch-platform" "$child_session" "$child_agent"
+  run bash -c "cat '$INPUT_FILE' | CLAUDE_PROJECT_DIR='$PROJECT_ROOT' node '$HOOK'"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *'"additionalContext"'* ]]
+  run _role_binding_state "arch-platform" "p4cycle-session"
+  [ "$output" = "BUSY" ]
+  run _registry_record_count_for_role "role-actor-bindings" "arch-platform"
+  [ "$output" = "1" ]
+
+  # One DISTINCT post-resume PreToolUse observation.
+  run node -e '
+    const rll = require(process.argv[1]);
+    rll.recordClaudeId01PreToolUseObservation(process.argv[2], { sessionId: process.argv[3], agentId: process.argv[4], agentType: "arch-platform", toolUseId: "p4cycle-post-tu-1" });
+  ' "$RLL_IMPL" "$PROJECT_ROOT" "$child_session" "$child_agent"
+  [ "$status" -eq 0 ]
+
+  # Full ClaudePeerBinding mint against the ORIGINAL RoleActorBinding.
+  run node -e '
+    const rll = require(process.argv[1]);
+    const result = rll.ensureClaudePeerBindingForObservedActor(process.argv[2], { sessionId: process.argv[3], agentId: process.argv[4], agentType: "arch-platform" });
+    if (!result.ok) { process.stderr.write("ensure failed: " + JSON.stringify(result)); process.exit(1); }
+    if (result.record.actor_binding_id !== process.argv[5]) { process.stderr.write("actor_binding_id mismatch: " + JSON.stringify(result.record)); process.exit(1); }
+  ' "$RLL_IMPL" "$PROJECT_ROOT" "$child_session" "$child_agent" "$original_actor_binding_id"
+  [ "$status" -eq 0 ]
+  run node -e '
+    const rll = require(process.argv[1]);
+    const fs = require("fs");
+    const path = require("path");
+    const dir = path.join(rll.registryRepoDir(process.argv[2]), "claude-peer-bindings");
+    let entries = [];
+    try { entries = fs.readdirSync(dir).filter((n) => n.endsWith(".json")); } catch {}
+    process.stdout.write(String(entries.length));
+  ' "$RLL_IMPL" "$PROJECT_ROOT"
+  [ "$output" = "1" ]
+
+  # Later ordinary stop of the now-fully-proven peer: back to WAITING, no
+  # fence, and a FRESH unconsumed resume handle (the first was already
+  # consumed at the resumed start above).
+  python3 - "$INPUT_FILE" "$child_session" "$child_agent" <<'PYEOF'
+import json, sys
+path, session, agent = sys.argv[1], sys.argv[2], sys.argv[3]
+payload = {"hook_event_name": "SubagentStop", "agent_type": "arch-platform", "session_id": session, "agent_id": agent}
+with open(path, "w", encoding="utf-8") as f:
+    json.dump(payload, f)
+PYEOF
+  run bash -c "cat '$INPUT_FILE' | CLAUDE_PROJECT_DIR='$PROJECT_ROOT' node '$HOOK'"
+  [ "$status" -eq 0 ]
+  run node -e '
+    const rll = require(process.argv[1]);
+    const projectRoot = process.argv[2];
+    const repoDescriptor = { repoId: rll.computeRepoId(projectRoot) };
+    const authorityIdentityId = rll.computeClaudeAuthorityIdentityId(repoDescriptor, "claude-hook", process.argv[3], process.argv[4]);
+    const fenceRead = rll.readClaudeAuthorityFence(repoDescriptor, authorityIdentityId);
+    if (!fenceRead.ok) { process.stderr.write("fence read failed: " + JSON.stringify(fenceRead)); process.exit(1); }
+    if (fenceRead.absent !== true) { process.stderr.write("fence is PRESENT -- must stay ABSENT"); process.exit(1); }
+  ' "$RLL_IMPL" "$PROJECT_ROOT" "$child_session" "$child_agent"
+  [ "$status" -eq 0 ]
+  run _role_binding_state "arch-platform" "p4cycle-session"
+  [ "$output" = "WAITING" ]
+  run node -e '
+    const rll = require(process.argv[1]);
+    const fs = require("fs");
+    const path = require("path");
+    const dir = path.join(rll.registryRepoDir(process.argv[2]), "claude-resume-handles");
+    let entries = [];
+    try { entries = fs.readdirSync(dir).filter((n) => n.endsWith(".json")); } catch {}
+    const liveUnconsumed = entries.filter((n) => !fs.existsSync(path.join(dir, n + ".consumed")));
+    process.stdout.write(String(liveUnconsumed.length));
+  ' "$RLL_IMPL" "$PROJECT_ROOT"
+  [ "$output" = "1" ]
+
+  # Final resumed SubagentStart: same identity, to BUSY, never a second
+  # RoleActorBinding or ClaudePeerBinding.
+  _make_subagent_start_input_full "arch-platform" "$child_session" "$child_agent"
+  run bash -c "cat '$INPUT_FILE' | CLAUDE_PROJECT_DIR='$PROJECT_ROOT' node '$HOOK'"
+  [ "$status" -eq 0 ]
+  run _role_binding_state "arch-platform" "p4cycle-session"
+  [ "$output" = "BUSY" ]
+  run _registry_record_count_for_role "role-actor-bindings" "arch-platform"
+  [ "$output" = "1" ]
+  run _registry_record_count_for_role "claude-peer-bindings" "arch-platform"
+  [ "$output" = "1" ]
 }

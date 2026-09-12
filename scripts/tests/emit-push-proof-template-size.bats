@@ -372,6 +372,9 @@ PYEOF
   if [[ -z "$ps_bin" ]]; then
     skip "powershell not available"
   fi
+  if ! "$ps_bin" -NoProfile -Command "exit 0" >/dev/null 2>&1; then
+    skip "PowerShell is discoverable but not executable from this Bash runtime"
+  fi
 
   write_overcap_template "overcap-fixture.md"
 

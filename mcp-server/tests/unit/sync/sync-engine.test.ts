@@ -1763,9 +1763,8 @@ describe("mergeObservationBoundaryRegistration() -- P1I-OBS-SYNC", () => {
 // This targets a SEPARATE assumed seam from mergeObservationBoundaryRegistration()
 // above -- same owned utility file (.claude/hooks/runtime-host-boundary.js),
 // the same three genuine hook events, but a DIFFERENT registry/matcher
-// surface: "Task|SendMessage", not "Agent|SendMessage". "Agent" is not
-// dropped from the contract -- it is kept as a separately-represented
-// payload/display tool name, never folded into the matcher string itself.
+// surface: "Bash|Task|Agent|SendMessage". Agent is also carried explicitly as
+// payloadToolName so evidence consumers do not infer it from the matcher.
 //
 // ASSUMED API SHAPE (narrow; this seam does not exist yet):
 //   syncEngineNs.mergeIbindBoundaryRegistration(projectRoot: string): Promise<{
@@ -1775,16 +1774,16 @@ describe("mergeObservationBoundaryRegistration() -- P1I-OBS-SYNC", () => {
 //     status: "REGISTERED" | "FAILED_SETTINGS_MALFORMED" | "FAILED_UTILITY_MISSING",
 //   }>
 //   -- registers runtime-host-boundary.js under PreToolUse, PostToolUse AND
-//   PostToolUseFailure with matcher "Task|SendMessage" ONLY. A pre-existing
-//   OWNED command found under the stale "Agent|SendMessage" matcher for the
+//   PostToolUseFailure with matcher "Bash|Task|Agent|SendMessage" ONLY. A
+//   pre-existing OWNED command found under the stale "Task|SendMessage" matcher
 //   same event is upgraded in place (old owned command removed, any
 //   unrelated co-located command preserved) instead of being registered a
 //   second time under the new matcher.
 // ═══════════════════════════════════════════════════════════════════════════
 
 const IBIND_BOUNDARY_EVENTS = ["PreToolUse", "PostToolUse", "PostToolUseFailure"] as const;
-const IBIND_BOUNDARY_MATCHER = "Task|SendMessage";
-const IBIND_BOUNDARY_STALE_MATCHER = "Agent|SendMessage";
+const IBIND_BOUNDARY_MATCHER = "Bash|Task|Agent|SendMessage";
+const IBIND_BOUNDARY_STALE_MATCHER = "Task|SendMessage";
 const IBIND_BOUNDARY_PAYLOAD_TOOL = "Agent";
 const IBIND_BOUNDARY_FILE = "runtime-host-boundary.js";
 
@@ -1814,13 +1813,13 @@ const mergeIbindBoundaryRegistration = (
 function requireMergeIbindBoundaryRegistration(): AssumedMergeIbindBoundaryFn {
   expect(
     typeof mergeIbindBoundaryRegistration,
-    "mcp-server/src/sync/sync-engine.ts must export mergeIbindBoundaryRegistration() -- the Task|SendMessage registration/migration path for runtime-host-boundary.js, keeping Agent as a separately-represented payload surface (P1-I/A RED Block B2)",
+    "mcp-server/src/sync/sync-engine.ts must export mergeIbindBoundaryRegistration() -- the complete native runtime registration/migration path for runtime-host-boundary.js (P1-I/A RED Block B2)",
   ).toBe("function");
   return mergeIbindBoundaryRegistration as AssumedMergeIbindBoundaryFn;
 }
 
 describe("mergeIbindBoundaryRegistration() -- P1IA-IBIND-SYNC", () => {
-  it("P1IA-IBIND-SYNC-REGISTER-TASK-MATCHER-ADDITIVE-01 RED: registers PreToolUse, PostToolUse and PostToolUseFailure entries under matcher Task|SendMessage (Agent kept only as payloadToolName) for runtime-host-boundary.js while preserving every pre-existing hook entry, its order, and unrelated settings keys", async () => {
+  it("P1IA-IBIND-SYNC-REGISTER-NATIVE-MATCHER-ADDITIVE-01 RED: registers the three lifecycle events under the complete native matcher while preserving every pre-existing hook entry, its order, and unrelated settings keys", async () => {
     const fn = requireMergeIbindBoundaryRegistration();
     const dir = await mkdtemp(join(tmpdir(), "sync-ibind-boundary-"));
     try {
@@ -1845,7 +1844,7 @@ describe("mergeIbindBoundaryRegistration() -- P1IA-IBIND-SYNC", () => {
         const entry = result.added.find((a) => a.event === event && a.file === IBIND_BOUNDARY_FILE);
         expect(entry, `expected an added entry for ${event}`).toBeTruthy();
         expect(entry?.matcher).toBe(IBIND_BOUNDARY_MATCHER);
-        expect(entry?.matcher).not.toContain("Agent");
+        expect(entry?.matcher).toBe("Bash|Task|Agent|SendMessage");
         expect(entry?.payloadToolName).toBe(IBIND_BOUNDARY_PAYLOAD_TOOL);
       }
       expect(result.added.filter((a) => a.file === IBIND_BOUNDARY_FILE)).toHaveLength(3);
@@ -1859,18 +1858,18 @@ describe("mergeIbindBoundaryRegistration() -- P1IA-IBIND-SYNC", () => {
       expect(hooks.PreToolUse[0].hooks[0].command).toContain("branch-guard.js");
       expect(hooks.PostToolUse[0].matcher).toBe(".*");
       expect(hooks.PostToolUse[0].hooks[0].command).toContain("tool-use-logger.js");
-      // New entries additively present in all three event arrays, under Task|SendMessage ONLY.
+      // New entries additively present exactly once in all three event arrays.
       for (const event of IBIND_BOUNDARY_EVENTS) {
         const arr = hooks[event] ?? [];
         expect(arr.some((b) => b.matcher === IBIND_BOUNDARY_MATCHER && b.hooks.some((h) => h.command.includes(IBIND_BOUNDARY_FILE)))).toBe(true);
-        expect(arr.some((b) => b.matcher.includes("Agent") && b.hooks.some((h) => h.command.includes(IBIND_BOUNDARY_FILE)))).toBe(false);
+        expect(arr.filter((b) => b.hooks.some((h) => h.command.includes(IBIND_BOUNDARY_FILE)))).toHaveLength(1);
       }
     } finally {
       await rm(dir, { recursive: true, force: true });
     }
   });
 
-  it("P1IA-IBIND-SYNC-UPGRADE-STALE-AGENT-MATCHER-02 RED: an owned command already registered under the stale Agent|SendMessage matcher is upgraded to Task|SendMessage for the same event, removing only the stale owned command and preserving a co-located unrelated command", async () => {
+  it("P1IA-IBIND-SYNC-UPGRADE-STALE-TASK-MATCHER-02 RED: an owned command under stale Task|SendMessage is upgraded to the complete native matcher, removing only the stale owned command and preserving a co-located unrelated command", async () => {
     const fn = requireMergeIbindBoundaryRegistration();
     const dir = await mkdtemp(join(tmpdir(), "sync-ibind-boundary-"));
     try {
@@ -1904,7 +1903,7 @@ describe("mergeIbindBoundaryRegistration() -- P1IA-IBIND-SYNC", () => {
         const entry = result.upgraded.find((u) => u.event === event && u.file === IBIND_BOUNDARY_FILE);
         expect(entry, `expected an upgraded entry for ${event}`).toBeTruthy();
         expect(entry?.matcher).toBe(IBIND_BOUNDARY_MATCHER);
-        expect(entry?.matcher).not.toContain("Agent");
+        expect(entry?.matcher).toBe("Bash|Task|Agent|SendMessage");
         expect(entry?.payloadToolName).toBe(IBIND_BOUNDARY_PAYLOAD_TOOL);
         expect(entry?.removedFromMatcher).toBe(IBIND_BOUNDARY_STALE_MATCHER);
       }
@@ -1914,10 +1913,10 @@ describe("mergeIbindBoundaryRegistration() -- P1IA-IBIND-SYNC", () => {
       for (const event of IBIND_BOUNDARY_EVENTS) {
         const arr = hooks[event] ?? [];
         const taskCommands = arr.filter((b) => b.matcher === IBIND_BOUNDARY_MATCHER).flatMap((b) => b.hooks.map((h) => h.command)).filter((c) => c.includes(IBIND_BOUNDARY_FILE));
-        expect(taskCommands, `${event} must have exactly one owned command under Task|SendMessage`).toHaveLength(1);
+        expect(taskCommands, `${event} must have exactly one owned command under the complete native matcher`).toHaveLength(1);
 
         const staleOwnedCommands = arr.filter((b) => b.matcher === IBIND_BOUNDARY_STALE_MATCHER).flatMap((b) => b.hooks.map((h) => h.command)).filter((c) => c.includes(IBIND_BOUNDARY_FILE));
-        expect(staleOwnedCommands, `${event} must have zero owned commands remaining under the stale Agent|SendMessage matcher`).toHaveLength(0);
+        expect(staleOwnedCommands, `${event} must have zero owned commands remaining under stale Task|SendMessage`).toHaveLength(0);
       }
 
       // The unrelated command co-located in PostToolUseFailure's stale block must survive the migration.
@@ -2047,7 +2046,7 @@ describe("mergeIbindBoundaryRegistration() -- P1IA-IBIND-SYNC", () => {
     }
   });
 
-  it("P1IA-IBIND-SYNC-STATIC-SETTINGS-TASK-MATCHER-CONTRACT-08 RED: the real repository .claude/settings.json must register runtime-host-boundary.js under Task|SendMessage for exactly PreToolUse, PostToolUse and PostToolUseFailure, with no stale owned Agent|SendMessage registration left behind", async () => {
+  it("P1IA-IBIND-SYNC-STATIC-SETTINGS-NATIVE-MATCHER-CONTRACT-08 RED: repository settings register runtime-host-boundary.js under the complete native matcher for exactly the three lifecycle events with no stale Task|SendMessage registration", async () => {
     const repoRoot = process.cwd().replace(/[\\/]mcp-server$/, "");
     const raw = await readFile(join(repoRoot, ".claude", "settings.json"), "utf-8");
     const settings = JSON.parse(raw) as { hooks?: Record<string, IbindMatcherBlock[]> };

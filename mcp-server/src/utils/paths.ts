@@ -20,7 +20,7 @@ export function getToolkitRoot(): string {
   // Fallback: resolve relative to this file's compiled location (build/utils/paths.js)
   // 3 levels up: build/utils/ -> build/ -> repo root
   const currentDir = path.dirname(fileURLToPath(import.meta.url));
-  return path.resolve(currentDir, "..", "..");
+  return path.resolve(currentDir, "..", "..", "..");
 }
 
 export function getDocsDir(): string {

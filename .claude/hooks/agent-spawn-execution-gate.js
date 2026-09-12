@@ -35,6 +35,7 @@ const fs = require('fs');
 const path = require('path');
 const rll = require('../../scripts/lib/runtime-role-lifecycle.cjs');
 const rc = require('../../scripts/lib/runtime-consultation.cjs');
+const hostClaude = require('../../scripts/lib/runtime-host-claude.cjs');
 const { getWaveSlug } = require('./hook-control-plane-utils');
 
 // Mirrors context-provider-gate.js's own MAIN_ORCHESTRATOR_BINDING_TTL_SECONDS
@@ -119,6 +120,7 @@ function harnessSuffixCandidateRole(name) {
  */
 function findOwningRoleLifecycleCandidate(projectRoot, worktreeId, role) {
   const foundByActionId = new Map();
+  const expiredBindingActionsById = new Map();
 
   const bindingsDir = path.join(rll.registryRepoDir(projectRoot), 'role-bindings');
   let bindingEntries;
@@ -146,6 +148,20 @@ function findOwningRoleLifecycleCandidate(projectRoot, worktreeId, role) {
     const actionRead = rll.findActionAcrossRepos(stateResult.record.pending_action_id);
     if (!actionRead.ok || actionRead.absent) continue;
     if (actionRead.action.worktree_id !== worktreeId || actionRead.action.role !== role) continue;
+    // A historical STARTING binding can remain durable after its immutable
+    // pending action expires.  Keep that expired authority separately: it
+    // remains owning (and therefore denies) when it is the only candidate,
+    // but it must not create false ambiguity when a fresh live action exists.
+    // Only a parseable, definitely-expired timestamp enters this historical
+    // bucket; malformed expiry stays in the live/suspicious set and therefore
+    // fails closed during later validation.
+    const bindingActionExpiryMs = Date.parse(actionRead.action.expires_at);
+    if (Number.isFinite(bindingActionExpiryMs) && bindingActionExpiryMs <= Date.now()) {
+      if (!expiredBindingActionsById.has(actionRead.action.action_id)) {
+        expiredBindingActionsById.set(actionRead.action.action_id, { record: stateResult.record, action: actionRead.action });
+      }
+      continue;
+    }
     if (!foundByActionId.has(actionRead.action.action_id)) {
       foundByActionId.set(actionRead.action.action_id, { record: stateResult.record, action: actionRead.action });
     }
@@ -178,9 +194,10 @@ function findOwningRoleLifecycleCandidate(projectRoot, worktreeId, role) {
     }
   }
 
-  if (foundByActionId.size === 0) return { candidate: null, ambiguous: false };
-  if (foundByActionId.size > 1) return { candidate: null, ambiguous: true };
-  return { candidate: foundByActionId.values().next().value, ambiguous: false };
+  const owningByActionId = foundByActionId.size > 0 ? foundByActionId : expiredBindingActionsById;
+  if (owningByActionId.size === 0) return { candidate: null, ambiguous: false };
+  if (owningByActionId.size > 1) return { candidate: null, ambiguous: true };
+  return { candidate: owningByActionId.values().next().value, ambiguous: false };
 }
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -263,22 +280,12 @@ process.stdin.on('end', () => {
     // the same-role case; this closes the CROSS-role case those checks
     // cannot see, since they only ever run once subagentType itself is
     // already known to own something.
-    if (rll.CANONICAL_ROLES.includes(name) && name !== subagentType) {
-      emit(denyResponse('[agent-spawn-execution-gate] tool_input.name "' + name + '" is a reserved canonical role name that diverges from tool_input.subagent_type "' + subagentType + '" -- the canonical-role namespace is reserved globally, regardless of ownership.'));
-      return;
-    }
     // M67-RS-HARNESS-SUFFIX-IDENTITY-01 (see harnessSuffixCandidateRole doc
     // comment): the same global reservation, extended to the harness's own
     // numeric-suffix namespace. name can never legitimately equal this shape
     // here -- the harness introduces it only AFTER this gate runs -- so any
     // caller-supplied match is denied unconditionally, independent of
     // whether the suffixed role itself is CANONICAL_ROLES-valid.
-    const suffixRole = harnessSuffixCandidateRole(name);
-    if (suffixRole !== null && rll.CANONICAL_ROLES.includes(suffixRole)) {
-      emit(denyResponse('[agent-spawn-execution-gate] tool_input.name "' + name + '" matches the reserved harness numeric-suffix namespace for canonical role "' + suffixRole + '" -- that namespace is reserved globally for the harness itself, never a caller-supplied name.'));
-      return;
-    }
-
     const projectRoot = process.env.CLAUDE_PROJECT_DIR || process.cwd();
 
     let worktreeId;
@@ -298,6 +305,19 @@ process.stdin.on('end', () => {
     // lifecycle scanner revalidates every closed action/path and intentionally
     // retains an already-reserved action so a replay reaches the strict
     // no-clobber mint below and is denied rather than becoming pass-through.
+    //
+    // ROOT-SOURCE-CORRELATION-01: the current call's own closed-form,
+    // non-caller-trusted correlation fields are supplied so the scanner can
+    // resolve which SPECIFIC historical record (if any) this call is
+    // fulfilling, instead of hard-denying every call for this role merely
+    // because SOME root-source history exists. This is the SAME exact-match
+    // this hook already performs once a single candidate is selected below
+    // (subagentType===expected.agent_type && name===expected.name &&
+    // toolInput.prompt===expected.bootstrap_message), applied per-candidate
+    // inside the scanner instead of only once exactly one candidate remains.
+    // The scan itself still always runs, unconditionally, for every
+    // toolkit-specialist spawn attempt -- whether it runs is never derived
+    // from tool_input, only which candidate (if any) it resolves to is.
     let rootSourceLookup;
     try {
       rootSourceLookup = rll.findLiveRootSourceActionsForRole(
@@ -337,41 +357,28 @@ process.stdin.on('end', () => {
       emit(denyResponse('[agent-spawn-execution-gate] owning action union is ambiguous for "' + subagentType + '" -- root-source, claude-agent and role-spawn are disjoint and may never be selected by priority.'));
       return;
     }
-    // Multiple ownership families may retain concurrently-live diagnostic
-    // records for the same role. They are disjoint, but the Agent call is
-    // not ambiguous when exactly one immutable action payload matches all
-    // supplied fields. Resolve by full accredited-input correlation, never
-    // family priority or role coincidence. Zero or multiple exact matches
-    // remain an explicit fail-closed ambiguity.
     let selectedOwnership = null;
     if (ownershipCount > 1) {
-      const exact = [];
-      if (rootSourceLookup.actions.length === 1) {
-        const expected = rootSourceLookup.actions[0].payload || {};
-        if (subagentType === expected.agent_type && name === expected.name && toolInput.prompt === expected.bootstrap_message) {
-          exact.push('root-source');
-        }
-      }
-      if (claudeAgentCandidates.length === 1) {
-        const { activation, requestId } = claudeAgentCandidates[0];
-        const expectedPrompt = rll.claudeAgentBootstrapMessageFor(subagentType, requestId, activation.attempt_id);
-        if (name === subagentType && toolInput.prompt === expectedPrompt) exact.push('claude-agent');
-      }
-      if (lifecycleLookup.candidate) {
-        const expected = lifecycleLookup.candidate.action.payload || {};
-        if (name === expected.teammate_name && toolInput.prompt === expected.bootstrap_message) exact.push('role-lifecycle');
-      }
-      if (exact.length !== 1) {
-        emit(denyResponse('[agent-spawn-execution-gate] owning action union is ambiguous for "' + subagentType + '" -- exact action-payload correlation did not select one unique owner.'));
-        return;
-      }
-      selectedOwnership = exact[0];
+      emit(denyResponse('[agent-spawn-execution-gate] owning action union is ambiguous for "' + subagentType + '" -- presentation fields cannot select authority.'));
+      return;
     } else if (rootSourceLookup.actions.length === 1) {
       selectedOwnership = 'root-source';
     } else if (claudeAgentCandidates.length === 1) {
       selectedOwnership = 'claude-agent';
     } else if (lifecycleLookup.candidate) {
       selectedOwnership = 'role-lifecycle';
+    }
+    if (!selectedOwnership) {
+      if (rll.CANONICAL_ROLES.includes(name) && name !== subagentType) {
+        emit(denyResponse('[agent-spawn-execution-gate] tool_input.name "' + name + '" is a reserved canonical role name that diverges from tool_input.subagent_type "' + subagentType + '".'));
+        return;
+      }
+      const suffixRole = harnessSuffixCandidateRole(name);
+      if (suffixRole !== null && rll.CANONICAL_ROLES.includes(suffixRole)) {
+        emit(denyResponse('[agent-spawn-execution-gate] tool_input.name "' + name + '" uses a reserved persistent-role suffix.'));
+        return;
+      }
+      process.exit(0);
     }
     if (selectedOwnership === 'root-source') {
       const action = rootSourceLookup.actions[0];
@@ -380,9 +387,12 @@ process.stdin.on('end', () => {
         emit(denyResponse('[agent-spawn-execution-gate] missing or invalid session_id while a genuine root-source action exists.'));
         return;
       }
-      const expected = action.payload || {};
-      if (subagentType !== expected.agent_type || name !== expected.name || toolInput.prompt !== expected.bootstrap_message) {
-        emit(denyResponse('[agent-spawn-execution-gate] Agent input does not exactly match the reserved root-source action payload.'));
+      const requestedProfile = hostClaude.resolveRequestedModelProfile(projectRoot, subagentType);
+      const rendered = requestedProfile.ok
+        ? rll.renderCanonicalNativeAgentInput(action, toolInput, requestedProfile.requestedModel)
+        : requestedProfile;
+      if (!rendered.ok) {
+        emit(denyResponse('[agent-spawn-execution-gate] root-source canonical input denied: ' + rendered.reason));
         return;
       }
       const bindingResult = rll.getOrCreateMainOrchestratorBindingForSession(
@@ -400,7 +410,10 @@ process.stdin.on('end', () => {
         sessionGenerationId: generationResult.generationId,
         runtimeSessionKey: sessionId,
         toolUseId: data.tool_use_id,
-        toolInput,
+        toolInput: rendered.canonicalInput,
+        canonicalInputDigest: rendered.canonicalInputDigest,
+        proposedInputDigest: rendered.proposedInputDigest,
+        modelDeviation: rendered.modelDeviation,
       });
       if (!reservation.ok) {
         emit(denyResponse('[agent-spawn-execution-gate] root-source reservation denied: ' + reservation.reason));
@@ -408,7 +421,7 @@ process.stdin.on('end', () => {
       }
       emit({
         exitCode: 0,
-        body: { hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'allow', updatedInput: Object.assign({}, toolInput) } },
+        body: { hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'allow', updatedInput: rendered.canonicalInput } },
       });
       return;
     }
@@ -569,24 +582,12 @@ process.stdin.on('end', () => {
       return;
     }
 
-    // RB11: an owning-scope call whose tool_input does not match the
-    // action's own payload must be explicitly denied, never silently
-    // reclassified as non-owning.
-    const expectedTeammateName = action.payload && action.payload.teammate_name;
-    if (name !== expectedTeammateName) {
-      emit(denyResponse('[agent-spawn-execution-gate] tool_input.name does not match the reserved action\'s own payload for "' + subagentType + '".'));
-      return;
-    }
-
-    // M7 Correction (Fix 1): tool_input.prompt must exactly match the
-    // reserved action's own accredited bootstrap_message. PLAN.md describes
-    // bootstrap_message as "fixed/bounded" (~L177, ~L614) -- a
-    // deterministically-constructed instruction string, not free model
-    // prose -- so an exact-match check is well-founded, not a guess about
-    // model behavior.
-    const expectedBootstrapMessage = action.payload && action.payload.bootstrap_message;
-    if (toolInput.prompt !== expectedBootstrapMessage) {
-      emit(denyResponse('[agent-spawn-execution-gate] tool_input.prompt does not match the reserved action\'s own bootstrap message for "' + subagentType + '".'));
+    const requestedProfile = hostClaude.resolveRequestedModelProfile(projectRoot, subagentType);
+    const rendered = requestedProfile.ok
+      ? rll.renderCanonicalNativeAgentInput(action, toolInput, requestedProfile.requestedModel)
+      : requestedProfile;
+    if (!rendered.ok) {
+      emit(denyResponse('[agent-spawn-execution-gate] canonical input denied for "' + subagentType + '": ' + rendered.reason));
       return;
     }
 
@@ -615,8 +616,9 @@ process.stdin.on('end', () => {
     // and mintRoleSpawnExecutionClaim cross-correlates that generation with
     // the action. RB7 remains bounded by the action's own expiry.
     let mainBindingId;
+    let bindingResult;
     try {
-      const bindingResult = rll.getOrCreateMainOrchestratorBindingForSession(
+      bindingResult = rll.getOrCreateMainOrchestratorBindingForSession(
         projectRoot, sessionId, worktreeId, planResult.planDigest, RESERVATION_BINDING_TTL_SECONDS,
       );
       if (!bindingResult.ok) {
@@ -629,11 +631,28 @@ process.stdin.on('end', () => {
       return;
     }
 
-    const toolInputDigest = rc.sha256String(rc.canonicalJSONStringify({ subagent_type: subagentType, name }));
+    const sourceToolUseId = data.tool_use_id;
+    if (typeof sourceToolUseId !== 'string' || sourceToolUseId.length === 0 || Buffer.byteLength(sourceToolUseId, 'utf8') > MAX_RUNTIME_SESSION_KEY_BYTES) {
+      emit(denyResponse('[agent-spawn-execution-gate] missing or invalid tool_use_id for the owning Agent call.'));
+      return;
+    }
     const repoDescriptor = { repoId: rll.computeRepoId(projectRoot) };
+    const claimTtl = rll.effectiveActionTtlSeconds(pair.policy, bindingResult.binding.expiry, {
+      kind: action.kind, runtime: action.runtime,
+    });
+    if (!claimTtl.ok) {
+      emit(denyResponse('[agent-spawn-execution-gate] native startup lifetime is unavailable.'));
+      return;
+    }
     let mintResult;
     try {
-      mintResult = rll.mintRoleSpawnExecutionClaim(repoDescriptor, action, mainBindingId, toolInputDigest, pair.policy.ready_timeout_seconds);
+      mintResult = rll.mintRoleSpawnExecutionClaim(repoDescriptor, action, mainBindingId, {
+        runtimeSessionId: sessionId,
+        sourceToolUseId,
+        canonicalInputDigest: rendered.canonicalInputDigest,
+        proposedInputDigest: rendered.proposedInputDigest,
+        modelDeviation: rendered.modelDeviation,
+      }, claimTtl.ttlSeconds);
     } catch {
       mintResult = { ok: false, reason: 'internal-error' };
     }
@@ -653,7 +672,7 @@ process.stdin.on('end', () => {
         hookSpecificOutput: {
           hookEventName: 'PreToolUse',
           permissionDecision: 'allow',
-          updatedInput: Object.assign({}, toolInput),
+          updatedInput: rendered.canonicalInput,
         },
       },
     });

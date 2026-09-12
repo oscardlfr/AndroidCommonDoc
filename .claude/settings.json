@@ -46,6 +46,18 @@
     ]
   },
   "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/runtime-host-session-start.js",
+            "timeout": 20
+          }
+        ]
+      }
+    ],
     "PostToolUse": [
       {
         "matcher": "Write|Edit",
@@ -123,7 +135,7 @@
         ]
       },
       {
-        "matcher": "Task|SendMessage",
+        "matcher": "Bash|Task|Agent|SendMessage",
         "hooks": [
           {
             "type": "command",
@@ -253,7 +265,7 @@
           {
             "type": "command",
             "command": "node \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/context-provider-gate.js",
-            "timeout": 5
+            "timeout": 30
           }
         ]
       },
@@ -265,11 +277,11 @@
             "command": "node \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/agent-spawn-validator.js",
             "timeout": 5
           },
-          {
-            "type": "command",
-            "command": "node \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/agent-spawn-execution-gate.js",
-            "timeout": 5
-          }
+      {
+        "type": "command",
+        "command": "node \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/agent-spawn-execution-gate.js",
+        "timeout": 30
+      }
         ]
       },
       {
@@ -303,7 +315,7 @@
         ]
       },
       {
-        "matcher": "Task|SendMessage",
+        "matcher": "Bash|Task|Agent|SendMessage",
         "hooks": [
           {
             "type": "command",
@@ -349,7 +361,7 @@
         ]
       },
       {
-        "matcher": "Task|SendMessage",
+        "matcher": "Bash|Task|Agent|SendMessage",
         "hooks": [
           {
             "type": "command",

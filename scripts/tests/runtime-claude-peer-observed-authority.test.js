@@ -15,6 +15,7 @@ const crypto = require('node:crypto');
 
 const IMPL = path.resolve(__dirname, '../lib/runtime-role-lifecycle.cjs');
 const rll = require(IMPL);
+const { primeClaudeId01V2ActorProof } = require('./fixtures/runtime-claude-id01-v2-fixture.cjs');
 
 function makeGitProject() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'claude-peer-observed-'));
@@ -64,29 +65,26 @@ function snapshotRegistry(projectRoot) {
   }));
 }
 
-function mintProofAction(project, worktreeId, planDigest, generationId, suffix) {
+function mintProofAction(project, worktreeId, planDigest, generationId, suffix, role = 'arch-platform') {
   const actionId = rll.generateActionId();
-  const payload = rll.buildRoleSpawnPayload('claude-id01-probe', 'arch-platform', 'arch-platform', 'fixture', 'fixture');
+  const payload = rll.buildRoleSpawnPayload('claude-id01-probe', role, role, 'fixture', 'fixture');
   const expiry = new Date(Date.now() + 600000).toISOString().replace(/\.\d{3}Z$/, 'Z');
   const minted = rll.mintRoleLifecycleAction(
     project, actionId, 'role-spawn', 'claude-native', rll.computeRepoId(project), worktreeId,
     planDigest, crypto.createHash('sha256').update('peer-observed-probe-policy:' + suffix).digest('hex'),
-    generationId, 'arch-platform', payload, expiry,
+    generationId, role, payload, expiry,
   );
   assert.strictEqual(minted.ok, true, 'proof probe action must mint: ' + JSON.stringify(minted));
   return actionId;
 }
 
-function primeCompleteProof(project, sessionId, worktreeId, planDigest, generationId, primaryAgentId) {
-  const actionA = mintProofAction(project, worktreeId, planDigest, generationId, 'a-' + primaryAgentId);
-  const actionB = mintProofAction(project, worktreeId, planDigest, generationId, 'b-' + primaryAgentId);
-  const peerB = primaryAgentId + '-distinct-peer-b';
-  rll.recordClaudeId01SubagentStartObservation(project, { sessionId, agentId: primaryAgentId, agentType: 'arch-platform', actionId: actionA });
-  rll.recordClaudeId01PreToolUseObservation(project, { sessionId, agentId: primaryAgentId, agentType: 'arch-platform', toolUseId: 'obs-tu-1-' + sessionId + '-' + primaryAgentId });
-  rll.recordClaudeId01PreToolUseObservation(project, { sessionId, agentId: primaryAgentId, agentType: 'arch-platform', toolUseId: 'obs-tu-2-' + sessionId + '-' + primaryAgentId });
-  rll.recordClaudeId01SubagentStartObservation(project, { sessionId, agentId: primaryAgentId, agentType: 'arch-platform', actionId: actionA });
-  rll.recordClaudeId01PreToolUseObservation(project, { sessionId, agentId: primaryAgentId, agentType: 'arch-platform', toolUseId: 'obs-tu-3-' + sessionId + '-' + primaryAgentId });
-  rll.recordClaudeId01SubagentStartObservation(project, { sessionId, agentId: peerB, agentType: 'arch-platform', actionId: actionB });
+function primeCompleteProof(project, sessionId, worktreeId, planDigest, generationId, agentId, agentType = 'arch-platform') {
+  const actionId = mintProofAction(project, worktreeId, planDigest, generationId, 'complete-' + agentId, agentType);
+  const proof = primeClaudeId01V2ActorProof({
+    projectRoot: project, agentType, sessionId, agentId,
+    actionId, prefix: 'peer-observed-v2',
+  });
+  return proof.actorBinding;
 }
 
 function primeIncompleteProof(project, sessionId, worktreeId, planDigest, generationId, primaryAgentId) {
@@ -178,10 +176,11 @@ test('returns UNAVAILABLE when CLAUDE-ID-01 proof is incomplete', () => {
 test('returns INVALID when the exact observed actor authority fence exists', () => {
   withProject((project) => {
     const base = setupBase(project);
-    primeCompleteProof(project, base.sessionId, base.worktreeId, base.planDigest, base.generationId, base.primaryAgentId);
     const event = targetEvent(base);
-    const created = rll.createRoleActorBinding(project, 'arch-testing', base.worktreeId, base.planDigest, base.generationId, 120);
-    assert.strictEqual(created.ok, true);
+    primeCompleteProof(
+      project, base.sessionId, base.worktreeId, base.planDigest, base.generationId,
+      event.agentId, event.agentType,
+    );
     const fencePublish = rll.publishClaudeAuthorityFence(
       project, rll.computeClaudeAuthorityIdentityId(project, 'claude-hook', event.sessionId, event.agentId),
     );
@@ -196,8 +195,13 @@ test('returns INVALID when the exact observed actor authority fence exists', () 
 test('returns UNAVAILABLE when no current matching RoleActorBinding exists', () => {
   withProject((project) => {
     const base = setupBase(project);
-    primeCompleteProof(project, base.sessionId, base.worktreeId, base.planDigest, base.generationId, base.primaryAgentId);
-    const result = rll.resolveClaudePeerObservedActorAuthority(project, targetEvent(base));
+    const event = targetEvent(base);
+    const binding = primeCompleteProof(
+      project, base.sessionId, base.worktreeId, base.planDigest, base.generationId,
+      event.agentId, event.agentType,
+    );
+    fs.rmSync(rll.roleActorBindingPathFor(project, binding.binding_id), { force: true });
+    const result = rll.resolveClaudePeerObservedActorAuthority(project, event);
     assert.deepStrictEqual(result, { ok: false, reason: 'UNAVAILABLE' });
   });
 });
@@ -207,12 +211,15 @@ test('returns UNAVAILABLE when no current matching RoleActorBinding exists', () 
 test('returns INVALID when current matching RoleActorBinding is ambiguous', () => {
   withProject((project) => {
     const base = setupBase(project);
-    primeCompleteProof(project, base.sessionId, base.worktreeId, base.planDigest, base.generationId, base.primaryAgentId);
-    const first = rll.createRoleActorBinding(project, 'arch-testing', base.worktreeId, base.planDigest, base.generationId, 120);
+    const event = targetEvent(base);
+    const first = primeCompleteProof(
+      project, base.sessionId, base.worktreeId, base.planDigest, base.generationId,
+      event.agentId, event.agentType,
+    );
     const second = rll.createRoleActorBinding(project, 'arch-testing', base.worktreeId, base.planDigest, base.generationId, 120);
-    assert.strictEqual(first.ok, true);
     assert.strictEqual(second.ok, true);
-    const result = rll.resolveClaudePeerObservedActorAuthority(project, targetEvent(base));
+    assert.ok(first.binding_id);
+    const result = rll.resolveClaudePeerObservedActorAuthority(project, event);
     assert.deepStrictEqual(result, { ok: false, reason: 'INVALID' });
   });
 });
@@ -222,10 +229,11 @@ test('returns INVALID when current matching RoleActorBinding is ambiguous', () =
 test('returns exact authority for one unfenced proof-complete observed actor and one current matching RoleActorBinding', () => {
   withProject((project) => {
     const base = setupBase(project);
-    primeCompleteProof(project, base.sessionId, base.worktreeId, base.planDigest, base.generationId, base.primaryAgentId);
-    const created = rll.createRoleActorBinding(project, 'arch-testing', base.worktreeId, base.planDigest, base.generationId, 120);
-    assert.strictEqual(created.ok, true);
     const event = targetEvent(base);
+    const created = primeCompleteProof(
+      project, base.sessionId, base.worktreeId, base.planDigest, base.generationId,
+      event.agentId, event.agentType,
+    );
     const result = rll.resolveClaudePeerObservedActorAuthority(project, event);
     assert.strictEqual(result.ok, true, 'expected success: ' + JSON.stringify(result));
     assert.deepStrictEqual(Object.keys(result).sort(), ['authority', 'ok']);
@@ -235,7 +243,7 @@ test('returns exact authority for one unfenced proof-complete observed actor and
     assert.strictEqual(result.authority.worktreeId, base.worktreeId);
     assert.strictEqual(result.authority.planDigest, base.planDigest);
     assert.strictEqual(result.authority.generationId, base.generationId);
-    assert.strictEqual(result.authority.actorBinding.binding_id, created.binding.binding_id);
+    assert.strictEqual(result.authority.actorBinding.binding_id, created.binding_id);
   });
 });
 
@@ -244,16 +252,21 @@ test('returns exact authority for one unfenced proof-complete observed actor and
 test('is lookup-only and leaves the complete registry byte-for-byte unchanged on success and failure', () => {
   withProject((project) => {
     const base = setupBase(project);
-    primeCompleteProof(project, base.sessionId, base.worktreeId, base.planDigest, base.generationId, base.primaryAgentId);
+    const event = targetEvent(base);
+    primeCompleteProof(
+      project, base.sessionId, base.worktreeId, base.planDigest, base.generationId,
+      event.agentId, event.agentType,
+    );
     const beforeFailure = snapshotRegistry(project);
-    const failureResult = rll.resolveClaudePeerObservedActorAuthority(project, targetEvent(base));
+    const failureResult = rll.resolveClaudePeerObservedActorAuthority(project, {
+      ...event,
+      agentId: event.agentId + '-unproven',
+    });
     assert.deepStrictEqual(failureResult, { ok: false, reason: 'UNAVAILABLE' });
     assert.deepStrictEqual(snapshotRegistry(project), beforeFailure);
 
-    const created = rll.createRoleActorBinding(project, 'arch-testing', base.worktreeId, base.planDigest, base.generationId, 120);
-    assert.strictEqual(created.ok, true);
     const beforeSuccess = snapshotRegistry(project);
-    const successResult = rll.resolveClaudePeerObservedActorAuthority(project, targetEvent(base));
+    const successResult = rll.resolveClaudePeerObservedActorAuthority(project, event);
     assert.strictEqual(successResult.ok, true, 'expected success: ' + JSON.stringify(successResult));
     assert.deepStrictEqual(snapshotRegistry(project), beforeSuccess);
   });

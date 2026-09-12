@@ -23,10 +23,10 @@ Route one validated task through the shared runtime collaboration owner. This sk
 4. Invoke:
 
 ```bash
-node scripts/lib/runtime-collaboration-entrypoints.cjs execute --entrypoint work --project-root <absolute> --intent <base64url canonical JSON>
+"<resolved-node>" "<toolkit-root>/scripts/lib/runtime-collaboration-entrypoints.cjs" execute --entrypoint work --project-root <consumer-root> --intent <base64url canonical JSON>
 ```
 
-The Bash call must be one standalone direct Node command. Replace `<absolute>` with the literal absolute project path before invoking it. Never use `$(pwd)`, `$PWD`, `cd`, shell variables, command substitution, pipes, redirects, or command separators in this authenticated entrypoint call.
+The Bash call must be one standalone direct Node command. For L0, both roots are the current repository. For a runtime consumer, derive `toolkit-root` only from the single local `layer=L0, role=tooling` manifest source and keep `consumer-root` as the literal absolute application repository. Use the resolved Node executable; do not use environment fallbacks, command substitution, wrappers, pipes, redirects, or command separators.
 
 The decoded intent must contain `role:"toolkit-specialist"`, the exact fixed `subject_ref` above, and `task` byte-for-byte equal to the current `/work` task description. A repeated task resumes its existing transaction; a genuinely different task creates a distinct intent and must not reuse a prior terminal action.
 

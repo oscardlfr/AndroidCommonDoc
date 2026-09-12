@@ -122,9 +122,15 @@ _assert_isolated_runtime_tmp() {
     try { st = fs.lstatSync(process.argv[1]); } catch (err) { console.error("runtime-tmp stat failed: " + err.message); process.exit(1); }
     if (st.isSymbolicLink()) { console.error("runtime-tmp is a symlink"); process.exit(1); }
     if (!st.isDirectory()) { console.error("runtime-tmp is not a directory"); process.exit(1); }
-    if ((st.mode & 0o777) !== 0o700) { console.error("runtime-tmp wrong mode: " + (st.mode & 0o777).toString(8)); process.exit(1); }
-    if (typeof process.getuid === "function" && st.uid !== process.getuid()) { console.error("runtime-tmp wrong owner"); process.exit(1); }
-  ' "$dir"
+    if (process.platform === "win32") {
+      const rc = require(process.argv[2]);
+      const acl = rc.windowsPrivateDirectoryAcl(process.argv[1], { mode: "ensure" });
+      if (!acl.ok) { console.error("runtime-tmp Windows ACL is not private: " + JSON.stringify(acl)); process.exit(1); }
+    } else {
+      if ((st.mode & 0o777) !== 0o700) { console.error("runtime-tmp wrong mode: " + (st.mode & 0o777).toString(8)); process.exit(1); }
+      if (typeof process.getuid === "function" && st.uid !== process.getuid()) { console.error("runtime-tmp wrong owner"); process.exit(1); }
+    }
+  ' "$dir" "$BATS_TEST_DIRNAME/../lib/runtime-consultation.cjs"
 }
 
 setup() {
@@ -583,7 +589,15 @@ _assert_cli_result() {
   _assert_cli_result "SUCCESS" "NONE"
   [ -d "$root" ]
   local artifact_ref; artifact_ref="$(node -e 'console.log(JSON.parse(process.argv[1]).artifact_ref)' "$output")"
-  [ "$artifact_ref" = "$root" ]
+  run node -e '
+    const fs = require("fs");
+    const path = require("path");
+    const canonical = (p) => fs.realpathSync.native ? fs.realpathSync.native(p) : fs.realpathSync(p);
+    const left = path.normalize(canonical(process.argv[1]));
+    const right = path.normalize(canonical(process.argv[2]));
+    process.exit((process.platform === "win32" ? left.toLowerCase() === right.toLowerCase() : left === right) ? 0 : 1);
+  ' "$artifact_ref" "$root"
+  [ "$status" -eq 0 ]
 }
 
 @test "RCR-root-2 PASS: root-init sets the coordination root directory mode to owner-confined 0700" {
@@ -3513,7 +3527,7 @@ STUBEOF
     const sessionExpiryMs = Date.now() + 300000;
     const waveActivation = { ok: true, waveSlug: "p1a-roots-fixture" };
     const action = { action_id: "p1a".padEnd(32, "0"), repo_id: repoId, plan_digest: "p1a".padEnd(64, "0"), expires_at: new Date(actionExpiryMs).toISOString() };
-    const engine = { p, repoDescriptor, action, coordinationRootReal: projectRoot, projectRoot, pidIdentity, credentialSource, rendezvousInstanceId: crypto.randomBytes(16).toString("hex"), supervisorInstanceId: crypto.randomBytes(16).toString("hex"), ownedChildRef, state, shutdown, actionExpiryMs, sessionExpiryMs, waveActivation };
+    const engine = { p, repoDescriptor, action, coordinationRootReal: projectRoot, projectRoot, pidIdentity, credentialSource, rendezvousInstanceId: crypto.randomBytes(16).toString("hex"), supervisorInstanceId: crypto.randomBytes(16).toString("hex"), ownedChildRef, state, shutdown, actionExpiryMs, startupDeadlineMs: actionExpiryMs, sessionExpiryMs, waveActivation };
     (async () => {
       const isolationRootsDir = path.join(rll.registryRepoDir({ repoId }), "isolation-roots");
       const handle = bridge.__testOnlyStartOwnedAppServerSupervisorEngine(engine);
@@ -3636,11 +3650,22 @@ STUBEOF
       const created = isolationProvider.createRunRoot({ instanceId, repoId, runId, ownerIdentity });
       if (!created.ok) throw new Error("test precondition: createRunRoot failed: " + JSON.stringify(created));
       if (created.handle.state !== "PROFILE_PENDING") throw new Error("test precondition: handle must remain unsealed: " + JSON.stringify(created.handle));
-      // Genuine replacement of the original leaf: remove and recreate a
-      // FRESH directory at the exact same path -- a genuinely different
-      // inode at an unchanged path, never merely a byte/content mutation.
+      // Genuine replacement of the original leaf. Create the substitute
+      // while the original still exists so the filesystem cannot recycle
+      // the original inode for it (an immediate rm+mkdir at the same path
+      // legitimately reuses inode numbers on WSL, Linux and macOS filesystems).
+      // Only then remove the original and rename the already-distinct
+      // substitute into the exact path under test. This is deterministic on
+      // POSIX and Windows and proves the test precondition before cleanup.
+      const replacementPath = created.handle.intendedPath + ".replacement-" + crypto.randomBytes(4).toString("hex");
+      fs.mkdirSync(replacementPath, { recursive: true, mode: 0o700 });
+      const originalIdentity = fs.statSync(created.handle.intendedPath, { bigint: true });
+      const replacementIdentity = fs.statSync(replacementPath, { bigint: true });
+      if (originalIdentity.dev === replacementIdentity.dev && originalIdentity.ino === replacementIdentity.ino) {
+        throw new Error("test precondition: concurrently-existing original and replacement unexpectedly share one filesystem identity");
+      }
       fs.rmSync(created.handle.intendedPath, { recursive: true, force: true });
-      fs.mkdirSync(created.handle.intendedPath, { recursive: true, mode: 0o700 });
+      fs.renameSync(replacementPath, created.handle.intendedPath);
       const authorization = {
         outcome: "NEVER_SPAWNED", pid: null, birthToken: null, executableIdentity: null,
         instanceRecordIdentity: null, repoId, instanceId, runId, ownerToken: created.ownerToken,
@@ -3688,7 +3713,7 @@ STUBEOF
     const sessionExpiryMs = Date.now() + 300000;
     const waveActivation = { ok: true, waveSlug: "p1a-roots-fixture" };
     const action = { action_id: "p1a".padEnd(32, "0"), repo_id: repoId, plan_digest: "p1a".padEnd(64, "0"), expires_at: new Date(actionExpiryMs).toISOString() };
-    const engine = { p, repoDescriptor, action, coordinationRootReal: projectRoot, projectRoot, pidIdentity, credentialSource, rendezvousInstanceId: crypto.randomBytes(16).toString("hex"), supervisorInstanceId: crypto.randomBytes(16).toString("hex"), ownedChildRef, state, shutdown, actionExpiryMs, sessionExpiryMs, waveActivation };
+    const engine = { p, repoDescriptor, action, coordinationRootReal: projectRoot, projectRoot, pidIdentity, credentialSource, rendezvousInstanceId: crypto.randomBytes(16).toString("hex"), supervisorInstanceId: crypto.randomBytes(16).toString("hex"), ownedChildRef, state, shutdown, actionExpiryMs, startupDeadlineMs: actionExpiryMs, sessionExpiryMs, waveActivation };
     (async () => {
       const isolationRootsDir = path.join(rll.registryRepoDir({ repoId }), "isolation-roots");
       const spawnIntentsDir = path.join(rll.registryRepoDir({ repoId }), "spawn-intents");

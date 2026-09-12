@@ -168,6 +168,39 @@ describe("ManifestSchemaV2", () => {
   });
 });
 
+describe("runtime consumer metadata", () => {
+  const runtime = {
+    schema: "runtime-consumer/v1" as const,
+    enabled: true as const,
+    consumer_layer: "L2" as const,
+    toolkit_commit: "a".repeat(40),
+    toolkit_content_sha256: "b".repeat(64),
+  };
+
+  it("preserves a valid optional closed runtime pin", () => {
+    const parsed = validateManifest(makeV2Manifest({ runtime }));
+    expect(parsed.runtime).toEqual(runtime);
+  });
+
+  it("rejects disabled, malformed and extended runtime pins", () => {
+    const invalid = [
+      { ...runtime, enabled: false },
+      { ...runtime, consumer_layer: "L0" },
+      { ...runtime, toolkit_commit: "A".repeat(40) },
+      { ...runtime, toolkit_content_sha256: "b".repeat(63) },
+      { ...runtime, extra: true },
+    ];
+    for (const candidate of invalid) {
+      expect(ManifestSchemaV2.safeParse({ ...makeV2Manifest(), runtime: candidate }).success).toBe(false);
+    }
+  });
+
+  it("keeps legacy/default manifests runtime-disabled by absence", () => {
+    expect(migrateV1toV2(makeV1Manifest()).runtime).toBeUndefined();
+    expect(createDefaultManifest("../AndroidCommonDoc").runtime).toBeUndefined();
+  });
+});
+
 // ---------------------------------------------------------------------------
 // v1 schema validation (backward compat)
 // ---------------------------------------------------------------------------

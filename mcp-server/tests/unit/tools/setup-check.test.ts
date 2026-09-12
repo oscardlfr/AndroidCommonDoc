@@ -18,15 +18,9 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { registerSetupCheckTool } from "../../../src/tools/setup-check.js";
+import { registerSetupCheckTool, resolveBashExecutable } from "../../../src/tools/setup-check.js";
 import type { ValidationResult } from "../../../src/types/results.js";
-import {
-  mkdtempSync,
-  mkdirSync,
-  writeFileSync,
-  copyFileSync,
-  rmSync,
-} from "node:fs";
+import { mkdtempSync, mkdirSync, writeFileSync, copyFileSync, rmSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import os from "node:os";
 import path from "node:path";
@@ -72,10 +66,7 @@ function createIsolatedProjectRoot(options: { installHook: boolean }): string {
   mkdirSync(path.join(root, "scripts", "ps1"), { recursive: true });
 
   mkdirSync(path.join(root, "skills", "dummy-skill"), { recursive: true });
-  writeFileSync(
-    path.join(root, "skills", "dummy-skill", "SKILL.md"),
-    "# dummy skill\n",
-  );
+  writeFileSync(path.join(root, "skills", "dummy-skill", "SKILL.md"), "# dummy skill\n");
 
   mkdirSync(path.join(root, ".claude", "agents"), { recursive: true });
 
@@ -90,7 +81,7 @@ function createIsolatedProjectRoot(options: { installHook: boolean }): string {
 
   if (options.installHook) {
     execFileSync(
-      "bash",
+      resolveBashExecutable(),
       [path.join(REAL_ROOT, "scripts", "sh", "install-git-hooks.sh"), root],
       { encoding: "utf8" },
     );
@@ -107,8 +98,7 @@ describe("setup-check tool", () => {
     server = new McpServer({ name: "test", version: "1.0.0" });
     registerSetupCheckTool(server);
 
-    const [clientTransport, serverTransport] =
-      InMemoryTransport.createLinkedPair();
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
     await server.connect(serverTransport);
     client = new Client({ name: "test-client", version: "1.0.0" });
     await client.connect(clientTransport);
@@ -136,9 +126,7 @@ describe("setup-check tool", () => {
     const content = result.content[0];
     expect(content).toHaveProperty("type", "text");
 
-    const parsed = JSON.parse(
-      (content as { type: "text"; text: string }).text,
-    ) as ValidationResult;
+    const parsed = JSON.parse((content as { type: "text"; text: string }).text) as ValidationResult;
     expect(parsed).toHaveProperty("status");
     expect(["PASS", "FAIL", "ERROR"]).toContain(parsed.status);
     expect(parsed).toHaveProperty("summary");
@@ -167,9 +155,7 @@ describe("setup-check tool", () => {
     const docsCheck = parsed.details.find((d) => d.check === "docs-directory");
     expect(docsCheck?.status).toBe("PASS");
 
-    const shCheck = parsed.details.find(
-      (d) => d.check === "scripts-sh-directory",
-    );
+    const shCheck = parsed.details.find((d) => d.check === "scripts-sh-directory");
     expect(shCheck?.status).toBe("PASS");
   });
 
@@ -185,13 +171,9 @@ describe("setup-check tool", () => {
         (result.content[0] as { type: "text"; text: string }).text,
       ) as ValidationResult;
 
-      const hookCheck = parsed.details.find(
-        (d) => d.check === "pre-push-hook-installed",
-      );
+      const hookCheck = parsed.details.find((d) => d.check === "pre-push-hook-installed");
       expect(hookCheck?.status).toBe("PASS");
-      expect(hookCheck?.message).toBe(
-        "git-layer pre-push hook is installed and canonical",
-      );
+      expect(hookCheck?.message).toBe("git-layer pre-push hook is installed and canonical");
       // Q6 (settled, arch-platform Item 6): Check 7 never increments
       // failCount either way -- the overall result must stay PASS here too.
       expect(parsed.status).toBe("PASS");
@@ -212,9 +194,7 @@ describe("setup-check tool", () => {
         (result.content[0] as { type: "text"; text: string }).text,
       ) as ValidationResult;
 
-      const hookCheck = parsed.details.find(
-        (d) => d.check === "pre-push-hook-installed",
-      );
+      const hookCheck = parsed.details.find((d) => d.check === "pre-push-hook-installed");
       expect(hookCheck?.status).toBe("WARN");
       expect(hookCheck?.message).toBe(
         "pre-push hook is not installed/canonical (hook-absent) -- run 'make install-git-hooks' to fix",

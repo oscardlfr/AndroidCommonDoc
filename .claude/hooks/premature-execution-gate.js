@@ -60,9 +60,88 @@ function isRootSourceProtocolCommand(toolName, agentType, toolInput, projectRoot
   let argv;
   try { argv = runtimeRoleLifecycle.parsePosixDirect(command); } catch { return false; }
   if (!Array.isArray(argv) || argv.length < 3) return false;
-  const expectedScript = path.join(projectRoot, 'scripts', 'lib', 'runtime-consultation.cjs');
+  const expectedScript = path.resolve(__dirname, '../../scripts/lib/runtime-consultation.cjs');
   if (path.resolve(argv[1]) !== expectedScript) return false;
-  return ['publish-request', 'dispatch', 'await-result', 'accept-result', 'transaction-ack'].includes(argv[2]);
+  return [
+    'publish-request',
+    'dispatch',
+    'record-delivery',
+    'await-result',
+    'accept-result',
+    'transaction-ack',
+  ].includes(argv[2]);
+}
+
+function harnessSuffixCandidateRole(name) {
+  const match = /^(.+)-([1-9][0-9]*)$/.exec(name);
+  if (!match) return null;
+  if (match[2].length === 1 && match[2] < '2') return null;
+  return match[1];
+}
+
+// The context-provider gate is the sole updatedInput writer for the first
+// root-source Bash proposal. Claude runs sibling PreToolUse hooks against the
+// original proposal, so this PREP gate must not veto that rewrite merely
+// because the model proposed a diagnostic command. Defer only while a real,
+// current root-source binding exists and its initial ingress is still absent.
+// Once ingress exists, arbitrary Bash falls back through the ordinary PREP
+// rules; only the closed protocol commands above retain their narrow exemption.
+function isAuthenticatedRootSourceInitialProposal(toolName, agentType, projectRoot, sessionId, agentId) {
+  if (toolName !== 'Bash' || !runtimeRoleLifecycle
+      || !(agentType === 'toolkit-specialist'
+        || harnessSuffixCandidateRole(agentType) === 'toolkit-specialist')
+      || typeof sessionId !== 'string' || sessionId.length === 0
+      || typeof agentId !== 'string' || agentId.length === 0) return false;
+  try {
+    const repoId = runtimeRoleLifecycle.computeRepoId(projectRoot);
+    const classification = runtimeRoleLifecycle.classifyClaudeAuthorityForIdentity(projectRoot, {
+      schema: runtimeRoleLifecycle.CLAUDE_AUTHORITY_IDENTITY_SCHEMA,
+      provider: 'claude-hook',
+      repo_id: repoId,
+      runtime_session_key: sessionId,
+      agent_id: agentId,
+    });
+    if (!classification.ok || classification.state !== 'ONE'
+        || classification.family !== 'root-source') return false;
+    const binding = classification.binding;
+    const roleMatches = binding.role === agentType
+      || harnessSuffixCandidateRole(agentType) === binding.role;
+    const plan = runtimeRoleLifecycle.discoverPlan(projectRoot);
+    const worktreeId = runtimeRoleLifecycle.computeWorktreeId(projectRoot);
+    if (!plan.ok || !roleMatches
+        || !runtimeRoleLifecycle.validateRootSourceBindingFor(
+          projectRoot, binding.binding_id, binding.role, worktreeId, plan.planDigest,
+        ).ok) return false;
+    const ingress = runtimeRoleLifecycle.readRegistryRecord(
+      runtimeRoleLifecycle.rootSourceIngressPathFor(projectRoot, binding.binding_id),
+    );
+    return ingress.ok && ingress.absent;
+  } catch {
+    return false;
+  }
+}
+
+// A spawned persistent role must execute one exact target-side lifecycle
+// bootstrap before PREP can exist. This gate owns neither the action nor the
+// one-use grant, so it defers only the canonical resolved-node `ready` argv to
+// runtime-consultation-target-gate.js, which performs the identity/action/
+// roster correlation and injects the grant. Near misses remain PREP-gated.
+function isLifecycleTargetReadyCommand(toolName, toolInput) {
+  if (toolName !== 'Bash' || !runtimeRoleLifecycle) return false;
+  const command = toolInput && toolInput.command;
+  if (typeof command !== 'string' || typeof runtimeRoleLifecycle.parsePosixDirect !== 'function'
+      || typeof runtimeRoleLifecycle.resolvedNodePath !== 'function') return false;
+  let argv;
+  try { argv = runtimeRoleLifecycle.parsePosixDirect(command); } catch { return false; }
+  if (!Array.isArray(argv) || argv.length !== 5) return false;
+  const normalized = value => String(value).replace(/\\/g, '/');
+  const expectedNode = normalized(runtimeRoleLifecycle.resolvedNodePath());
+  const expectedScript = normalized(path.resolve(__dirname, '../../scripts/lib/runtime-role-lifecycle.cjs'));
+  return normalized(argv[0]) === expectedNode
+    && normalized(path.resolve(argv[1])) === expectedScript
+    && argv[2] === 'ready'
+    && argv[3] === '--action'
+    && /^[0-9a-f]{32,}$/.test(argv[4]);
 }
 
 // Resolve current HEAD (40-hex) or '' — fail-closed at the call site (D5).
@@ -118,6 +197,10 @@ process.stdin.on('end', () => {
     }
 
     const projectRoot = process.env.CLAUDE_PROJECT_DIR || process.cwd();
+    if (isLifecycleTargetReadyCommand(toolName, data.tool_input)) process.exit(0);
+    if (isAuthenticatedRootSourceInitialProposal(
+      toolName, agentType, projectRoot, data.session_id, data.agent_id,
+    )) process.exit(0);
     if (isRootSourceProtocolCommand(toolName, agentType, data.tool_input, projectRoot)) process.exit(0);
     const slug = getWaveSlug(projectRoot);
 

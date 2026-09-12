@@ -1,5 +1,5 @@
 ---
-description: Propagate L0 skills, agents, and commands to consuming projects.
+description: Propagate L0 assets and optionally install the source-referenced runtime in L1/L2 consumers.
 ---
 
 Synchronize L0 assets (skills, agents, commands) from AndroidCommonDoc into the current project.
@@ -7,9 +7,9 @@ Synchronize L0 assets (skills, agents, commands) from AndroidCommonDoc into the 
 ## How it works
 
 1. Read `l0-manifest.json` from the current project root.
-2. Use the `l0_source` path (resolved relative to project root) to locate AndroidCommonDoc.
+2. Resolve the single `sources[]` entry whose layer is `L0` relative to the project root.
 3. Run: `node {l0_source}/mcp-server/build/sync/sync-l0-cli.js --project-root {current-dir}`
-4. Pass through any `--prune` flag from `$ARGUMENTS` if present.
+4. Pass supported flags from `$ARGUMENTS`. Runtime mode is explicit and never implies prune or force.
 
 ## Step-by-step execution
 
@@ -26,9 +26,9 @@ If `l0-manifest.json` does not exist, stop and tell the user:
 > ```
 > Or run `/setup` if the setup skill is available.
 
-### Step 2 — Resolve l0_source
+### Step 2 — Resolve the L0 source
 
-From `l0-manifest.json`, find the `sources` array entry with `"layer": "L0"` and read its `"path"` field. This path is relative to the project root.
+From `l0-manifest.json`, find exactly one local `sources` entry with `"layer": "L0"` and `"role": "tooling"`, then read its `"path"`. The path is relative to the project root. Runtime mode rejects absent, ambiguous, remote-only, or unresolved sources and never uses an environment fallback.
 
 Resolve the absolute path: `{project_root}/{sources[0].path}` (normalize `..` segments).
 
@@ -51,6 +51,14 @@ If `$ARGUMENTS` contains `--prune`, append it:
 node {l0_source}/mcp-server/build/sync/sync-l0-cli.js --project-root {project_root} --prune
 ```
 
+If `$ARGUMENTS` contains `--runtime`, append it without `--prune`, `--force`, `--force-l0-managed`, or `--auto-migrate`:
+
+```bash
+node {l0_source}/mcp-server/build/sync/sync-l0-cli.js --project-root {project_root} --runtime
+```
+
+`--runtime` requires an existing manifest. It pins the exact toolkit commit/content digest, installs ten byte-identical runtime roles, and registers the closed hook matrix by absolute L0 source path. Toolkit runtime code is not copied into the consumer. Use `--dry-run` for a write-free preflight.
+
 ### Step 4 — Report results
 
 Print the CLI output verbatim. The CLI reports added/updated/removed/unchanged counts and updates `l0-manifest.json` automatically.
@@ -61,3 +69,5 @@ Print the CLI output verbatim. The CLI reports added/updated/removed/unchanged c
 
 Supported flags:
 - `--prune` — Remove files tracked in the manifest that are no longer in the L0 registry (e.g. deleted or excluded commands).
+- `--runtime` — Install or verify the source-referenced runtime in an L1/L2 consumer.
+- `--dry-run` — Validate and preview without writes.

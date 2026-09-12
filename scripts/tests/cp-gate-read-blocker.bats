@@ -16,9 +16,15 @@ _assert_isolated_runtime_tmp() {
     try { st = fs.lstatSync(process.argv[1]); } catch (err) { console.error("runtime-tmp stat failed: " + err.message); process.exit(1); }
     if (st.isSymbolicLink()) { console.error("runtime-tmp is a symlink"); process.exit(1); }
     if (!st.isDirectory()) { console.error("runtime-tmp is not a directory"); process.exit(1); }
-    if ((st.mode & 0o777) !== 0o700) { console.error("runtime-tmp wrong mode: " + (st.mode & 0o777).toString(8)); process.exit(1); }
-    if (typeof process.getuid === "function" && st.uid !== process.getuid()) { console.error("runtime-tmp wrong owner"); process.exit(1); }
-  ' "$dir"
+    if (process.platform === "win32") {
+      const rc = require(process.argv[2]);
+      const acl = rc.windowsPrivateDirectoryAcl(process.argv[1], { mode: "ensure" });
+      if (!acl.ok) { console.error("runtime-tmp Windows ACL is not private: " + JSON.stringify(acl)); process.exit(1); }
+    } else {
+      if ((st.mode & 0o777) !== 0o700) { console.error("runtime-tmp wrong mode: " + (st.mode & 0o777).toString(8)); process.exit(1); }
+      if (typeof process.getuid === "function" && st.uid !== process.getuid()) { console.error("runtime-tmp wrong owner"); process.exit(1); }
+    }
+  ' "$dir" "$BATS_TEST_DIRNAME/../lib/runtime-consultation.cjs"
 }
 
 setup() {
@@ -861,6 +867,7 @@ _write_canonical_accepted_consultation() {
     const fs = require("fs");
     const path = require("path");
     const crypto = require("crypto");
+    const id01Fixture = require(process.argv[8]);
     const proj = process.argv[3];
     const waveSlug = process.argv[4];
     const planSha256 = process.argv[5];
@@ -885,10 +892,10 @@ _write_canonical_accepted_consultation() {
     // instanceId lines up with this binding own agent_key.
     const openerIdentity = { ok: true, provider: "claude-hook", runtime_session_key: "cp-gate-read-blocker-canonical-chain-opener-session" };
     const openerAgentId = "arch-testing-instance-1";
-    // Prime the genuine generation-scoped CLAUDE-ID-01 capability the
-    // production RequesterBinding constructor now requires. Two distinct,
-    // live role-spawn actions prove the primary sequence and the same-role
-    // peer observation; no fixture bypasses the production gate.
+    // Prime the genuine actor-scoped CLAUDE-ID-01 v2 proof the production
+    // RequesterBinding constructor now requires. The shared fixture records
+    // signed host/session evidence, a consumed spawn claim, startup actor and
+    // READY outcome; no test-only capability file bypasses the production gate.
     const expiry = new Date(Date.now() + 600000).toISOString().replace(/\.\d{3}Z$/, "Z");
     function primeCapability(identity, primaryAgentId, proofRole, labelPrefix) {
       const generation = rll.resolveSessionGeneration(proj, identity);
@@ -906,14 +913,22 @@ _write_canonical_accepted_consultation() {
         return actionId;
       }
       const primaryAction = mintProbeAction("primary");
-      const peerAction = mintProbeAction("peer");
-      rll.recordClaudeId01SubagentStartObservation(proj, { sessionId: identity.runtime_session_key, agentId: primaryAgentId, agentType: proofRole, actionId: primaryAction });
-      rll.recordClaudeId01PreToolUseObservation(proj, { sessionId: identity.runtime_session_key, agentId: primaryAgentId, agentType: proofRole, toolUseId: labelPrefix + "-before-1" });
-      rll.recordClaudeId01PreToolUseObservation(proj, { sessionId: identity.runtime_session_key, agentId: primaryAgentId, agentType: proofRole, toolUseId: labelPrefix + "-before-2" });
-      rll.recordClaudeId01SubagentStartObservation(proj, { sessionId: identity.runtime_session_key, agentId: primaryAgentId, agentType: proofRole, actionId: primaryAction });
-      rll.recordClaudeId01PreToolUseObservation(proj, { sessionId: identity.runtime_session_key, agentId: primaryAgentId, agentType: proofRole, toolUseId: labelPrefix + "-after-1" });
-      rll.recordClaudeId01SubagentStartObservation(proj, { sessionId: identity.runtime_session_key, agentId: primaryAgentId + "-peer", agentType: proofRole, actionId: peerAction });
-      const capability = rll.checkClaudeId01RuntimeCapability(proj, identity.runtime_session_key, worktreeId, planSha256);
+      id01Fixture.primeClaudeId01V2ActorProof({
+        projectRoot: proj,
+        agentType: proofRole,
+        sessionId: identity.runtime_session_key,
+        agentId: primaryAgentId,
+        actionId: primaryAction,
+        prefix: labelPrefix,
+      });
+      const capability = rll.checkClaudeId01RuntimeCapability(
+        proj,
+        identity.runtime_session_key,
+        worktreeId,
+        planSha256,
+        proofRole,
+        primaryAgentId,
+      );
       if (!capability.ok) throw new Error(labelPrefix + " CLAUDE-ID-01 capability failed: " + JSON.stringify(capability));
     }
     primeCapability(openerIdentity, openerAgentId, role, "cp-bats-opener");
@@ -984,7 +999,7 @@ _write_canonical_accepted_consultation() {
       const acceptedPath = path.join(txnDir, "accepted-result.json");
       writeDurable(acceptedPath, acceptedObj);
     }
-  ' "$RLL_IMPL_FOR_CHAIN" "$RC_IMPL_FOR_CHAIN" "$proj" "$wave_slug" "$plan_sha256" "$role" "$with_accepted"
+  ' "$RLL_IMPL_FOR_CHAIN" "$RC_IMPL_FOR_CHAIN" "$proj" "$wave_slug" "$plan_sha256" "$role" "$with_accepted" "$BATS_TEST_DIRNAME/fixtures/runtime-claude-id01-v2-fixture.cjs"
 }
 
 @test "PP-BATS-1 BLOCK: post-PLAN, specialist arch-response flag present but NO consult-result at all -> exit 2 (message/candidate-only)" {

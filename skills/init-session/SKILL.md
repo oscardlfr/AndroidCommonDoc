@@ -23,10 +23,10 @@ The `<slug>` is required when `--orchestrate` is passed. Example: `/init-session
 All dashboard and support-plane operations enter through the shared product flow:
 
 ```bash
-node scripts/lib/runtime-collaboration-entrypoints.cjs execute --entrypoint init-session --project-root <absolute> --intent <base64url canonical JSON>
+"<resolved-node>" "<toolkit-root>/scripts/lib/runtime-collaboration-entrypoints.cjs" execute --entrypoint init-session --project-root <consumer-root> --intent <base64url canonical JSON>
 ```
 
-The Bash call must be one standalone direct Node command. Replace `<absolute>` with the literal absolute project path before invoking it. Never use `$(pwd)`, `$PWD`, `cd`, shell variables, command substitution, pipes, redirects, or command separators in this authenticated entrypoint call.
+The Bash call must be one standalone direct Node command. For L0, `toolkit-root` and `consumer-root` are the current repository. For an installed runtime consumer, resolve `toolkit-root` only from the single local `layer=L0, role=tooling` source in `l0-manifest.json`; `consumer-root` remains the literal absolute application repository. Use the resolved Node executable. Never use `$(pwd)`, `$PWD`, `cd`, environment fallbacks, shell variables, command substitution, pipes, redirects, or command separators in this authenticated entrypoint call.
 
 Encode exactly `{"mode":"dashboard"}` for the read-only form or `{"mode":"start"}` for orchestration. Treat `READY` as a proven dashboard result, execute only returned `ACTION_REQUIRED` actions through the runtime adapter, and report `BLOCKED|UNAVAILABLE|FAILED` without inventing readiness.
 

@@ -33,10 +33,9 @@
 #   RUNTIME_CONSULTATION_FAKE_CLOCK=<ISO>            (overrides the frozen base, default 2025-01-01T00:00:00.000Z)
 #   RUNTIME_CONSULTATION_FAKE_CLOCK_ADVANCE_MS=<int>  (added once to the frozen base -- a single
 #                                                       fixed instant, NEVER simulated elapsed time)
-#   RUNTIME_CONSULTATION_ACL_PROBE=unverifiable        (gated the same way; NOT YET WIRED to any
-#                                                       actual ACL-confinement logic in this WP1/WP2
-#                                                       core -- confirmed by reading the full source;
-#                                                       see the W10b skip reason below)
+#   RUNTIME_CONSULTATION_ACL_PROBE=unverifiable        (gated by test capability plus BOTH fixed
+#                                                       flags; forces the production ACL path to
+#                                                       return indeterminate and fail closed)
 #
 # --fixed-ids: genId() returns a per-process monotonic counter, hex, zero-
 # padded to 32 chars, starting at 0 ("0" * 32) and incrementing by 1 per call --
@@ -83,16 +82,17 @@
 #   W01  real (via .ps1 wrapper)      W02  real (via .ps1 wrapper)
 #   W03  real (via .ps1 wrapper)      W04  real (via .ps1 wrapper)
 #   W05  real (via .ps1 wrapper)      W06  real (via .ps1 wrapper, 4 cases)
-#   W07a real (via .ps1 wrapper)      W07b SKIP (WP3: deterministic app-server/mcp bridge)
-#   W08  real (node + .sh-via-bash + .ps1, byte-identical stdout)
+#   W07a real (via .ps1 wrapper)      W07b real (deterministic app-server/mcp bridge)
+#   W08  real publish-request (node + .sh-via-bash + .ps1, byte-identical stdout)
 #   W09  real (Get-Acl allowlist, via .ps1 wrapper for root-init/root-validate)
-#   W10a SKIP (WP3: root-confinement ACL-rejection not yet implemented)
-#   W10b SKIP (WP3: RUNTIME_CONSULTATION_ACL_PROBE not yet wired to any logic)
+#   W10a real (Everyone SID fail-closed)  W10b real (unverifiable probe fail-closed)
 #   W11  real (two node processes race one .lock/, + a separate orphan-lock case)
 #   W12  real (two node processes race the no-clobber primitive via `claim`)
 #
 # Invocation: pwsh -NoLogo -NoProfile -NonInteractive -File
 #   scripts/tests/runtime-consultation-windows.ps1
+
+param([string]$CasePattern = '*')
 
 $ErrorActionPreference = 'Continue'
 $ProgressPreference = 'SilentlyContinue'
@@ -103,8 +103,17 @@ $ProgressPreference = 'SilentlyContinue'
 
 $RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $ImplPath = (Resolve-Path (Join-Path $PSScriptRoot '..\lib\runtime-consultation.cjs')).Path
+$RllImplPath = (Resolve-Path (Join-Path $PSScriptRoot '..\lib\runtime-role-lifecycle.cjs')).Path
+$BridgeImplPath = (Resolve-Path (Join-Path $PSScriptRoot '..\lib\runtime-bridge-codex.cjs')).Path
+$PrivateRegistryPreloadPath = (Resolve-Path (Join-Path $PSScriptRoot 'lib\private-registry-tmpdir-preload.cjs')).Path
+$ContextProviderGatePath = (Resolve-Path (Join-Path $PSScriptRoot '..\..\.claude\hooks\context-provider-gate.js')).Path
 $Ps1WrapperPath = (Resolve-Path (Join-Path $PSScriptRoot '..\ps1\runtime-consultation.ps1')).Path
 $ShWrapperPath = (Resolve-Path (Join-Path $PSScriptRoot '..\sh\runtime-consultation.sh')).Path
+$BashPath = @(
+  (Join-Path $env:ProgramFiles 'Git\bin\bash.exe'),
+  (Join-Path $env:ProgramFiles 'Git\usr\bin\bash.exe')
+) | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
+if (-not $BashPath) { $BashPath = (Get-Command bash -ErrorAction Stop).Source }
 
 # "Harness-created" test capability (PLAN.md ~L752-753, ~L796) -- distinct value
 # from the bats suites' own TEST_CAPABILITY constants so suite-of-origin is
@@ -139,10 +148,20 @@ function New-Ps1TestTempDir {
 function New-GitFixtureRoot {
   param([Parameter(Mandatory)][string]$Suffix)
   $dir = New-Ps1TestTempDir -Suffix $Suffix
-  & git -C $dir init -q 2>&1 | Out-Null
-  & git -C $dir config user.email 'ps1-windows-fixture@test.local' 2>&1 | Out-Null
-  & git -C $dir config user.name 'PS1 Windows Fixture' 2>&1 | Out-Null
-  & git -C $dir commit -q --allow-empty -m init 2>&1 | Out-Null
+  & git -c core.longpaths=true -C $dir init -q 2>&1 | Out-Null
+  if ($LASTEXITCODE -ne 0) { throw "git init failed for fixture path: $dir" }
+  & git -c core.longpaths=true -C $dir config core.longpaths true 2>&1 | Out-Null
+  if ($LASTEXITCODE -ne 0) { throw "git core.longpaths setup failed for fixture path: $dir" }
+  & git -c core.longpaths=true -C $dir config user.email 'ps1-windows-fixture@test.local' 2>&1 | Out-Null
+  if ($LASTEXITCODE -ne 0) { throw "git user.email setup failed for fixture path: $dir" }
+  & git -c core.longpaths=true -C $dir config user.name 'PS1 Windows Fixture' 2>&1 | Out-Null
+  if ($LASTEXITCODE -ne 0) { throw "git user.name setup failed for fixture path: $dir" }
+  & git -c core.longpaths=true -C $dir commit -q --allow-empty -m init 2>&1 | Out-Null
+  if ($LASTEXITCODE -ne 0) { throw "git initial commit failed for fixture path: $dir" }
+  $planDir = Join-Path $dir '.planning\wave-ps1-windows-harness'
+  New-Item -ItemType Directory -Force -Path $planDir | Out-Null
+  '# Fixture PLAN for runtime-consultation-windows.ps1' |
+    Set-Content -NoNewline -Encoding utf8 -Path (Join-Path $planDir 'PLAN.md')
   return $dir
 }
 
@@ -171,6 +190,15 @@ function ConvertTo-ForwardSlashPath {
   return $Path.Replace('\', '/')
 }
 
+function ConvertTo-GitBashPath {
+  param([Parameter(Mandatory)][string]$Path)
+  $full = [IO.Path]::GetFullPath($Path).Replace('\', '/')
+  if ($full -match '^([A-Za-z]):/(.*)$') {
+    return '/' + $Matches[1].ToLowerInvariant() + '/' + $Matches[2]
+  }
+  return $full
+}
+
 function New-SubjectBundleManifestFile {
   param([Parameter(Mandatory)][string]$Path)
   $manifest = [ordered]@{ schema = 'coordination/subject-bundle-manifest/v1'; entries = @() }
@@ -181,7 +209,9 @@ function New-SubjectBundleManifestFile {
 
 function New-PlanFixtureFile {
   param([Parameter(Mandatory)][string]$GitRoot, [Parameter(Mandatory)][string]$WaveSlug)
-  $planDir = Join-Path $GitRoot (".planning\wave-" + $WaveSlug)
+  # One discoverable PLAN per fixture repository. Multiple wave directories
+  # make discoverPlan() correctly fail closed as ambiguous.
+  $planDir = Join-Path $GitRoot '.planning\wave-ps1-windows-harness'
   New-Item -ItemType Directory -Force -Path $planDir | Out-Null
   $planPath = Join-Path $planDir 'PLAN.md'
   "# Fixture PLAN for runtime-consultation-windows.ps1`n`nThrowaway per-test fixture -- not the real Wave 1 PLAN.md.`n" |
@@ -237,31 +267,43 @@ function Invoke-ChildProcess {
   $outFile = Join-Path $WorkRoot ("invoke-{0}.out" -f $script:InvocationCounter)
   $errFile = Join-Path $WorkRoot ("invoke-{0}.err" -f $script:InvocationCounter)
 
-  $previous = @{}
-  foreach ($k in $EnvVars.Keys) {
-    $previous[$k] = [System.Environment]::GetEnvironmentVariable($k)
-    [System.Environment]::SetEnvironmentVariable($k, [string]$EnvVars[$k])
-  }
-  try {
-    $proc = Start-Process -FilePath $FilePath -ArgumentList $ArgumentList `
-      -WorkingDirectory $RepoRoot -RedirectStandardOutput $outFile -RedirectStandardError $errFile `
-      -NoNewWindow -PassThru
-    $proc.WaitForExit()
-    $exitCode = $proc.ExitCode
-  } finally {
-    foreach ($k in $EnvVars.Keys) {
-      [System.Environment]::SetEnvironmentVariable($k, $previous[$k])
-    }
-  }
+  # Start-Process flattens ArgumentList back into one command line and lets
+  # Windows re-tokenize it, corrupting paths with spaces. ArgumentList on
+  # ProcessStartInfo preserves every argv token as an independent value.
+  $psi = [System.Diagnostics.ProcessStartInfo]::new()
+  $psi.FileName = $FilePath
+  $psi.WorkingDirectory = $RepoRoot
+  $psi.UseShellExecute = $false
+  $psi.CreateNoWindow = $true
+  $psi.RedirectStandardOutput = $true
+  $psi.RedirectStandardError = $true
+  foreach ($arg in $ArgumentList) { [void]$psi.ArgumentList.Add([string]$arg) }
+  foreach ($k in $EnvVars.Keys) { $psi.Environment[$k] = [string]$EnvVars[$k] }
+
+  $proc = [System.Diagnostics.Process]::new()
+  $proc.StartInfo = $psi
+  [void]$proc.Start()
+  $stdoutMemory = [IO.MemoryStream]::new()
+  $stderrMemory = [IO.MemoryStream]::new()
+  $stdoutCopy = $proc.StandardOutput.BaseStream.CopyToAsync($stdoutMemory)
+  $stderrCopy = $proc.StandardError.BaseStream.CopyToAsync($stderrMemory)
+  $proc.WaitForExit()
+  [System.Threading.Tasks.Task]::WaitAll(@($stdoutCopy, $stderrCopy))
+  $exitCode = $proc.ExitCode
+  $stdoutBytes = $stdoutMemory.ToArray()
+  $stderrBytes = $stderrMemory.ToArray()
+  [IO.File]::WriteAllBytes($outFile, $stdoutBytes)
+  [IO.File]::WriteAllBytes($errFile, $stderrBytes)
+  $proc.Dispose()
+  $stdoutMemory.Dispose()
+  $stderrMemory.Dispose()
 
   # Deliberately plain, unambiguous direct assignments (never an if/else used
   # as an expression) -- PowerShell's pipeline-style value capture can unroll
   # an empty array result to $null, which would silently corrupt the
   # byte-exact comparisons this file relies on (W03/W08/Assert-BytesEqual).
-  $stdoutBytes = [byte[]]@()
-  if (Test-Path $outFile) { $stdoutBytes = [IO.File]::ReadAllBytes($outFile) }
-  $stderrBytes = [byte[]]@()
-  if (Test-Path $errFile) { $stderrBytes = [IO.File]::ReadAllBytes($errFile) }
+  $stdoutBytes = [byte[]]$stdoutBytes
+  $stderrBytes = [byte[]]$stderrBytes
   return [pscustomobject]@{
     ExitCode     = $exitCode
     Stdout       = [System.Text.Encoding]::UTF8.GetString($stdoutBytes)
@@ -271,6 +313,115 @@ function Invoke-ChildProcess {
     OutFile      = $outFile
     ErrFile      = $errFile
   }
+}
+
+$script:TargetBindingIds = @{}
+$script:GrantMintScript = @'
+const fs = require('fs');
+const crypto = require('crypto');
+const rll = require(process.argv[1]);
+const rc = require(process.argv[2]);
+const projectRoot = process.argv[3];
+const subcommand = process.argv[4];
+const role = process.argv[5];
+const existingTargetBindingId = process.argv[6] === '-' ? null : process.argv[6];
+const rest = process.argv.slice(7);
+const flag = (name) => { const i = rest.indexOf(name); return i >= 0 && i + 1 < rest.length ? rest[i + 1] : undefined; };
+const canonicalIso = (ms) => new Date(ms).toISOString().replace(/\.\d{3}Z$/, 'Z');
+const frozenNow = () => {
+  const base = Date.parse(process.env.RUNTIME_CONSULTATION_FAKE_CLOCK || '2025-01-01T00:00:00.000Z');
+  const advance = Number.parseInt(process.env.RUNTIME_CONSULTATION_FAKE_CLOCK_ADVANCE_MS || '0', 10);
+  return canonicalIso(base + (Number.isFinite(advance) && advance > 0 ? advance : 0));
+};
+const rewrite = (recordPath, ttlMs, pinCreated) => {
+  const record = JSON.parse(fs.readFileSync(recordPath, 'utf8'));
+  const realCreated = Date.parse(record.created_at);
+  const frozen = Date.parse(frozenNow());
+  record.created_at = pinCreated ? canonicalIso(frozen) : canonicalIso(Math.min(realCreated, frozen));
+  record.expiry = canonicalIso((pinCreated ? frozen : Math.max(realCreated, frozen)) + ttlMs);
+  fs.writeFileSync(recordPath, JSON.stringify(record));
+};
+const requester = new Set(['root-init','root-validate','publish-blob','publish-request','dispatch','record-delivery','takeover','await-result','accept-result','transaction-ack','cancel','worker-stop','cleanup','validate']);
+const target = new Set(['claim','lease-heartbeat','publish-result','worker-stop-ack']);
+if (!requester.has(subcommand) && !target.has(subcommand)) process.exit(4);
+const worktreeId = rll.computeWorktreeId(projectRoot);
+const plan = rll.discoverPlan(projectRoot);
+if (!plan.ok) throw new Error('discoverPlan failed: ' + JSON.stringify(plan));
+const argvDigest = rc.sha256String(rc.canonicalJSONStringify(rest));
+const fixed = rest.includes('--fixed-clock');
+let binding;
+let authority;
+let requestId = null;
+let attemptId = null;
+let leaseEpoch = null;
+let flagName;
+if (requester.has(subcommand)) {
+  authority = 'requester'; flagName = '--requester-binding';
+  const identity = { ok: true, provider: 'codex-supervisor', runtime_session_key: 'ps1-windows-harness-session' };
+  const created = rll.createRequesterBinding(projectRoot, identity, 'ps1-windows-harness-agent', role, worktreeId, plan.planDigest, 3600);
+  if (!created.ok) throw new Error('createRequesterBinding failed: ' + JSON.stringify(created));
+  binding = created.binding;
+  if (fixed) rewrite(rll.requesterBindingPathFor(projectRoot, binding.binding_id), 100 * 365 * 24 * 3600 * 1000, false);
+  const scope = rc.resolveRequesterGrantScope(subcommand, {
+    'coordination-root': flag('--coordination-root'), request: flag('--request'), kind: flag('--kind'),
+  });
+  if (scope.ok) { requestId = scope.requestId; attemptId = scope.attemptId; leaseEpoch = scope.leaseEpoch; }
+} else {
+  authority = 'target'; flagName = '--target-binding';
+  if (existingTargetBindingId) {
+    const checked = rll.validateRoleActorBindingFor(projectRoot, existingTargetBindingId, role, worktreeId, plan.planDigest);
+    if (!checked.ok) throw new Error('validateRoleActorBindingFor failed: ' + JSON.stringify(checked));
+    binding = checked.binding;
+  } else {
+    const created = rll.createRoleActorBinding(projectRoot, role, worktreeId, plan.planDigest, crypto.randomBytes(16).toString('hex'), 60);
+    if (!created.ok) throw new Error('createRoleActorBinding failed: ' + JSON.stringify(created));
+    binding = created.binding;
+  }
+  if (fixed) rewrite(rll.roleActorBindingPathFor(projectRoot, binding.binding_id), 100 * 365 * 24 * 3600 * 1000, false);
+  requestId = subcommand === 'worker-stop-ack' ? null : flag('--request');
+}
+const minted = rll.mintRoleCommandGrant(projectRoot, binding, authority, subcommand, argvDigest, requestId, attemptId, leaseEpoch);
+if (!minted.ok) throw new Error('mintRoleCommandGrant failed: ' + JSON.stringify(minted));
+if (fixed) rewrite(rll.roleCommandGrantPathFor(projectRoot, minted.grantId), 30000, true);
+process.stdout.write(JSON.stringify({ grantId: minted.grantId, flagName, bindingId: binding.binding_id }));
+'@
+
+function Resolve-ProjectRootFromCliArgs {
+  param([Parameter(Mandatory)][string[]]$CliArgs)
+  $idx = [Array]::IndexOf($CliArgs, '--coordination-root')
+  if ($idx -lt 0 -or $idx + 1 -ge $CliArgs.Count) { return $null }
+  $probe = [IO.Path]::GetFullPath($CliArgs[$idx + 1])
+  while (-not (Test-Path -LiteralPath $probe)) {
+    $parent = Split-Path -Parent $probe
+    if (-not $parent -or $parent -eq $probe) { return $null }
+    $probe = $parent
+  }
+  $gitRoot = & git -C $probe rev-parse --show-toplevel 2>$null
+  $gitExit = $LASTEXITCODE
+  if ($gitExit -ne 0 -or -not $gitRoot) { return $null }
+  return ([IO.Path]::GetFullPath(([string]$gitRoot).Trim()))
+}
+
+function Add-OneShotGrant {
+  param([Parameter(Mandatory)][string[]]$CliArgs, [hashtable]$EnvVars = @{})
+  if ($CliArgs.Count -eq 0) { return $CliArgs }
+  $requesterCommands = @('root-init','root-validate','publish-blob','publish-request','dispatch','record-delivery','takeover','await-result','accept-result','transaction-ack','cancel','worker-stop','cleanup','validate')
+  $targetCommands = @('claim','lease-heartbeat','publish-result','worker-stop-ack')
+  $command = $CliArgs[0]
+  if (($requesterCommands -notcontains $command) -and ($targetCommands -notcontains $command)) { return $CliArgs }
+  $projectRoot = Resolve-ProjectRootFromCliArgs -CliArgs $CliArgs
+  if (-not $projectRoot) { throw "unable to resolve git project root for grant: $($CliArgs -join ' ')" }
+  $role = 'arch-testing'
+  $roleIdx = [Array]::IndexOf($CliArgs, '--role')
+  if ($roleIdx -ge 0 -and $roleIdx + 1 -lt $CliArgs.Count) { $role = $CliArgs[$roleIdx + 1] }
+  $cacheKey = "$projectRoot|$role"
+  $existing = '-'
+  if ($targetCommands -contains $command -and $script:TargetBindingIds.ContainsKey($cacheKey)) { $existing = $script:TargetBindingIds[$cacheKey] }
+  $mint = Invoke-ChildProcess -FilePath 'node' -ArgumentList (@('-e', $script:GrantMintScript, $RllImplPath, $ImplPath, $projectRoot, $command, $role, $existing) + $CliArgs[1..($CliArgs.Count - 1)]) -EnvVars (Get-DefaultCapabilityEnv -Extra $EnvVars)
+  if ($mint.ExitCode -ne 0) { throw "grant mint failed for $command`: $($mint.Stderr)" }
+  $grant = $mint.Stdout | ConvertFrom-Json -ErrorAction Stop
+  if ($targetCommands -contains $command) { $script:TargetBindingIds[$cacheKey] = $grant.bindingId }
+  return @($CliArgs + @([string]$grant.flagName, [string]$grant.grantId))
 }
 
 function Get-DefaultCapabilityEnv {
@@ -284,7 +435,8 @@ function Get-DefaultCapabilityEnv {
 # pwsh child process -- the primary entrypoint under test for W01-W07a/W09.
 function Invoke-Wrapper {
   param([Parameter(Mandatory)][string[]]$CliArgs, [hashtable]$EnvVars = @{})
-  $argList = @('-NoLogo', '-NoProfile', '-NonInteractive', '-File', $Ps1WrapperPath) + $CliArgs
+  $grantedArgs = Add-OneShotGrant -CliArgs $CliArgs -EnvVars $EnvVars
+  $argList = @('-NoLogo', '-NoProfile', '-NonInteractive', '-File', $Ps1WrapperPath) + $grantedArgs
   return Invoke-ChildProcess -FilePath 'pwsh' -ArgumentList $argList -EnvVars $EnvVars
 }
 
@@ -292,7 +444,8 @@ function Invoke-Wrapper {
 # W11/W12, which race two NODE processes per this task's own dispatch wording).
 function Invoke-NodeDirect {
   param([Parameter(Mandatory)][string[]]$CliArgs, [hashtable]$EnvVars = @{})
-  return Invoke-ChildProcess -FilePath 'node' -ArgumentList (@($ImplPath) + $CliArgs) -EnvVars $EnvVars
+  $grantedArgs = Add-OneShotGrant -CliArgs $CliArgs -EnvVars $EnvVars
+  return Invoke-ChildProcess -FilePath 'node' -ArgumentList (@($ImplPath) + $grantedArgs) -EnvVars $EnvVars
 }
 
 # Invokes scripts/sh/runtime-consultation.sh via bash (Git for Windows' bash.exe,
@@ -305,8 +458,135 @@ function Invoke-NodeDirect {
 # uncertainty note).
 function Invoke-ShWrapperViaBash {
   param([Parameter(Mandatory)][string[]]$CliArgs, [hashtable]$EnvVars = @{})
-  $shWrapperFwd = ConvertTo-ForwardSlashPath -Path $ShWrapperPath
-  return Invoke-ChildProcess -FilePath 'bash' -ArgumentList (@($shWrapperFwd) + $CliArgs) -EnvVars $EnvVars
+  $shWrapperFwd = ConvertTo-GitBashPath -Path $ShWrapperPath
+  $grantedArgs = Add-OneShotGrant -CliArgs $CliArgs -EnvVars $EnvVars
+  return Invoke-ChildProcess -FilePath $BashPath -ArgumentList (@($shWrapperFwd) + $grantedArgs) -EnvVars $EnvVars
+}
+
+function New-SupervisorStartAction {
+  param(
+    [Parameter(Mandatory)][string]$ProjectRoot,
+    [Parameter(Mandatory)][string]$Role,
+    [Parameter(Mandatory)][string]$PrivateTemp
+  )
+  $scriptText = @'
+const { spawnSync } = require('child_process');
+const rll = require(process.argv[1]);
+const projectRoot = process.argv[2];
+const role = process.argv[3];
+const contextProviderGate = process.argv[4];
+const identity = { ok: true, provider: 'claude-hook', runtime_session_key: 'ps1-w07b-session' };
+const worktreeId = rll.computeWorktreeId(projectRoot);
+const plan = rll.discoverPlan(projectRoot);
+if (!plan.ok) throw new Error('discoverPlan failed: ' + JSON.stringify(plan));
+const binding = rll.createMainOrchestratorBinding(projectRoot, identity, worktreeId, plan.planDigest, 600);
+if (!binding.ok) throw new Error('createMainOrchestratorBinding failed: ' + JSON.stringify(binding));
+const crypto = require('crypto');
+const argvDigest = crypto.createHash('sha256').update(Buffer.from('ensure:' + role, 'utf8')).digest('hex');
+const grant = rll.mintLifecycleCommandGrant(projectRoot, binding.binding, argvDigest, role, 'ensure', 'main-orchestrator', 'orchestrator', 'normal', null);
+if (!grant.ok) throw new Error('mintLifecycleCommandGrant failed: ' + JSON.stringify(grant));
+const capabilityDiagnostic = {
+  manifest: rll.getCapabilityManifest(projectRoot),
+  startability: rll.resolveSupervisorStartability(projectRoot, 'codex-app-server'),
+  testBackend: process.env.RUNTIME_ROLE_LIFECYCLE_TEST_BACKEND || null,
+};
+const run = spawnSync(process.execPath, [process.argv[1], 'ensure', '--project-root', projectRoot, '--role', role, '--lifecycle-binding', grant.grantId], {
+  encoding: 'utf8',
+  env: Object.assign({}, process.env, {
+    NODE_ENV: 'test',
+    RUNTIME_ROLE_LIFECYCLE_TEST_CAPABILITY: process.env.RUNTIME_ROLE_LIFECYCLE_TEST_CAPABILITY,
+    RUNTIME_ROLE_LIFECYCLE_FAKE_CAPABILITIES: JSON.stringify(['codex-app-server']),
+    CODEX_CLI_PATH: process.execPath,
+  }),
+});
+if (run.status !== 0) throw new Error('ensure failed: ' + run.stdout + run.stderr + ' diagnostics=' + JSON.stringify(capabilityDiagnostic));
+const result = JSON.parse(run.stdout.trim().split(/\r?\n/).pop());
+const action = result.actions.find((candidate) => candidate.kind === 'supervisor-start');
+if (!action) throw new Error('ensure returned no supervisor-start action: ' + run.stdout);
+const hookInput = {
+  tool_name: 'Bash',
+  tool_input: {
+    command: action.payload.bridge_command,
+    run_in_background: false,
+    description: 'W07b real host-executor admission',
+  },
+  session_id: identity.runtime_session_key,
+  agent_type: '',
+  agent_id: '',
+};
+const hook = spawnSync(process.execPath, [contextProviderGate], {
+  input: JSON.stringify(hookInput),
+  encoding: 'utf8',
+  env: Object.assign({}, process.env, {
+    CLAUDE_PROJECT_DIR: projectRoot,
+    CLAUDE_WAVE_SLUG: '',
+  }),
+});
+if (hook.status !== 0) throw new Error('context-provider gate failed: ' + hook.stdout + hook.stderr);
+const hookLines = hook.stdout.trim().split(/\r?\n/).filter(Boolean);
+const hookBody = JSON.parse(hookLines[hookLines.length - 1]);
+const decision = hookBody && hookBody.hookSpecificOutput;
+if (!decision || decision.permissionDecision !== 'allow') {
+  throw new Error('context-provider gate did not admit supervisor start: ' + hook.stdout + hook.stderr);
+}
+if (!decision.updatedInput || decision.updatedInput.command !== action.payload.bridge_command || decision.updatedInput.run_in_background !== true) {
+  throw new Error('context-provider gate returned an invalid host-executor rewrite: ' + hook.stdout);
+}
+process.stdout.write(JSON.stringify(action));
+'@
+  $env = @{
+    NODE_ENV = 'test'
+    NODE_OPTIONS = "--require=$PrivateRegistryPreloadPath"
+    ANDROID_COMMON_DOC_TEST_PRIVATE_REGISTRY_ROOT = $PrivateTemp
+    RUNTIME_ROLE_LIFECYCLE_TEST_CAPABILITY = 'ps1-w07b-lifecycle-capability'
+    RUNTIME_ROLE_LIFECYCLE_TEST_BACKEND = 'deterministic-app-server-v1'
+    RUNTIME_ROLE_LIFECYCLE_FAKE_CAPABILITIES = '["codex-app-server"]'
+    TEMP = $PrivateTemp
+    TMP = $PrivateTemp
+    TMPDIR = $PrivateTemp
+  }
+  $mint = Invoke-ChildProcess -FilePath 'node' -ArgumentList @(
+    '-e', $scriptText, $RllImplPath, $ProjectRoot, $Role, $ContextProviderGatePath
+  ) -EnvVars $env
+  if ($mint.ExitCode -ne 0) { throw "unable to mint real supervisor-start action: $($mint.Stderr)" }
+  return ($mint.Stdout | ConvertFrom-Json -DateKind String -ErrorAction Stop)
+}
+
+function Start-CapturedProcess {
+  param([Parameter(Mandatory)][string]$FilePath, [Parameter(Mandatory)][string[]]$ArgumentList, [hashtable]$EnvVars = @{})
+  $psi = [System.Diagnostics.ProcessStartInfo]::new()
+  $psi.FileName = $FilePath
+  $psi.WorkingDirectory = $RepoRoot
+  $psi.UseShellExecute = $false
+  $psi.CreateNoWindow = $true
+  $psi.RedirectStandardOutput = $true
+  $psi.RedirectStandardError = $true
+  foreach ($arg in $ArgumentList) { [void]$psi.ArgumentList.Add([string]$arg) }
+  foreach ($k in $EnvVars.Keys) { $psi.Environment[$k] = [string]$EnvVars[$k] }
+  $process = [System.Diagnostics.Process]::new()
+  $process.StartInfo = $psi
+  [void]$process.Start()
+  return [pscustomobject]@{ Process = $process; Stdout = $process.StandardOutput.ReadToEndAsync(); Stderr = $process.StandardError.ReadToEndAsync() }
+}
+
+function New-PublishedRequestFixture {
+  param([Parameter(Mandatory)][string]$Suffix, [string]$Question = 'Windows race fixture')
+  $gitRoot = New-GitFixtureRoot -Suffix $Suffix
+  $coordRoot = Join-Path $gitRoot '.planning\coordination'
+  $capEnv = Get-DefaultCapabilityEnv
+  $rInit = Invoke-Wrapper -CliArgs @('root-init', '--coordination-root', $coordRoot) -EnvVars $capEnv
+  if ($rInit.ExitCode -ne 0) { throw "fixture root-init failed: $($rInit.Stdout) $($rInit.Stderr)" }
+  $planPath = New-PlanFixtureFile -GitRoot $gitRoot -WaveSlug $Suffix
+  $bundlePath = Join-Path $gitRoot ".planning\subject-bundle-$Suffix.json"
+  New-SubjectBundleManifestFile -Path $bundlePath | Out-Null
+  $intent = New-IntentBase64Url -TargetRole 'arch-testing' -Question $Question -ExpectedResultKind 'PS1_WINDOWS_FIXTURE' -Expiry (Get-IsoTimestamp -OffsetSeconds 1800)
+  $rPublish = Invoke-Wrapper -CliArgs @(
+    'publish-request', '--coordination-root', $coordRoot, '--plan', $planPath,
+    '--subject-bundle', $bundlePath, '--intent', $intent
+  ) -EnvVars $capEnv
+  if ($rPublish.ExitCode -ne 0) { throw "fixture publish-request failed: $($rPublish.Stdout) $($rPublish.Stderr)" }
+  $parsed = Assert-CliResult -Stdout $rPublish.Stdout -ExpectedStatus 'SUCCESS' -ExpectedDetail 'NONE'
+  return [pscustomobject]@{ GitRoot = $gitRoot; CoordinationRoot = $coordRoot; RequestPath = $parsed.artifact_ref; CapabilityEnv = $capEnv }
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -372,7 +652,7 @@ function Assert-StdoutSingleJsonLine {
 # Asserts $StderrBytes never carries a bare JSON object (PLAN.md ~L779, W04).
 # Empty stderr trivially passes.
 function Assert-StderrNoBareJson {
-  param([Parameter(Mandatory)][byte[]]$StderrBytes)
+  param([Parameter(Mandatory)][AllowEmptyCollection()][byte[]]$StderrBytes)
   if ($StderrBytes.Length -eq 0) { return }
   $text = [System.Text.Encoding]::UTF8.GetString($StderrBytes)
   if ([string]::IsNullOrWhiteSpace($text)) { return }
@@ -401,6 +681,7 @@ function Assert-BytesEqual {
 
 function Invoke-Case {
   param([Parameter(Mandatory)][string]$Name, [Parameter(Mandatory)][scriptblock]$Body)
+  if ($Name -notlike $CasePattern) { return }
   Write-Host "--- RUNNING: $Name ---"
   try {
     & $Body
@@ -433,7 +714,7 @@ Invoke-Case -Name 'W01 wrapper: root-init then root-validate succeed against a -
   # the suffix itself still embeds the spaces this case exists to prove.
   $rootWithSpaces = New-GitFixtureRoot -Suffix 'w01 coordination root with spaces'
   $r1 = Invoke-Wrapper -CliArgs @('root-init', '--coordination-root', $rootWithSpaces) -EnvVars (Get-DefaultCapabilityEnv)
-  Assert-True ($r1.ExitCode -eq 0) "root-init exit code expected 0, got $($r1.ExitCode); stderr=$($r1.Stderr)"
+  Assert-True ($r1.ExitCode -eq 0) "root-init exit code expected 0, got $($r1.ExitCode); stdout=$($r1.Stdout); stderr=$($r1.Stderr)"
   Assert-CliResult -Stdout $r1.Stdout -ExpectedStatus 'SUCCESS' -ExpectedDetail 'NONE' | Out-Null
   Assert-StdoutSingleJsonLine -StdoutBytes $r1.StdoutBytes
   Assert-StderrNoBareJson -StderrBytes $r1.StderrBytes
@@ -528,15 +809,12 @@ Invoke-Case -Name 'W06 wrapper: success/validation-error/timeout/unknown-subcomm
   $rHappy = Invoke-Wrapper -CliArgs @('root-init', '--coordination-root', $freshRoot) -EnvVars (Get-DefaultCapabilityEnv)
   Assert-CliResult -Stdout $rHappy.Stdout -ExpectedStatus 'SUCCESS' -ExpectedDetail 'NONE' | Out-Null
 
-  # (b) malformed/unresolvable request -- `claim` against a --request path whose
-  # request.json does not exist. readRequestForTxnOrCorrelationInvalid() throws
-  # CORRELATION_INVALID (INVALID/rc3) BEFORE any git call is reached, so no
-  # git-backed root is required for this sub-case.
-  $missingReqPath = Join-Path (New-Ps1TestTempDir -Suffix 'w06-missing-req') 'transactions\nope\request.json'
-  $rBad = Invoke-Wrapper -CliArgs @(
-    'claim', '--coordination-root', $freshRoot, '--request', $missingReqPath, '--role', 'w06-role'
-  ) -EnvVars (Get-DefaultCapabilityEnv)
-  Assert-CliResult -Stdout $rBad.Stdout -ExpectedStatus 'INVALID' -ExpectedDetail 'CORRELATION_INVALID' | Out-Null
+  # (b) validation error -- a missing root lexically inside the same git
+  # worktree reaches root-validate's confinement checks and deterministically
+  # returns INVALID/SECURITY_INVALID.
+  $missingRoot = Join-Path $freshRoot 'missing-validation-root'
+  $rBad = Invoke-Wrapper -CliArgs @('root-validate', '--coordination-root', $missingRoot) -EnvVars (Get-DefaultCapabilityEnv)
+  Assert-CliResult -Stdout $rBad.Stdout -ExpectedStatus 'INVALID' -ExpectedDetail 'SCHEMA_INVALID' | Out-Null
 
   # (c) forced deadline-exceeded via the fake-clock advance -- NEVER a real
   # sleep. await-result's deadlineBaseMs is FIXED_CLOCK_BASE_MS when
@@ -544,11 +822,10 @@ Invoke-Case -Name 'W06 wrapper: success/validation-error/timeout/unknown-subcomm
   # FIXED_CLOCK_BASE_MS+FIXED_CLOCK_ADVANCE_MS. Advancing far past the
   # 1-second --timeout forces the very first loop iteration's deadline check
   # to already be exceeded -- zero real elapsed wall-clock time.
-  $timeoutReqDir = New-Ps1TestTempDir -Suffix 'w06-timeout-req'
-  $timeoutReqPath = Join-Path $timeoutReqDir 'request.json'
-  '{}' | Set-Content -NoNewline -Encoding utf8 -Path $timeoutReqPath
+  $timeoutFixture = New-PublishedRequestFixture -Suffix 'w06-timeout' -Question 'W06 forced timeout'
+  $timeoutReqPath = $timeoutFixture.RequestPath
   $rTimeout = Invoke-Wrapper -CliArgs @(
-    'await-result', '--coordination-root', $freshRoot, '--request', $timeoutReqPath, '--timeout', '1', '--fixed-clock'
+    'await-result', '--coordination-root', $timeoutFixture.CoordinationRoot, '--request', $timeoutReqPath, '--timeout', '1', '--fixed-clock'
   ) -EnvVars (Get-DefaultCapabilityEnv -Extra @{ RUNTIME_CONSULTATION_FAKE_CLOCK_ADVANCE_MS = '999999999' })
   Assert-CliResult -Stdout $rTimeout.Stdout -ExpectedStatus 'TIMEOUT' -ExpectedDetail 'DEADLINE_EXCEEDED' | Out-Null
 
@@ -643,34 +920,38 @@ Invoke-Case -Name 'W07a wrapper: same-worktree publish->dispatch->claim->publish
 # is meaningful -- the real determinism proof, never a normalization fallback.
 # ══════════════════════════════════════════════════════════════════════════
 
-Invoke-Case -Name 'W08 node vs sh-wrapper(bash) vs ps1-wrapper equivalence: root-init --fixed-ids --fixed-clock produces byte-identical cli-result/v1 stdout via all three entrypoints' -Body {
-  # WP3 root-confinement: root-init now requires a git-worktree-confined root
-  # (idempotent across all three entrypoints below, same as RCR-root-3 proves
-  # for the node CLI directly -- stdout shape is unaffected: {artifact_ref}).
-  $sharedRoot = New-GitFixtureRoot -Suffix 'w08-coordination'
+Invoke-Case -Name 'W08 node vs sh-wrapper(bash) vs ps1-wrapper equivalence: publish-request fixed IDs/clock is byte-identical' -Body {
+  $gitRoot = New-GitFixtureRoot -Suffix 'w08-publish-request'
+  $sharedRoot = Join-Path $gitRoot '.planning\coordination'
   $capEnv = Get-DefaultCapabilityEnv
-
-  $rNode = Invoke-NodeDirect -CliArgs @('root-init', '--coordination-root', $sharedRoot, '--fixed-ids', '--fixed-clock') -EnvVars $capEnv
-  Assert-True ($rNode.ExitCode -eq 0) "node-direct root-init failed: $($rNode.Stdout) $($rNode.Stderr)"
-  Assert-CliResult -Stdout $rNode.Stdout -ExpectedStatus 'SUCCESS' -ExpectedDetail 'NONE' | Out-Null
-
-  # Forward slashes for the bash/.sh leg only (script path + coordination-root
-  # value) -- sidesteps MSYS/Git-Bash's own argv re-splitting/backslash-
-  # escaping conventions. Node's path.resolve() normalizes either separator to
-  # the same canonical Windows absolute form, so artifact_ref still matches
-  # byte-for-byte across all three entrypoints (see this file's header note).
+  $rInit = Invoke-Wrapper -CliArgs @('root-init', '--coordination-root', $sharedRoot) -EnvVars $capEnv
+  Assert-True ($rInit.ExitCode -eq 0) "W08 root-init failed: $($rInit.Stdout) $($rInit.Stderr)"
+  $planPath = New-PlanFixtureFile -GitRoot $gitRoot -WaveSlug 'ps1-w08'
+  $bundlePath = Join-Path $gitRoot '.planning\subject-bundle-w08.json'
+  New-SubjectBundleManifestFile -Path $bundlePath | Out-Null
+  $intent = New-IntentBase64Url -TargetRole 'arch-testing' -Question 'W08 deterministic request' -ExpectedResultKind 'PS1_W08' -Expiry '2025-01-01T00:10:00Z'
   $sharedRootFwd = ConvertTo-ForwardSlashPath -Path $sharedRoot
+  $planFwd = ConvertTo-ForwardSlashPath -Path $planPath
+  $bundleFwd = ConvertTo-ForwardSlashPath -Path $bundlePath
+  $commonArgs = @(
+    'publish-request', '--coordination-root', $sharedRootFwd, '--plan', $planFwd,
+    '--subject-bundle', $bundleFwd, '--intent', $intent, '--fixed-ids', '--fixed-clock'
+  )
+
+  $rNode = Invoke-NodeDirect -CliArgs $commonArgs -EnvVars $capEnv
+  Assert-True ($rNode.ExitCode -eq 0) "node-direct publish-request failed: $($rNode.Stdout) $($rNode.Stderr)"
+  Assert-CliResult -Stdout $rNode.Stdout -ExpectedStatus 'SUCCESS' -ExpectedDetail 'NONE' | Out-Null
   $rSh = $null
   try {
-    $rSh = Invoke-ShWrapperViaBash -CliArgs @('root-init', '--coordination-root', $sharedRootFwd, '--fixed-ids', '--fixed-clock') -EnvVars $capEnv
+    $rSh = Invoke-ShWrapperViaBash -CliArgs $commonArgs -EnvVars $capEnv
   } catch {
     throw "bash was not invokable for the .sh wrapper leg of W08 (expected Git for Windows' bash.exe on PATH on windows-latest) -- underlying error: $($_.Exception.Message)"
   }
-  Assert-True ($rSh.ExitCode -eq 0) "sh-wrapper(bash) root-init failed: $($rSh.Stdout) $($rSh.Stderr)"
+  Assert-True ($rSh.ExitCode -eq 0) "sh-wrapper(bash) publish-request failed: $($rSh.Stdout) $($rSh.Stderr)"
   Assert-CliResult -Stdout $rSh.Stdout -ExpectedStatus 'SUCCESS' -ExpectedDetail 'NONE' | Out-Null
 
-  $rPs1 = Invoke-Wrapper -CliArgs @('root-init', '--coordination-root', $sharedRoot, '--fixed-ids', '--fixed-clock') -EnvVars $capEnv
-  Assert-True ($rPs1.ExitCode -eq 0) "ps1-wrapper root-init failed: $($rPs1.Stdout) $($rPs1.Stderr)"
+  $rPs1 = Invoke-Wrapper -CliArgs $commonArgs -EnvVars $capEnv
+  Assert-True ($rPs1.ExitCode -eq 0) "ps1-wrapper publish-request failed: $($rPs1.Stdout) $($rPs1.Stderr)"
   Assert-CliResult -Stdout $rPs1.Stdout -ExpectedStatus 'SUCCESS' -ExpectedDetail 'NONE' | Out-Null
 
   Assert-BytesEqual -A $rNode.StdoutBytes -B $rSh.StdoutBytes -Message 'node vs sh-wrapper(bash) stdout not byte-identical'
@@ -681,10 +962,8 @@ Invoke-Case -Name 'W08 node vs sh-wrapper(bash) vs ps1-wrapper equivalence: root
 # ══════════════════════════════════════════════════════════════════════════
 # W09 root/registry owner-confined ACL (PLAN.md ~L1504) -- via the .ps1
 # wrapper for root-init/root-validate; the ACL allowlist assertion itself is
-# performed directly by THIS test via Get-Acl (see this file's own report for
-# the load-bearing caveat: cmdRootInit's chmod is a documented Windows no-op
-# and cmdRootValidate performs NO ACL check at all in the current WP1/WP2
-# core -- the real confinement proof here is entirely this pwsh-side check).
+# performed independently by THIS test via Get-Acl after production's own
+# SID/DACL validation succeeds.
 # ══════════════════════════════════════════════════════════════════════════
 
 Invoke-Case -Name 'W09 wrapper: root/registry owner-confined ACL contains only the frozen allowlisted SIDs' -Body {
@@ -703,8 +982,12 @@ Invoke-Case -Name 'W09 wrapper: root/registry owner-confined ACL contains only t
   # genuine, informative failure rather than being silently allowlisted away.
   $allowedSids = @($currentUserSid, 'S-1-5-18', 'S-1-5-32-544')
 
-  $acl = Get-Acl -Path $root
+  $acl = Get-Acl -LiteralPath $root
+  $ownerSid = ([System.Security.Principal.NTAccount]::new($acl.Owner)).Translate([System.Security.Principal.SecurityIdentifier]).Value
+  Assert-True ($ownerSid -eq $currentUserSid) "ACL owner on $root is not the current user SID"
+  Assert-True ($acl.AreAccessRulesProtected -eq $true) "ACL on $root still inherits access rules"
   $violations = @()
+  $currentUserFullControl = $false
   foreach ($ace in $acl.Access) {
     $sid = $null
     try {
@@ -712,11 +995,17 @@ Invoke-Case -Name 'W09 wrapper: root/registry owner-confined ACL contains only t
     } catch {
       $sid = $ace.IdentityReference.Value
     }
-    if ($allowedSids -notcontains $sid) {
+    if ($ace.AccessControlType -ne [System.Security.AccessControl.AccessControlType]::Allow) {
+      $violations += "non-allow ACE: $($ace.IdentityReference) ($sid) $($ace.AccessControlType)"
+    } elseif ($allowedSids -notcontains $sid) {
       $violations += "$($ace.IdentityReference) ($sid)"
+    }
+    if ($sid -eq $currentUserSid -and (($ace.FileSystemRights -band [System.Security.AccessControl.FileSystemRights]::FullControl) -eq [System.Security.AccessControl.FileSystemRights]::FullControl)) {
+      $currentUserFullControl = $true
     }
   }
   Assert-True ($violations.Count -eq 0) "ACL on $root contains non-allowlisted principal(s): $($violations -join '; ')"
+  Assert-True $currentUserFullControl "ACL on $root does not grant current user FullControl"
 
   $rValidate = Invoke-Wrapper -CliArgs @('root-validate', '--coordination-root', $root) -EnvVars $capEnv
   Assert-True ($rValidate.ExitCode -eq 0) "root-validate failed: $($rValidate.Stdout) $($rValidate.Stderr)"
@@ -735,21 +1024,19 @@ function Invoke-TwoRacerNodeProcesses {
   $tag = $script:InvocationCounter
   $out1 = Join-Path $WorkRoot ("racer-{0}-1.out" -f $tag); $err1 = Join-Path $WorkRoot ("racer-{0}-1.err" -f $tag)
   $out2 = Join-Path $WorkRoot ("racer-{0}-2.out" -f $tag); $err2 = Join-Path $WorkRoot ("racer-{0}-2.err" -f $tag)
-  $previous = @{}
-  foreach ($k in $EnvVars.Keys) {
-    $previous[$k] = [System.Environment]::GetEnvironmentVariable($k)
-    [System.Environment]::SetEnvironmentVariable($k, [string]$EnvVars[$k])
-  }
-  try {
-    $p1 = Start-Process -FilePath 'node' -ArgumentList (@($ImplPath) + $CliArgs) -WorkingDirectory $RepoRoot -RedirectStandardOutput $out1 -RedirectStandardError $err1 -NoNewWindow -PassThru
-    $p2 = Start-Process -FilePath 'node' -ArgumentList (@($ImplPath) + $CliArgs) -WorkingDirectory $RepoRoot -RedirectStandardOutput $out2 -RedirectStandardError $err2 -NoNewWindow -PassThru
-    $p1.WaitForExit()
-    $p2.WaitForExit()
-  } finally {
-    foreach ($k in $EnvVars.Keys) { [System.Environment]::SetEnvironmentVariable($k, $previous[$k]) }
-  }
-  $r1 = [pscustomobject]@{ ExitCode = $p1.ExitCode; Stdout = [IO.File]::ReadAllText($out1); Stderr = [IO.File]::ReadAllText($err1) }
-  $r2 = [pscustomobject]@{ ExitCode = $p2.ExitCode; Stdout = [IO.File]::ReadAllText($out2); Stderr = [IO.File]::ReadAllText($err2) }
+  $args1 = Add-OneShotGrant -CliArgs $CliArgs -EnvVars $EnvVars
+  $args2 = Add-OneShotGrant -CliArgs $CliArgs -EnvVars $EnvVars
+  $run1 = Start-CapturedProcess -FilePath 'node' -ArgumentList (@($ImplPath) + $args1) -EnvVars $EnvVars
+  $run2 = Start-CapturedProcess -FilePath 'node' -ArgumentList (@($ImplPath) + $args2) -EnvVars $EnvVars
+  $run1.Process.WaitForExit()
+  $run2.Process.WaitForExit()
+  $stdout1 = $run1.Stdout.GetAwaiter().GetResult(); $stderr1 = $run1.Stderr.GetAwaiter().GetResult()
+  $stdout2 = $run2.Stdout.GetAwaiter().GetResult(); $stderr2 = $run2.Stderr.GetAwaiter().GetResult()
+  [IO.File]::WriteAllText($out1, $stdout1); [IO.File]::WriteAllText($err1, $stderr1)
+  [IO.File]::WriteAllText($out2, $stdout2); [IO.File]::WriteAllText($err2, $stderr2)
+  $r1 = [pscustomobject]@{ ExitCode = $run1.Process.ExitCode; Stdout = $stdout1; Stderr = $stderr1 }
+  $r2 = [pscustomobject]@{ ExitCode = $run2.Process.ExitCode; Stdout = $stdout2; Stderr = $stderr2 }
+  $run1.Process.Dispose(); $run2.Process.Dispose()
   return @($r1, $r2)
 }
 
@@ -761,15 +1048,12 @@ function Invoke-TwoRacerNodeProcesses {
 # ══════════════════════════════════════════════════════════════════════════
 
 Invoke-Case -Name 'W11a two node processes race the same fresh .lock/: exactly one publishes cancel.json, the other observes it already cancelled' -Body {
-  $reqDir = New-Ps1TestTempDir -Suffix 'w11a-req'
-  $reqPath = Join-Path $reqDir 'request.json'
-  '{"request_id":"w11afixturerequest"}' | Set-Content -NoNewline -Encoding utf8 -Path $reqPath
-  $coordRoot = New-Ps1TestTempDir -Suffix 'w11a-coordination'
-  $capEnv = Get-DefaultCapabilityEnv
-
-  # cmdCancel never calls git (unlike cmdClaim/cmdPublishResult/cmdAcceptResult),
-  # so no git-backed fixture root is required for this sub-case.
-  $cliArgs = @('cancel', '--coordination-root', $coordRoot, '--request', $reqPath, '--reason', 'explicit', '--fixed-ids', '--fixed-clock')
+  $fixture = New-PublishedRequestFixture -Suffix 'w11a' -Question 'W11 live-holder race'
+  $reqPath = $fixture.RequestPath
+  $reqDir = Split-Path -Parent $reqPath
+  $coordRoot = $fixture.CoordinationRoot
+  $capEnv = $fixture.CapabilityEnv
+  $cliArgs = @('cancel', '--coordination-root', $coordRoot, '--request', $reqPath, '--reason', 'explicit')
   $racers = Invoke-TwoRacerNodeProcesses -CliArgs $cliArgs -EnvVars $capEnv
 
   $winners = @($racers | Where-Object { $_.ExitCode -eq 0 })
@@ -788,16 +1072,16 @@ Invoke-Case -Name 'W11a two node processes race the same fresh .lock/: exactly o
 }
 
 Invoke-Case -Name 'W11b node: an orphan .lock/ (pre-created, never released) causes a bounded TIMEOUT/STOP, never an age-based reclaim' -Body {
-  $reqDir = New-Ps1TestTempDir -Suffix 'w11b-req'
-  $reqPath = Join-Path $reqDir 'request.json'
-  '{"request_id":"w11bfixturerequest"}' | Set-Content -NoNewline -Encoding utf8 -Path $reqPath
-  $coordRoot = New-Ps1TestTempDir -Suffix 'w11b-coordination'
+  $fixture = New-PublishedRequestFixture -Suffix 'w11b' -Question 'W11 orphan lock'
+  $reqPath = $fixture.RequestPath
+  $reqDir = Split-Path -Parent $reqPath
+  $coordRoot = $fixture.CoordinationRoot
   # Simulates an abandoned/crashed lock holder: pre-create .lock/ ourselves; it
   # is never released by anyone in this test.
   $lockDir = Join-Path $reqDir '.lock'
   New-Item -ItemType Directory -Force -Path $lockDir | Out-Null
 
-  $capEnv = Get-DefaultCapabilityEnv
+  $capEnv = $fixture.CapabilityEnv
   $sw = [System.Diagnostics.Stopwatch]::StartNew()
   $r = Invoke-NodeDirect -CliArgs @('cancel', '--coordination-root', $coordRoot, '--request', $reqPath, '--reason', 'explicit') -EnvVars $capEnv
   $sw.Stop()
@@ -830,34 +1114,16 @@ Invoke-Case -Name 'W11b node: an orphan .lock/ (pre-created, never released) cau
 # ══════════════════════════════════════════════════════════════════════════
 
 Invoke-Case -Name 'W12 two node processes race the no-clobber publish primitive via claim: exactly one wins whole, loser EEXIST/AUTHORITY_INVALID, winner durable at nlink==1' -Body {
-  # cmdClaim calls computeWorktreeId(coordRoot) -- a real git call -- so this
-  # sub-case (unlike W11) needs a git-backed fixture root.
-  $gitRoot = New-GitFixtureRoot -Suffix 'w12-git'
-  $coordRoot = Join-Path $gitRoot '.planning\coordination'
-  $planRoot = Join-Path $coordRoot 'w12fakerepo\w12fakewave\w12fakeplandigest'
-  # The directory name under transactions/ MUST equal the request.json's own
-  # request_id field: validateClaimV1 (used below) independently RE-DERIVES
-  # txnDir as planRoot/transactions/<request_id-from-the-claim-file>, it does
-  # not simply trust wherever cmdClaim's own --request happened to point.
-  $w12RequestId = 'w12reqfixture'
-  $reqDir = Join-Path $planRoot ('transactions\' + $w12RequestId)
-  New-Item -ItemType Directory -Force -Path $reqDir | Out-Null
-  $reqPath = Join-Path $reqDir 'request.json'
-
-  $expiry = Get-IsoTimestamp -OffsetSeconds 1800
-  $fixedHexAttempt = '1' * 64
-  $fixedHexProfileDigest = 'b' * 64
-  $requestFixture = [ordered]@{
-    request_id = $w12RequestId
-    initial_attempt_id = $fixedHexAttempt
-    initial_lease_epoch = 0
-    target_role_profile_digest = $fixedHexProfileDigest
-    expiry = $expiry
-  }
-  ($requestFixture | ConvertTo-Json -Compress -Depth 4) | Set-Content -NoNewline -Encoding utf8 -Path $reqPath
-
-  $capEnv = Get-DefaultCapabilityEnv
-  $cliArgs = @('claim', '--coordination-root', $coordRoot, '--request', $reqPath, '--role', 'w12-racer', '--fixed-ids', '--fixed-clock')
+  $fixture = New-PublishedRequestFixture -Suffix 'w12' -Question 'W12 no-clobber race'
+  $coordRoot = $fixture.CoordinationRoot
+  $reqPath = $fixture.RequestPath
+  $reqDir = Split-Path -Parent $reqPath
+  $requestFixture = Get-Content -Raw -Encoding utf8 -LiteralPath $reqPath | ConvertFrom-Json
+  $fixedHexAttempt = $requestFixture.initial_attempt_id
+  $capEnv = $fixture.CapabilityEnv
+  $dispatch = Invoke-Wrapper -CliArgs @('dispatch', '--coordination-root', $coordRoot, '--request', $reqPath) -EnvVars $capEnv
+  Assert-True ($dispatch.ExitCode -eq 0) "W12 dispatch failed: $($dispatch.Stdout) $($dispatch.Stderr)"
+  $cliArgs = @('claim', '--coordination-root', $coordRoot, '--request', $reqPath, '--role', 'arch-testing')
   $racers = Invoke-TwoRacerNodeProcesses -CliArgs $cliArgs -EnvVars $capEnv
 
   $winners = @($racers | Where-Object { $_.ExitCode -eq 0 })
@@ -879,9 +1145,35 @@ Invoke-Case -Name 'W12 two node processes race the no-clobber publish primitive 
   # independently observable from this external, unsynchronized vantage point
   # -- that would need in-process instrumentation inside the node source,
   # which is out of this single-owned file's scope.
-  $hardlinkOutput = & fsutil hardlink list $claimPath
+  $claimPathNative = [IO.Path]::GetFullPath(([string]$claimPath).Replace('/', '\'))
+  Assert-True (Test-Path -LiteralPath $claimPathNative -PathType Leaf) "winning claim path does not resolve before fsutil: raw=$claimPath native=$claimPathNative"
+  Assert-True ($claimPathNative.Length -gt 260) "W12 canonical claim path did not cross legacy MAX_PATH: length=$($claimPathNative.Length) path=$claimPathNative"
+  $claimsDir = Split-Path -Parent $claimPathNative
+  # fsutil itself still uses legacy path parsing for this subcommand. The
+  # canonical transaction path is intentionally >260 chars, so expose the
+  # same claims directory through one short, verified, temporary junction;
+  # fsutil still enumerates the underlying file's real volume-relative name.
+  $publicRootW12 = [IO.Path]::GetFullPath((Join-Path $env:SystemDrive 'Users\Public'))
+  $junctionPath = [IO.Path]::GetFullPath((Join-Path $publicRootW12 ('w12-' + [Guid]::NewGuid().ToString('N').Substring(0, 12))))
+  Assert-True ((Split-Path -Parent $junctionPath) -eq $publicRootW12) 'W12 junction escaped its exact temporary parent'
+  $hardlinkOutput = @()
+  $hardlinkExit = -1
+  try {
+    New-Item -ItemType Junction -Path $junctionPath -Target $claimsDir -ErrorAction Stop | Out-Null
+    $fsutilClaimPath = Join-Path $junctionPath (Split-Path -Leaf $claimPathNative)
+    $hardlinkOutput = & fsutil hardlink list $fsutilClaimPath 2>&1
+    $hardlinkExit = $LASTEXITCODE
+  } finally {
+    if (Test-Path -LiteralPath $junctionPath) { Remove-Item -LiteralPath $junctionPath -Force -ErrorAction Stop }
+  }
+  Assert-True ($hardlinkExit -eq 0) "fsutil hardlink list failed for $claimPathNative with exit $hardlinkExit`: $($hardlinkOutput -join ' | ')"
   $hardlinkLines = @($hardlinkOutput | Where-Object { $_ -and $_.Trim().Length -gt 0 })
   Assert-True ($hardlinkLines.Count -eq 1) "expected exactly one hard link (nlink==1) for the winning claim file, fsutil reported $($hardlinkLines.Count): $($hardlinkLines -join ' | ')"
+  $expectedClaimPath = $claimPathNative
+  $reportedClaimPath = ([string]$hardlinkLines[0]).Trim()
+  if ($reportedClaimPath.StartsWith('\')) { $reportedClaimPath = ([IO.Path]::GetPathRoot($expectedClaimPath)).TrimEnd('\') + $reportedClaimPath }
+  $reportedClaimPath = [IO.Path]::GetFullPath($reportedClaimPath)
+  Assert-True ([string]::Equals($reportedClaimPath, $expectedClaimPath, [StringComparison]::OrdinalIgnoreCase)) "fsutil's sole hardlink is not the exact winning claim path: expected=$expectedClaimPath actual=$reportedClaimPath"
 
   # Production-consumer cross-check: `validate --kind claim-v1` itself calls
   # assertDurable() (stat.nlink !== 1 => DURABILITY_UNPROVEN) -- if the winning
@@ -894,8 +1186,7 @@ Invoke-Case -Name 'W12 two node processes race the no-clobber publish primitive 
   # No leftover .tmp-owner temp files from either racer (the winner unlinks its
   # own temp after barrier 1; the loser's catch-block unlinks its temp
   # immediately on EEXIST).
-  $claimsDir = Join-Path $reqDir 'claims'
-  $leftoverTemps = @(Get-ChildItem -Path $claimsDir -Filter '*.tmp-owner*' -ErrorAction SilentlyContinue)
+  $leftoverTemps = @(Get-ChildItem -LiteralPath $claimsDir -Filter '*.tmp-owner*' -ErrorAction Stop)
   Assert-True ($leftoverTemps.Count -eq 0) "leftover no-clobber temp file(s) found in $claimsDir : $($leftoverTemps.Name -join ', ')"
 }
 
@@ -906,18 +1197,225 @@ Invoke-Case -Name 'W12 two node processes race the no-clobber publish primitive 
 # faked/worked around.
 # ══════════════════════════════════════════════════════════════════════════
 
-Skip-Case -Name 'W07b same-worktree deterministic app-server/mcp rendezvous (session-run --test-backend deterministic-app-server-v1 + claude-mcp-launch --test-frontend deterministic-mcp-client-v1)' `
-  -Reason 'WP3: requires scripts/lib/runtime-bridge-codex.cjs (session-run/claude-mcp-launch subcommands). Confirmed by reading the full 2857-line scripts/lib/runtime-consultation.cjs: its COMMANDS registry has no session-run/claude-mcp-launch/mcp-serve/runtime-spawn/worker-cleanup/conformance handlers -- that is a separate bridge file this dispatch does not own. W07a above already proves the same-worktree publish->dispatch->claim->publish-result->await-result->accept-result->transaction-ack round trip entirely via the .ps1 wrapper; this sub-case is purely the WP3 deterministic backend-rendezvous mechanism layered on top of it.'
+Invoke-Case -Name 'W07b deterministic backend/frontend attach reuses one supervisor, owner, scheduler and PID identity; replay is rejected' -Body {
+  $gitRoot = New-GitFixtureRoot -Suffix 'w07b-deterministic-bridge'
+  $fixtureLib = Join-Path $gitRoot 'scripts\lib'
+  $fixtureSetupTemplates = Join-Path $gitRoot 'setup\agent-templates'
+  $fixtureClaudeAgents = Join-Path $gitRoot '.claude\agents'
+  New-Item -ItemType Directory -Force -Path $fixtureLib, $fixtureSetupTemplates, $fixtureClaudeAgents | Out-Null
+  Copy-Item -Recurse -Force -Path (Join-Path $RepoRoot 'scripts\lib\*') -Destination $fixtureLib
+  Copy-Item -Recurse -Force -Path (Join-Path $RepoRoot 'setup\agent-templates\*') -Destination $fixtureSetupTemplates
+  Copy-Item -Recurse -Force -Path (Join-Path $RepoRoot '.claude\agents\*') -Destination $fixtureClaudeAgents
+  $fixtureBridgePath = Join-Path $fixtureLib 'runtime-bridge-codex.cjs'
+  $publicRoot = [IO.Path]::GetFullPath((Join-Path $env:SystemDrive 'Users\Public'))
+  $w07bPrivateTemp = [IO.Path]::GetFullPath((Join-Path $publicRoot ('w7-' + [Guid]::NewGuid().ToString('N').Substring(0, 12))))
+  Assert-True ((Split-Path -Parent $w07bPrivateTemp) -eq $publicRoot) 'W07b private temp escaped the intended public parent'
+  New-Item -ItemType Directory -Path $w07bPrivateTemp | Out-Null
+  $coordRoot = Join-Path $gitRoot '.planning\coordination'
+  $capEnv = Get-DefaultCapabilityEnv
+  $rInit = Invoke-Wrapper -CliArgs @('root-init', '--coordination-root', $coordRoot) -EnvVars $capEnv
+  Assert-True ($rInit.ExitCode -eq 0) "W07b root-init failed: $($rInit.Stdout) $($rInit.Stderr)"
 
-Skip-Case -Name 'W10a ACL-insecure (world-SID icacls */S-1-1-0:(OI)(CI)F) rejected fail-closed' `
-  -Reason 'WP3: Windows ACL-rejection logic does not exist yet. UPDATED -- cmdRootValidate now confines the root to its git worktree, rejects a symlinked root path, and checks the POSIX mode is exactly 0700 (WP3 RCR-confine-1..4, cross-platform via git + fs.lstatSync), but performs zero Windows ACL/SID inspection (the mode check is explicitly isPosix-gated and no-ops on win32). Constructing the world-SID icacls fixture now would only prove this test file''s OWN external Get-Acl probe (as W09 above already does for the confined-baseline case); it would not prove root-validate itself rejects an insecure ACL, since root-validate has no such check to exercise. Deferred to WP3 Windows-ACL work in cmdRootValidate.'
+  $planPath = New-PlanFixtureFile -GitRoot $gitRoot -WaveSlug 'ps1-w07b'
+  $bundlePath = Join-Path $gitRoot '.planning\subject-bundle-w07b.json'
+  New-SubjectBundleManifestFile -Path $bundlePath | Out-Null
+  $expiry = Get-IsoTimestamp -OffsetSeconds 600
+  $intent = New-IntentBase64Url -TargetRole 'verifier' -Question 'W07b deterministic frontend attach' -ExpectedResultKind 'PS1_WINDOWS_FIXTURE' -Expiry $expiry
+  $rPublish = Invoke-Wrapper -CliArgs @(
+    'publish-request', '--coordination-root', $coordRoot, '--plan', $planPath,
+    '--subject-bundle', $bundlePath, '--intent', $intent
+  ) -EnvVars $capEnv
+  Assert-True ($rPublish.ExitCode -eq 0) "W07b publish-request failed: $($rPublish.Stdout) $($rPublish.Stderr)"
+  $requestPath = (Assert-CliResult -Stdout $rPublish.Stdout -ExpectedStatus 'SUCCESS' -ExpectedDetail 'NONE').artifact_ref
 
-Skip-Case -Name 'W10b ACL-unverifiable (RUNTIME_CONSULTATION_ACL_PROBE=unverifiable) disables sibling shared-root mode fail-closed' `
-  -Reason 'WP3 UPDATED: cmdRootValidate now reads RUNTIME_CONSULTATION_ACL_PROBE and rejects INVALID/SECURITY_INVALID when it equals "unverifiable" on a win32-effective platform (resolveEffectivePlatform(), the same RUNTIME_CONSULTATION_FORCE_PLATFORM seam Gap#1 uses). This exact wiring is verified on non-Windows via that seam (2 new node --test cases in runtime-consultation-cli.test.js: probe-set -> rejected, probe-unset -> currently succeeds since no real ACL check exists yet). Still skipped HERE because real pwsh/Windows execution remains unavailable in this environment -- the underlying Node logic is proven, the .ps1-level real-Windows proof (this case) is not. Un-skip once real Windows CI can run it.'
+  $action = New-SupervisorStartAction -ProjectRoot $gitRoot -Role 'verifier' -PrivateTemp $w07bPrivateTemp
+  $sessionArgs = @($action.payload.bridge_argv | Select-Object -Skip 1) + @('--test-backend', 'deterministic-app-server-v1')
+  $bridgeEnv = @{
+    NODE_ENV = 'test'
+    NODE_OPTIONS = "--require=$PrivateRegistryPreloadPath"
+    ANDROID_COMMON_DOC_TEST_PRIVATE_REGISTRY_ROOT = $w07bPrivateTemp
+    RUNTIME_BRIDGE_CODEX_TEST_CAPABILITY = 'ps1-w07b-bridge-capability'
+    RUNTIME_CONSULTATION_TEST_CAPABILITY = $TestCapability
+    RUNTIME_ROLE_LIFECYCLE_TEST_CAPABILITY = 'ps1-w07b-lifecycle-capability'
+    RUNTIME_ROLE_LIFECYCLE_TEST_BATCH_READY_CAPABILITY = 'ps1-w07b-batch-ready-capability'
+    TEMP = $w07bPrivateTemp
+    TMP = $w07bPrivateTemp
+    TMPDIR = $w07bPrivateTemp
+  }
+  # Execute the immutable action's own resolved Node and bridge paths. The
+  # fixture copy is byte-identical but intentionally has a different path;
+  # using it here would correctly fail the production argv/path correlation.
+  $session = Start-CapturedProcess -FilePath ([string]$action.payload.bridge_argv[0]) -ArgumentList $sessionArgs -EnvVars $bridgeEnv
+  try {
+    $readyDeadline = [DateTime]::UtcNow.AddSeconds(15)
+    $descriptorFiles = @()
+    do {
+      $descriptorFiles = @(Get-ChildItem -LiteralPath $w07bPrivateTemp -Recurse -File -Filter 'deterministic-mcp-loopback.json' -ErrorAction SilentlyContinue)
+      if ($descriptorFiles.Count -eq 1) { break }
+      Start-Sleep -Milliseconds 100
+    } while ([DateTime]::UtcNow -lt $readyDeadline -and -not $session.Process.HasExited)
+    if ($descriptorFiles.Count -ne 1) {
+      $sessionStatus = if ($session.Process.HasExited) { "exited:$($session.Process.ExitCode)" } else { 'running' }
+      $sessionStdout = if ($session.Process.HasExited) { $session.Stdout.GetAwaiter().GetResult() } else { '' }
+      $sessionStderr = if ($session.Process.HasExited) { $session.Stderr.GetAwaiter().GetResult() } else { '' }
+      throw "W07b supervisor did not publish exactly one READY loopback descriptor; found $($descriptorFiles.Count); session=$sessionStatus stdout=$sessionStdout stderr=$sessionStderr"
+    }
+
+    $frontend = $null
+    $deadline = [DateTime]::UtcNow.AddSeconds(15)
+    do {
+      $frontend = Invoke-ChildProcess -FilePath 'node' -ArgumentList @(
+        ([string]$action.payload.bridge_argv[1]), 'claude-mcp-launch', '--coordination-root', $coordRoot,
+        '--request', $requestPath, '--test-frontend', 'deterministic-mcp-client-v1'
+      ) -EnvVars $bridgeEnv
+      if ($frontend.ExitCode -eq 0) { break }
+      Start-Sleep -Milliseconds 100
+    } while ([DateTime]::UtcNow -lt $deadline -and -not $session.Process.HasExited)
+    if ($frontend.ExitCode -ne 0) {
+      $sessionStatus = if ($session.Process.HasExited) { "exited:$($session.Process.ExitCode)" } else { 'running' }
+      $sessionStdout = if ($session.Process.HasExited) { $session.Stdout.GetAwaiter().GetResult() } else { '' }
+      $sessionStderr = if ($session.Process.HasExited) { $session.Stderr.GetAwaiter().GetResult() } else { '' }
+      $txnTree = @(Get-ChildItem -LiteralPath (Split-Path -Parent $requestPath) -Recurse -Force | ForEach-Object { $_.FullName.Substring((Split-Path -Parent $requestPath).Length) }) -join '|'
+      $activationDebug = @(Get-ChildItem -LiteralPath (Join-Path (Split-Path -Parent $requestPath) 'activations') -File -Filter '*.json' | ForEach-Object { Get-Content -Raw -Encoding utf8 -LiteralPath $_.FullName }) -join '|'
+      throw "deterministic frontend never attached: $($frontend.Stdout) $($frontend.Stderr); session=$sessionStatus stdout=$sessionStdout stderr=$sessionStderr txn=$txnTree activation=$activationDebug"
+    }
+    $attached = $frontend.Stdout | ConvertFrom-Json -ErrorAction Stop
+    Assert-True ($attached.schema -eq 'coordination/bridge-result/v1') 'W07b frontend returned the wrong schema'
+    Assert-True ($attached.command -eq 'claude-mcp-launch' -and $attached.ok -eq $true) 'W07b frontend did not report claude-mcp-launch success'
+    Assert-True ($attached.reason -eq 'deterministic-mcp-rendezvous-attached') 'W07b frontend returned the wrong attach reason'
+    Assert-True ((@($attached.PSObject.Properties.Name | Sort-Object) -join ',') -eq 'artifact_ref,child_instance_id,child_pid_identity,command,ok,reason,result_attempt_id,result_sha256,schema,supervisor_instance_id,worker_session_id') 'W07b frontend output is not closed or contains self-reported spawn/scheduler fields'
+    Assert-True ($attached.supervisor_instance_id -match '^[a-f0-9]{32,}$') 'W07b supervisor identity is absent'
+    Assert-True ($attached.worker_session_id -match '^[a-f0-9]{32,}$') 'W07b worker session identity is absent'
+    Assert-True ($attached.child_instance_id -eq $attached.worker_session_id) 'W07b child instance and worker session do not identify the same retained child'
+    Assert-True ($null -ne ($attached.child_pid_identity.pid -as [long]) -and [long]$attached.child_pid_identity.pid -gt 0) 'W07b child PID identity is absent'
+    Assert-True ([long]$attached.child_pid_identity.pid -ne [long]$session.Process.Id) 'W07b substituted the supervisor PID for the backend child PID'
+    Assert-True (-not [string]::IsNullOrWhiteSpace($attached.child_pid_identity.executable)) 'W07b child executable identity is absent'
+    Assert-True (-not [string]::IsNullOrWhiteSpace($attached.child_pid_identity.birth_observed_at)) 'W07b child birth identity is absent'
+    Assert-True ($null -ne (Get-Process -Id ([long]$attached.child_pid_identity.pid) -ErrorAction Stop)) 'W07b child PID is not live after the rendezvous'
+
+    $artifact = Get-Content -Raw -Encoding utf8 -LiteralPath $attached.artifact_ref | ConvertFrom-Json
+    Assert-True ($artifact.schema -eq 'coordination/deterministic-mcp-rendezvous/v2') 'W07b evidence is not v2'
+    Assert-True ((@($artifact.PSObject.Properties.Name | Sort-Object) -join ',') -eq 'child_instance_id,child_pid_identity,child_record_sha256,completed_at,expected_result_kind,loopback_host,loopback_port,nonce,request_id,request_sha256,result_attempt_id,result_content,result_sha256,schema,supervisor_instance_id,worker_session_id') 'W07b evidence is not closed or contains self-reported spawn/scheduler fields'
+    Assert-True ($artifact.worker_session_id -eq $attached.worker_session_id) 'W07b artifact worker-session correlation mismatch'
+    Assert-True ($artifact.supervisor_instance_id -eq $attached.supervisor_instance_id) 'W07b artifact supervisor correlation mismatch'
+    Assert-True ($artifact.child_pid_identity.pid -eq $attached.child_pid_identity.pid) 'W07b artifact child PID correlation mismatch'
+    Assert-True ($artifact.result_content -eq 'deterministic-answer:PS1_WINDOWS_FIXTURE') 'W07b did not observe the deterministic backend answer through the canonical result chain'
+    Assert-True ($artifact.loopback_host -eq '127.0.0.1' -and [int]$artifact.loopback_port -gt 0) 'W07b did not prove a real loopback exchange'
+
+    $instanceRecords = @(Get-ChildItem -LiteralPath $w07bPrivateTemp -Recurse -File -Filter '*.json' | Where-Object { $_.Directory.Name -eq 'instances' })
+    Assert-True ($instanceRecords.Count -eq 1) "W07b expected exactly one retained BORN child record, found $($instanceRecords.Count)"
+    $childRecord = Get-Content -Raw -Encoding utf8 -LiteralPath $instanceRecords[0].FullName | ConvertFrom-Json
+    Assert-True ($childRecord.instance_id -eq $attached.child_instance_id) 'W07b evidence does not identify the independently discovered BORN record'
+    Assert-True ([long]$childRecord.pid -eq [long]$attached.child_pid_identity.pid) 'W07b evidence PID does not match the independently discovered BORN record'
+    Assert-True ($childRecord.process_kind -eq 'app-server-worker' -and $childRecord.driver -eq 'codex-app-server') 'W07b BORN record is not the supervised app-server child'
+
+    # The lifecycle registry is user-private at every authority-bearing level,
+    # not merely at whichever leaf happened to be written last. The shared
+    # test-private registry container may contain several principals, so
+    # confinement begins at this run's single hashed-principal directory.
+    $runtimeContainer = Join-Path $w07bPrivateTemp 'registry'
+    $principalDirs = @(Get-ChildItem -LiteralPath $runtimeContainer -Directory -ErrorAction Stop)
+    Assert-True ($principalDirs.Count -eq 1) "W07b expected one runtime principal directory, found $($principalDirs.Count)"
+    $registryDirs = @($principalDirs[0]) + @(Get-ChildItem -LiteralPath $principalDirs[0].FullName -Directory -Recurse -ErrorAction Stop)
+    $currentSid = ([System.Security.Principal.WindowsIdentity]::GetCurrent()).User.Value
+    $allowedRegistrySids = @($currentSid, 'S-1-5-18', 'S-1-5-32-544')
+    foreach ($registryDir in $registryDirs) {
+      $registryAcl = Get-Acl -LiteralPath $registryDir.FullName
+      if ($registryDir.FullName -eq $principalDirs[0].FullName) {
+        Assert-True $registryAcl.AreAccessRulesProtected "runtime registry principal boundary still inherits ACLs: $($registryDir.FullName)"
+      }
+      $registryOwnerSid = ([System.Security.Principal.NTAccount]::new($registryAcl.Owner)).Translate([System.Security.Principal.SecurityIdentifier]).Value
+      Assert-True ($registryOwnerSid -eq $currentSid) "runtime registry directory has the wrong owner: $($registryDir.FullName) $registryOwnerSid"
+      foreach ($ace in $registryAcl.Access) {
+        $sid = $ace.IdentityReference.Translate([System.Security.Principal.SecurityIdentifier]).Value
+        Assert-True ($ace.AccessControlType -eq [System.Security.AccessControl.AccessControlType]::Allow) "runtime registry contains a non-Allow ACE: $($registryDir.FullName) $sid"
+        Assert-True ($allowedRegistrySids -contains $sid) "runtime registry contains a disallowed SID: $($registryDir.FullName) $sid"
+      }
+    }
+
+    $replay = Invoke-ChildProcess -FilePath 'node' -ArgumentList @(
+      ([string]$action.payload.bridge_argv[1]), 'claude-mcp-launch', '--coordination-root', $coordRoot,
+      '--request', $requestPath, '--test-frontend', 'deterministic-mcp-client-v1'
+    ) -EnvVars $bridgeEnv
+    Assert-True ($replay.ExitCode -eq 3) "W07b replay expected rc3, got $($replay.ExitCode)"
+    Assert-True ($replay.Stderr.Contains('deterministic-mcp-rendezvous-replay')) "W07b replay did not emit the sealed rejection reason: $($replay.Stdout) $($replay.Stderr)"
+  } finally {
+    if (-not $session.Process.HasExited) { $session.Process.Kill($true) }
+    [void]$session.Process.WaitForExit(5000)
+    $session.Process.Dispose()
+    if ((Split-Path -Parent ([IO.Path]::GetFullPath($w07bPrivateTemp))) -eq $publicRoot) {
+      Remove-Item -LiteralPath $w07bPrivateTemp -Recurse -Force -ErrorAction Stop
+    }
+  }
+}
+
+Invoke-Case -Name 'W10a ACL-insecure: Everyone SID full-control grant is rejected fail-closed by production root-validate' -Body {
+  $root = New-GitFixtureRoot -Suffix 'w10a-acl-insecure'
+  $capEnv = Get-DefaultCapabilityEnv
+  $rInit = Invoke-Wrapper -CliArgs @('root-init', '--coordination-root', $root) -EnvVars $capEnv
+  Assert-True ($rInit.ExitCode -eq 0) "root-init failed before W10a ACL mutation: $($rInit.Stdout) $($rInit.Stderr)"
+
+  $aclMutation = Invoke-ChildProcess -FilePath 'icacls.exe' -ArgumentList @(
+    $root, '/grant', '*S-1-1-0:(OI)(CI)F'
+  )
+  Assert-True ($aclMutation.ExitCode -eq 0) "icacls failed to install the deterministic Everyone SID fixture: $($aclMutation.Stdout) $($aclMutation.Stderr)"
+
+  $worldSid = 'S-1-1-0'
+  $observedWorld = $false
+  foreach ($ace in (Get-Acl -LiteralPath $root).Access) {
+    try {
+      if ($ace.IdentityReference.Translate([System.Security.Principal.SecurityIdentifier]).Value -eq $worldSid) {
+        $observedWorld = $true
+      }
+    } catch { }
+  }
+  Assert-True $observedWorld 'W10a fixture invalid: Get-Acl did not observe the Everyone SID after icacls succeeded'
+
+  # The capability-gated cross-platform seam must never suppress the native
+  # Windows SID/DACL check. Even while it claims "linux", process.platform is
+  # still authoritative for security and the world ACE remains rejected.
+  $forcedPlatformEnv = Get-DefaultCapabilityEnv -Extra @{
+    RUNTIME_CONSULTATION_FORCE_PLATFORM = 'linux'
+  }
+  $rValidate = Invoke-Wrapper -CliArgs @('root-validate', '--coordination-root', $root) -EnvVars $forcedPlatformEnv
+  Assert-True ($rValidate.ExitCode -ne 0) 'production accepted an Everyone-writable shared coordination root'
+  Assert-CliResult -Stdout $rValidate.Stdout -ExpectedStatus 'INVALID' -ExpectedDetail 'SECURITY_INVALID' | Out-Null
+}
+
+Invoke-Case -Name 'W10b ACL-unverifiable: production reports indeterminate and disables sibling/shared-root use fail-closed' -Body {
+  $root = New-GitFixtureRoot -Suffix 'w10b-acl-unverifiable'
+  $baseEnv = Get-DefaultCapabilityEnv
+  $rInit = Invoke-Wrapper -CliArgs @(
+    'root-init', '--coordination-root', $root, '--fixed-ids', '--fixed-clock'
+  ) -EnvVars $baseEnv
+  Assert-True ($rInit.ExitCode -eq 0) "root-init failed before W10b probe: $($rInit.Stdout) $($rInit.Stderr)"
+
+  $probeEnv = Get-DefaultCapabilityEnv -Extra @{
+    RUNTIME_CONSULTATION_ACL_PROBE = 'unverifiable'
+  }
+  $missingFixedClock = Invoke-Wrapper -CliArgs @(
+    'root-validate', '--coordination-root', $root, '--fixed-ids'
+  ) -EnvVars $probeEnv
+  Assert-True ($missingFixedClock.ExitCode -eq 3) 'ACL probe seam was accepted without both fixed flags'
+  Assert-CliResult -Stdout $missingFixedClock.Stdout -ExpectedStatus 'INVALID' -ExpectedDetail 'INVALID_ARGUMENT' | Out-Null
+
+  $rValidate = Invoke-Wrapper -CliArgs @(
+    'root-validate', '--coordination-root', $root, '--fixed-ids', '--fixed-clock'
+  ) -EnvVars $probeEnv
+  Assert-True ($rValidate.ExitCode -ne 0) 'production treated an unverifiable ACL as confined/shared-root-capable'
+  Assert-CliResult -Stdout $rValidate.Stdout -ExpectedStatus 'INVALID' -ExpectedDetail 'SECURITY_INVALID' | Out-Null
+}
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Summary + exit -- non-zero exit iff any REAL (non-skipped) case failed.
 # ─────────────────────────────────────────────────────────────────────────────
+
+try {
+  Remove-Item -LiteralPath $WorkRoot -Recurse -Force -ErrorAction Stop
+} catch {
+  $script:FailCount++
+  $script:TestResults += [pscustomobject]@{ Result = 'FAIL'; Name = 'Harness cleanup removes the exact private work root'; Message = $_.Exception.Message }
+}
 
 Write-Host ''
 Write-Host '==================== runtime-consultation-windows.ps1 SUMMARY ===================='
@@ -928,13 +1426,7 @@ foreach ($r in $script:TestResults) {
 Write-Host '====================================================================================='
 Write-Host "PASS=$script:PassCount FAIL=$script:FailCount SKIP=$script:SkipCount TOTAL=$($script:TestResults.Count)"
 
-try {
-  Remove-Item -Recurse -Force -Path $WorkRoot -ErrorAction SilentlyContinue
-} catch {
-  Write-Host "WARN: cleanup of $WorkRoot failed (non-fatal): $($_.Exception.Message)"
-}
-
-if ($script:FailCount -gt 0) {
+if ($script:FailCount -gt 0 -or $script:SkipCount -gt 0) {
   Write-Host 'RESULT: FAIL'
   exit 1
 } else {

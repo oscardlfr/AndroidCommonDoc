@@ -252,14 +252,26 @@ process.stdin.on('end', () => {
         const stamp = new Date().toISOString().replace(/[:.]/g, '-').replace('Z', 'z');
         const rotatedPath = logPath.replace('.jsonl', '-' + stamp + '.jsonl');
         const gzPath = rotatedPath + '.gz';
+        let pendingGzPath = null;
         try {
           fs.renameSync(logPath, rotatedPath); // atomic hand-off; new entries go to fresh logPath
           const raw = fs.readFileSync(rotatedPath);
           const compressed = zlib.gzipSync(raw);
-          fs.writeFileSync(gzPath, compressed);
+          pendingGzPath = gzPath + '.pending-' + process.pid + '-' + crypto.randomBytes(8).toString('hex');
+          fs.writeFileSync(pendingGzPath, compressed, { flag: 'wx' });
+          const persisted = fs.readFileSync(pendingGzPath);
+          const recovered = zlib.gunzipSync(persisted);
+          if (!recovered.equals(raw)) throw new Error('gzip rotation round-trip mismatch');
+          fs.renameSync(pendingGzPath, gzPath);
+          pendingGzPath = null;
           fs.unlinkSync(rotatedPath); // remove uncompressed snapshot after gz written
         } catch {
-          // rotation failed (race or permissions) — fall through, keep appending
+          // Never discard the recoverable raw snapshot unless the persisted gzip
+          // has round-tripped byte-for-byte. A failed/corrupt archive stays
+          // unpublished; the hook remains fail-open and appends to a fresh log.
+          if (pendingGzPath) {
+            try { fs.unlinkSync(pendingGzPath); } catch {}
+          }
         }
       }
     } catch {}

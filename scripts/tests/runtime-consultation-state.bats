@@ -93,9 +93,15 @@ _assert_isolated_runtime_tmp() {
     try { st = fs.lstatSync(process.argv[1]); } catch (err) { console.error("runtime-tmp stat failed: " + err.message); process.exit(1); }
     if (st.isSymbolicLink()) { console.error("runtime-tmp is a symlink"); process.exit(1); }
     if (!st.isDirectory()) { console.error("runtime-tmp is not a directory"); process.exit(1); }
-    if ((st.mode & 0o777) !== 0o700) { console.error("runtime-tmp wrong mode: " + (st.mode & 0o777).toString(8)); process.exit(1); }
-    if (typeof process.getuid === "function" && st.uid !== process.getuid()) { console.error("runtime-tmp wrong owner"); process.exit(1); }
-  ' "$dir"
+    if (process.platform === "win32") {
+      const rc = require(process.argv[2]);
+      const acl = rc.windowsPrivateDirectoryAcl(process.argv[1], { mode: "ensure" });
+      if (!acl.ok) { console.error("runtime-tmp Windows ACL is not private: " + JSON.stringify(acl)); process.exit(1); }
+    } else {
+      if ((st.mode & 0o777) !== 0o700) { console.error("runtime-tmp wrong mode: " + (st.mode & 0o777).toString(8)); process.exit(1); }
+      if (typeof process.getuid === "function" && st.uid !== process.getuid()) { console.error("runtime-tmp wrong owner"); process.exit(1); }
+    }
+  ' "$dir" "$BATS_TEST_DIRNAME/../lib/runtime-consultation.cjs"
 }
 
 setup() {
@@ -118,7 +124,7 @@ setup() {
 
   REPO_ID="$(_compute_repo_id)"
   WORKTREE_ID="$(_compute_worktree_id)"
-  COORD_ROOT_ID="$(_sha256_string "$(cd "$COORD_ROOT" && pwd -P)")"
+  COORD_ROOT_ID="$(node -e 'const rll=require(process.argv[1]);process.stdout.write(rll.computeCoordinationRootIdFromPath(process.argv[2]));' "$RLL_IMPL" "$COORD_ROOT")"
   SUBJECT_HEAD="$(git -C "$PROJ" rev-parse HEAD)"
 
   mkdir -p "$PROJ/.planning/wave-$WAVE_SLUG"
@@ -158,11 +164,7 @@ _sha256_string() {
 }
 
 _sha256_file() {
-  if command -v sha256sum >/dev/null 2>&1; then
-    sha256sum "$1" | awk '{print $1}'
-  else
-    shasum -a 256 "$1" | awk '{print $1}'
-  fi
+  node -e 'const fs=require("fs"),crypto=require("crypto");process.stdout.write(crypto.createHash("sha256").update(fs.readFileSync(process.argv[1])).digest("hex"));' "$1"
 }
 
 _gen_hex_id() {
@@ -171,17 +173,11 @@ _gen_hex_id() {
 }
 
 _compute_repo_id() {
-  local common_dir resolved
-  common_dir="$(git -C "$PROJ" rev-parse --path-format=absolute --git-common-dir)"
-  resolved="$(cd "$common_dir" 2>/dev/null && pwd -P)" || resolved="$common_dir"
-  _sha256_string "$resolved"
+  node -e 'const rll=require(process.argv[1]);process.stdout.write(rll.computeRepoId(process.argv[2]));' "$RLL_IMPL" "$PROJ"
 }
 
 _compute_worktree_id() {
-  local toplevel resolved
-  toplevel="$(git -C "$PROJ" rev-parse --show-toplevel)"
-  resolved="$(cd "$toplevel" 2>/dev/null && pwd -P)" || resolved="$toplevel"
-  _sha256_string "$resolved"
+  node -e 'const rll=require(process.argv[1]);process.stdout.write(rll.computeWorktreeId(process.argv[2]));' "$RLL_IMPL" "$PROJ"
 }
 
 _iso_plus_seconds() {

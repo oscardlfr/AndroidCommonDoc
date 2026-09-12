@@ -20,10 +20,10 @@ Resume session with a CEO/CTO dashboard — shows status by department from last
 Resume through the shared product flow using the validated checkpoint reference:
 
 ```bash
-node scripts/lib/runtime-collaboration-entrypoints.cjs execute --entrypoint resume-work --project-root <absolute> --intent <base64url canonical JSON>
+"<resolved-node>" "<toolkit-root>/scripts/lib/runtime-collaboration-entrypoints.cjs" execute --entrypoint resume-work --project-root <consumer-root> --intent <base64url canonical JSON>
 ```
 
-The Bash call must be one standalone direct Node command. Replace `<absolute>` with the literal absolute project path before invoking it. Never use `$(pwd)`, `$PWD`, `cd`, shell variables, command substitution, pipes, redirects, or command separators in this authenticated entrypoint call.
+The Bash call must be one standalone direct Node command. For L0, both roots are the current repository. For a runtime consumer, derive `toolkit-root` only from the single local `layer=L0, role=tooling` manifest source and keep `consumer-root` as the literal absolute application repository. Use the resolved Node executable; do not use environment fallbacks, command substitution, wrappers, pipes, redirects, or command separators.
 
 The decoded intent is exactly `{"checkpoint_ref":"checkpoint:<sha256>"}`. Reuse `READY` bindings, execute only returned `ACTION_REQUIRED` actions, and surface `BLOCKED|UNAVAILABLE|FAILED` without treating historical memory as live authority.
 

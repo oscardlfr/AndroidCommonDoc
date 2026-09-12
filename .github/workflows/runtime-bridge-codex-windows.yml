@@ -1,0 +1,44 @@
+name: Runtime Bridge Codex Windows
+
+# ----------------------------------------------------------------------------
+# AndroidCommonDoc L0 reusable workflow -- Windows ACL conformance for the Codex
+# host bridge.
+#
+# Runs scripts/tests/runtime-bridge-codex-windows.ps1 on a real windows-latest
+# runner: real icacls.exe-planted ACLs, real Get-Acl confirmation, real pwsh
+# execution against the production __testOnly*-exported functions in
+# scripts/lib/runtime-bridge-codex.cjs (readProtectedHostCodexPin,
+# validatePinnedCodexExecutable, readOwnedStableBuffer) -- the only mechanical
+# proof the win32 ACL checks actually work, closing the coverage gap
+# arch-platform's PREP verdict PRIMARY FINDING flagged (Windows credential-pin
+# ACL gap) for this Wave (portable-runtime-messaging-adapters). Mirrors
+# runtime-consultation-windows.yml's own rationale for a real, executing
+# Windows leg rather than a static/script-parity review claiming so.
+#
+# Invoked from .github/workflows/l0-ci.yml as an unconditional, required
+# ci-gate dependency -- informational-only status is insufficient, same
+# convention as runtime-consultation-windows.
+# ----------------------------------------------------------------------------
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  runtime-bridge-codex-windows:
+    name: Runtime Bridge Codex Windows
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "24"
+
+      - name: Run runtime bridge codex Windows tests
+        shell: pwsh
+        run: pwsh -NoLogo -NoProfile -NonInteractive -File scripts/tests/runtime-bridge-codex-windows.ps1

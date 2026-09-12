@@ -87,7 +87,7 @@
 require('./lib/private-registry-tmpdir-preload.cjs');
 
 const assert = require('node:assert');
-const { test } = require('node:test');
+const { test, after } = require('node:test');
 const crypto = require('node:crypto');
 const fs = require('node:fs');
 const os = require('node:os');
@@ -95,6 +95,8 @@ const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 
 const IMPL = path.resolve(__dirname, '../lib/runtime-host-claude.cjs');
+const rll = require(path.resolve(__dirname, '../lib/runtime-role-lifecycle.cjs'));
+const rc = require(path.resolve(__dirname, '../lib/runtime-consultation.cjs'));
 
 let hostClaude = null;
 let loadError = null;
@@ -112,6 +114,10 @@ const ISO_MS_Z_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
 
 function sha256hex(value) {
   return crypto.createHash('sha256').update(String(value), 'utf8').digest('hex');
+}
+
+function sha256bytes(value) {
+  return crypto.createHash('sha256').update(value).digest('hex');
 }
 
 function mkRoot() {
@@ -233,6 +239,55 @@ function basePostToolUseEvent(pre, overrides = {}) {
     tool_response: { ok: true },
     ...overrides,
   };
+}
+
+function makeNativeOutcomeFixture(label, proposedOverride = {}) {
+  const projectRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'rhc-native-outcome-'));
+  for (const args of [
+    ['-C', projectRoot, 'init', '-q'],
+    ['-C', projectRoot, 'config', 'user.email', 'runtime-host-test@test.local'],
+    ['-C', projectRoot, 'config', 'user.name', 'Runtime Host Test'],
+    ['-C', projectRoot, 'commit', '-q', '--allow-empty', '-m', 'init'],
+  ]) {
+    const git = spawnSync('git', args, { encoding: 'utf8' });
+    assert.strictEqual(git.status, 0, git.stderr);
+  }
+  const waveDir = path.join(projectRoot, '.planning', 'wave-native-outcome-' + label);
+  fs.mkdirSync(waveDir, { recursive: true });
+  fs.writeFileSync(path.join(waveDir, 'PLAN.md'), '# native outcome fixture\n');
+  const plan = rll.discoverPlan(projectRoot);
+  const worktreeId = rll.computeWorktreeId(projectRoot);
+  const sessionId = 'native-outcome-session-' + label;
+  const toolUseId = 'native-outcome-tool-' + label;
+  const identity = { ok: true, provider: 'claude-hook', runtime_session_key: sessionId };
+  const generation = rll.resolveSessionGeneration(projectRoot, identity);
+  const binding = rll.createMainOrchestratorBinding(projectRoot, identity, worktreeId, plan.planDigest, 600);
+  assert.strictEqual(generation.ok, true);
+  assert.strictEqual(binding.ok, true);
+  const actionId = rll.generateActionId();
+  const payload = rll.buildRoleSpawnPayload('native-outcome', 'arch-platform', 'arch-platform', null, 'canonical bootstrap ' + label);
+  const minted = rll.mintRoleLifecycleAction(
+    projectRoot, actionId, 'role-spawn', 'claude-native', rll.computeRepoId(projectRoot),
+    worktreeId, plan.planDigest, sha256hex('native-outcome-policy'), generation.generationId,
+    'arch-platform', payload, new Date(Date.now() + 300000).toISOString().replace(/\.\d{3}Z$/, 'Z'),
+  );
+  assert.strictEqual(minted.ok, true);
+  const canonicalInput = rll.canonicalNativeAgentInputForAction(minted.action);
+  const proposedInput = Object.assign({}, canonicalInput, proposedOverride);
+  const claim = rll.mintRoleSpawnExecutionClaim({ repoId: rll.computeRepoId(projectRoot) }, minted.action, binding.binding.binding_id, {
+    runtimeSessionId: sessionId,
+    sourceToolUseId: toolUseId,
+    canonicalInputDigest: sha256hex(rc.canonicalJSONStringify(canonicalInput)),
+    proposedInputDigest: sha256hex(rc.canonicalJSONStringify(proposedInput)),
+    modelDeviation: rc.canonicalJSONStringify(canonicalInput) !== rc.canonicalJSONStringify(proposedInput),
+  }, 240);
+  assert.strictEqual(claim.ok, true, JSON.stringify(claim));
+  return { projectRoot, sessionId, toolUseId, action: minted.action, claim: claim.record, canonicalInput, proposedInput };
+}
+
+function cleanupNativeOutcomeFixture(fixture) {
+  try { fs.rmSync(rll.registryRepoDir(fixture.projectRoot), { recursive: true, force: true }); } catch { /* best effort */ }
+  fs.rmSync(fixture.projectRoot, { recursive: true, force: true });
 }
 
 function attemptCorrelate(composition, handle, postEvent) {
@@ -812,17 +867,61 @@ test('P1IA-IBIND-HOST-FAIL-CLOSED-MATRIX-29 RED: every missing, mismatched, dupl
 });
 
 const PROJECT_ROOT = path.resolve(__dirname, '../..');
+let SESSION_HOST_FIXTURE = null;
+
+function sessionHostFixture() {
+  if (SESSION_HOST_FIXTURE) return SESSION_HOST_FIXTURE;
+  SESSION_HOST_FIXTURE = writeHostContractFixture('session');
+  const published = requireHostClaude().publishClaudeHostContractPackage({
+    projectRoot: SESSION_HOST_FIXTURE.projectRoot,
+    qualificationPath: SESSION_HOST_FIXTURE.qualificationPath,
+    evidenceRoot: SESSION_HOST_FIXTURE.evidenceRoot,
+    observerPath: SESSION_HOST_FIXTURE.observerPath,
+  });
+  assert.strictEqual(published.ok, true, JSON.stringify(published));
+  return SESSION_HOST_FIXTURE;
+}
+
+function sessionHostPin(fixture) {
+  return {
+    executablePath: fixture.executablePath,
+    cliVersion: fixture.qualification.cli.version,
+    observerPath: fixture.observerPath,
+    transportProfile: fixture.qualification.transport_profile,
+    os: process.platform,
+  };
+}
+
+after(() => {
+  if (SESSION_HOST_FIXTURE) cleanupHostContractFixture(SESSION_HOST_FIXTURE);
+});
 
 function mintProductionAdmission(overrides) {
   const mod = requireHostClaude();
+  const fixture = sessionHostFixture();
+  const projectRoot = fixture.projectRoot;
+  const sessionId = 'r131-host-production-' + crypto.randomBytes(12).toString('hex');
+  const sessionEvidence = mod.recordProductionSessionIdentity({
+    projectRoot,
+    event: {
+      type: 'system', subtype: 'init', session_id: sessionId,
+      model: 'claude-sonnet-5', cwd: projectRoot,
+      tools: ['Task', 'Bash', 'SendMessage', 'Read'], mcp_servers: [{ name: 'docs', status: 'connected' }],
+    },
+    hostPin: sessionHostPin(fixture),
+  });
+  assert.strictEqual(sessionEvidence.ok, true, 'production mint precondition: genuine SessionStart evidence');
+  assert.strictEqual(sessionEvidence.record.observation_source, 'managed-system-init-stream');
+  assert.match(sessionEvidence.record.pin_digest, DIGEST_RE);
+  assert.match(sessionEvidence.record.host_contract_digest, DIGEST_RE);
   const base = {
-    projectRoot: PROJECT_ROOT,
-    event: { hook_event_name: 'PreToolUse', tool_name: 'Bash', model: 'claude-sonnet-5' },
+    projectRoot,
+    event: { hook_event_name: 'PreToolUse', tool_name: 'Bash', session_id: sessionId },
     entrypoint: 'monitor-docs',
     argvDigest: sha256hex('entrypoint:monitor-docs:readonly'),
     roleScope: null,
   };
-  return mod.mintProductionHostComposition(Object.assign(base, overrides || {}));
+  return Object.assign(mod.mintProductionHostComposition(Object.assign(base, overrides || {})), { projectRoot });
 }
 
 test('R131-HOST-PRODUCTION-SIGNED-ADMISSION-POSITIVE-31: signed production admission validates for its exact scope', () => {
@@ -832,26 +931,223 @@ test('R131-HOST-PRODUCTION-SIGNED-ADMISSION-POSITIVE-31: signed production admis
   const minted = mintProductionAdmission();
   assert.strictEqual(minted.ok, true);
   assert.match(minted.compositionId, /^[0-9a-f]{32}$/);
+  assert.strictEqual(minted.record.schema, 'runtime/claude-host-composition/v2');
+  assert.strictEqual(minted.record.requested_profile_name, 'balanced');
+  assert.match(minted.record.requested_profile_digest, DIGEST_RE);
+  assert.strictEqual(minted.record.actual_model, 'claude-sonnet-5');
   assert.deepStrictEqual(minted.record.supported_operations, ['Agent', 'Bash', 'SendMessage', 'TaskOutput']);
-  const consumed = mod.consumeProductionHostComposition(PROJECT_ROOT, minted.compositionId, {
+  const consumed = mod.consumeProductionHostComposition(minted.projectRoot, minted.compositionId, {
     entrypoint: 'monitor-docs', argvDigest: sha256hex('entrypoint:monitor-docs:readonly'), roleScope: null,
   });
   assert.strictEqual(consumed.ok, true);
 });
 
-test('R131-HOST-PRODUCTION-WRONG-MODEL-32: non-sonnet or absent model evidence cannot mint', () => {
-  assert.strictEqual(mintProductionAdmission({ event: { hook_event_name: 'PreToolUse', tool_name: 'Bash', model: 'claude-haiku-4-5' } }).ok, false);
-  assert.strictEqual(mintProductionAdmission({ event: { hook_event_name: 'PreToolUse', tool_name: 'Bash' } }).ok, false);
+test('HC-CE managed conductor authority requires a signed system/init session and no hook event', () => {
+  const mod = requireHostClaude();
+  const fixture = sessionHostFixture();
+  const projectRoot = fixture.projectRoot;
+  const sessionId = `managed-conductor-${crypto.randomBytes(12).toString('hex')}`;
+  const recorded = mod.recordProductionSessionIdentity({
+    projectRoot,
+    event: {
+      type: 'system', subtype: 'init', session_id: sessionId,
+      model: 'claude-sonnet-5', cwd: projectRoot,
+      tools: ['Task', 'Bash', 'SendMessage'], mcp_servers: [],
+    },
+    hostPin: sessionHostPin(fixture),
+  });
+  assert.equal(recorded.ok, true);
+  const argvDigest = sha256hex('managed-conductor-entrypoint');
+  const composition = mod.mintManagedHostComposition({
+    projectRoot, sessionId, entrypoint: 'init-session', argvDigest, roleScope: 'arch-platform',
+  });
+  assert.equal(composition.ok, true);
+  assert.equal(composition.evidenceMethod, 'CONDUCTOR_DIRECT_EXECUTION');
+  assert.equal(mod.validateProductionHostComposition(projectRoot, composition.compositionId, {
+    entrypoint: 'init-session', argvDigest, roleScope: 'arch-platform',
+  }).ok, true);
+  assert.equal(mod.mintManagedHostComposition({
+    projectRoot, sessionId: `${sessionId}-foreign`, entrypoint: 'init-session', argvDigest,
+    roleScope: 'arch-platform',
+  }).ok, false);
+  const multiRoleScope = [
+    'arch-integration', 'arch-platform', 'arch-testing', 'context-provider', 'doc-updater',
+  ];
+  const lifecycleAuthority = mod.mintManagedLifecycleCommandAuthority({
+    projectRoot, sessionId, subcommand: 'ensure', argvDigest,
+    role: multiRoleScope, actionId: null,
+  });
+  assert.equal(lifecycleAuthority.ok, true,
+    'managed init-session must admit the canonical sorted multi-role ensure scope');
+  assert.equal(mod.mintManagedLifecycleCommandAuthority({
+    projectRoot, sessionId, subcommand: 'ensure', argvDigest: sha256hex('invalid-order'),
+    role: [...multiRoleScope].reverse(), actionId: null,
+  }).ok, false, 'managed authority must reject a non-canonical multi-role scope');
+});
+
+test('HC-CE managed ingest denial needs host composition but no lifecycle grant', async () => {
+  const mod = requireHostClaude();
+  const fixture = sessionHostFixture();
+  const projectRoot = fixture.projectRoot;
+  const sessionId = `managed-ingest-denied-${crypto.randomBytes(12).toString('hex')}`;
+  assert.equal(mod.recordProductionSessionIdentity({
+    projectRoot,
+    event: {
+      type: 'system', subtype: 'init', session_id: sessionId,
+      model: 'claude-sonnet-5', cwd: projectRoot,
+      tools: ['Task', 'Bash', 'SendMessage'], mcp_servers: [],
+    },
+    hostPin: sessionHostPin(fixture),
+  }).ok, true);
+  const entrypointPath = require.resolve('../lib/runtime-collaboration-entrypoints.cjs');
+  const savedNodeEnv = process.env.NODE_ENV;
+  const savedEntrypointCapability = process.env.RUNTIME_COLLABORATION_ENTRYPOINTS_TEST_CAPABILITY;
+  process.env.NODE_ENV = 'test';
+  process.env.RUNTIME_COLLABORATION_ENTRYPOINTS_TEST_CAPABILITY = 'p3-entrypoints-v1';
+  delete require.cache[entrypointPath];
+  const entrypoint = require(entrypointPath);
+  if (savedNodeEnv === undefined) delete process.env.NODE_ENV; else process.env.NODE_ENV = savedNodeEnv;
+  if (savedEntrypointCapability === undefined) delete process.env.RUNTIME_COLLABORATION_ENTRYPOINTS_TEST_CAPABILITY;
+  else process.env.RUNTIME_COLLABORATION_ENTRYPOINTS_TEST_CAPABILITY = savedEntrypointCapability;
+  const intent = { request_ref: `request:${'a'.repeat(64)}`, approval_ref: '' };
+  const plan = entrypoint.planEntrypointStep('ingest-content', intent, projectRoot);
+  assert.equal(plan.command, null);
+  const consumptionProbe = mod.mintManagedHostComposition({
+    projectRoot, sessionId, entrypoint: 'ingest-content',
+    argvDigest: plan.argv_digest, roleScope: plan.role_scope,
+  });
+  assert.equal(consumptionProbe.ok, true);
+  const consumed = mod.consumeProductionHostComposition(projectRoot, consumptionProbe.compositionId, {
+    entrypoint: 'ingest-content', argvDigest: plan.argv_digest, roleScope: plan.role_scope,
+  });
+  assert.equal(consumed.ok, true);
+  const ports = entrypoint.__TEST_ONLY__createProductionPorts({
+    entrypoint: 'ingest-content', projectRoot, intent, lifecycleBinding: null,
+  }, plan, consumed.record);
+  const context = entrypoint.__TEST_ONLY__createTrustedHostContext(ports);
+  assert.equal((await entrypoint.executeEntrypoint('ingest-content', intent, context)).status, 'BLOCKED');
+  const composition = mod.mintManagedHostComposition({
+    projectRoot, sessionId, entrypoint: 'ingest-content',
+    argvDigest: plan.argv_digest, roleScope: plan.role_scope,
+  });
+  assert.equal(composition.ok, true);
+  const result = spawnSync(process.execPath, [
+    IMPL.replace(/runtime-host-claude\.cjs$/, 'runtime-collaboration-entrypoints.cjs'),
+    'execute', '--entrypoint', 'ingest-content', '--project-root', projectRoot,
+    '--intent', Buffer.from(rc.canonicalJSONStringify(intent)).toString('base64url'),
+    '--host-composition', composition.compositionId,
+  ], { cwd: projectRoot, encoding: 'utf8' });
+  assert.equal(result.status, 5, result.stderr || result.stdout);
+  assert.deepStrictEqual(JSON.parse(result.stdout), {
+    actions: [], detail: 'approval-required', entrypoint: 'ingest-content',
+    result: null, schema: 'runtime/collaboration-entrypoint-result/v1',
+    selection: null, status: 'BLOCKED',
+  });
+});
+
+test('P1-MODEL-32: actual model is an observed bounded literal distinct from the requested profile alias', () => {
+  const mod = requireHostClaude();
+  const fixture = sessionHostFixture();
+  const projectRoot = fixture.projectRoot;
+  const sessionId = 'r131-host-wrong-model-' + crypto.randomBytes(12).toString('hex');
+  assert.strictEqual(mod.recordProductionSessionIdentity({
+    projectRoot,
+    event: { hook_event_name: 'SessionStart', source: 'startup', session_id: sessionId, model: 'claude-haiku-4-5', cwd: projectRoot },
+    hostPin: sessionHostPin(fixture),
+  }).ok, false);
+  const observed = mod.recordProductionSessionIdentity({
+    projectRoot,
+    event: {
+      type: 'system', subtype: 'init', session_id: sessionId,
+      model: 'claude-fable-5-1', cwd: projectRoot,
+      tools: ['Task', 'Bash', 'SendMessage', 'Read'], mcp_servers: [{ name: 'docs' }],
+    },
+    hostPin: sessionHostPin(fixture),
+  });
+  assert.strictEqual(observed.ok, true);
+  assert.strictEqual(observed.record.actual_model, 'claude-fable-5-1');
+  assert.strictEqual(observed.record.requested_profile_name, 'balanced');
+  assert.notStrictEqual(observed.record.actual_model, 'sonnet');
+  const base = {
+    projectRoot,
+    entrypoint: 'monitor-docs', argvDigest: sha256hex('entrypoint:monitor-docs:readonly'), roleScope: null,
+  };
+  const minted = mod.mintProductionHostComposition(Object.assign({}, base, {
+    event: { hook_event_name: 'PreToolUse', tool_name: 'Bash', session_id: sessionId, model: 'forged-model-is-ignored' },
+  }));
+  assert.strictEqual(minted.ok, true);
+  assert.strictEqual(minted.record.actual_model, 'claude-fable-5-1');
+  assert.strictEqual(mod.mintProductionHostComposition(Object.assign({}, base, {
+    event: { hook_event_name: 'PreToolUse', tool_name: 'Bash' },
+  })).ok, false);
+});
+
+test('P1-CAPABILITIES-33: system/init requires a typed subset while permitting extra tools and MCP', () => {
+  const mod = requireHostClaude();
+  const fixture = sessionHostFixture();
+  const projectRoot = fixture.projectRoot;
+  const valid = (suffix, tools, mcpServers) => mod.recordProductionSessionIdentity({
+    projectRoot,
+    event: {
+      type: 'system', subtype: 'init', session_id: `p1-cap-${suffix}-${crypto.randomBytes(8).toString('hex')}`,
+      model: 'claude-sonnet-5', cwd: projectRoot, tools, mcp_servers: mcpServers,
+    },
+    hostPin: sessionHostPin(fixture),
+  });
+  assert.strictEqual(valid('extra', ['Read', 'Agent', 'Bash', 'SendMessage', 'Glob'], [{ name: 'docs' }]).ok, true);
+  assert.strictEqual(valid('task', ['Task', 'Bash', 'SendMessage'], []).ok, true);
+  assert.strictEqual(valid('missing-send', ['Agent', 'Bash'], []).ok, false);
+  assert.strictEqual(valid('missing-agent', ['Read', 'Bash', 'SendMessage'], []).ok, false);
+  assert.strictEqual(valid('bad-tool', ['Agent', 'Bash', 'SendMessage', { name: 'Read' }], []).ok, false);
+  assert.strictEqual(valid('bad-mcp', ['Agent', 'Bash', 'SendMessage'], [{ config: { token: 'secret' } }]).ok, false);
+});
+
+test('P1-DRIFT-34: same-session model drift is stale rather than silently reusing old evidence', () => {
+  const mod = requireHostClaude();
+  const fixture = sessionHostFixture();
+  const projectRoot = fixture.projectRoot;
+  const sessionId = 'p1-model-drift-' + crypto.randomBytes(12).toString('hex');
+  const event = (model) => ({
+    type: 'system', subtype: 'init', session_id: sessionId, model, cwd: projectRoot,
+    tools: ['Agent', 'Bash', 'SendMessage'], mcp_servers: [],
+  });
+  assert.strictEqual(mod.recordProductionSessionIdentity({ projectRoot, event: event('claude-sonnet-5'), hostPin: sessionHostPin(fixture) }).ok, true);
+  const drift = mod.recordProductionSessionIdentity({ projectRoot, event: event('claude-fable-5-1'), hostPin: sessionHostPin(fixture) });
+  assert.strictEqual(drift.ok, false);
+  assert.strictEqual(drift.reason, 'STALE_OBSERVATION');
+});
+
+test('P1-PROFILE-35: current requested profile is validated and digested independently of actual model', () => {
+  const mod = requireHostClaude();
+  const root = mkRoot();
+  try {
+    fs.mkdirSync(path.join(root, '.claude'), { recursive: true });
+    fs.writeFileSync(path.join(root, '.claude', 'model-profiles.json'), JSON.stringify({
+      current: 'balanced',
+      profiles: { balanced: { description: 'test', default_model: 'sonnet', overrides: { 'arch-platform': 'haiku' } } },
+    }));
+    const resolved = mod.resolveRequestedModelProfile(root, 'arch-platform');
+    assert.strictEqual(resolved.ok, true);
+    assert.strictEqual(resolved.name, 'balanced');
+    assert.strictEqual(resolved.requestedModel, 'haiku');
+    assert.match(resolved.digest, DIGEST_RE);
+    fs.writeFileSync(path.join(root, '.claude', 'model-profiles.json'), JSON.stringify({
+      current: 'missing', profiles: {},
+    }));
+    assert.strictEqual(mod.resolveRequestedModelProfile(root, 'arch-platform').ok, false);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
 });
 
 test('R131-HOST-PRODUCTION-WRONG-SCOPE-33: an exact admission rejects a foreign entrypoint or argv scope', () => {
   const mod = requireHostClaude();
   const minted = mintProductionAdmission();
   assert.strictEqual(minted.ok, true);
-  assert.strictEqual(mod.consumeProductionHostComposition(PROJECT_ROOT, minted.compositionId, {
+  assert.strictEqual(mod.consumeProductionHostComposition(minted.projectRoot, minted.compositionId, {
     entrypoint: 'ingest-content', argvDigest: sha256hex('entrypoint:monitor-docs:readonly'), roleScope: null,
   }).ok, false);
-  assert.strictEqual(mod.consumeProductionHostComposition(PROJECT_ROOT, minted.compositionId, {
+  assert.strictEqual(mod.consumeProductionHostComposition(minted.projectRoot, minted.compositionId, {
     entrypoint: 'monitor-docs', argvDigest: 'f'.repeat(64), roleScope: null,
   }).ok, false);
 });
@@ -861,11 +1157,11 @@ test('R131-HOST-PRODUCTION-EXPIRY-34: expired admission is rejected before consu
   const rll = require('../lib/runtime-role-lifecycle.cjs');
   const minted = mintProductionAdmission();
   assert.strictEqual(minted.ok, true);
-  const recordPath = path.join(rll.registryRepoDir(PROJECT_ROOT), 'host-compositions', minted.compositionId + '.json');
+  const recordPath = path.join(rll.registryRepoDir(minted.projectRoot), 'host-compositions', minted.compositionId + '.json');
   const record = JSON.parse(fs.readFileSync(recordPath, 'utf8'));
   record.expires_at = new Date(Date.now() - 1000).toISOString();
   fs.writeFileSync(recordPath, JSON.stringify(record), { mode: 0o600 });
-  assert.strictEqual(mod.consumeProductionHostComposition(PROJECT_ROOT, minted.compositionId, {
+  assert.strictEqual(mod.consumeProductionHostComposition(minted.projectRoot, minted.compositionId, {
     entrypoint: 'monitor-docs', argvDigest: sha256hex('entrypoint:monitor-docs:readonly'), roleScope: null,
   }).ok, false);
 });
@@ -874,8 +1170,8 @@ test('R131-HOST-PRODUCTION-REPLAY-35: exact composition is consumable once only'
   const mod = requireHostClaude();
   const minted = mintProductionAdmission();
   const expected = { entrypoint: 'monitor-docs', argvDigest: sha256hex('entrypoint:monitor-docs:readonly'), roleScope: null };
-  assert.strictEqual(mod.consumeProductionHostComposition(PROJECT_ROOT, minted.compositionId, expected).ok, true);
-  assert.strictEqual(mod.consumeProductionHostComposition(PROJECT_ROOT, minted.compositionId, expected).ok, false);
+  assert.strictEqual(mod.consumeProductionHostComposition(minted.projectRoot, minted.compositionId, expected).ok, true);
+  assert.strictEqual(mod.consumeProductionHostComposition(minted.projectRoot, minted.compositionId, expected).ok, false);
 });
 
 test('R131-HOST-PRODUCTION-FORGERY-36: record or signature forgery is rejected', () => {
@@ -886,12 +1182,549 @@ test('R131-HOST-PRODUCTION-FORGERY-36: record or signature forgery is rejected',
     (record) => { record.signature_ed25519_base64 = Buffer.alloc(64).toString('base64'); },
   ]) {
     const minted = mintProductionAdmission();
-    const recordPath = path.join(rll.registryRepoDir(PROJECT_ROOT), 'host-compositions', minted.compositionId + '.json');
+    const recordPath = path.join(rll.registryRepoDir(minted.projectRoot), 'host-compositions', minted.compositionId + '.json');
     const record = JSON.parse(fs.readFileSync(recordPath, 'utf8'));
     mutate(record);
     fs.writeFileSync(recordPath, JSON.stringify(record), { mode: 0o600 });
-    assert.strictEqual(mod.consumeProductionHostComposition(PROJECT_ROOT, minted.compositionId, {
+    assert.strictEqual(mod.consumeProductionHostComposition(minted.projectRoot, minted.compositionId, {
       entrypoint: 'monitor-docs', argvDigest: sha256hex('entrypoint:monitor-docs:readonly'), roleScope: null,
     }).ok, false);
+  }
+});
+
+test('P1-A31-A33 native outcome recorder resolves the v2 owner by session/tool identity and distinguishes absent, different, and correct executed input', () => {
+  const mod = requireHostClaude();
+  assert.strictEqual(typeof mod.recordProductionNativeToolOutcome, 'function');
+  const fixtures = [
+    makeNativeOutcomeFixture('absent'),
+    makeNativeOutcomeFixture('different', { prompt: 'model proposal with explanation' }),
+    makeNativeOutcomeFixture('correct'),
+  ];
+  try {
+    const events = [
+      { hook_event_name: 'PostToolUse', session_id: fixtures[0].sessionId, tool_use_id: fixtures[0].toolUseId, tool_name: 'Agent' },
+      { hook_event_name: 'PostToolUse', session_id: fixtures[1].sessionId, tool_use_id: fixtures[1].toolUseId, tool_name: 'Agent', tool_input: fixtures[1].proposedInput },
+      { hook_event_name: 'PostToolUse', session_id: fixtures[2].sessionId, tool_use_id: fixtures[2].toolUseId, tool_name: 'Agent', tool_input: fixtures[2].canonicalInput },
+    ];
+    const results = events.map((event, index) => mod.recordProductionNativeToolOutcome({ projectRoot: fixtures[index].projectRoot, event }));
+    assert.deepStrictEqual(results.map((result) => result.ok), [true, true, true]);
+    assert.deepStrictEqual(results.map((result) => result.record.execution_input_exact), [null, false, true]);
+    assert.deepStrictEqual(results.map((result) => result.record.observed_input_digest), [null, sha256hex(rc.canonicalJSONStringify(fixtures[1].proposedInput)), sha256hex(rc.canonicalJSONStringify(fixtures[2].canonicalInput))]);
+    for (let index = 0; index < results.length; index += 1) {
+      const record = results[index].record;
+      assert.deepStrictEqual(Object.keys(record).sort(), [
+        'action_digest', 'action_id', 'canonical_input_digest', 'evidence_method',
+        'execution_input_exact', 'model_deviation', 'observed_at', 'observed_input_digest',
+        'original_input_digest', 'outcome', 'reservation_digest', 'schema',
+        'session_digest', 'tool_use_digest',
+      ].sort());
+      assert.strictEqual(record.schema, 'runtime/native-tool-outcome/v1');
+      assert.strictEqual(record.evidence_method, 'POST_TOOL_INPUT');
+      assert.strictEqual(record.session_digest, sha256hex(fixtures[index].sessionId));
+      assert.strictEqual(record.tool_use_digest, sha256hex(fixtures[index].toolUseId));
+      assert.strictEqual(record.action_id, fixtures[index].action.action_id);
+      assert.strictEqual(record.action_digest, sha256hex(rc.canonicalJSONStringify(fixtures[index].action)));
+      assert.strictEqual(record.reservation_digest, sha256hex(rc.canonicalJSONStringify(fixtures[index].claim)));
+    }
+  } finally {
+    fixtures.forEach(cleanupNativeOutcomeFixture);
+  }
+});
+
+test('P1-NATIVE-OUTCOME-REPLAY identical replay is idempotent and conflicting duplicate never overwrites', () => {
+  const mod = requireHostClaude();
+  const fixture = makeNativeOutcomeFixture('replay');
+  try {
+    const event = {
+      hook_event_name: 'PostToolUse', session_id: fixture.sessionId, tool_use_id: fixture.toolUseId,
+      tool_name: 'Agent', tool_input: fixture.canonicalInput,
+    };
+    const first = mod.recordProductionNativeToolOutcome({ projectRoot: fixture.projectRoot, event });
+    const replay = mod.recordProductionNativeToolOutcome({ projectRoot: fixture.projectRoot, event });
+    assert.strictEqual(first.ok, true);
+    assert.strictEqual(replay.ok, true);
+    assert.strictEqual(replay.idempotent, true);
+    assert.strictEqual(replay.record.observed_at, first.record.observed_at);
+    const conflicting = mod.recordProductionNativeToolOutcome({
+      projectRoot: fixture.projectRoot,
+      event: Object.assign({}, event, { hook_event_name: 'PostToolUseFailure', error: 'host failure' }),
+    });
+    assert.strictEqual(conflicting.ok, false);
+    assert.strictEqual(conflicting.reason, 'NATIVE_OUTCOME_CONFLICT');
+    assert.strictEqual(JSON.parse(fs.readFileSync(first.recordPath, 'utf8')).outcome, 'SUCCEEDED');
+  } finally {
+    cleanupNativeOutcomeFixture(fixture);
+  }
+});
+
+function writeHostContractFixture(label) {
+  const projectRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'rhc-host-package-' + label + '-'));
+  for (const args of [
+    ['-C', projectRoot, 'init', '-q'],
+    ['-C', projectRoot, 'config', 'user.email', 'runtime-host-test@test.local'],
+    ['-C', projectRoot, 'config', 'user.name', 'Runtime Host Test'],
+    ['-C', projectRoot, 'commit', '-q', '--allow-empty', '-m', 'init'],
+  ]) {
+    const git = spawnSync('git', args, { encoding: 'utf8' });
+    assert.strictEqual(git.status, 0, git.stderr);
+  }
+  const evidenceRoot = path.join(projectRoot, 'probe-evidence');
+  const observerPath = path.join(projectRoot, 'scripts', 'tests', 'fixtures', 'claude-host-contract-probe.cjs');
+  const executablePath = path.join(projectRoot, 'bin', 'claude.exe');
+  fs.mkdirSync(path.dirname(observerPath), { recursive: true });
+  fs.mkdirSync(path.dirname(executablePath), { recursive: true });
+  fs.mkdirSync(path.join(projectRoot, '.claude'), { recursive: true });
+  fs.mkdirSync(path.join(evidenceRoot, 'observer'), { recursive: true });
+  fs.mkdirSync(path.join(projectRoot, '.planning', 'wave-host-package'), { recursive: true });
+  fs.writeFileSync(path.join(projectRoot, '.planning', 'wave-host-package', 'PLAN.md'), '# host package fixture\n');
+  fs.copyFileSync(path.resolve(__dirname, 'fixtures', 'claude-host-contract-probe.cjs'), observerPath);
+  fs.copyFileSync(path.resolve(__dirname, '..', '..', '.claude', 'model-profiles.json'), path.join(projectRoot, '.claude', 'model-profiles.json'));
+  fs.writeFileSync(executablePath, Buffer.from('isolated claude executable ' + label, 'utf8'));
+
+  const sessionId = 'host-package-session-' + label;
+  const agentA = 'host-package-agent-a-' + label;
+  const agentB = 'host-package-agent-b-' + label;
+  const toolA = 'host-package-tool-a-' + label;
+  const toolWake = 'host-package-tool-wake-' + label;
+  const toolB = 'host-package-tool-b-' + label;
+  const inputA = { description: 'probe A', subagent_type: 'probe-peer', name: 'probe-peer-a', prompt: 'A', run_in_background: true };
+  const inputB = { description: 'probe B', subagent_type: 'probe-peer', name: 'probe-peer-b', prompt: 'B', run_in_background: false };
+  const event = (hook, extras = {}) => {
+    const raw = Object.assign({ hook_event_name: hook, session_id: sessionId }, extras);
+    return {
+      schema: 'runtime/claude-host-contract-probe-event/v1', evidence_mode: 'genuine-pinned',
+      producer: 'claude-host-contract-probe', hook_event_name: hook,
+      session_digest: sha256hex(sessionId),
+      tool_use_digest: raw.tool_use_id ? sha256hex(raw.tool_use_id) : null,
+      prompt_id_digest: null,
+      agent_id_digest: raw.agent_id ? sha256hex(raw.agent_id) : null,
+      agent_type: raw.agent_type || null,
+      tool_name: raw.tool_name || null,
+      tool_input_digest: raw.tool_input === undefined ? null : sha256hex(rc.canonicalJSONStringify(raw.tool_input)),
+      updated_input_digest: extras.updated_input_digest || null,
+      raw_event: raw,
+      observed_at: '2026-09-05T14:50:00.000Z',
+    };
+  };
+  const events = [
+    event('SessionStart', { source: 'startup' }),
+    event('PreToolUse', { tool_name: 'Agent', tool_use_id: toolA, tool_input: inputA,
+      updated_input_digest: sha256hex(rc.canonicalJSONStringify(inputA)) }),
+    event('SubagentStart', { agent_id: agentA, agent_type: 'probe-peer' }),
+    event('PreToolUse', { agent_id: agentA, agent_type: 'probe-peer', tool_name: 'Read', tool_use_id: 'read-a-1', tool_input: { file_path: 'a1' } }),
+    event('PostToolUse', { agent_id: agentA, agent_type: 'probe-peer', tool_name: 'Read', tool_use_id: 'read-a-1', tool_input: { file_path: 'a1' } }),
+    event('PreToolUse', { agent_id: agentA, agent_type: 'probe-peer', tool_name: 'Read', tool_use_id: 'read-a-2', tool_input: { file_path: 'a2' } }),
+    event('PostToolUse', { agent_id: agentA, agent_type: 'probe-peer', tool_name: 'Read', tool_use_id: 'read-a-2', tool_input: { file_path: 'a2' } }),
+    event('SubagentStop', { agent_id: agentA, agent_type: 'probe-peer' }),
+    event('PostToolUse', { tool_name: 'Agent', tool_use_id: toolA, tool_input: inputA,
+      tool_response: { isAsync: true, status: 'async_launched', agentId: agentA } }),
+    event('PreToolUse', { tool_name: 'SendMessage', tool_use_id: toolWake, tool_input: { recipient: 'probe-peer-a', message: 'wake' } }),
+    event('PostToolUse', { tool_name: 'SendMessage', tool_use_id: toolWake, tool_input: { recipient: 'probe-peer-a', message: 'wake' },
+      tool_response: { success: true, resumedAgentId: agentA } }),
+    event('SubagentStart', { agent_id: agentA, agent_type: 'probe-peer' }),
+    event('PreToolUse', { agent_id: agentA, agent_type: 'probe-peer', tool_name: 'Read', tool_use_id: 'read-a-3', tool_input: { file_path: 'nonce' } }),
+    event('PostToolUse', { agent_id: agentA, agent_type: 'probe-peer', tool_name: 'Read', tool_use_id: 'read-a-3', tool_input: { file_path: 'nonce' } }),
+    event('SubagentStop', { agent_id: agentA, agent_type: 'probe-peer' }),
+    event('PreToolUse', { tool_name: 'Agent', tool_use_id: toolB, tool_input: inputB,
+      updated_input_digest: sha256hex(rc.canonicalJSONStringify(inputB)) }),
+    event('SubagentStart', { agent_id: agentB, agent_type: 'probe-peer' }),
+    event('PreToolUse', { agent_id: agentB, agent_type: 'probe-peer', tool_name: 'Read', tool_use_id: 'read-b-1', tool_input: { file_path: 'b1' } }),
+    event('PostToolUse', { agent_id: agentB, agent_type: 'probe-peer', tool_name: 'Read', tool_use_id: 'read-b-1', tool_input: { file_path: 'b1' } }),
+    event('SubagentStop', { agent_id: agentB, agent_type: 'probe-peer' }),
+    event('PostToolUse', { tool_name: 'Agent', tool_use_id: toolB, tool_input: inputB,
+      tool_response: { status: 'completed', agentId: agentB, totalToolUseCount: 1 } }),
+  ];
+  const observerBytes = Buffer.from(events.map((row) => JSON.stringify(row)).join('\n') + '\n', 'utf8');
+  const streamRows = [{
+    type: 'system', subtype: 'init', session_id: sessionId, model: 'claude-sonnet-5',
+    claude_code_version: '2.1.261', tools: ['Task', 'Bash', 'Read', 'SendMessage'],
+    mcp_servers: [{ name: 'fixture-mcp', status: 'connected' }],
+  }];
+  fs.writeFileSync(path.join(evidenceRoot, 'observer', 'events.jsonl'), observerBytes);
+  fs.writeFileSync(path.join(evidenceRoot, 'claude-stream.jsonl'), streamRows.map((row) => JSON.stringify(row)).join('\n') + '\n');
+  const evidenceSha = {
+    'observer/events.jsonl': sha256bytes(observerBytes),
+    'claude-stream.jsonl': sha256bytes(fs.readFileSync(path.join(evidenceRoot, 'claude-stream.jsonl'))),
+  };
+  const qualification = {
+    schema: 'androidcommondoc/p1-native-host-contract-qualification/v1',
+    status: 'HOST_CONTRACT_OBSERVED',
+    session_id: sessionId,
+    qualified_at: '2026-09-05T14:58:31.667Z',
+    transport_profile: 'native-claude-cli',
+    cli: {
+      version: '2.1.261', executable_realpath: fs.realpathSync(executablePath),
+      executable_sha256: sha256bytes(fs.readFileSync(executablePath)), actual_model: 'claude-sonnet-5',
+    },
+    evidence_sha256: evidenceSha,
+    observed_contract: {
+      same_actor_resume: true, different_same_type_peer: true, required_tools_present: true,
+      additional_tools_allowed: true, post_tool_use_exposes_executed_input: true,
+      canonical_five_key_input_executed: true,
+    },
+  };
+  const qualificationPath = path.join(projectRoot, 'qualification.json');
+  fs.writeFileSync(qualificationPath, JSON.stringify(qualification));
+  return { projectRoot, evidenceRoot, observerPath, executablePath, qualificationPath, qualification, events };
+}
+
+function cleanupHostContractFixture(fixture) {
+  try { fs.rmSync(rll.registryRepoDir(fixture.projectRoot), { recursive: true, force: true }); } catch { /* best effort */ }
+  fs.rmSync(fixture.projectRoot, { recursive: true, force: true });
+}
+
+test('P1-HOST-CERT-PUBLISH RED: independently verified retained observations produce one closed signed fixed toolkit package', () => {
+  const mod = requireHostClaude();
+  const fixture = writeHostContractFixture('publish');
+  try {
+    assert.strictEqual(typeof mod.publishClaudeHostContractPackage, 'function');
+    const published = mod.publishClaudeHostContractPackage({
+      projectRoot: fixture.projectRoot, qualificationPath: fixture.qualificationPath,
+      evidenceRoot: fixture.evidenceRoot, observerPath: fixture.observerPath,
+    });
+    assert.strictEqual(published.ok, true, JSON.stringify(published));
+    assert.strictEqual(published.packagePath, path.join(fixture.projectRoot, 'setup', 'claude-host-contract.json'));
+    const pkg = JSON.parse(fs.readFileSync(published.packagePath, 'utf8'));
+    assert.deepStrictEqual(Object.keys(pkg).sort(), ['anchor', 'certificate', 'schema']);
+    assert.strictEqual(pkg.schema, 'runtime/claude-host-contract-package/v1');
+    assert.deepStrictEqual(Object.keys(pkg.anchor).sort(), ['key_id', 'public_key_spki_der_base64', 'schema']);
+    assert.deepStrictEqual(Object.keys(pkg.certificate).sort(), [
+      'bundle_digest', 'cli_version', 'distinct_same_type_peers', 'evidence_method',
+      'executable_digest', 'extra_tools_mcp_compatible', 'key_id', 'observations_digest',
+      'observed_at', 'observer_digest', 'os', 'pin_digest', 'probe_contract_version',
+      'required_hooks_observed', 'schema', 'signature_ed25519_base64',
+      'stable_actor_resume', 'transport_profile',
+    ].sort());
+    assert.strictEqual(pkg.certificate.schema, 'runtime/claude-id01-host-contract/v1');
+    assert.strictEqual(pkg.certificate.bundle_digest, null);
+    assert.strictEqual(pkg.certificate.observations_digest, fixture.qualification.evidence_sha256['observer/events.jsonl']);
+    assert.strictEqual(pkg.certificate.stable_actor_resume, true);
+    assert.strictEqual(pkg.certificate.distinct_same_type_peers, true);
+    assert.strictEqual(pkg.certificate.required_hooks_observed, true);
+    assert.strictEqual(pkg.certificate.extra_tools_mcp_compatible, true);
+    const verified = mod.verifyClaudeHostContractPackage(fixture.projectRoot, {
+      executablePath: fixture.executablePath, cliVersion: '2.1.261',
+      observerPath: fixture.observerPath, transportProfile: 'native-claude-cli', os: process.platform,
+    });
+    assert.strictEqual(verified.ok, true, JSON.stringify(verified));
+    assert.strictEqual(verified.hostContractDigest, sha256hex(rc.canonicalJSONStringify(pkg.certificate)));
+    assert.strictEqual(verified.pinDigest, pkg.certificate.pin_digest);
+  } finally {
+    cleanupHostContractFixture(fixture);
+  }
+});
+
+test('P1-HOST-CERT-VERIFY RED: fixed package verifies across fresh registries and rejects evidence, signature, anchor, binary, observer, version, OS and transport drift', () => {
+  const mod = requireHostClaude();
+  const fixture = writeHostContractFixture('verify');
+  const consumers = [];
+  try {
+    const published = mod.publishClaudeHostContractPackage({
+      projectRoot: fixture.projectRoot, qualificationPath: fixture.qualificationPath,
+      evidenceRoot: fixture.evidenceRoot, observerPath: fixture.observerPath,
+    });
+    assert.strictEqual(published.ok, true, JSON.stringify(published));
+    const packageBytes = fs.readFileSync(published.packagePath);
+    for (const label of ['fresh-run-root-b', 'ordinary-temp-root-c']) {
+      const root = fs.mkdtempSync(path.join(os.tmpdir(), label + '-'));
+      consumers.push(root);
+      fs.mkdirSync(path.join(root, 'setup'), { recursive: true });
+      fs.mkdirSync(path.dirname(path.join(root, 'scripts', 'tests', 'fixtures', 'claude-host-contract-probe.cjs')), { recursive: true });
+      fs.writeFileSync(path.join(root, 'setup', 'claude-host-contract.json'), packageBytes);
+      fs.copyFileSync(fixture.observerPath, path.join(root, 'scripts', 'tests', 'fixtures', 'claude-host-contract-probe.cjs'));
+      assert.strictEqual(mod.verifyClaudeHostContractPackage(root, {
+        executablePath: fixture.executablePath, cliVersion: '2.1.261',
+        observerPath: path.join(root, 'scripts', 'tests', 'fixtures', 'claude-host-contract-probe.cjs'),
+        transportProfile: 'native-claude-cli', os: process.platform,
+      }).ok, true);
+    }
+    const baseOptions = {
+      executablePath: fixture.executablePath, cliVersion: '2.1.261', observerPath: fixture.observerPath,
+      transportProfile: 'native-claude-cli', os: process.platform,
+    };
+    for (const [label, mutateOptions] of [
+      ['binary', (o) => { o.executablePath = fixture.observerPath; }],
+      ['observer', (o) => { o.observerPath = fixture.executablePath; }],
+      ['version', (o) => { o.cliVersion = '2.1.262'; }],
+      ['os', (o) => { o.os = 'foreign-os'; }],
+      ['transport', (o) => { o.transportProfile = 'foreign-transport'; }],
+    ]) {
+      const options = Object.assign({}, baseOptions);
+      mutateOptions(options);
+      assert.strictEqual(mod.verifyClaudeHostContractPackage(fixture.projectRoot, options).ok, false, label);
+    }
+    const original = fs.readFileSync(published.packagePath);
+    for (const mutate of [
+      (pkg) => { pkg.certificate.observations_digest = '0'.repeat(64); },
+      (pkg) => { pkg.certificate.signature_ed25519_base64 = Buffer.alloc(64).toString('base64'); },
+      (pkg) => { pkg.anchor.key_id = '1'.repeat(64); },
+    ]) {
+      const pkg = JSON.parse(original.toString('utf8'));
+      mutate(pkg);
+      fs.writeFileSync(published.packagePath, JSON.stringify(pkg));
+      assert.strictEqual(mod.verifyClaudeHostContractPackage(fixture.projectRoot, baseOptions).ok, false);
+    }
+    fs.writeFileSync(published.packagePath, original);
+  } finally {
+    consumers.forEach((root) => fs.rmSync(root, { recursive: true, force: true }));
+    cleanupHostContractFixture(fixture);
+  }
+});
+
+test('P1-HOST-CERT-FAIL-CLOSED RED: publisher rejects trusted-summary lies, observer mutation, bad topology and conflicting fixed-package replay', () => {
+  const mod = requireHostClaude();
+  const fixtures = [];
+  try {
+    const mutateQualification = writeHostContractFixture('summary-lie');
+    fixtures.push(mutateQualification);
+    mutateQualification.qualification.observed_contract.same_actor_resume = false;
+    fs.writeFileSync(mutateQualification.qualificationPath, JSON.stringify(mutateQualification.qualification));
+    assert.strictEqual(mod.publishClaudeHostContractPackage({
+      projectRoot: mutateQualification.projectRoot, qualificationPath: mutateQualification.qualificationPath,
+      evidenceRoot: mutateQualification.evidenceRoot, observerPath: mutateQualification.observerPath,
+    }).ok, false);
+
+    const mutatedEvidence = writeHostContractFixture('mutated-evidence');
+    fixtures.push(mutatedEvidence);
+    fs.appendFileSync(path.join(mutatedEvidence.evidenceRoot, 'observer', 'events.jsonl'), '{}\n');
+    assert.strictEqual(mod.publishClaudeHostContractPackage({
+      projectRoot: mutatedEvidence.projectRoot, qualificationPath: mutatedEvidence.qualificationPath,
+      evidenceRoot: mutatedEvidence.evidenceRoot, observerPath: mutatedEvidence.observerPath,
+    }).ok, false);
+
+    const badTopology = writeHostContractFixture('bad-topology');
+    fixtures.push(badTopology);
+    const rows = fs.readFileSync(path.join(badTopology.evidenceRoot, 'observer', 'events.jsonl'), 'utf8').trim().split(/\r?\n/).map(JSON.parse);
+    rows[16].raw_event.agent_id = rows[2].raw_event.agent_id;
+    rows[16].agent_id_digest = rows[2].agent_id_digest;
+    const badBytes = Buffer.from(rows.map((row) => JSON.stringify(row)).join('\n') + '\n');
+    fs.writeFileSync(path.join(badTopology.evidenceRoot, 'observer', 'events.jsonl'), badBytes);
+    badTopology.qualification.evidence_sha256['observer/events.jsonl'] = sha256bytes(badBytes);
+    fs.writeFileSync(badTopology.qualificationPath, JSON.stringify(badTopology.qualification));
+    assert.strictEqual(mod.publishClaudeHostContractPackage({
+      projectRoot: badTopology.projectRoot, qualificationPath: badTopology.qualificationPath,
+      evidenceRoot: badTopology.evidenceRoot, observerPath: badTopology.observerPath,
+    }).ok, false);
+
+    const replay = writeHostContractFixture('no-clobber');
+    fixtures.push(replay);
+    const args = { projectRoot: replay.projectRoot, qualificationPath: replay.qualificationPath,
+      evidenceRoot: replay.evidenceRoot, observerPath: replay.observerPath };
+    const first = mod.publishClaudeHostContractPackage(args);
+    assert.strictEqual(first.ok, true, JSON.stringify(first));
+    const exactBytes = fs.readFileSync(first.packagePath);
+    const same = mod.publishClaudeHostContractPackage(args);
+    assert.strictEqual(same.ok, true);
+    assert.deepStrictEqual(fs.readFileSync(first.packagePath), exactBytes);
+    fs.writeFileSync(first.packagePath, '{}');
+    assert.strictEqual(mod.publishClaudeHostContractPackage(args).ok, false);
+  } finally {
+    fixtures.forEach(cleanupHostContractFixture);
+  }
+});
+
+test('DRH-01 RED: a genuine restricted role system/init becomes one signed direct-role identity and resolves only with its parent proof', () => {
+  const mod = requireHostClaude();
+  for (const name of ['recordDirectRoleHostIdentity', 'getDirectRoleHostIdentity',
+    'resolveObservedClaudeActor']) {
+    assert.strictEqual(typeof mod[name], 'function', `${name} must be exported`);
+  }
+  const fixture = sessionHostFixture();
+  const projectRoot = fixture.projectRoot;
+  const parentSessionId = `drh-parent-${crypto.randomBytes(12).toString('hex')}`;
+  const roleSessionId = `drh-role-${crypto.randomBytes(12).toString('hex')}`;
+  const parent = mod.recordProductionSessionIdentity({
+    projectRoot,
+    event: {
+      type: 'system', subtype: 'init', session_id: parentSessionId,
+      model: 'claude-sonnet-5', cwd: projectRoot,
+      tools: ['Task', 'Bash', 'SendMessage'], mcp_servers: [],
+    },
+    hostPin: sessionHostPin(fixture),
+  });
+  assert.strictEqual(parent.ok, true, JSON.stringify(parent));
+  const action = {
+    action_id: crypto.randomBytes(16).toString('hex'),
+    kind: 'role-spawn', runtime: 'claude-native', role: 'arch-platform',
+    payload: {
+      agent_type: 'arch-platform',
+      bootstrap_message: 'FIRST Bash=fixture-ready-command\n{"n":"node","r":"arch-platform"}\nWAIT.',
+    },
+  };
+  const base = {
+    projectRoot, parentSessionId, role: action.role, action,
+    definitionDigest: sha256hex('arch-platform-definition'),
+    launchArgv: ['claude', '--setting-sources', '', '--agent', action.role],
+    processId: 12345,
+    processBirth: 'fixture-process-birth',
+    event: {
+      type: 'system', subtype: 'init', session_id: roleSessionId,
+      model: 'claude-sonnet-5', cwd: projectRoot,
+      tools: ['Bash', 'Read', 'Grep'], agents: [action.role], mcp_servers: [],
+    },
+  };
+  const recorded = mod.recordDirectRoleHostIdentity(base);
+  assert.strictEqual(recorded.ok, true, JSON.stringify(recorded));
+  assert.strictEqual(recorded.record.schema, 'runtime/claude-direct-role-host/v1');
+  assert.strictEqual(recorded.record.parent_session_digest, sha256hex(parentSessionId));
+  assert.strictEqual(recorded.record.session_digest, sha256hex(roleSessionId));
+  assert.strictEqual(recorded.record.role, action.role);
+  assert.strictEqual(recorded.record.action_id, action.action_id);
+  assert.strictEqual(recorded.record.bootstrap_digest, sha256hex(action.payload.bootstrap_message));
+  assert.strictEqual(recorded.record.observation_source, 'managed-role-system-init-stream');
+  assert.strictEqual(mod.getDirectRoleHostIdentity(projectRoot, roleSessionId).ok, true);
+  const actor = mod.resolveObservedClaudeActor(projectRoot, {
+    session_id: roleSessionId,
+  }, { parentSessionId });
+  assert.deepStrictEqual({
+    ok: actor.ok, family: actor.family, sessionId: actor.sessionId,
+    agentId: actor.agentId, agentType: actor.agentType, actionId: actor.actionId,
+  }, {
+    ok: true, family: 'direct-role-host', sessionId: parentSessionId,
+    agentId: roleSessionId, agentType: action.role, actionId: action.action_id,
+  });
+  assert.strictEqual(mod.resolveObservedClaudeActor(projectRoot,
+    { session_id: roleSessionId }, { parentSessionId: parentSessionId + '-foreign' }).ok, false);
+  assert.strictEqual(mod.recordDirectRoleHostIdentity({
+    ...base,
+    action: {
+      ...action,
+      payload: { ...action.payload, bootstrap_message: `${action.payload.bootstrap_message}\u0000forged` },
+    },
+    event: { ...base.event, session_id: `${roleSessionId}-control` },
+  }).ok, false, 'a canonical multiline bootstrap must still reject embedded control bytes');
+  assert.strictEqual(mod.recordDirectRoleHostIdentity({
+    ...base,
+    event: { ...base.event, session_id: `${roleSessionId}-send`, tools: ['Bash', 'SendMessage'] },
+  }).ok, false, 'a role host must never expose parent-only SendMessage');
+  assert.strictEqual(mod.recordDirectRoleHostIdentity({
+    ...base,
+    event: { ...base.event, session_id: `${roleSessionId}-agent`, tools: ['Bash', 'Agent'] },
+  }).ok, false, 'a role host must never expose nested Agent');
+  const rootSessionId = `drh-root-${crypto.randomBytes(12).toString('hex')}`;
+  const rootAction = {
+    action_id: crypto.randomBytes(16).toString('hex'),
+    kind: 'root-source-spawn', runtime: 'claude-native',
+    payload: { agent_type: 'toolkit-specialist', bootstrap_message: 'ROOT_SOURCE_BOOTSTRAP/v1' },
+  };
+  const rootRecorded = mod.recordDirectRoleHostIdentity({
+    ...base,
+    role: 'toolkit-specialist', action: rootAction,
+    definitionDigest: sha256hex('toolkit-specialist-definition'),
+    event: { ...base.event, session_id: rootSessionId,
+      tools: ['Bash', 'SendMessage'], agents: ['toolkit-specialist'] },
+  });
+  assert.strictEqual(rootRecorded.ok, true, JSON.stringify(rootRecorded));
+  const rootActor = mod.resolveObservedClaudeActor(projectRoot,
+    { session_id: rootSessionId }, { parentSessionId });
+  assert.strictEqual(rootActor.ok, true, JSON.stringify(rootActor));
+  assert.strictEqual(rootActor.agentType, 'toolkit-specialist');
+  assert.strictEqual(rootActor.actionId, rootAction.action_id);
+});
+
+test('DRH-04 RED: direct-role admission consumes the existing claim once and creates the ordinary actor binding', (t) => {
+  assert.strictEqual(typeof rll.admitDirectRoleHostStartup, 'function');
+  const fixture = writeHostContractFixture('drh-admit');
+  const decoyDirs = [];
+  t.after(() => {
+    cleanupHostContractFixture(fixture);
+    for (const decoy of decoyDirs) fs.rmSync(decoy, { recursive: true, force: true });
+  });
+  const published = requireHostClaude().publishClaudeHostContractPackage({
+    projectRoot: fixture.projectRoot,
+    qualificationPath: fixture.qualificationPath,
+    evidenceRoot: fixture.evidenceRoot,
+    observerPath: fixture.observerPath,
+  });
+  assert.strictEqual(published.ok, true, JSON.stringify(published));
+  const projectRoot = fixture.projectRoot;
+  const parentSessionId = `drh-admit-parent-${crypto.randomBytes(12).toString('hex')}`;
+  const parent = requireHostClaude().recordProductionSessionIdentity({
+    projectRoot,
+    event: { type: 'system', subtype: 'init', session_id: parentSessionId,
+      model: 'claude-sonnet-5', cwd: projectRoot,
+      tools: ['Task', 'Bash', 'SendMessage'], mcp_servers: [] },
+    hostPin: sessionHostPin(fixture),
+  });
+  assert.strictEqual(parent.ok, true, JSON.stringify(parent));
+  const identity = { ok: true, provider: 'claude-hook', runtime_session_key: parentSessionId };
+  const plan = rll.discoverPlan(projectRoot);
+  const worktreeId = rll.computeWorktreeId(projectRoot);
+  const generation = rll.resolveSessionGeneration(projectRoot, identity);
+  const binding = rll.createMainOrchestratorBinding(projectRoot, identity, worktreeId, plan.planDigest, 600);
+  const actionId = rll.generateActionId();
+  const payload = rll.buildRoleSpawnPayload('drh-admit', 'arch-platform', 'arch-platform', null, 'canonical direct bootstrap');
+  const minted = rll.mintRoleLifecycleAction(
+    projectRoot, actionId, 'role-spawn', 'claude-native', rll.computeRepoId(projectRoot),
+    worktreeId, plan.planDigest, sha256hex('direct-role-policy'), generation.generationId,
+    'arch-platform', payload, new Date(Date.now() + 300000).toISOString().replace(/\.\d{3}Z$/, 'Z'),
+  );
+  assert.strictEqual(minted.ok, true, JSON.stringify(minted));
+  const starting = rll.transitionRoleBinding(
+    projectRoot, worktreeId, plan.planDigest, rll.roleProfileDigestFor(minted.action.role),
+    generation.generationId, minted.action.role, 'ABSENT', 'STARTING', null,
+    { driver: 'claude-sendmessage', respawn_count: 0, pending_action_id: minted.action.action_id },
+  );
+  assert.strictEqual(starting.ok, true, JSON.stringify(starting));
+  const roleSessionId = `direct-role-${crypto.randomBytes(12).toString('hex')}`;
+  const reserved = requireHostClaude().reserveDirectRoleHostLaunch({
+    projectRoot,
+    parentSessionId,
+    roleSessionId,
+    action: { ...minted.action, operation: 'Agent' },
+  });
+  assert.strictEqual(reserved.ok, true, JSON.stringify(reserved));
+  // A long-lived Windows registry can contain thousands of unrelated repo
+  // scopes. Admission already owns the canonical projectRoot and must not
+  // fall back to the bounded global action scan used by scope-less callers.
+  const registryBase = rll.registryBaseDir();
+  for (let index = 0; index < 1025; index += 1) {
+    const decoy = path.join(registryBase, sha256hex(`drh-admit-decoy-${index}`));
+    fs.mkdirSync(decoy, { recursive: true });
+    decoyDirs.push(decoy);
+  }
+  assert.deepStrictEqual(rll.findActionAcrossRepos(minted.action.action_id), {
+    ok: false,
+    reason: 'action-repo-scan-cap-exceeded',
+  });
+  assert.strictEqual(rll.findActionDirect(projectRoot, minted.action.action_id).ok, true);
+  const beforeAdmission = rll.readRoleBindingState(
+    projectRoot, minted.action.worktree_id, minted.action.plan_digest,
+    rll.roleProfileDigestFor(minted.action.role), minted.action.session_generation_id,
+    minted.action.role,
+  );
+  assert.strictEqual(beforeAdmission.state, 'STARTING', JSON.stringify(beforeAdmission));
+  assert.strictEqual(beforeAdmission.record.pending_action_id, minted.action.action_id,
+    JSON.stringify(beforeAdmission));
+  try {
+    const actor = {
+      family: 'direct-role-host',
+      sessionId: parentSessionId,
+      agentId: roleSessionId,
+      agentType: minted.action.role,
+      actionId: minted.action.action_id,
+    };
+    const admitted = rll.admitDirectRoleHostStartup(projectRoot, actor, minted.action.action_id);
+    assert.strictEqual(admitted.ok, true, JSON.stringify(admitted));
+    assert.strictEqual(admitted.idempotent, false);
+    const actorBinding = rll.validateRoleActorBindingFor(
+      projectRoot, admitted.actorBinding.binding_id, minted.action.role,
+      minted.action.worktree_id, minted.action.plan_digest,
+    );
+    assert.strictEqual(actorBinding.ok, true, JSON.stringify(actorBinding));
+    assert.strictEqual(actorBinding.binding.session_generation_id, minted.action.session_generation_id);
+    const parked = rll.parkClaudeResumeHandleForRoleActor(projectRoot, {
+      sessionId: parentSessionId,
+      agentId: roleSessionId,
+      agentType: minted.action.role,
+    });
+    assert.strictEqual(parked.ok, true, JSON.stringify(parked));
+    const replay = rll.admitDirectRoleHostStartup(projectRoot, actor, minted.action.action_id);
+    assert.strictEqual(replay.ok, true, JSON.stringify(replay));
+    assert.strictEqual(replay.idempotent, true);
+    assert.strictEqual(rll.admitDirectRoleHostStartup(projectRoot,
+      { ...actor, agentType: 'arch-testing' }, minted.action.action_id).ok, false);
+  } finally {
+    fs.rmSync(rll.registryRepoDir(projectRoot), { recursive: true, force: true });
   }
 });

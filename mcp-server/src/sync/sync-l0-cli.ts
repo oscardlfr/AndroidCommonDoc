@@ -12,7 +12,7 @@
  * If no manifest exists, auto-discovers L0/L1 sources nearby and creates one.
  *
  * Usage:
- *   node build/sync/sync-l0-cli.js [--project-root <path>] [--l0-root <path>] [--prune] [--force] [--dry-run]
+ *   node build/sync/sync-l0-cli.js [--project-root <path>] [--l0-root <path>] [--prune] [--force] [--dry-run] [--runtime]
  *
  * Options:
  *   --project-root  Path to the downstream project (default: cwd)
@@ -20,6 +20,7 @@
  *   --prune         Remove orphaned files (default: additive only)
  *   --force         Allow removing >5 files (requires --prune)
  *   --dry-run       Preview changes without writing
+ *   --runtime       Install the source-referenced L1/L2 collaboration runtime
  *
  * Exit codes:
  *   0 - Success
@@ -37,6 +38,7 @@ import {
   cleanupClone,
   detectMigrations,
   applyMigrations,
+  installRuntimeConsumer,
   type SyncOptions,
   type SyncReport,
   type MultiSourceSyncReport,
@@ -65,6 +67,7 @@ interface CliArgs {
   dryRun: boolean;
   autoMigrate: boolean;
   forceL0Managed: boolean;
+  runtime: boolean;
 }
 
 function parseArgs(argv: string[]): CliArgs {
@@ -75,6 +78,7 @@ function parseArgs(argv: string[]): CliArgs {
   let dryRun = false;
   let autoMigrate = false;
   let forceL0Managed = false;
+  let runtime = false;
 
   for (let i = 2; i < argv.length; i++) {
     if (argv[i] === "--project-root" && argv[i + 1]) {
@@ -93,10 +97,12 @@ function parseArgs(argv: string[]): CliArgs {
       autoMigrate = true;
     } else if (argv[i] === "--force-l0-managed") {
       forceL0Managed = true;
+    } else if (argv[i] === "--runtime") {
+      runtime = true;
     }
   }
 
-  return { projectRoot, l0Root, prune, force, dryRun, autoMigrate, forceL0Managed };
+  return { projectRoot, l0Root, prune, force, dryRun, autoMigrate, forceL0Managed, runtime };
 }
 
 // ---------------------------------------------------------------------------
@@ -133,6 +139,7 @@ const L0_MANAGED_TEMPLATES = [
 async function ensureManifest(
   projectRoot: string,
   l0RootOverride?: string,
+  runtimeMode = false,
 ): Promise<{ l0Root: string; isMultiSource: boolean; clonedDirs: string[] }> {
   const manifestPath = path.join(projectRoot, "l0-manifest.json");
 
@@ -179,6 +186,23 @@ async function ensureManifest(
   const isMultiSource = manifest.sources.length > 1;
   const clonedDirs: string[] = [];
 
+  // Runtime consumers are authority-bound to exactly one explicit, local L0
+  // tooling source. Never auto-discover, clone a remote, or fall back to an
+  // environment variable while installing the runtime.
+  if (runtimeMode) {
+    const l0Sources = manifest.sources.filter(source => source.layer === "L0" && source.role === "tooling");
+    if (l0Sources.length !== 1 || l0Sources[0].remote !== undefined) {
+      throw new Error("Runtime install requires exactly one local L0 tooling source in l0-manifest.json");
+    }
+    const configured = path.resolve(projectRoot, l0Sources[0].path);
+    if (!existsSync(configured)) throw new Error("Runtime L0 tooling source is missing");
+    const resolved = await resolveL0Source(l0Sources[0].path, projectRoot);
+    if (l0RootOverride && path.resolve(l0RootOverride) !== path.resolve(resolved)) {
+      throw new Error("--l0-root must equal the runtime source declared in l0-manifest.json");
+    }
+    return { l0Root: resolved, isMultiSource, clonedDirs };
+  }
+
   // Resolve L0 root — try local path first, then remote clone
   if (l0RootOverride) {
     return { l0Root: l0RootOverride, isMultiSource, clonedDirs };
@@ -213,14 +237,28 @@ async function ensureManifest(
 // ---------------------------------------------------------------------------
 
 async function main(): Promise<void> {
-  const { projectRoot, l0Root: l0RootArg, prune, force, dryRun, autoMigrate, forceL0Managed } = parseArgs(process.argv);
+  const { projectRoot, l0Root: l0RootArg, prune, force, dryRun, autoMigrate, forceL0Managed, runtime } = parseArgs(process.argv);
 
   console.log(`Sync → ${projectRoot}`);
   if (dryRun) console.log("  (dry-run mode — no files will be modified)");
 
-  const { l0Root, isMultiSource, clonedDirs } = await ensureManifest(projectRoot, l0RootArg);
+  if (runtime) {
+    if (!existsSync(path.join(projectRoot, "l0-manifest.json"))) {
+      throw new Error("Runtime install requires an existing l0-manifest.json");
+    }
+    if (prune || force || forceL0Managed || autoMigrate) {
+      throw new Error("--runtime cannot be combined with --prune, --force, --force-l0-managed, or --auto-migrate");
+    }
+  }
+
+  const { l0Root, isMultiSource, clonedDirs } = await ensureManifest(projectRoot, l0RootArg, runtime);
 
   try {
+
+  if (runtime) {
+    const preflight = await installRuntimeConsumer(projectRoot, l0Root, { dryRun: true });
+    if (!preflight.ok) throw new Error(`Runtime install preflight failed: ${preflight.reason}`);
+  }
 
   // Auto-migrate: detect and apply pending migrations before sync
   if (autoMigrate) {
@@ -248,6 +286,7 @@ async function main(): Promise<void> {
     force,
     dryRun,
     forceL0ManagedPaths: forceL0Managed ? L0_MANAGED_TEMPLATES : [],
+    runtime,
   };
   let report: SyncReport;
 
@@ -351,6 +390,12 @@ async function main(): Promise<void> {
 
   if (report.errors.length > 0) {
     process.exit(1);
+  }
+
+  if (runtime) {
+    const runtimeResult = await installRuntimeConsumer(projectRoot, l0Root, { dryRun });
+    if (!runtimeResult.ok) throw new Error(`Runtime install failed: ${runtimeResult.reason}`);
+    console.log(`Runtime consumer: ${runtimeResult.consumerLayer} (${runtimeResult.toolkitContentDigest})`);
   }
   } finally {
     // Cleanup temporary clones

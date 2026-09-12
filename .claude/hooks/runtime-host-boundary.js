@@ -230,6 +230,34 @@ function processPostToolUse(event, context) {
   return { closed: true };
 }
 
+function recordProductionNativeOutcome(event) {
+  const projectRoot = event && typeof event.cwd === 'string' && path.isAbsolute(event.cwd)
+    ? event.cwd
+    : (typeof process.env.CLAUDE_PROJECT_DIR === 'string' && path.isAbsolute(process.env.CLAUDE_PROJECT_DIR)
+      ? process.env.CLAUDE_PROJECT_DIR : null);
+  if (!projectRoot) return { ok: false };
+  try {
+    const host = require('../../scripts/lib/runtime-host-claude.cjs');
+    return host.recordProductionNativeToolOutcome({ projectRoot, event });
+  } catch {
+    return { ok: false };
+  }
+}
+
+function recordStartupReadyOutcome(event) {
+  const projectRoot = event && typeof event.cwd === 'string' && path.isAbsolute(event.cwd)
+    ? event.cwd
+    : (typeof process.env.CLAUDE_PROJECT_DIR === 'string' && path.isAbsolute(process.env.CLAUDE_PROJECT_DIR)
+      ? process.env.CLAUDE_PROJECT_DIR : null);
+  if (!projectRoot) return { ok: false };
+  try {
+    const lifecycle = require('../../scripts/lib/runtime-role-lifecycle.cjs');
+    return lifecycle.recordClaudeStartupReadyOutcome(projectRoot, event);
+  } catch {
+    return { ok: false };
+  }
+}
+
 function actionIdFromNativeEvent(event) {
   const input = event && event.tool_input;
   if (!input || typeof input !== 'object') return null;
@@ -405,6 +433,8 @@ function produceIbindDenyRecord(event, options) {
 module.exports = {
   processPreToolUse,
   processPostToolUse,
+  recordProductionNativeOutcome,
+  recordStartupReadyOutcome,
   admitEntrypointPreToolUse,
   admitNativeActionEvent,
   __TEST_ONLY__admitFinalWriterJob: admitFinalWriterJob,
@@ -424,7 +454,11 @@ if (require.main === module) {
         admitNativeActionEvent(event);
         processPreToolUse(event, {});
       }
-      else if (event && (event.hook_event_name === 'PostToolUse' || event.hook_event_name === 'PostToolUseFailure')) processPostToolUse(event, {});
+      else if (event && (event.hook_event_name === 'PostToolUse' || event.hook_event_name === 'PostToolUseFailure')) {
+        recordProductionNativeOutcome(event);
+        if (event.hook_event_name === 'PostToolUse' && event.tool_name === 'Bash') recordStartupReadyOutcome(event);
+        processPostToolUse(event, {});
+      }
     } catch {
       // Hooks must never block the host tool call because observation failed.
     }

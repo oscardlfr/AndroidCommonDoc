@@ -34,10 +34,10 @@ Additional skill-specific arguments (not in params.json):
 Monitoring enters through the shared product flow:
 
 ```bash
-node scripts/lib/runtime-collaboration-entrypoints.cjs execute --entrypoint monitor-docs --project-root <absolute> --intent <base64url canonical JSON>
+"<resolved-node>" "<toolkit-root>/scripts/lib/runtime-collaboration-entrypoints.cjs" execute --entrypoint monitor-docs --project-root <consumer-root> --intent <base64url canonical JSON>
 ```
 
-The Bash call must be one standalone direct Node command. Replace `<absolute>` with the literal absolute project path before invoking it. Never use `$(pwd)`, `$PWD`, `cd`, shell variables, command substitution, pipes, redirects, or command separators in this authenticated entrypoint call.
+The Bash call must be one standalone direct Node command. For L0, both roots are the current repository. For a runtime consumer, derive `toolkit-root` only from the single local `layer=L0, role=tooling` manifest source and keep `consumer-root` as the literal absolute application repository. Use the resolved Node executable; do not use environment fallbacks, command substitution, wrappers, pipes, redirects, or command separators.
 
 The decoded intent is exactly `{"scope":"<safe scope>"}`. The result contains observations and proposals only; it never converts a proposal into approval or writes documentation. Surface `BLOCKED|UNAVAILABLE|FAILED` unchanged.
 

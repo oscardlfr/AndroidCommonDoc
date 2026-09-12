@@ -17,9 +17,9 @@
  * - Registry existence is validated before any sync operations
  */
 
-import { readFile, writeFile, mkdir, unlink, access, lstat, readdir, rename, copyFile } from "node:fs/promises";
+import { readFile, writeFile, mkdir, unlink, access, lstat, readdir, rename, copyFile, realpath } from "node:fs/promises";
 import { createHash } from "node:crypto";
-import { execSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import path from "node:path";
 import {
   generateRegistry,
@@ -85,6 +85,8 @@ export interface SyncOptions {
    * Used by --force-l0-managed (F7 — BL-W47-prep-10).
    */
   forceL0ManagedPaths?: string[];
+  /** Install the source-referenced runtime closure instead of copying hooks. */
+  runtime?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -400,7 +402,7 @@ export async function resolveL0Source(
   // 2. Resolve relative to git toplevel (worktree-safe)
   let gitToplevel: string | undefined;
   try {
-    gitToplevel = execSync("git rev-parse --show-toplevel", {
+    gitToplevel = execFileSync("git", ["rev-parse", "--show-toplevel"], {
       cwd: projectRoot,
       encoding: "utf-8",
       stdio: ["pipe", "pipe", "pipe"],
@@ -475,7 +477,7 @@ export function cloneRemoteSource(remoteUrl: string): string {
     `l0-sync-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
   );
   try {
-    execSync(`git clone --depth=1 "${remoteUrl}" "${tmpDir}"`, {
+    execFileSync("git", ["clone", "--depth=1", remoteUrl, tmpDir], {
       encoding: "utf-8",
       stdio: ["pipe", "pipe", "pipe"],
     });
@@ -503,7 +505,7 @@ export function cleanupClone(dirPath: string): void {
  */
 export function getGitCommit(dirPath: string): string | undefined {
   try {
-    return execSync("git rev-parse --short HEAD", {
+    return execFileSync("git", ["rev-parse", "--short", "HEAD"], {
       cwd: dirPath,
       encoding: "utf-8",
       stdio: ["pipe", "pipe", "pipe"],
@@ -768,6 +770,222 @@ function hasValidHookStructure(hooks: unknown): hooks is SettingsHooks {
   );
 }
 
+const RUNTIME_CORE_HOOK_FILES = [
+  "context-provider-gate.js", "context-provider-write-gate.js",
+  "runtime-consultation-target-gate.js", "agent-spawn-execution-gate.js",
+  "subagent-start-context-bundle.js", "runtime-host-boundary.js",
+  "runtime-host-session-start.js", "bash-cli-spawn-gate.js",
+  "premature-execution-gate.js", "tool-use-logger.js",
+] as const;
+
+const RUNTIME_ROLE_TEMPLATES = [
+  "arch-platform", "arch-testing", "arch-integration", "context-provider",
+  "doc-updater", "toolkit-specialist", "test-specialist", "verifier",
+  "quality-gater", "planner",
+] as const;
+
+const RUNTIME_HOOK_REGISTRATIONS: readonly (HookRegistrationEntry & { timeout: number })[] = [
+  { event: "SessionStart", matcher: "startup", file: "runtime-host-session-start.js", timeout: 20 },
+  { event: "PreToolUse", matcher: "Write|Edit|Bash", file: "premature-execution-gate.js", timeout: 5 },
+  { event: "PreToolUse", matcher: "Bash", file: "bash-cli-spawn-gate.js", timeout: 5 },
+  { event: "PreToolUse", matcher: "Bash", file: "runtime-consultation-target-gate.js", timeout: 5 },
+  { event: "PreToolUse", matcher: "Bash", file: "context-provider-write-gate.js", timeout: 5 },
+  { event: "PreToolUse", matcher: "Grep|Glob|Bash|Read", file: "context-provider-gate.js", timeout: 30 },
+  { event: "PreToolUse", matcher: "Task|Agent", file: "agent-spawn-execution-gate.js", timeout: 30 },
+  { event: "PreToolUse", matcher: "Bash|Task|Agent|SendMessage", file: "runtime-host-boundary.js", timeout: 5 },
+  { event: "PostToolUse", matcher: ".*", file: "tool-use-logger.js", timeout: 5 },
+  { event: "PostToolUse", matcher: "Bash|Task|Agent|SendMessage", file: "runtime-host-boundary.js", timeout: 5 },
+  { event: "PostToolUseFailure", matcher: "Agent|SendMessage", file: "tool-use-logger.js", timeout: 5 },
+  { event: "PostToolUseFailure", matcher: "Bash|Task|Agent|SendMessage", file: "runtime-host-boundary.js", timeout: 5 },
+  { event: "SubagentStart", matcher: ".*", file: "subagent-start-context-bundle.js", timeout: 10 },
+  { event: "SubagentStop", matcher: ".*", file: "subagent-start-context-bundle.js", timeout: 10 },
+] as const;
+
+export interface RuntimeToolkitInventoryEntry {
+  relative_path: string;
+  kind: "file";
+  sha256: string;
+}
+
+async function collectInventoryDirectory(root: string, relativeDir: string, out: string[]): Promise<void> {
+  const absolute = path.join(root, relativeDir);
+  const entries = await readdir(absolute, { withFileTypes: true });
+  for (const entry of entries) {
+    const relative = path.posix.join(relativeDir.replace(/\\/g, "/"), entry.name);
+    if (entry.isSymbolicLink()) throw new Error(`runtime inventory symlink: ${relative}`);
+    if (entry.isDirectory()) await collectInventoryDirectory(root, relative, out);
+    else if (entry.isFile()) out.push(relative);
+  }
+}
+
+export async function computeRuntimeToolkitInventory(toolkitRoot: string): Promise<{
+  entries: RuntimeToolkitInventoryEntry[];
+  digest: string;
+}> {
+  const canonicalRoot = await realpath(toolkitRoot);
+  const files = [
+    "scripts/lib/runtime-role-lifecycle.cjs", "scripts/lib/runtime-host-claude.cjs",
+    "scripts/lib/runtime-consultation.cjs", "scripts/lib/runtime-collaboration-entrypoints.cjs",
+    "scripts/lib/runtime-collaboration-policy.json", "scripts/lib/runtime-routing.json",
+    "scripts/lib/runtime-bridge-codex.cjs", "scripts/lib/runtime-project-context.cjs",
+    ".claude/settings.json", ".claude/model-profiles.json", "setup/claude-host-contract.json",
+    "mcp-server/package-lock.json",
+    ...RUNTIME_CORE_HOOK_FILES.map((file) => `.claude/hooks/${file}`),
+    ...RUNTIME_ROLE_TEMPLATES.map((role) => `.claude/agents/${role}.md`),
+    ...["init-session", "resume-work", "work", "ingest-content", "monitor-docs"].map((skill) => `skills/${skill}/SKILL.md`),
+    ...["init-session", "resume-work", "work", "ingest-content", "monitor-docs"].map((command) => `.claude/commands/${command}.md`),
+  ];
+  await collectInventoryDirectory(canonicalRoot, "mcp-server/build", files);
+  const unique = [...new Set(files)].sort();
+  const inventory: RuntimeToolkitInventoryEntry[] = [];
+  for (const relative of unique) {
+    const absolute = path.join(canonicalRoot, relative);
+    const info = await lstat(absolute);
+    if (!info.isFile() || info.isSymbolicLink()) throw new Error(`runtime inventory entry is not a regular file: ${relative}`);
+    inventory.push({
+      relative_path: relative.replace(/\\/g, "/"), kind: "file",
+      sha256: createHash("sha256").update(await readFile(absolute)).digest("hex"),
+    });
+  }
+  const digest = createHash("sha256").update(JSON.stringify(inventory), "utf8").digest("hex");
+  return { entries: inventory, digest };
+}
+
+export interface RuntimeConsumerInstallResult {
+  ok: boolean;
+  reason?: string;
+  dryRun: boolean;
+  consumerLayer?: "L1" | "L2";
+  toolkitCommit?: string;
+  toolkitContentDigest?: string;
+  inventory?: RuntimeToolkitInventoryEntry[];
+  addedRoles?: string[];
+  migratedRoles?: string[];
+  registrations?: number;
+}
+
+export async function installRuntimeConsumer(
+  projectRoot: string,
+  toolkitRoot: string,
+  options: { dryRun?: boolean } = {},
+): Promise<RuntimeConsumerInstallResult> {
+  const dryRun = options.dryRun === true;
+  try {
+    const consumer = await realpath(projectRoot);
+    const toolkit = await realpath(toolkitRoot);
+    if (consumer === toolkit) return { ok: false, reason: "runtime-consumer-must-be-distinct", dryRun };
+    const manifestPath = path.join(consumer, "l0-manifest.json");
+    const manifest = await readManifest(manifestPath);
+    const l0Sources = manifest.sources.filter((source) => source.layer === "L0" && source.role === "tooling");
+    if (l0Sources.length !== 1 || l0Sources[0].remote !== undefined ||
+        await realpath(path.resolve(consumer, l0Sources[0].path)) !== toolkit) {
+      return { ok: false, reason: "runtime-l0-source-invalid", dryRun };
+    }
+    const consumerLayer: "L1" | "L2" = await access(path.join(consumer, "skills", "registry.json"))
+      .then(() => "L1" as const).catch(() => "L2" as const);
+    const toolkitCommit = execFileSync("git", ["rev-parse", "HEAD"], { cwd: toolkit, encoding: "utf8" }).trim();
+    if (!/^[0-9a-f]{40}$/.test(toolkitCommit)) return { ok: false, reason: "runtime-toolkit-commit-invalid", dryRun };
+    const inventory = await computeRuntimeToolkitInventory(toolkit);
+
+    const settingsPath = path.join(consumer, ".claude", "settings.json");
+    let settings: ClaudeSettings = {};
+    try {
+      const parsed: unknown = JSON.parse(await readFile(settingsPath, "utf8"));
+      if (!isJsonObject(parsed) || (parsed.hooks !== undefined && !hasValidHookStructure(parsed.hooks))) {
+        return { ok: false, reason: "runtime-settings-malformed", dryRun };
+      }
+      settings = parsed as ClaudeSettings;
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
+        return { ok: false, reason: "runtime-settings-malformed", dryRun };
+      }
+    }
+    const nextSettings: ClaudeSettings = JSON.parse(JSON.stringify(settings));
+    if (!nextSettings.hooks) nextSettings.hooks = {};
+    const nodePath = await realpath(process.execPath);
+    // Forward slashes are accepted by Node on Windows and avoid serializing
+    // JSON escape backslashes into the shell command stored in settings.json.
+    // JSON.stringify still supplies robust quoting for spaces on every host.
+    const quoteCommandPath = (value: string): string => JSON.stringify(value.replace(/\\/g, "/"));
+    const desiredByFile = new Map<string, string>(RUNTIME_CORE_HOOK_FILES.map((file) => [
+      file, `${quoteCommandPath(nodePath)} ${quoteCommandPath(path.join(toolkit, ".claude", "hooks", file))}`,
+    ]));
+    const legacyFor = (file: string): string => `node "$CLAUDE_PROJECT_DIR"/.claude/hooks/${file}`;
+    for (const [event, blocks] of Object.entries(nextSettings.hooks)) {
+      for (const block of blocks) {
+        const retained: HookCommandEntry[] = [];
+        for (const hook of block.hooks) {
+          const file = RUNTIME_CORE_HOOK_FILES.find((candidate) => hook.command.includes(candidate));
+          if (!file) { retained.push(hook); continue; }
+          const desiredRegistration = RUNTIME_HOOK_REGISTRATIONS.some((candidate) =>
+            candidate.event === event && candidate.matcher === block.matcher && candidate.file === file &&
+            hook.command === desiredByFile.get(file));
+          if (desiredRegistration) { retained.push(hook); continue; }
+          if (hook.command !== legacyFor(file)) return { ok: false, reason: `runtime-hook-conflict:${file}`, dryRun };
+        }
+        block.hooks = retained;
+      }
+    }
+    for (const registration of RUNTIME_HOOK_REGISTRATIONS) {
+      const blocks = nextSettings.hooks[registration.event] ?? (nextSettings.hooks[registration.event] = []);
+      let block = blocks.find((candidate) => candidate.matcher === registration.matcher);
+      if (!block) { block = { matcher: registration.matcher, hooks: [] }; blocks.push(block); }
+      const command = desiredByFile.get(registration.file)!;
+      if (!block.hooks.some((hook) => hook.command === command)) {
+        block.hooks.push({ type: "command", command, timeout: registration.timeout });
+      }
+    }
+
+    const roleWrites: Array<{ role: string; source: string; destination: string; content: string; migration: boolean }> = [];
+    for (const role of RUNTIME_ROLE_TEMPLATES) {
+      const source = path.join(toolkit, ".claude", "agents", `${role}.md`);
+      const destination = path.join(consumer, ".claude", "agents", `${role}.md`);
+      const content = await readFile(source, "utf8");
+      let migration = false;
+      try {
+        const existing = await readFile(destination, "utf8");
+        if (existing === content) continue;
+        if (stripL0Metadata(existing) !== content) {
+          return { ok: false, reason: `runtime-role-conflict:${role}`, dryRun };
+        }
+        migration = true;
+      } catch (err) {
+        if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
+          return { ok: false, reason: `runtime-role-unreadable:${role}`, dryRun };
+        }
+      }
+      roleWrites.push({ role, source, destination, content, migration });
+    }
+
+    if (!dryRun) {
+      await mkdir(path.dirname(settingsPath), { recursive: true });
+      await writeFile(settingsPath, JSON.stringify(nextSettings, null, 2) + "\n", "utf8");
+      for (const write of roleWrites) {
+        await mkdir(path.dirname(write.destination), { recursive: true });
+        await writeFile(write.destination, write.content, "utf8");
+      }
+      manifest.runtime = {
+        schema: "runtime-consumer/v1", enabled: true, consumer_layer: consumerLayer,
+        toolkit_commit: toolkitCommit, toolkit_content_sha256: inventory.digest,
+      };
+      for (const role of RUNTIME_ROLE_TEMPLATES) {
+        const relative = `.claude/agents/${role}.md`;
+        manifest.checksums[relative] = `sha256:${createHash("sha256").update(await readFile(path.join(toolkit, relative))).digest("hex")}`;
+      }
+      await writeManifest(manifestPath, manifest);
+    }
+    return {
+      ok: true, dryRun, consumerLayer, toolkitCommit, toolkitContentDigest: inventory.digest,
+      inventory: inventory.entries,
+      addedRoles: roleWrites.filter((write) => !write.migration).map((write) => write.role),
+      migratedRoles: roleWrites.filter((write) => write.migration).map((write) => write.role),
+      registrations: RUNTIME_HOOK_REGISTRATIONS.length,
+    };
+  } catch (err) {
+    return { ok: false, reason: err instanceof Error ? err.message : String(err), dryRun };
+  }
+}
+
 /**
  * Add the observation-only boundary hook only when the caller explicitly
  * enables the observation policy. This path deliberately differs from the
@@ -940,19 +1158,18 @@ export async function mergeHookRegistrations(
 }
 
 // ---------------------------------------------------------------------------
-// I-BIND boundary registration -- Task|SendMessage registry matcher
+// I-BIND boundary registration -- complete native runtime matcher
 // (P1-I/A RED Block B2). Separate seam from mergeObservationBoundaryRegistration
 // above: same owned utility file (runtime-host-boundary.js), same three
-// genuine hook events, but the registry/matcher surface is "Task|SendMessage".
-// "Agent" is never folded into the matcher string -- it is reported
-// separately as payloadToolName, preserving the accepted G1 boundary
-// semantics that this registration only observes/adjudicates the already
-// host-enforced I-BIND evidence and creates no authority of its own.
+// genuine hook events. The matcher includes Bash (entrypoint/startup), Task
+// (legacy host alias), Agent (native role spawn), and SendMessage (native
+// delivery). payloadToolName remains explicit metadata; this registration
+// only observes/adjudicates host events and creates no authority of its own.
 // ---------------------------------------------------------------------------
 
 const IBIND_BOUNDARY_FILE = "runtime-host-boundary.js";
-const IBIND_BOUNDARY_MATCHER = "Task|SendMessage";
-const IBIND_BOUNDARY_STALE_MATCHER = "Agent|SendMessage";
+const IBIND_BOUNDARY_MATCHER = "Bash|Task|Agent|SendMessage";
+const IBIND_BOUNDARY_STALE_MATCHER = "Task|SendMessage";
 const IBIND_BOUNDARY_PAYLOAD_TOOL = "Agent";
 const IBIND_BOUNDARY_EVENTS = [
   "PreToolUse",
@@ -973,7 +1190,7 @@ export interface IbindBoundaryUpgradedEntry extends IbindBoundaryEntry {
   removedFromMatcher: string;
 }
 
-/** Result of the Task|SendMessage I-BIND boundary registration/migration merge. */
+/** Result of the native I-BIND boundary registration/migration merge. */
 export interface MergeIbindBoundaryRegistrationResult {
   added: IbindBoundaryEntry[];
   skipped: IbindBoundaryEntry[];
@@ -983,7 +1200,7 @@ export interface MergeIbindBoundaryRegistrationResult {
 
 /**
  * Register (or migrate) the owned runtime-host-boundary.js command under the
- * "Task|SendMessage" registry matcher for PreToolUse, PostToolUse and
+ * "Bash|Task|Agent|SendMessage" registry matcher for PreToolUse, PostToolUse and
  * PostToolUseFailure.
  *
  * Ownership is decided by EXACT string equality against the canonical
@@ -991,17 +1208,17 @@ export interface MergeIbindBoundaryRegistrationResult {
  * that merely contains "runtime-host-boundary.js" is left untouched and
  * never mistaken for the owned registration.
  *
- * Every block matching either the canonical "Task|SendMessage" matcher or
- * the stale "Agent|SendMessage" matcher is inspected for the event (not just
+ * Every block matching either the canonical matcher or the stale
+ * "Task|SendMessage" matcher is inspected for the event (not just
  * the first one found), so duplicate owned hooks and duplicate matcher
  * blocks converge correctly. An event already holding exactly one exact
- * owned command under Task|SendMessage and none under the stale matcher is
+ * owned command under the canonical matcher and none under the stale matcher is
  * left completely untouched and reported as skipped — guaranteeing
  * byte-for-byte idempotence. Otherwise every exact owned hook found under
  * either matcher is removed (a block is dropped only when that removal
  * empties it, so co-located unrelated commands and unrelated duplicate
  * matcher blocks always survive untouched and are never merged), a single
- * owned entry is (re)inserted under Task|SendMessage, and the event is
+ * owned entry is (re)inserted under the canonical matcher, and the event is
  * reported as an upgrade (removedFromMatcher names the stale matcher when
  * any stale copy was removed, else the canonical matcher itself for a
  * same-matcher dedup). A genuinely absent registration is reported as added.
@@ -1479,14 +1696,17 @@ export async function syncMultiSource(
   // Hook propagation (F5 — BL-W47-prep-10): syncHooks inside syncMultiSource
   const msL0Root = resolvedPaths[orderedSources[0].layer] ?? "";
   if (msL0Root) {
-    const hookResult = await syncHooks(msL0Root, projectRoot, manifest.selection?.exclude_hooks ?? [], dryRun);
+    const hookResult = options.runtime ? { copied: [], skipped: [], errors: [] }
+      : await syncHooks(msL0Root, projectRoot, manifest.selection?.exclude_hooks ?? [], dryRun);
     for (const err of hookResult.errors) {
       report.warnings.push(`Hook sync: ${err}`);
     }
   }
 
   // Hook registration merge (F1 — BL-W47-prep-11): additive merge into settings.json
-  const msMergeResult = await mergeHookRegistrations(projectRoot, dryRun);
+  const msMergeResult = options.runtime
+    ? { added: [], skipped: [], dryRun }
+    : await mergeHookRegistrations(projectRoot, dryRun);
   if (msMergeResult.added.length > 0) {
     report.warnings.push(
       `Hook registrations added to settings.json: ${msMergeResult.added.map((e) => e.file).join(', ')}`,
@@ -1840,13 +2060,16 @@ export async function syncL0(
   }
 
   // Hook propagation (F5 — BL-W47-prep-10): syncHooks called inside syncL0
-  const slHookResult = await syncHooks(l0Root, projectRoot, manifest.selection?.exclude_hooks ?? [], dryRun);
+  const slHookResult = options.runtime ? { copied: [], skipped: [], errors: [] }
+    : await syncHooks(l0Root, projectRoot, manifest.selection?.exclude_hooks ?? [], dryRun);
   for (const err of slHookResult.errors) {
     report.warnings.push(`Hook sync: ${err}`);
   }
 
   // Hook registration merge (F1 — BL-W47-prep-11): additive merge into settings.json
-  const slMergeResult = await mergeHookRegistrations(projectRoot, dryRun);
+  const slMergeResult = options.runtime
+    ? { added: [], skipped: [], dryRun }
+    : await mergeHookRegistrations(projectRoot, dryRun);
   if (slMergeResult.added.length > 0) {
     report.warnings.push(
       `Hook registrations added to settings.json: ${slMergeResult.added.map((e) => e.file).join(', ')}`,

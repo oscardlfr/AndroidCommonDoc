@@ -85,6 +85,29 @@ CONSULTATION_CLI="$LIB_DIR/runtime-consultation.cjs"
 RLL_IMPL="$LIB_DIR/runtime-role-lifecycle.cjs"
 TG_CAPABILITY="tg-fixture-capability"
 S16_RETAINED_FIXTURE="$BATS_TEST_DIRNAME/fixtures/runtime-consultation-grant-wrapper.cjs"
+ID01_V2_FIXTURE="$BATS_TEST_DIRNAME/fixtures/runtime-claude-id01-v2-fixture.cjs"
+
+_secure_private_directory() {
+  local dir="$1"
+  node -e '
+    const fs = require("fs");
+    const dir = process.argv[1];
+    let st;
+    try { st = fs.lstatSync(dir); } catch (err) { console.error("private-directory stat failed: " + err.message); process.exit(1); }
+    if (st.isSymbolicLink()) { console.error("private-directory is a symlink"); process.exit(1); }
+    if (!st.isDirectory()) { console.error("private-directory is not a directory"); process.exit(1); }
+    if (process.platform === "win32") {
+      const rc = require(process.argv[2]);
+      const acl = rc.windowsPrivateDirectoryAcl(dir, { mode: "ensure" });
+      if (!acl.ok) { console.error("private-directory Windows ACL is not private: " + JSON.stringify(acl)); process.exit(1); }
+    } else {
+      fs.chmodSync(dir, 0o700);
+      st = fs.lstatSync(dir);
+      if ((st.mode & 0o777) !== 0o700) { console.error("private-directory wrong mode: " + (st.mode & 0o777).toString(8)); process.exit(1); }
+      if (typeof process.getuid === "function" && st.uid !== process.getuid()) { console.error("private-directory wrong owner"); process.exit(1); }
+    }
+  ' "$dir" "$CONSULTATION_CLI"
+}
 
 _assert_isolated_runtime_tmp() {
   local dir="$1"
@@ -95,15 +118,7 @@ _assert_isolated_runtime_tmp() {
     "$real_bats"|"$real_bats"/*) ;;
     *) echo "# runtime-tmp escaped BATS_TEST_TMPDIR: $real_dir not under $real_bats" >&2; return 1 ;;
   esac
-  node -e '
-    const fs = require("fs");
-    let st;
-    try { st = fs.lstatSync(process.argv[1]); } catch (err) { console.error("runtime-tmp stat failed: " + err.message); process.exit(1); }
-    if (st.isSymbolicLink()) { console.error("runtime-tmp is a symlink"); process.exit(1); }
-    if (!st.isDirectory()) { console.error("runtime-tmp is not a directory"); process.exit(1); }
-    if ((st.mode & 0o777) !== 0o700) { console.error("runtime-tmp wrong mode: " + (st.mode & 0o777).toString(8)); process.exit(1); }
-    if (typeof process.getuid === "function" && st.uid !== process.getuid()) { console.error("runtime-tmp wrong owner"); process.exit(1); }
-  ' "$dir"
+  _secure_private_directory "$dir"
 }
 
 setup() {
@@ -128,24 +143,23 @@ setup() {
   PROJ_REGISTRY_DIR="$(node -e 'const rll=require(process.argv[1]); process.stdout.write(rll.registryRepoDir(process.argv[2]));' "$RLL_IMPL" "$PROJ")"
   mkdir -p "$PROJ/.planning/wave-tg-wave"
   printf '# fixture PLAN for runtime-consultation-target-gate tests\n' > "$PROJ/.planning/wave-tg-wave/PLAN.md"
-  # The supervisor/action half of this suite deliberately exercises the
-  # retained Codex compatibility lane, whereas production's current v2 pair
-  # pins Claude-native selection. Install the canonical v1 projection only in
-  # this hermetic fixture so those tests reach their own gate assertions.
+  # Keep the canonical v2 policy: current startup claims and actor authority
+  # are deliberately invalid under the historical v1 projection. Individual
+  # retained-Codex tests opt into the deterministic app-server test backend
+  # rather than downgrading the whole fixture's policy contract.
   mkdir -p "$PROJ/scripts/lib"
   cp "$BATS_TEST_DIRNAME/../lib/runtime-collaboration-policy.json" "$PROJ/scripts/lib/runtime-collaboration-policy.json"
   cp "$BATS_TEST_DIRNAME/../lib/runtime-routing.json" "$PROJ/scripts/lib/runtime-routing.json"
-  node -e '
-    const fs = require("fs");
-    const p = process.argv[1];
-    const policy = JSON.parse(fs.readFileSync(p, "utf8"));
-    policy.schema = "runtime-collaboration-policy/v1";
-    policy.version = 1;
-    delete policy.selection;
-    fs.writeFileSync(p, JSON.stringify(policy, null, 2) + "\n");
-  ' "$PROJ/scripts/lib/runtime-collaboration-policy.json"
+  mkdir -p "$PROJ/.claude"
+  cp "$BATS_TEST_DIRNAME/../../.claude/model-profiles.json" "$PROJ/.claude/model-profiles.json"
   TEST_HOME="$PROJ/test-home"
   mkdir -p "$TEST_HOME/.codex"
+  _secure_private_directory "$TEST_HOME/.codex"
+  # Node resolves os.homedir() from USERPROFILE on native Windows. Isolate
+  # both variables so Git Bash cannot fall through to the developer profile;
+  # POSIX continues to resolve the same fixture through HOME.
+  export HOME="$TEST_HOME"
+  export USERPROFILE="$TEST_HOME"
   node -e '
     const fs = require("fs");
     const enc = (v) => Buffer.from(JSON.stringify(v)).toString("base64url");
@@ -217,7 +231,7 @@ _make_input() {
   python3 - "$INPUT_FILE" "$command" "$agent" "$session" "$agent_id" <<'PYEOF'
 import json, sys
 path, command, agent, session, agent_id = sys.argv[1:6]
-payload = {"tool_name": "Bash", "tool_input": {"command": command}, "agent_type": agent, "session_id": session, "agent_id": agent_id}
+payload = {"hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_use_id": "tg-tool-use-" + session + "-" + agent_id, "tool_input": {"command": command}, "agent_type": agent, "session_id": session, "agent_id": agent_id}
 with open(path, "w", encoding="utf-8") as f:
     json.dump(payload, f)
 PYEOF
@@ -234,18 +248,16 @@ _run_cp_hook() {
   run bash -c "cat '$INPUT_FILE' | CLAUDE_PROJECT_DIR='$PROJ' node '$CP_GATE_HOOK'"
 }
 
-# CLAUDE-ID-01 capability primer. The fixture uses the same host-private
-# lifecycle primitives as production and two distinct, live role-spawn
-# actions: peer A supplies the full start/tool/resume/tool sequence and peer B
-# supplies the required same-role/different-agent observation. This proves the
-# session-generation capability without relying on a model-visible artifact
-# or on repeated copies of one hook payload.
+# Corrected CLAUDE-ID-01 v2 actor primer. It publishes a signed reusable host
+# contract, records pin-bound session evidence, then proves this exact actor
+# through consumed startup claim + real ready pre/outcome + READY binding.
 # _prime_claude_id01_trace <agent_type> <session_id> [agent_id]
 _prime_claude_id01_trace() {
   local agent_type="$1" session_id="$2" agent_id="${3:-tg-agent-id}"
   node -e '
     const crypto = require("crypto");
     const rll = require(process.argv[1]);
+    const fixture = require(process.argv[6]);
     const projectRoot = process.argv[2];
     const agentType = process.argv[3];
     const sessionId = process.argv[4];
@@ -258,43 +270,32 @@ _prime_claude_id01_trace() {
       process.exit(1);
     }
     const worktreeId = rll.computeWorktreeId(projectRoot);
-    function mintAction(suffix) {
-      const actionId = rll.generateActionId();
-      const expiry = new Date(Date.now() + 600000).toISOString().replace(/\.\d{3}Z$/, "Z");
-      const minted = rll.mintRoleLifecycleAction(
-        projectRoot, actionId, "role-spawn", "claude-native",
-        rll.computeRepoId(projectRoot), worktreeId, plan.planDigest,
-        crypto.createHash("sha256").update("role-gate-claude-id01:" + suffix).digest("hex"),
-        generation.generationId, agentType,
-        rll.buildRoleSpawnPayload("claude-id01-probe", agentType, agentType, "fixture", "fixture"),
-        expiry,
-      );
-      if (!minted.ok) {
-        process.stderr.write("_prime_claude_id01_trace: action mint failed: " + JSON.stringify(minted));
-        process.exit(1);
-      }
-      return actionId;
+    const actionId = rll.generateActionId();
+    const expiry = new Date(Date.now() + 600000).toISOString().replace(/\.\d{3}Z$/, "Z");
+    const minted = rll.mintRoleLifecycleAction(
+      projectRoot, actionId, "role-spawn", "claude-native",
+      rll.computeRepoId(projectRoot), worktreeId, plan.planDigest,
+      crypto.createHash("sha256").update("role-gate-claude-id01-v2:" + agentId).digest("hex"),
+      generation.generationId, agentType,
+      rll.buildRoleSpawnPayload("claude-id01-probe", agentType, agentType, "fixture", "fixture"),
+      expiry,
+    );
+    if (!minted.ok) {
+      process.stderr.write("_prime_claude_id01_trace: action mint failed: " + JSON.stringify(minted));
+      process.exit(1);
     }
-    const actionA = mintAction("a-" + agentId);
-    const actionB = mintAction("b-" + agentId);
-    const observeStart = (id, actionId) => rll.recordClaudeId01SubagentStartObservation(
-      projectRoot, { sessionId, agentId: id, agentType, actionId }
+    fixture.primeClaudeId01V2ActorProof({
+      projectRoot, agentType, sessionId, agentId, actionId,
+      prefix: "role-gate-id01-v2",
+    });
+    const proof = rll.checkClaudeId01RuntimeCapability(
+      projectRoot, sessionId, worktreeId, plan.planDigest, agentType, agentId,
     );
-    const observeTool = (suffix) => rll.recordClaudeId01PreToolUseObservation(
-      projectRoot, { sessionId, agentId, agentType, toolUseId: "role-gate-prime-" + suffix + "-" + sessionId + "-" + agentId }
-    );
-    observeStart(agentId, actionA);
-    observeTool("1");
-    observeTool("2");
-    observeStart(agentId, actionA);
-    observeTool("3");
-    observeStart(agentId + "-distinct-peer-b", actionB);
-    const proof = rll.checkClaudeId01RuntimeCapability(projectRoot, sessionId, worktreeId, plan.planDigest);
     if (!proof.ok) {
       process.stderr.write("_prime_claude_id01_trace: global capability absent: " + JSON.stringify(proof));
       process.exit(1);
     }
-  ' "$RLL_IMPL" "$PROJ" "$agent_type" "$session_id" "$agent_id"
+  ' "$RLL_IMPL" "$PROJ" "$agent_type" "$session_id" "$agent_id" "$ID01_V2_FIXTURE"
 }
 
 # Extracts a --<flag> value from the last hook stdout ($output), reading the
@@ -330,13 +331,13 @@ _extract_injected() {
 # Mints a REAL pending role-spawn action for `role` via the actual production
 # ensure()/grant machinery. Prints "<action_id> <worktree_id> <plan_digest> <session_generation_id>".
 _mint_pending_role_spawn_full() {
-  local role="$1" session_key="$2"
-  _prime_claude_id01_trace "context-provider" "$session_key" "tg-lifecycle-capability-primary"
+  local role="$1" session_key="$2" prime_actor="${3:-true}"
   NODE_ENV=test RUNTIME_ROLE_LIFECYCLE_TEST_CAPABILITY="$TG_CAPABILITY" RUNTIME_ROLE_LIFECYCLE_FAKE_CAPABILITIES='["claude-sendmessage"]' node -e '
     const rll = require(process.argv[1]);
     const projectRoot = process.argv[2];
     const role = process.argv[3];
     const sessionKey = process.argv[4];
+    const fixture = require(process.argv[5]);
     const identity = { ok: true, provider: "claude-hook", runtime_session_key: sessionKey };
     const worktreeId = rll.computeWorktreeId(projectRoot);
     const planResult = rll.discoverPlan(projectRoot);
@@ -355,8 +356,14 @@ _mint_pending_role_spawn_full() {
     const profileDigest = rll.roleProfileDigestFor(role);
     const stateResult = rll.readRoleBindingState(projectRoot, worktreeId, planResult.planDigest, profileDigest, genResult.generationId, role);
     if (!stateResult.ok || !stateResult.record || !stateResult.record.pending_action_id) { process.stderr.write("no pending_action_id: " + JSON.stringify(stateResult)); process.exit(1); }
+    if (process.argv[6] === "true") {
+      fixture.primeClaudeStartupActor({
+        projectRoot, agentType: role, sessionId: sessionKey, agentId: "tg-agent-id",
+        actionId: stateResult.record.pending_action_id, prefix: "role-gate-startup-v2",
+      });
+    }
     process.stdout.write(stateResult.record.pending_action_id + " " + worktreeId + " " + planResult.planDigest + " " + genResult.generationId);
-  ' "$RLL_IMPL" "$PROJ" "$role" "$session_key"
+  ' "$RLL_IMPL" "$PROJ" "$role" "$session_key" "$ID01_V2_FIXTURE" "$prime_actor"
 }
 
 # _mint_role_actor_binding <role> <worktree_id> <plan_digest> <session_generation_id> [ttl_seconds]
@@ -409,6 +416,43 @@ _run_cli_command() {
 # all follow it) -- used by the adversarial on-disk-tamper tests below.
 _role_command_grant_path() {
   printf '%s/%s.json' "$(_role_command_grants_dir)" "$1"
+}
+
+_requester_grant_authority_snapshot() {
+  local grant_id="$1" rewritten="${2:-}"
+  node -e '
+    const fs = require("fs");
+    const rll = require(process.argv[1]);
+    const projectRoot = process.argv[2];
+    const grant = JSON.parse(fs.readFileSync(process.argv[3], "utf8"));
+    const rewritten = process.argv[4];
+    const bindingRead = rll.readRegistryRecord(rll.requesterBindingPathFor(projectRoot, grant.binding_id));
+    if (!bindingRead.ok || bindingRead.absent) {
+      process.stdout.write(JSON.stringify({ binding: bindingRead })); process.exit(0);
+    }
+    const binding = bindingRead.obj;
+    const identity = {
+      schema: rll.CLAUDE_AUTHORITY_IDENTITY_SCHEMA, provider: "claude-hook",
+      repo_id: rll.computeRepoId(projectRoot), runtime_session_key: binding.runtime_session_key,
+      agent_id: binding.agent_key,
+    };
+    const classification = rll.classifyClaudeAuthorityForIdentity(projectRoot, identity);
+    const proof = rll.checkClaudeId01ProofComplete(
+      projectRoot, binding.runtime_session_key, binding.worktree_id, binding.plan_digest,
+      binding.role, binding.agent_key,
+    );
+    let argvDigest = null;
+    if (rewritten) {
+      const tokens = rll.parsePosixDirect(rewritten);
+      const flagTokens = tokens.slice(3);
+      const idx = flagTokens.indexOf("--requester-binding");
+      const pre = idx < 0 ? flagTokens : flagTokens.slice(0, idx).concat(flagTokens.slice(idx + 2));
+      argvDigest = require("crypto").createHash("sha256")
+        .update(Buffer.from(JSON.stringify(pre), "utf8")).digest("hex");
+    }
+    const consumed = fs.existsSync(process.argv[3].replace(/\.json$/, ".consumed"));
+    process.stdout.write(JSON.stringify({ grant, argvDigest, consumed, binding, classification, proof }));
+  ' "$RLL_IMPL" "$PROJ" "$(_role_command_grant_path "$grant_id")" "$rewritten"
 }
 
 # _set_grant_field <grant_id> <field> <json_value_literal>
@@ -1131,15 +1175,14 @@ _assert_pretooluse_deny() {
   out="$(_mint_pending_role_spawn_full arch-testing tg-ready-1-session)"
   read -r action_id worktree_id plan_digest gen_id <<< "$out"
   [ -n "$action_id" ]
-  _mint_role_actor_binding arch-testing "$worktree_id" "$plan_digest" "$gen_id" 60
 
   local cmd; cmd="$(_render_posix_direct node "$RLL_IMPL" ready --action "$action_id")"
-  _make_input "$cmd" arch-testing tg-ready-1-caller
+  _make_input "$cmd" arch-testing tg-ready-1-session
   _run_hook
   [ "$status" -eq 0 ]
   [ -n "$output" ]
   local grant_id; grant_id="$(_extract_injected lifecycle-binding)"
-  [ -n "$grant_id" ]
+  [ -n "$grant_id" ] || { printf '# ready hook output: %s\n' "$output" >&3; false; }
 
   # Genuine round-trip proof via the SAME exported validator the real CLI
   # itself uses -- never a shape-only check on the hook's own stdout.
@@ -1158,20 +1201,20 @@ _assert_pretooluse_deny() {
   out="$(_mint_pending_role_spawn_full arch-testing tg-ready-absolute-node-session)"
   read -r action_id worktree_id plan_digest gen_id <<< "$out"
   [ -n "$action_id" ]
-  _mint_role_actor_binding arch-testing "$worktree_id" "$plan_digest" "$gen_id" 60
 
   local resolved_node
   resolved_node="$(node -e 'const rll=require(process.argv[1]); process.stdout.write(rll.resolvedNodePath());' "$RLL_IMPL")"
   [ -n "$resolved_node" ]
-  [[ "$resolved_node" = /* ]]
+  run node -e 'process.exit(require("path").isAbsolute(process.argv[1]) ? 0 : 1)' "$resolved_node"
+  [ "$status" -eq 0 ]
 
   local cmd; cmd="$(_render_posix_direct "$resolved_node" "$RLL_IMPL" ready --action "$action_id")"
-  _make_input "$cmd" arch-testing tg-ready-absolute-node-caller
+  _make_input "$cmd" arch-testing tg-ready-absolute-node-session
   _run_hook
   [ "$status" -eq 0 ]
   [ -n "$output" ]
   local grant_id; grant_id="$(_extract_injected lifecycle-binding)"
-  [ -n "$grant_id" ]
+  [ -n "$grant_id" ] || { printf '# absolute-node ready hook output: %s\n' "$output" >&3; false; }
 
   run node -e '
     const rll = require(process.argv[1]);
@@ -1187,7 +1230,6 @@ _assert_pretooluse_deny() {
   local out action_id worktree_id plan_digest gen_id
   out="$(_mint_pending_role_spawn_full arch-testing tg-ready-2-session)"
   read -r action_id worktree_id plan_digest gen_id <<< "$out"
-  _mint_role_actor_binding arch-testing "$worktree_id" "$plan_digest" "$gen_id" 60
   local forged; forged="$(_random_hex32)"
 
   local cmd; cmd="$(_render_posix_direct node "$RLL_IMPL" ready --action "$action_id" --lifecycle-binding "$forged")"
@@ -1247,7 +1289,7 @@ _assert_pretooluse_deny() {
 # ONE live binding that is honestly the WRONG one for this action.
 @test "TG-READY-WRONG-GENERATION BLOCK: exactly one live RoleActorBinding exists for {role,worktree,plan}, but its session_generation_id does NOT match the target action's own -- must block, never silently accepted as if it were the action's real binding" {
   local out action_id worktree_id plan_digest gen_id
-  out="$(_mint_pending_role_spawn_full arch-testing tg-readywronggen-session)"
+  out="$(_mint_pending_role_spawn_full arch-testing tg-readywronggen-session false)"
   read -r action_id worktree_id plan_digest gen_id <<< "$out"
   [ -n "$action_id" ]
 
@@ -1260,7 +1302,7 @@ _assert_pretooluse_deny() {
   _mint_role_actor_binding arch-testing "$worktree_id" "$plan_digest" "$wrong_gen" 60
 
   local cmd; cmd="$(_render_posix_direct node "$RLL_IMPL" ready --action "$action_id")"
-  _make_input "$cmd" arch-testing tg-readywronggen-caller
+  _make_input "$cmd" arch-testing tg-readywronggen-session
   _run_hook
   _assert_pretooluse_deny
 
@@ -1272,9 +1314,8 @@ _assert_pretooluse_deny() {
   local out2 action_id2 worktree_id2 plan_digest2 gen_id2
   out2="$(_mint_pending_role_spawn_full arch-testing tg-readywronggen-session-2)"
   read -r action_id2 worktree_id2 plan_digest2 gen_id2 <<< "$out2"
-  _mint_role_actor_binding arch-testing "$worktree_id2" "$plan_digest2" "$gen_id2" 60
   local cmd2; cmd2="$(_render_posix_direct node "$RLL_IMPL" ready --action "$action_id2")"
-  _make_input "$cmd2" arch-testing tg-readywronggen-caller-2
+  _make_input "$cmd2" arch-testing tg-readywronggen-session-2
   _run_hook
   [ "$status" -eq 0 ]
 }
@@ -1752,6 +1793,7 @@ _m6a_mint_supervisor_start_action() {
       env: Object.assign({}, process.env, {
         HOME: process.argv[4],
         CODEX_CLI_PATH: process.argv[5],
+        RUNTIME_ROLE_LIFECYCLE_TEST_BACKEND: "deterministic-app-server-v1",
         RUNTIME_ROLE_LIFECYCLE_FAKE_CAPABILITIES: JSON.stringify(["codex-app-server"]),
       }),
     });
@@ -1996,7 +2038,10 @@ _admin_root_init_cmd() {
   # some unrelated fixture gap.
   local legit; legit="$(_returned_command)"
   _run_cli_command "$legit"
-  [ "$status" -eq 0 ]
+  [ "$status" -eq 0 ] || {
+    printf '# legitimate root-init failed: %s\n# authority: %s\n' "$output" "$(_requester_grant_authority_snapshot "$grant_id" "$legit")" >&3
+    false
+  }
 
   # Same grant_id, but --coordination-root now points at a COMPLETELY
   # DIFFERENT root than the one the grant actually authorizes. Uses a FRESH
@@ -2045,7 +2090,10 @@ _admin_root_init_cmd() {
   # First use: must succeed. root-init is itself empirically idempotent, so
   # this is a genuine end-to-end SUCCESS, not merely "unrecognized flag".
   _run_cli_command "$rewritten"
-  [ "$status" -eq 0 ]
+  [ "$status" -eq 0 ] || {
+    printf '# first root-init use failed: %s\n# authority: %s\n' "$output" "$(_requester_grant_authority_snapshot "$grant_id" "$rewritten")" >&3
+    false
+  }
 
   # Second use of the EXACT SAME rewritten command (same grant_id): must be
   # rejected -- the grant was already consumed. Root-init's OWN idempotency
@@ -3130,7 +3178,7 @@ _s16e2e_bootstrap_project() {
   # give this fixture the same resolvable non-protected branch.
   git -C "$PROJ" checkout -b "feature/s16e2e-fixture" -q 2>/dev/null
   mkdir -p "$PROJ/.planning/coordination"
-  chmod 0700 "$PROJ/.planning/coordination"
+  _secure_private_directory "$PROJ/.planning/coordination"
   mkdir -p "$PROJ/scripts"
   # setup() already creates scripts/lib and its hermetic v1 policy fixture.
   # Preserve that projection while copying the canonical module CONTENTS;
@@ -3478,7 +3526,7 @@ _s16e2e_mint_raw_action() {
   # is no longer caller-selected: the grant/binding TTL now comes from the
   # SAME production derivation every real ensure call uses.
   local ensure_out
-  ensure_out="$(NODE_ENV=test RUNTIME_ROLE_LIFECYCLE_TEST_CAPABILITY="$S16E2E_LC_CAPABILITY" RUNTIME_ROLE_LIFECYCLE_FAKE_CAPABILITIES='["codex-app-server"]' node "$RLL_IMPL" ensure --project-root "$PROJ" "${role_flags[@]}" --lifecycle-binding "$lifecycle_grant")"
+  ensure_out="$(NODE_ENV=test RUNTIME_ROLE_LIFECYCLE_TEST_CAPABILITY="$S16E2E_LC_CAPABILITY" RUNTIME_ROLE_LIFECYCLE_TEST_BACKEND=deterministic-app-server-v1 RUNTIME_ROLE_LIFECYCLE_FAKE_CAPABILITIES='["codex-app-server"]' node "$RLL_IMPL" ensure --project-root "$PROJ" "${role_flags[@]}" --lifecycle-binding "$lifecycle_grant")"
   if [ $? -ne 0 ]; then echo "real ensure CLI failed: $ensure_out" >&2; return 1; fi
 
   node -e '
@@ -3522,7 +3570,7 @@ _s16e2e_mint_execution_claim() {
 _s16e2e_argv_from_action() {
   node -e '
     const action = JSON.parse(process.argv[1]);
-    process.stdout.write(JSON.stringify(action.payload.bridge_argv.slice(3)));
+    process.stdout.write(JSON.stringify(action.payload.bridge_argv));
   ' "$1"
 }
 
@@ -3536,6 +3584,7 @@ _s16e2e_start_bridge_bg() {
   local argv_json="$1"
   local args=()
   while IFS= read -r line; do args+=("$line"); done < <(_s16e2e_args_from_json "$argv_json")
+  [ "${#args[@]}" -ge 3 ]
   S16E2E_TIMING_LOG="$(mktemp)"
   # NO-GO Correction D: RUNTIME_BRIDGE_CODEX_FAKE_CONTEXT7_SERVER_PORT points
   # the bridge's own resolveTestContext7SocketAgent at a REAL local HTTPS
@@ -3579,7 +3628,11 @@ _s16e2e_start_bridge_bg() {
     [ -n "$context7_server_port" ]
   fi
   S16E2E_FAKE_CONTEXT7_CONN_LOG="$context7_conn_log"
-  env HOME="$S16E2E_TEST_HOME" NODE_ENV=test RUNTIME_BRIDGE_CODEX_TEST_CAPABILITY=x RUNTIME_BRIDGE_CODEX_FAKE_APP_SERVER_SPAWN="$S16E2E_FAKE_APP_SERVER_SPAWN_JSON" S16E2E_TIMING_LOG="$S16E2E_TIMING_LOG" RUNTIME_BRIDGE_CODEX_FAKE_CONTEXT7_SERVER_PORT="$context7_server_port" RUNTIME_BRIDGE_CODEX_FAKE_CONTEXT7_CONN_LOG="$context7_conn_log" node "$S16E2E_BRIDGE" session-run "${args[@]}" >"$S16E2E_BG_OUT" 2>&1 &
+  # Execute the immutable action's exact node/bridge/subcommand tuple. The
+  # previous fixture discarded bridge_argv[0..2] and substituted a separate
+  # project-local copy, which correctly failed the production bridge's own
+  # __filename correlation as bridge-argv-path-mismatch.
+  env HOME="$S16E2E_TEST_HOME" NODE_ENV=test RUNTIME_BRIDGE_CODEX_TEST_CAPABILITY=x RUNTIME_BRIDGE_CODEX_FAKE_APP_SERVER_SPAWN="$S16E2E_FAKE_APP_SERVER_SPAWN_JSON" S16E2E_TIMING_LOG="$S16E2E_TIMING_LOG" RUNTIME_BRIDGE_CODEX_FAKE_CONTEXT7_SERVER_PORT="$context7_server_port" RUNTIME_BRIDGE_CODEX_FAKE_CONTEXT7_CONN_LOG="$context7_conn_log" "${args[@]}" >"$S16E2E_BG_OUT" 2>&1 &
   S16E2E_BG_PID=$!
 }
 
@@ -3596,6 +3649,7 @@ _s16e2e_wait_for_owner_file() {
     sleep 0.1
   done
   if [ -f "$S16E2E_BG_OUT" ]; then sed 's/^/# bridge: /' "$S16E2E_BG_OUT" >&2; fi
+  if [ -n "${S16E2E_ACTION_JSON:-}" ]; then printf '# action: %s\n' "$S16E2E_ACTION_JSON" >&2; fi
   return 1
 }
 
@@ -3612,8 +3666,13 @@ _s16e2e_binding_state_json() {
 
 _s16e2e_wait_for_role_state() {
   local role="$1" action_json="$2" wanted="$3"
-  local observed=""
-  for _ in $(seq 1 150); do
+  local observed="" deadline=$((SECONDS + 15))
+  # Bound elapsed time, not iteration count.  A state read intentionally
+  # performs native DACL validation on Windows and can itself take longer
+  # than the nominal 0.1s sleep; 150 iterations therefore did not mean the
+  # documented 15 seconds on that host.  Bash SECONDS is available on both
+  # Windows Git Bash and POSIX/macOS.
+  while [ "$SECONDS" -lt "$deadline" ]; do
     observed="$(_s16e2e_binding_state_json "$role" "$action_json")"
     [[ "$observed" == *'"state":"'"$wanted"'"'* ]] && { printf '%s' "$observed"; return 0; }
     sleep 0.1
@@ -3900,11 +3959,11 @@ _s16e2e_setup_through_ingress() {
 # by setup()'s own _assert_isolated_runtime_tmp), and never rewrites the
 # snapshot itself after publish-request.
 _r2c_s16_integrity_sha256_file() {
-  if command -v sha256sum >/dev/null 2>&1; then
-    sha256sum "$1" | awk '{print $1}'
-  else
-    shasum -a 256 "$1" | awk '{print $1}'
-  fi
+  node -e '
+    const fs = require("fs");
+    const crypto = require("crypto");
+    process.stdout.write(crypto.createHash("sha256").update(fs.readFileSync(process.argv[1])).digest("hex"));
+  ' "$1"
 }
 
 # _r2c_s16_integrity_predispatch <request_path>
@@ -3983,7 +4042,11 @@ _r2c_s16_integrity_postdispatch() {
     return 1
   fi
   if ! cmp -s "$R2C_S16_SNAPSHOT_PATH" "$R2C_S16_BASELINE_DIR/snapshot-baseline.json"; then
-    echo "R2C-S16-INTEGRITY:snapshot-mutated" >&2
+    local observed_sha override_sha canonical_sha
+    observed_sha="$(_r2c_s16_integrity_sha256_file "$R2C_S16_SNAPSHOT_PATH")"
+    override_sha="$(_r2c_s16_integrity_sha256_file "$S16E2E_ROUTING_OVERRIDE_PATH")"
+    canonical_sha="$(_r2c_s16_integrity_sha256_file "$LIB_DIR/runtime-routing.json")"
+    echo "R2C-S16-INTEGRITY:snapshot-mutated:baseline=$R2C_S16_SNAPSHOT_BASELINE_SHA:observed=$observed_sha:override=$override_sha:canonical=$canonical_sha" >&2
     return 1
   fi
   if ! cmp -s "$R2C_S16_SNAPSHOT_PATH" "$S16E2E_ROUTING_OVERRIDE_PATH"; then
@@ -3998,7 +4061,7 @@ _r2c_s16_integrity_postdispatch() {
   local snapshot_sha_after canonical_sha_after
   snapshot_sha_after="$(_r2c_s16_integrity_sha256_file "$R2C_S16_SNAPSHOT_PATH")"
   if [ "$snapshot_sha_after" != "$R2C_S16_SNAPSHOT_BASELINE_SHA" ]; then
-    echo "R2C-S16-INTEGRITY:snapshot-mutated" >&2
+    echo "R2C-S16-INTEGRITY:snapshot-hash-mismatch:baseline=$(printf '%q' "$R2C_S16_SNAPSHOT_BASELINE_SHA"):observed=$(printf '%q' "$snapshot_sha_after")" >&2
     return 1
   fi
   canonical_sha_after="$(_r2c_s16_integrity_sha256_file "$LIB_DIR/runtime-routing.json")"
@@ -4286,31 +4349,22 @@ _r2c_s16_integrity_postdispatch() {
   _s16e2e_stop_retained_plane
 }
 
-# S16-ROOT-SOURCE-CANONICAL-ROUTING-01 (M6-M7-ROOT-SOURCE-CONTINUATION-
-# CLOSURE-20260820): the production Matrix 3 defect -- under the CANONICAL
-# runtime-routing.json (claude-agent ordered before codex-app-server for
-# arch-platform; NO R2-C private reorder, NO RUNTIME_CONSULTATION_TEST_
-# ROUTING_POLICY_PATH seam) a root-source-authenticated dispatch must be
-# constrained to codex-app-server (the retained architect the root-source
-# action was minted against), even though a genuine live
-# MainOrchestratorBinding makes claude-agent's own liveness proof pass too.
-# The discriminating signal is the activation's own selected_driver, never a
-# generic non-zero exit. An ORDINARY (non-root-source) requester dispatch in
-# the SAME fixture is the control: canonical routing is untouched for it, so
-# it still selects claude-agent.
-@test "S16-ROOT-SOURCE-CANONICAL-ROUTING-01: canonical runtime-routing.json applies capability order to root-source and ordinary requester dispatches; retained Codex remains a fallback, not an authority-derived override" {
+# Root-source is a closed, durable delivery surface: it may reuse a unique
+# live Claude peer through SendMessage, otherwise a live Codex app-server
+# peer, but never mint a fresh claude-agent actor. Ordinary requester
+# dispatch remains governed by the canonical route and is the control.
+@test "S16-ROOT-SOURCE-CANONICAL-ROUTING-01: root-source without a Claude peer uses live codex-app-server while an ordinary requester retains claude-agent" {
   # No routing_override_role argument: frozen canonical routing, no seam.
   _s16e2e_setup_through_ingress "s16e2e-canon-session" "s16e2e-canon-agent"
   [ -z "${RUNTIME_CONSULTATION_TEST_ROUTING_POLICY_PATH:-}" ]
   local session_id="$S16E2E_SESSION_ID" agent_id="$S16E2E_AGENT_ID"
   local request_path="$S16E2E_REQUEST_PATH" coord_root="$S16E2E_COORD_ROOT"
 
-  # ---- fixture sanity (fields DISTINCT from the semantic assertion below):
-  # the request is pinned to the CANONICAL repo routing policy, whose
-  # arch-platform route orders claude-agent strictly before codex-app-server;
-  # and BOTH candidates are genuinely live right now. ----
+  # ---- fixture sanity: canonical ordering still has claude-agent first,
+  # Codex is live, and no Claude peer exists for this root-source target. ----
   node -e '
     const fs = require("fs");
+    const path = require("path");
     const crypto = require("crypto");
     const rll = require(process.argv[1]);
     const rbc = require(process.argv[2]);
@@ -4335,6 +4389,9 @@ _r2c_s16_integrity_postdispatch() {
     if (mainLive !== true) { process.stderr.write("fixture sanity: no live MainOrchestratorBinding for the request scope -- claude-agent would not even be a live candidate"); process.exit(1); }
     const codexLive = rbc.resolveLiveCodexAppServerWorker(proj, "arch-platform");
     if (!codexLive || codexLive.ok !== true || codexLive.available !== true) { process.stderr.write("fixture sanity: retained codex-app-server arch-platform not live: " + JSON.stringify(codexLive)); process.exit(1); }
+    const peerDir = path.join(rll.registryRepoDir(proj), "claude-peer-bindings");
+    const peerCount = fs.existsSync(peerDir) ? fs.readdirSync(peerDir).filter((name) => name.endsWith(".json")).length : 0;
+    if (peerCount !== 0) { process.stderr.write("fixture sanity: expected no Claude peer, got " + peerCount); process.exit(1); }
   ' "$RLL_IMPL" "$LIB_DIR/runtime-bridge-codex.cjs" "$LIB_DIR/runtime-routing.json" "$request_path" "$PROJ"
 
   # ---- root-source-authenticated dispatch: real hook-injected one-use
@@ -4349,11 +4406,11 @@ _r2c_s16_integrity_postdispatch() {
   [ "$status" -eq 0 ]
   local activation_path; activation_path="$(node -e 'process.stdout.write(JSON.parse(process.argv[1]).artifact_ref)' "$output")"
   local root_selected; root_selected="$(node -e 'process.stdout.write(JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).selected_driver)' "$activation_path")"
-  echo "ROOT-SOURCE-DISPATCH selected_driver=$root_selected expected=claude-agent"
+  echo "ROOT-SOURCE-DISPATCH selected_driver=$root_selected expected=codex-app-server"
   node -e '
     const selected = process.argv[1];
-    if (selected !== "claude-agent") {
-      process.stderr.write("S16-ROOT-SOURCE-CANONICAL-ROUTING-01: root-source dispatch selected_driver=" + selected + " expected=claude-agent\n");
+    if (selected !== "codex-app-server") {
+      process.stderr.write("S16-ROOT-SOURCE-CANONICAL-ROUTING-01: root-source dispatch selected_driver=" + selected + " expected=codex-app-server\n");
       process.exit(1);
     }
   ' "$root_selected"
@@ -4405,6 +4462,114 @@ _r2c_s16_integrity_postdispatch() {
   ' "$control_selected"
 
   _s16e2e_stop_retained_plane
+}
+
+_s16e2e_create_arch_platform_claude_peer() {
+  local session_id="$1" peer_agent_id="$2"
+  node -e '
+    const crypto = require("crypto");
+    const rll = require(process.argv[1]);
+    const fixture = require(process.argv[5]);
+    const projectRoot = process.argv[2];
+    const sessionId = process.argv[3];
+    const agentId = process.argv[4];
+    const plan = rll.discoverPlan(projectRoot);
+    const generation = rll.resolveSessionGeneration(projectRoot, {
+      ok: true, provider: "claude-hook", runtime_session_key: sessionId,
+    });
+    if (!plan.ok || !generation.ok) {
+      process.stderr.write("peer fixture scope failed: " + JSON.stringify({ plan, generation }));
+      process.exit(1);
+    }
+    const actionId = rll.generateActionId();
+    const expiry = new Date(Date.now() + 600000).toISOString().replace(/\.\d{3}Z$/, "Z");
+    const minted = rll.mintRoleLifecycleAction(
+      projectRoot, actionId, "role-spawn", "claude-native",
+      rll.computeRepoId(projectRoot), rll.computeWorktreeId(projectRoot), plan.planDigest,
+      crypto.createHash("sha256").update("root-source-sendmessage-peer").digest("hex"),
+      generation.generationId, "arch-platform",
+      rll.buildRoleSpawnPayload("root-source-sendmessage", "arch-platform", "arch-platform", null, "fixture"),
+      expiry,
+    );
+    if (!minted.ok) { process.stderr.write("peer fixture action failed: " + JSON.stringify(minted)); process.exit(1); }
+    fixture.primeClaudeId01V2ActorProof({
+      projectRoot, agentType: "arch-platform", sessionId, agentId, actionId,
+      prefix: "root-source-sendmessage-peer-v2",
+    });
+    fixture.primeProductionClaudeHostAdmission({
+      projectRoot, sessionId, entrypoint: "monitor-docs", roleScope: "arch-platform",
+    });
+    const peer = rll.ensureClaudePeerBindingForObservedActor(projectRoot, {
+      sessionId, agentId, agentType: "arch-platform",
+    });
+    if (!peer.ok) { process.stderr.write("peer fixture bind failed: " + JSON.stringify(peer)); process.exit(1); }
+    process.stdout.write(JSON.stringify(peer.record));
+  ' "$RLL_IMPL" "$PROJ" "$session_id" "$peer_agent_id" "$ID01_V2_FIXTURE"
+}
+
+@test "S16-ROOT-SOURCE-DRIVER-CLAUDE-SENDMESSAGE-01: a unique live Claude peer is reused through claude-sendmessage, never claude-agent" {
+  _s16e2e_setup_through_ingress "s16e2e-sendmessage-session" "s16e2e-sendmessage-root-agent"
+  local session_id="$S16E2E_SESSION_ID" agent_id="$S16E2E_AGENT_ID"
+  local request_path="$S16E2E_REQUEST_PATH" coord_root="$S16E2E_COORD_ROOT"
+  local peer_json
+  peer_json="$(_s16e2e_create_arch_platform_claude_peer "$session_id" "s16e2e-live-arch-platform-peer")"
+  [ -n "$peer_json" ]
+
+  local dispatch_cmd; dispatch_cmd="$(_render_posix_direct node "$CONSULTATION_CLI" dispatch --coordination-root "$coord_root" --request "$request_path")"
+  _make_input "$dispatch_cmd" "toolkit-specialist" "$session_id" "$agent_id"
+  _run_cp_hook
+  [ "$status" -eq 0 ]
+  local dispatch_grant; dispatch_grant="$(_extract_injected requester-binding)"
+  [ -n "$dispatch_grant" ]
+  run node "$CONSULTATION_CLI" dispatch --coordination-root "$coord_root" --request "$request_path" --requester-binding "$dispatch_grant"
+  [ "$status" -eq 0 ]
+  local activation_path; activation_path="$(node -e 'process.stdout.write(JSON.parse(process.argv[1]).artifact_ref)' "$output")"
+  node -e '
+    const activation = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"));
+    if (activation.selected_driver !== "claude-sendmessage") {
+      process.stderr.write("expected claude-sendmessage, got " + activation.selected_driver);
+      process.exit(1);
+    }
+  ' "$activation_path"
+
+  _s16e2e_stop_retained_plane
+}
+
+@test "S16-ROOT-SOURCE-DRIVER-UNAVAILABLE-01: no Claude peer and no live Codex returns DRIVER_UNAVAILABLE with zero coordination writes" {
+  _s16e2e_setup_through_ingress "s16e2e-no-driver-session" "s16e2e-no-driver-root-agent"
+  local session_id="$S16E2E_SESSION_ID" agent_id="$S16E2E_AGENT_ID"
+  local request_path="$S16E2E_REQUEST_PATH" coord_root="$S16E2E_COORD_ROOT"
+  local dispatch_cmd; dispatch_cmd="$(_render_posix_direct node "$CONSULTATION_CLI" dispatch --coordination-root "$coord_root" --request "$request_path")"
+  _make_input "$dispatch_cmd" "toolkit-specialist" "$session_id" "$agent_id"
+  _run_cp_hook
+  [ "$status" -eq 0 ]
+  local dispatch_grant; dispatch_grant="$(_extract_injected requester-binding)"
+  [ -n "$dispatch_grant" ]
+
+  _s16e2e_stop_retained_plane
+  node -e '
+    const fs = require("fs");
+    const path = require("path");
+    const rll = require(process.argv[1]);
+    const rbc = require(process.argv[2]);
+    const projectRoot = process.argv[3];
+    const peerDir = path.join(rll.registryRepoDir(projectRoot), "claude-peer-bindings");
+    const peerCount = fs.existsSync(peerDir) ? fs.readdirSync(peerDir).filter((name) => name.endsWith(".json")).length : 0;
+    const codex = rbc.resolveLiveCodexAppServerWorker(projectRoot, "arch-platform", rll.roleProfileDigestFor("arch-platform"));
+    if (peerCount !== 0 || (codex && codex.ok === true && codex.available === true)) {
+      process.stderr.write("fixture still has a live root-source driver: " + JSON.stringify({ peerCount, codex }));
+      process.exit(1);
+    }
+  ' "$RLL_IMPL" "$LIB_DIR/runtime-bridge-codex.cjs" "$PROJ"
+
+  local before after
+  before="$(_s16_snapshot_tree "$coord_root")"
+  run node "$CONSULTATION_CLI" dispatch --coordination-root "$coord_root" --request "$request_path" --requester-binding "$dispatch_grant"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *'"status":"UNAVAILABLE"'* ]]
+  [[ "$output" == *'"detail_code":"DRIVER_UNAVAILABLE"'* ]]
+  after="$(_s16_snapshot_tree "$coord_root")"
+  [ "$after" = "$before" ]
 }
 
 @test "S16-ROOT-SOURCE-RACE-01: two real concurrent publish-request grants for the same binding produce exactly one durable request and one ingress" {
@@ -4668,6 +4833,9 @@ _r2c_s16_integrity_postdispatch() {
 }
 
 @test "S16-HOSTBRIDGE-LIVENESS-NO-STALE-CACHE-01: a target SIGKILLed immediately after being observed available is seen unavailable well inside the deleted cache's old 3s window, in the SAME process -- dispatch against it then fails closed with zero fabricated delivery" {
+  if [ "$(node -p 'process.platform')" = "win32" ]; then
+    skip "POSIX SIGKILL semantics; native Windows process liveness is covered by the PowerShell suites"
+  fi
   _s16e2e_setup_through_ingress "s16e2e-nostale-session" "s16e2e-nostale-agent" "arch-platform"
   local coord_root="$S16E2E_COORD_ROOT" request_path="$S16E2E_REQUEST_PATH"
   local session_id="$S16E2E_SESSION_ID" agent_id="$S16E2E_AGENT_ID"
@@ -4783,6 +4951,9 @@ _r2c_s16_integrity_postdispatch() {
 }
 
 @test "S16-HOSTBRIDGE-LIVENESS-NO-SAME-TICK-STALE-01: a target killed via a synchronous spawnSync between two immediate resolves (no await, same synchronous burst) is seen unavailable on the second resolve -- a queueMicrotask-scoped memo would still be serving the stale first result" {
+  if [ "$(node -p 'process.platform')" = "win32" ]; then
+    skip "POSIX /bin/kill semantics; native Windows process liveness is covered by the PowerShell suites"
+  fi
   _s16e2e_setup_through_ingress "s16e2e-notick-session" "s16e2e-notick-agent"
   local coord_root="$S16E2E_COORD_ROOT" request_path="$S16E2E_REQUEST_PATH"
   local session_id="$S16E2E_SESSION_ID" agent_id="$S16E2E_AGENT_ID"
@@ -5019,7 +5190,8 @@ _r2c_s16_integrity_postdispatch() {
 # runContextProviderInternalSearch (runtime-bridge-codex.cjs, unconditional on
 # role, independent of this intent's own evidence_policy), which needs a real
 # '@modelcontextprotocol/sdk' resolvable from $PROJ/mcp-server/package.json
-# and a real $PROJ/mcp-server/build/index.js to spawn -- _s16e2e_bootstrap_
+# and the real $PROJ/mcp-server/build/runtime-search-stdio.js composition to
+# spawn -- _s16e2e_bootstrap_
 # project symlinks both from the real checkout (never copies -- node_modules
 # is 100MB+) so this runs the SAME production internal-search code CP-
 # EVIDENCE-E2E exercises, just with zero matching docs in the fixture (a
@@ -5027,15 +5199,19 @@ _r2c_s16_integrity_postdispatch() {
 # ══════════════════════════════════════════════════════════════════════════
 
 _s16e2e_poll_consult_root_status() {
-  local session_id="$1" intent_id="$2" wanted="$3" tries=0
-  local observed=""
-  # 900 tries * 0.1s = 90s. Not 150 (15s): context-provider's real internal-
-  # search round trip alone measured ~32s under the five-role plane's own
-  # poll contention (see CONTEXT_PROVIDER_MCP_TIMEOUT_MS's comment in
-  # runtime-bridge-codex.cjs) -- this status poll must comfortably outlast
-  # the full request/dispatch/serve/accept/ack chain it is waiting on, not
-  # just the one sub-step.
-  while [ "$tries" -lt 900 ]; do
+  local session_id="$1" intent_id="$2" wanted="$3"
+  local observed="" deadline=$((SECONDS + 90))
+  # Bound actual elapsed time, not `iterations * sleep`.  Each status probe
+  # invokes the real hook and native Windows ACL checks can take seconds, so
+  # 900 iterations was not a 90-second ceiling there.  Ninety real seconds
+  # still comfortably covers the full request/dispatch/serve/accept/ack
+  # chain, while the same Bash SECONDS contract works on macOS/POSIX.  A
+  # status probe is a full security-hook + one-use-grant operation, not a
+  # cheap in-memory read; spacing probes by two seconds prevents the test
+  # driver itself from continuously competing with the MCP child it is
+  # trying to observe.
+  while [ "$SECONDS" -lt "$deadline" ]; do
+    sleep 2
     local status_cmd; status_cmd="$(_render_posix_direct node "$RLL_IMPL" consult-root-status --project-root "$PROJ" --intent-id "$intent_id")"
     _make_input "$status_cmd" "" "$session_id"
     _run_cp_hook
@@ -5047,8 +5223,6 @@ _s16e2e_poll_consult_root_status() {
         [[ "$observed" == *'"status":"'"$wanted"'"'* ]] && { printf '%s' "$observed"; return 0; }
       fi
     fi
-    tries=$((tries + 1))
-    sleep 0.1
   done
   printf '# last consult-root-status: %s\n' "$observed" >&2
   return 1
@@ -5367,6 +5541,9 @@ _s16e2e_poll_consult_root_request_published() {
 }
 
 @test "S16-ROOT-CONSULT-NO-RESERVATION-ZEROWRITE-01: an intent nobody reserves before its own 30s window closes is zero-write/BLOCKED" {
+  if [ "$(node -p 'process.platform')" = "win32" ]; then
+    skip "POSIX SIGSTOP/SIGCONT fixture; native Windows lifecycle coverage uses bounded deterministic clocks"
+  fi
   local session_id="s16e2e-noreserve-session"
   S16E2E_BG_PID=""
   _s16e2e_start_retained_plane "$session_id"
@@ -5485,6 +5662,9 @@ _s16e2e_poll_consult_root_request_published() {
 }
 
 @test "S16-ROOT-CONSULT-RESERVED-PAST-30S-READY-01: an intent reserved before its own activation window closes still reaches READY after that window elapses, bound by request_expiry instead" {
+  if [ "$(node -p 'process.platform')" = "win32" ]; then
+    skip "POSIX SIGSTOP/SIGCONT fixture; native Windows lifecycle coverage uses bounded deterministic clocks"
+  fi
   local session_id="s16e2e-past30s-session"
   S16E2E_BG_PID=""
   _s16e2e_start_retained_plane "$session_id"
@@ -6223,13 +6403,13 @@ _s16e2e_cp_evidence_expect_shutdown_signal() {
   local session_id="s16e2e-cpe-cleanup-session"
   # M6+M7 SIXTEENTH CODEX ACCEPTANCE Correction F: scoped to THIS test's own
   # $PROJ (a fresh mktemp -d, unique per test) rather than a global `pgrep
-  # -f "mcp-server/build/index.js"` -- the prior bare substring matches ANY
+  # -f "mcp-server/build/runtime-search-stdio.js"` -- a bare substring
+  # matches ANY
   # process on the machine with that path fragment anywhere in its argv,
   # including a totally unrelated concurrently-running test's own MCP child
   # or an orphan left by a PRIOR test run, either of which would make this
   # count comparison spuriously pass OR fail for a reason having nothing to
   # do with THIS test's own cleanup.
-  local before; before="$(pgrep -f "$PROJ/mcp-server/build/index.js" 2>/dev/null | wc -l | tr -d ' ')"
   S16E2E_FAKE_MODE="cooperative"
   S16E2E_FAKE_GAP_SPEC=""
   S16E2E_FAKE_CONTEXT7_RESPONSES=""
@@ -6242,12 +6422,26 @@ _s16e2e_cp_evidence_expect_shutdown_signal() {
   fi
   # runContextProviderInternalSearch's own finally block requires
   # stopOwnedAppServerChildBounded to CONFIRM the child is gone (throwing
-  # DURABILITY_UNPROVEN otherwise) before ever returning -- by the time
-  # consult-root-status reports READY, the search's own child is already
-  # provably reaped. Confirm no orphan survives independently too.
-  local after; after="$(pgrep -f "$PROJ/mcp-server/build/index.js" 2>/dev/null | wc -l | tr -d ' ')"
-  [ "$after" -eq "$before" ]
+  # DURABILITY_UNPROVEN otherwise) before ever returning. Stop the retained
+  # plane and verify its durable coordinator receipt too: no raw MCP promise,
+  # request or unconfirmed owned child may remain. This is the authoritative
+  # cross-platform proof; OS process-name scans are neither ownership-scoped
+  # nor reliable in hybrid Windows/WSL environments.
+  local repo_id action_id
+  repo_id="$(node -e 'process.stdout.write(JSON.parse(process.argv[1]).repo_id)' "$S16E2E_ACTION_JSON")"
+  action_id="$(node -e 'process.stdout.write(JSON.parse(process.argv[1]).action_id)' "$S16E2E_ACTION_JSON")"
   _s16e2e_stop_retained_plane
+  local receipt_path
+  receipt_path="$(node -e 'const path=require("path"),rll=require(process.argv[1]); process.stdout.write(path.join(rll.registryRepoDir({repoId:process.argv[2]}),"shutdown-receipts",process.argv[3]+".json"));' "$RLL_IMPL" "$repo_id" "$action_id")"
+  [ -f "$receipt_path" ]
+  run node -e '
+    const receipt = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"));
+    const q = receipt.quiescence;
+    const c = receipt.children;
+    if (!q || q.pending_raw_mcp !== 0 || q.pending_requests !== 0) throw new Error("MCP/request work not quiescent: " + JSON.stringify(q));
+    if (!c || c.unconfirmed !== 0 || c.observed !== c.exit_confirmed || c.observed !== c.streams_closed) throw new Error("owned children not confirmed closed: " + JSON.stringify(c));
+  ' "$receipt_path"
+  [ "$status" -eq 0 ]
 }
 
 # NO-GO Correction E (§16d line 79: "the MCP executable/argv/cwd/shell/
@@ -6260,9 +6454,11 @@ _s16e2e_cp_evidence_expect_shutdown_signal() {
 # same rationale as childEnvFromTopology) closes that gap without spawning a
 # real child.
 @test "S16-CP-SPAWN-CONFINEMENT-ENV-01: closedMcpEnvironment returns EXACTLY the PLAN.md §16c closed POSIX key set, no inherited/secret/proxy value" {
+  if [ "$(node -p 'process.platform')" = "win32" ]; then
+    skip "POSIX-only environment contract; native Windows confinement is covered by the Windows suites"
+  fi
   run env NODE_ENV=test RUNTIME_BRIDGE_CODEX_TEST_CAPABILITY="$TG_CAPABILITY" node -e '
     const rbc = require(process.argv[1]);
-    if (process.platform === "win32") { process.stdout.write(JSON.stringify({skip:"win32"})); process.exit(0); }
     const projectRoot = "/example/project-root";
     const isolatedHome = "/example/isolated-home";
     const env = rbc.closedMcpEnvironment(projectRoot, isolatedHome);
@@ -6289,6 +6485,45 @@ _s16e2e_cp_evidence_expect_shutdown_signal() {
   [[ "$output" == *'"path":""'* ]]
   [[ "$output" == *'"httpProxy":""'* ]]
   [[ "$output" == *'"noProxy":"*"'* ]]
+}
+
+@test "S16-CP-SPAWN-CONFINEMENT-WINDOWS-ENV-01: closedMcpEnvironment derives architecture natively and confines the Windows profile even when Git Bash omits PROCESSOR_ARCHITECTURE" {
+  if [ "$(node -p 'process.platform')" != "win32" ]; then
+    skip "native Windows-only environment contract"
+  fi
+  run env -u PROCESSOR_ARCHITECTURE NODE_ENV=test RUNTIME_BRIDGE_CODEX_TEST_CAPABILITY="$TG_CAPABILITY" node -e '
+    const path = require("path");
+    const rbc = require(process.argv[1]);
+    const projectRoot = path.resolve(process.argv[2]);
+    const isolatedHome = path.resolve(process.argv[3]);
+    const env = rbc.closedMcpEnvironment(projectRoot, isolatedHome);
+    const expectedKeys = [
+      "ALL_PROXY", "ANDROID_COMMON_DOC", "APPDATA", "HOMEDRIVE", "HOMEPATH",
+      "HTTP_PROXY", "HTTPS_PROXY", "LOCALAPPDATA", "NO_PROXY", "PATH",
+      "PROCESSOR_ARCHITECTURE", "PROGRAMFILES", "SYSTEMDRIVE", "SYSTEMROOT",
+      "TEMP", "USERNAME", "USERPROFILE",
+    ].sort();
+    const expectedArch = ({ ia32: "x86", x64: "AMD64", arm64: "ARM64" })[process.arch];
+    const actualKeys = Object.keys(env).sort();
+    const userRoot = path.join(isolatedHome, "mcp-user");
+    const ok = (
+      JSON.stringify(actualKeys) === JSON.stringify(expectedKeys)
+      && env.PROCESSOR_ARCHITECTURE === expectedArch
+      && env.USERPROFILE === userRoot
+      && env.APPDATA === path.join(userRoot, "AppData", "Roaming")
+      && env.LOCALAPPDATA === path.join(userRoot, "AppData", "Local")
+      && env.TEMP === path.join(isolatedHome, "mcp-temp")
+      && env.ANDROID_COMMON_DOC === projectRoot
+      && env.PATH === "" && env.USERNAME === "runtime"
+      && env.HTTP_PROXY === "" && env.HTTPS_PROXY === ""
+      && env.ALL_PROXY === "" && env.NO_PROXY === "*"
+      && !("HOME" in env) && !("USERPROFILE" in process.env && env.USERPROFILE === process.env.USERPROFILE)
+    );
+    process.stdout.write(JSON.stringify({ ok, actualKeys, expectedArch, actualArch: env.PROCESSOR_ARCHITECTURE }));
+    if (!ok) process.exit(1);
+  ' "$LIB_DIR/runtime-bridge-codex.cjs" "$PROJ" "$PROJ/isolated-mcp-home"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *'"ok":true'* ]]
 }
 
 # ══════════════════════════════════════════════════════════════════════════
@@ -7917,7 +8152,7 @@ _m7_call_root_source_status() {
   run node -e '
     const before = JSON.parse(process.argv[1]);
     const after = JSON.parse(process.argv[2]);
-    const isGrantPath = (k) => k.includes("/grants/");
+    const isGrantPath = (k) => k.replace(/\\/g, "/").includes("/grants/");
     const beforeKeys = new Set(Object.keys(before));
     const newKeys = Object.keys(after).filter((k) => !beforeKeys.has(k) && !isGrantPath(k));
     const changedKeys = Object.keys(after).filter((k) => beforeKeys.has(k) && before[k] !== after[k] && !isGrantPath(k));
@@ -8085,7 +8320,13 @@ _m7_g25_call_gate() {
     let body;
     try { body = JSON.parse(gate.stdout); } catch { body = null; }
     const decision = body && body.hookSpecificOutput && body.hookSpecificOutput.permissionDecision;
-    process.stdout.write(JSON.stringify({ status: gate.status, decision: decision || null, stdoutEmpty: gate.stdout === "" }));
+    const updatedInput = body && body.hookSpecificOutput && body.hookSpecificOutput.updatedInput;
+    process.stdout.write(JSON.stringify({
+      status: gate.status,
+      decision: decision || null,
+      stdoutEmpty: gate.stdout === "",
+      updatedName: updatedInput && updatedInput.name || null,
+    }));
   ' "$PROJ" "$AGENT_SPAWN_GATE_HOOK" "$session_id" "$subagent_type" "$name" "$prompt"
 }
 
@@ -8104,13 +8345,14 @@ _m7_g25_call_gate() {
   [[ "$output" == *'"decision":"allow"'* ]]
 }
 
-@test "M7-OWNING-NAME-GUARD-25 (diverging custom name, denied): a custom name diverging from an owning spawn own reserved action payload must be denied with zero root-source-binding reservations written" {
+@test "M7-OWNING-NAME-GUARD-25 (diverging custom name, canonicalized): a custom name cannot hide a unique owning spawn and the reserved action's canonical name is executed" {
   local session_id="m7-red-g25-diverge-session"
   local action_json
   action_json="$(_m7_mint_real_root_source_action_only "$session_id" "diverge")"
   [ -n "$action_json" ]
-  local agent_type prompt
+  local agent_type canonical_name prompt
   agent_type="$(node -e 'process.stdout.write(JSON.parse(process.argv[1]).payload.agent_type)' "$action_json")"
+  canonical_name="$(node -e 'process.stdout.write(JSON.parse(process.argv[1]).payload.name)' "$action_json")"
   prompt="$(node -e 'process.stdout.write(JSON.parse(process.argv[1]).payload.bootstrap_message)' "$action_json")"
 
   local before_count after_count
@@ -8119,9 +8361,14 @@ _m7_g25_call_gate() {
   run _m7_g25_call_gate "$session_id" "$agent_type" "my-custom-non-canonical-name" "$prompt"
   [ "$status" -eq 0 ]
   [[ "$output" == *'"status":0'* ]]
-  [[ "$output" == *'"decision":"deny"'* ]]
+  [[ "$output" == *'"decision":"allow"'* ]]
+  local updated_name
+  updated_name="$(node -e 'process.stdout.write(JSON.parse(process.argv[1]).updatedName || "")' "$output")"
+  [ "$updated_name" = "$canonical_name" ]
 
   after_count="$(node -e 'const rll=require(process.argv[1]);const fs=require("fs");const path=require("path");const dir=path.join(rll.registryRepoDir(process.argv[2]),"root-source-bindings");try{process.stdout.write(String(fs.readdirSync(dir).length));}catch{process.stdout.write("0");}' "$RLL_IMPL" "$PROJ")"
+  # PreToolUse reserves the owning action but must not create authority. The
+  # RootSourceBinding appears only after the correlated real SubagentStart.
   [ "$before_count" = "$after_count" ]
 }
 

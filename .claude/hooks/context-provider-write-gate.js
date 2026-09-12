@@ -43,11 +43,12 @@ const ROLE_RE = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 const PLAN_ID_RE = /^[A-Za-z0-9][A-Za-z0-9/#._-]*$/;
 const SLUG_RE = /^[a-z0-9][a-z0-9.-]*$/;
 const SLUG_REJECT_LIST = ['develop', 'master', 'main', 'HEAD'];
-// A write/append/tee operation whose target path contains context-bundles/ --
+// A write/append/tee operation whose target path contains context-bundles
+// followed by either platform path separator --
 // write-bundle.sh itself never accepts that path as an argv token (it always
 // computes it internally from --slug/--role), so ANY direct occurrence here
 // is a bypass of the sanctioned writer, never a legitimate write-bundle.sh flag.
-const BYPASS_WRITE_RE = /(>>?|\btee\b)[^&|;]*context-bundles\//;
+const BYPASS_WRITE_RE = /(>>?|\btee\b)[^&|;]*context-bundles[\\/]/;
 
 const WRITE_BUNDLE_SH_PATH = path.resolve(__dirname, '../../scripts/sh/write-bundle.sh');
 const ALLOWED_FLAGS = ['--role', '--plan-id', '--slug'];

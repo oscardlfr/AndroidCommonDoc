@@ -301,6 +301,47 @@ console.log('T16 agent_name/agent_class main: PASS');
   console.log('T19 CR-4 post-rotation entries go to fresh logPath: PASS');
 }
 
+// T20: a corrupt gzip result must never replace the recoverable raw snapshot.
+// This preloader simulates the exact aggregate-only failure observed on Windows:
+// a complete gzip payload with a damaged checksum trailer.
+{
+  const rotDir20 = fs.mkdtempSync(path.join(os.tmpdir(), 'tul-corrupt-gzip-'));
+  const logDir20 = path.join(rotDir20, '.androidcommondoc');
+  fs.mkdirSync(logDir20);
+  const logPath20 = path.join(logDir20, 'tool-use-log.jsonl');
+  const preload20 = path.join(rotDir20, 'corrupt-gzip-preload.cjs');
+  const MB = 1024 * 1024;
+  const chunk20 = Buffer.alloc(MB, 0x44);
+  const fd20 = fs.openSync(logPath20, 'w');
+  for (let i = 0; i < 21; i++) fs.writeSync(fd20, chunk20);
+  fs.closeSync(fd20);
+  fs.writeFileSync(preload20, String.raw`
+const zlib = require('node:zlib');
+const realGzipSync = zlib.gzipSync;
+zlib.gzipSync = function corruptGzipTrailer(...args) {
+  const result = realGzipSync.apply(this, args);
+  result[result.length - 8] ^= 0xff;
+  return result;
+};
+`);
+
+  const result20 = spawnSync('node', [HOOK], {
+    input: JSON.stringify({ tool_name: 'Bash', tool_input: { command: 'echo corrupt' }, session_id: 'sess20' }),
+    env: { ...process.env, CLAUDE_PROJECT_DIR: rotDir20, NODE_OPTIONS: `--require=${preload20}` },
+    encoding: 'utf8',
+  });
+  assert.strictEqual(result20.status, 0, 'T20: hook remains fail-open when gzip validation fails');
+  const rotatedRaw20 = fs.readdirSync(logDir20)
+    .filter((name) => name.startsWith('tool-use-log-') && name.endsWith('.jsonl'));
+  const gzip20 = fs.readdirSync(logDir20).filter((name) => name.endsWith('.jsonl.gz'));
+  assert.strictEqual(rotatedRaw20.length, 1, 'T20: recoverable raw snapshot is retained');
+  assert.strictEqual(gzip20.length, 0, 'T20: corrupt gzip is never published');
+  assert.ok(fs.existsSync(logPath20), 'T20: fresh live log still receives the current entry');
+
+  fs.rmSync(rotDir20, { recursive: true, force: true });
+  console.log('T20 corrupt gzip retains raw snapshot: PASS');
+}
+
 console.log('\nAll tool-use-logger tests passed.');
 
 // ═══════════════════════════════════════════════════════════════════════════

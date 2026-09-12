@@ -41,11 +41,50 @@ const os = require('os');
 const path = require('path');
 
 const REAL_SYSTEM_TMPDIR = os.tmpdir();
+const WINDOWS_COMMON_APP_DATA = process.platform === 'win32'
+  ? fs.realpathSync(process.env.ProgramData || 'C:\\ProgramData')
+  : null;
 
-const privateRoot = fs.mkdtempSync(path.join(REAL_SYSTEM_TMPDIR, 'acd-private-registry-'));
-fs.chmodSync(privateRoot, 0o700);
+const SHARED_PRIVATE_ROOT_ENV = 'ANDROID_COMMON_DOC_TEST_PRIVATE_REGISTRY_ROOT';
+const inheritedPrivateRoot = process.env[SHARED_PRIVATE_ROOT_ENV];
+const ownsPrivateRoot = !(typeof inheritedPrivateRoot === 'string' && path.isAbsolute(inheritedPrivateRoot));
+const privateRoot = ownsPrivateRoot
+  ? fs.mkdtempSync(path.join(WINDOWS_COMMON_APP_DATA || REAL_SYSTEM_TMPDIR, 'acd-private-registry-'))
+  : fs.realpathSync(inheritedPrivateRoot);
+if (ownsPrivateRoot) fs.chmodSync(privateRoot, 0o700);
+process.env[SHARED_PRIVATE_ROOT_ENV] = privateRoot;
 
+// Node follows the host-specific temp variable precedence.  Windows consults
+// TEMP/TMP while POSIX consults TMPDIR, so set all three to keep every child
+// registry inside the same harness-owned isolation boundary.
+process.env.TEMP = privateRoot;
+process.env.TMP = privateRoot;
 process.env.TMPDIR = privateRoot;
+
+// Every descendant Node process must install the same process-local registry
+// capability before it loads production modules. Merely inheriting TEMP/TMPDIR
+// is insufficient because registryBaseDir() deliberately trusts the Symbol
+// below, not an externally forgeable environment path. NODE_OPTIONS is the
+// one Node-owned propagation boundary shared by execFile/spawn/fork helpers.
+// Use a forward-slash absolute path so Windows option parsing is not exposed
+// to backslash escaping; quote it so worktrees containing spaces also work.
+const selfPreloadPath = __filename.split(path.sep).join('/').replace(/"/g, '\\"');
+const selfRequireOption = '--require="' + selfPreloadPath + '"';
+const inheritedNodeOptions = typeof process.env.NODE_OPTIONS === 'string'
+  ? process.env.NODE_OPTIONS.trim()
+  : '';
+if (!inheritedNodeOptions.includes(selfRequireOption)) {
+  process.env.NODE_OPTIONS = inheritedNodeOptions.length > 0
+    ? inheritedNodeOptions + ' ' + selfRequireOption
+    : selfRequireOption;
+}
+
+// A process-local test preload seam keeps registry authority private even in
+// tests that deliberately clear NODE_ENV while exercising production branches.
+// Windows needs this root outside HOME because HOME is itself a mandatory
+// sensitive root and production isolation roots must never nest beneath it.
+const TEST_PRIVATE_REGISTRY_BASE_SYMBOL = Symbol.for('android-common-doc.runtime-private-registry-base');
+globalThis[TEST_PRIVATE_REGISTRY_BASE_SYMBOL] = path.join(privateRoot, 'registry');
 
 function fatal(message) {
   process.stderr.write('[private-registry-tmpdir-preload] FATAL: ' + message + '\n');
@@ -60,7 +99,9 @@ if (os.tmpdir() !== privateRoot) {
 const rootStat = fs.lstatSync(privateRoot);
 if (rootStat.isSymbolicLink()) fatal('private root is a symlink -- refusing to trust it as an isolation boundary.');
 if (!rootStat.isDirectory()) fatal('private root is not a directory.');
-if ((rootStat.mode & 0o777) !== 0o700) fatal('private root has the wrong mode: ' + (rootStat.mode & 0o777).toString(8));
+if (process.platform !== 'win32' && (rootStat.mode & 0o777) !== 0o700) {
+  fatal('private root has the wrong mode: ' + (rootStat.mode & 0o777).toString(8));
+}
 if (typeof process.getuid === 'function' && rootStat.uid !== process.getuid()) fatal('private root has the wrong owner.');
 
 // Deliberately does NOT eagerly require runtime-role-lifecycle.cjs (or
@@ -97,13 +138,15 @@ if (typeof process.getuid === 'function' && rootStat.uid !== process.getuid()) f
 // the same eager-require hazard by another name); this is only the fixed
 // PARENT every principal's own registryBaseDir() nests under, which is
 // enough to prove containment via a prefix check.
-const EXPECTED_REGISTRY_BASE_DIR_PARENT = path.join(privateRoot, 'android-common-doc-runtime');
+const EXPECTED_REGISTRY_BASE_DIR_PARENT = globalThis[TEST_PRIVATE_REGISTRY_BASE_SYMBOL];
 if (!EXPECTED_REGISTRY_BASE_DIR_PARENT.startsWith(privateRoot + path.sep)) {
   fatal('internal error deriving the expected registryBaseDir() parent.');
 }
 
 process.on('exit', () => {
-  try { fs.rmSync(privateRoot, { recursive: true, force: true }); } catch { /* best effort */ }
+  if (ownsPrivateRoot) {
+    try { fs.rmSync(privateRoot, { recursive: true, force: true }); } catch { /* best effort */ }
+  }
 });
 
 module.exports = Object.freeze({

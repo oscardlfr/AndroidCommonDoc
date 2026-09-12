@@ -56,11 +56,31 @@ const path = require('path');
 
 const rll = require('../../scripts/lib/runtime-role-lifecycle.cjs');
 const rc = require('../../scripts/lib/runtime-consultation.cjs');
+const hostClaude = require('../../scripts/lib/runtime-host-claude.cjs');
 
 const CANONICAL_LIFECYCLE_CLI_PATH = path.resolve(__dirname, '../../scripts/lib/runtime-role-lifecycle.cjs');
 const CANONICAL_CONSULTATION_CLI_PATH = path.resolve(__dirname, '../../scripts/lib/runtime-consultation.cjs');
 const CONSULTATION_TARGET_SUBCOMMANDS = Object.freeze(['claim', 'lease-heartbeat', 'publish-result', 'worker-stop-ack']);
 const RESOLVED_NODE_EXECUTABLE = rll.resolvedNodePath().replace(/\\/g, '/');
+
+function resolveDirectRoleEvent(projectRoot, data) {
+  const parentSessionId = process.env.RUNTIME_DIRECT_ROLE_PARENT_SESSION_ID;
+  if (typeof parentSessionId !== 'string' || parentSessionId.length === 0 ||
+      (typeof data.agent_id === 'string' && data.agent_id.length > 0)) {
+    return { ok: true, data, direct: false };
+  }
+  const actor = hostClaude.resolveObservedClaudeActor(projectRoot, data, { parentSessionId });
+  if (!actor.ok || actor.family !== 'direct-role-host') {
+    return { ok: false, reason: 'direct role identity is not signed for this parent session' };
+  }
+  const admitted = rll.admitDirectRoleHostStartup(projectRoot, actor, actor.actionId);
+  if (!admitted.ok) return { ok: false, reason: admitted.reason || 'direct role startup admission failed' };
+  return {
+    ok: true,
+    direct: true,
+    data: { ...data, session_id: actor.sessionId, agent_id: actor.agentId, agent_type: actor.agentType },
+  };
+}
 
 // Generic `--flag value` linear scan (mirrors context-provider-gate.js's own
 // extractFlagValues, minus repeatable-flag support -- none of the four
@@ -155,7 +175,8 @@ function allowInjected(toolInput, rewrittenCommand) {
  * protocol entirely. A missing binding is therefore a genuine lookup
  * failure inside this owning flow, not a fallback-mint opportunity.
  */
-function handleReadyOwning(tokens, cliIdx, toolInput) {
+function handleReadyOwning(tokens, cliIdx, toolInput, data) {
+  const projectRoot = process.env.CLAUDE_PROJECT_DIR || process.cwd();
   const rest = tokens.slice(cliIdx + 2);
   if (rest.includes('--lifecycle-binding') || rest.includes('--target-binding')) {
     block('[RC-TARGET-GATE] a "ready" command must never carry its own grant-binding flag -- only this hook may mint and inject one.');
@@ -217,6 +238,20 @@ function handleReadyOwning(tokens, cliIdx, toolInput) {
   }
   if (!mintResult.ok) {
     block('[RC-TARGET-GATE] ready: unable to mint lifecycle-command-grant.');
+    return;
+  }
+
+  const startupReadyPre = rll.recordClaudeStartupReadyPreObservation(projectRoot, {
+    sessionId: data.session_id,
+    agentId: data.agent_id,
+    agentType: data.agent_type,
+    toolUseId: data.tool_use_id,
+    action,
+    actorBinding: binding,
+    grantId: mintResult.grantId,
+  });
+  if (!startupReadyPre.ok) {
+    block('[RC-TARGET-GATE] ready: unable to persist the authenticated startup-ready PRE fact.');
     return;
   }
 
@@ -382,7 +417,7 @@ function handleConsultationTargetOwning(tokens, cliIdx, toolInput, data) {
     };
     let claudeAgentClassification;
     try {
-      claudeAgentClassification = rll.classifyClaudeAuthorityForIdentity(repoDescriptorForClaudeAgent, observedIdentity);
+      claudeAgentClassification = rll.classifyClaudeAuthorityForIdentity(projectRoot, observedIdentity);
     } catch {
       claudeAgentClassification = { ok: false, reason: 'authority-classify-threw' };
     }
@@ -460,7 +495,7 @@ process.stdin.on('data', (c) => { input += c; });
 process.stdin.on('end', () => {
   clearTimeout(t);
   try {
-    const data = JSON.parse(input);
+    let data = JSON.parse(input);
     if (data.tool_name !== 'Bash') process.exit(0);
     const toolInput = (data.tool_input && typeof data.tool_input === 'object') ? data.tool_input : {};
     const command = toolInput.command;
@@ -472,11 +507,22 @@ process.stdin.on('end', () => {
     if (/[;&|`\n]|\$\(/.test(command)) process.exit(0);
 
     const tokens = rll.parsePosixDirect(command);
-    if (!tokens) process.exit(0); // non-canonical -- never owning.
+    const projectRoot = process.env.CLAUDE_PROJECT_DIR || process.cwd();
+    const direct = resolveDirectRoleEvent(projectRoot, data);
+    if (!direct.ok) {
+      block('[RC-TARGET-GATE] direct-role-host: ' + direct.reason + '.');
+      return;
+    }
+    data = direct.data;
+    if (!tokens) {
+      if (direct.direct) block('[RC-TARGET-GATE] direct-role-host: non-canonical Bash is outside the closed role command surface.');
+      else process.exit(0);
+      return;
+    }
 
     const readyIdx = findCliInvocation(tokens, CANONICAL_LIFECYCLE_CLI_PATH);
     if (readyIdx !== -1 && tokens[readyIdx + 1] === 'ready') {
-      handleReadyOwning(tokens, readyIdx, toolInput);
+      handleReadyOwning(tokens, readyIdx, toolInput, data);
       return;
     }
 
@@ -486,6 +532,10 @@ process.stdin.on('end', () => {
       return;
     }
 
+    if (direct.direct) {
+      block('[RC-TARGET-GATE] direct-role-host: Bash is outside the closed lifecycle/consultation target surface.');
+      return;
+    }
     process.exit(0); // not owning -- zero side effects.
   } catch (e) {
     // Fail open -- never block due to script/parse error on a genuinely

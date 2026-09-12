@@ -308,6 +308,7 @@ describe("P3 runtime-collaboration-entrypoints (RED)", () => {
     const v2Policy = JSON.parse(fs.readFileSync(policyPath, "utf8"));
     const v1Policy = { ...v2Policy };
     delete v1Policy.selection;
+    delete v1Policy.claude_native_startup_timeout_seconds;
     v1Policy.schema = "runtime-collaboration-policy/v1";
     v1Policy.version = 1;
 
@@ -410,6 +411,68 @@ describe("P3 runtime-collaboration-entrypoints (RED)", () => {
     expect(second.status).toBe("READY");
     expect(ports.lifecycle.ensureRoles).not.toHaveBeenCalled();
     expect(ports.adapter.executeAction).not.toHaveBeenCalled();
+  });
+
+  // P4 correction (fresh OAuth-session live evidence): all five canonical
+  // support roles were spawned and parked WAITING by an ordinary SubagentStop
+  // (a healthy idle liveness state, never terminal), but
+  // allSupportRolesReady accepted only the literal 'READY' string --
+  // executeInit then called ensureRoles/executeActions against roles that
+  // were already live, and a repeated standalone init-session call kept
+  // returning ACTION_REQUIRED with an empty actions array (nothing left to
+  // action, nothing recognized as ready either). The sealed plan defines
+  // READY, WAITING, and BUSY as the healthy/liveness routing set; WAITING is
+  // the normal idle state.
+  it("8b. init-session start intent returns READY with zero ensure/action when all five support roles are WAITING (a healthy idle liveness state, never STARTING)", async () => {
+    const mod = loadEntrypointWithCapability();
+    const ports = createScriptedPorts({
+      lifecycle: { status: vi.fn(async () => ({ roles: Object.fromEntries(SUPPORT_ROLES.map((r) => [r, "WAITING"])) })) },
+    });
+    const context = mod.__TEST_ONLY__createTrustedHostContext(ports);
+
+    const envelope = await mod.executeEntrypoint("init-session", { mode: "start" }, context);
+
+    expect(envelope.status).toBe("READY");
+    expect(ports.lifecycle.status).toHaveBeenCalledTimes(1);
+    expect(ports.lifecycle.ensureRoles).not.toHaveBeenCalled();
+    expect(ports.adapter.executeAction).not.toHaveBeenCalled();
+  });
+
+  it("8c. init-session start intent returns READY with zero ensure/action when the five support roles are a healthy mixture of READY, WAITING, and BUSY", async () => {
+    const mod = loadEntrypointWithCapability();
+    const mixedStates = ["READY", "WAITING", "BUSY", "READY", "WAITING"];
+    const ports = createScriptedPorts({
+      lifecycle: {
+        status: vi.fn(async () => ({
+          roles: Object.fromEntries(SUPPORT_ROLES.map((r, i) => [r, mixedStates[i]])),
+        })),
+      },
+    });
+    const context = mod.__TEST_ONLY__createTrustedHostContext(ports);
+
+    const envelope = await mod.executeEntrypoint("init-session", { mode: "start" }, context);
+
+    expect(envelope.status).toBe("READY");
+    expect(ports.lifecycle.ensureRoles).not.toHaveBeenCalled();
+    expect(ports.adapter.executeAction).not.toHaveBeenCalled();
+  });
+
+  it("8d. init-session start intent still ensures roles when only one of five is a non-healthy state (STARTING), even though the other four are READY/WAITING/BUSY", async () => {
+    const mod = loadEntrypointWithCapability();
+    const states = ["READY", "WAITING", "BUSY", "READY", "STARTING"];
+    const ports = createScriptedPorts({
+      lifecycle: {
+        status: vi.fn(async () => ({
+          roles: Object.fromEntries(SUPPORT_ROLES.map((r, i) => [r, states[i]])),
+        })),
+        ensureRoles: vi.fn(async () => ({ actions: [] })),
+      },
+    });
+    const context = mod.__TEST_ONLY__createTrustedHostContext(ports);
+
+    await mod.executeEntrypoint("init-session", { mode: "start" }, context);
+
+    expect(ports.lifecycle.ensureRoles).toHaveBeenCalledTimes(1);
   });
 
   it("9. exact selection mismatch with fallback deny returns UNAVAILABLE before lifecycle/adapter calls and records one digest-safe audit decision", async () => {
@@ -528,7 +591,8 @@ describe("P3 runtime-collaboration-entrypoints (RED)", () => {
     expect(ports.lifecycle.recoverRole).toHaveBeenCalledTimes(Object.keys(staleRoles).length);
     const recoveredRoles = ports.lifecycle.recoverRole.mock.calls.map((call: any[]) => call[0].role).sort();
     expect(recoveredRoles).toEqual(Object.keys(staleRoles).sort());
-    expect(["ACTION_REQUIRED", "READY"]).toContain(envelope.status);
+    expect(envelope.status).toBe("ACTION_REQUIRED");
+    expect(envelope.detail).toBe("recovery-action-required");
   });
 
   it("13. work exact intent {role,subject_ref,task} calls lifecycle.invokeRole once; source contains no TeamCreate, SendMessage, Agent(, codex-app-server or provider-branch literal", async () => {
@@ -734,10 +798,10 @@ describe("P3 runtime-collaboration-entrypoints (RED)", () => {
     for (const [skillDir, entrypointValue] of Object.entries(skillEntrypoints)) {
       const skillPath = path.join(ROOT, "skills", skillDir, "SKILL.md");
       const text = fs.readFileSync(skillPath, "utf8");
-      expect(text).toContain("node scripts/lib/runtime-collaboration-entrypoints.cjs execute");
+      expect(text).toContain('"<resolved-node>" "<toolkit-root>/scripts/lib/runtime-collaboration-entrypoints.cjs" execute');
       expect(text).toContain(`--entrypoint ${entrypointValue}`);
-      expect(text).toContain("literal absolute project path");
-      expect(text).toContain("Never use `$(pwd)`, `$PWD`, `cd`");
+      expect(text).toContain("consumer-root");
+      expect(text).toContain("toolkit-root");
       if (skillDir === "work") {
         expect(text).not.toMatch(/TeamCreate/);
         expect(text).not.toMatch(/SendMessage/);
@@ -753,6 +817,7 @@ describe("P3 runtime-collaboration-entrypoints (RED)", () => {
       "./runtime-role-lifecycle.cjs",
       "./runtime-consultation.cjs",
       "./runtime-host-claude.cjs",
+      "./runtime-project-context.cjs",
     ]);
     const nodeBuiltins = new Set(["fs", "path", "crypto", "child_process", "module", "os", "util"]);
     let match: RegExpExecArray | null;
@@ -781,7 +846,7 @@ describe("P3 runtime-collaboration-entrypoints (RED)", () => {
     expect(rll.isValidPolicy(projected)).toBe(true);
   });
 
-  it("20. a signed production admission runs the real CLI once and replay is unavailable", () => {
+  it("20. a production CLI admission without genuine session evidence is unavailable", () => {
     const req = createRequire(import.meta.url);
     const mod = loadEntrypoint({ fresh: true });
     const host = req(path.join(ROOT, "scripts/lib/runtime-host-claude.cjs"));
@@ -794,15 +859,7 @@ describe("P3 runtime-collaboration-entrypoints (RED)", () => {
       argvDigest: plan.argv_digest,
       roleScope: plan.role_scope,
     });
-    expect(admission.ok).toBe(true);
-    const args = [ENTRYPOINT_MODULE, "execute", "--entrypoint", "monitor-docs", "--project-root", ROOT,
-      "--intent", Buffer.from(JSON.stringify(intent)).toString("base64url"), "--host-composition", admission.compositionId];
-    const first = spawnSync(process.execPath, args, { encoding: "utf8" });
-    expect(first.status).toBe(0);
-    expect(JSON.parse(first.stdout).status).toBe("COMPLETED");
-    const replay = spawnSync(process.execPath, args, { encoding: "utf8" });
-    expect(replay.status).toBe(6);
-    expect(JSON.parse(replay.stdout).status).toBe("UNAVAILABLE");
+    expect(admission.ok).toBe(false);
   }, 60_000);
 
   it("21. caller-supplied or missing composition/grant cannot authorize the CLI", () => {
@@ -868,6 +925,54 @@ describe("P3 runtime-collaboration-entrypoints (RED)", () => {
       expect(Object.keys(first).sort()).toEqual(["command", "argv_digest", "role_scope"].sort());
       expect(first.argv_digest).toMatch(/^[0-9a-f]{64}$/);
       expect(Object.isFrozen(first)).toBe(true);
+    }
+  });
+
+  it("25. production resume-work reads and returns the durable five-role state instead of reporting READY with an empty role map", async () => {
+    const req = createRequire(import.meta.url);
+    const childProcess = req("node:child_process");
+    const spawn = vi.spyOn(childProcess, "spawnSync").mockReturnValue({
+      status: 0,
+      stdout: JSON.stringify({
+        status: "READY",
+        actions: [],
+        bindings: SUPPORT_ROLES.map((role) => ({ role, state: "BUSY" })),
+        operation: {
+          schema: "runtime/resume-checkpoint-completion/v1",
+          checkpoint_ref: "checkpoint:" + HEX64_A,
+          resumed_roles: [...SUPPORT_ROLES].sort(),
+        },
+      }),
+      stderr: "",
+    });
+    try {
+      const mod = loadEntrypointWithCapability();
+      const intent = { checkpoint_ref: "checkpoint:" + HEX64_A };
+      const plan = mod.planEntrypointStep("resume-work", intent, ROOT);
+      const ports = mod.__TEST_ONLY__createProductionPorts(
+        { entrypoint: "resume-work", projectRoot: ROOT, intent, lifecycleBinding: "a".repeat(32) },
+        plan,
+        {
+          actual_host: "claude",
+          actual_model: "claude-sonnet-5",
+          actual_role_engine: "claude",
+          continuity: "session-persistent",
+        },
+      );
+
+      const envelope = await mod.executeEntrypoint(
+        "resume-work",
+        intent,
+        mod.__TEST_ONLY__createTrustedHostContext(ports),
+      );
+      expect(envelope.status).toBe("READY");
+      expect(envelope.result.roles).toEqual(Object.fromEntries(SUPPORT_ROLES.map((role) => [role, "BUSY"])));
+      expect(spawn).toHaveBeenCalledTimes(1);
+      const argv = spawn.mock.calls[0][1] as string[];
+      expect(argv).toContain("--resume-checkpoint");
+      expect(argv[argv.indexOf("--resume-checkpoint") + 1]).toBe(intent.checkpoint_ref);
+    } finally {
+      spawn.mockRestore();
     }
   });
 });

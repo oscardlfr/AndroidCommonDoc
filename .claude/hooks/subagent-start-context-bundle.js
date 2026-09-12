@@ -62,12 +62,20 @@ function emitSubagentStartAdditionalContext(value) {
   }));
   process.exit(0);
 }
-// M7 Correction (§5.A): createRoleActorBinding's own internal bound is
-// ACTION_TTL_CEILING_SECONDS (120, confirmed by direct read of
-// runtime-role-lifecycle.cjs) -- the maximum admitted, chosen here to give
-// both `ready` (item 1§C) and the consultation target grants (item 1§D) the
-// widest possible window to find this binding.
-const ROLE_ACTOR_BINDING_TTL_SECONDS = 120;
+// P4 correction (clean9 live evidence, 2026-09-05): createRoleActorBinding's
+// own internal bound is now ROLE_ACTOR_BINDING_TTL_CEILING_SECONDS (3600,
+// confirmed by direct read of runtime-role-lifecycle.cjs) -- genuinely
+// separate from ACTION_TTL_CEILING_SECONDS (120, unchanged for startup
+// actions). RoleActorBinding is a PERSISTENT support-plane lifecycle
+// primitive (READY/WAITING/BUSY across idle gaps); the previous 120s bound
+// forced every parked resume handle down to a two-minute lifetime,
+// observed live expiring the binding before the same top-level session even
+// finished init-session. Requested here at the maximum admitted, mirroring
+// SESSION_GENERATION_TTL_SECONDS's own 3600s bound -- a live session
+// generation is independently re-validated on every park/consume/finder
+// call regardless, so this widened ceiling never outlives session
+// expiry/restart.
+const ROLE_ACTOR_BINDING_TTL_SECONDS = 3600;
 // M7 completeness Part C follow-up: createClaudeOneShotBinding's own
 // internal ceiling is CLAUDE_ONE_SHOT_BINDING_TTL_CEILING_SECONDS (3600,
 // confirmed by direct read of runtime-role-lifecycle.cjs) -- requested at
@@ -152,10 +160,34 @@ function scanRoleBindingsForRole(projectRoot, role) {
   return { anyExists, liveCandidates };
 }
 
-/** True when a RoleSpawnExecutionClaim/v1 record exists at this action's claim path (presence only -- full validation happens via validateAndConsumeRoleSpawnExecutionClaim). */
+/**
+ * True only when a RoleSpawnExecutionClaim can still be live.
+ *
+ * Durable expired claim files are audit history, not live reservations. A
+ * presence-only check lets an abandoned prior generation poison every later
+ * genuine spawn for the same role as "ambiguous". Filter only records that
+ * are provably well-formed history here; malformed records remain candidates
+ * so the full validator below can fail closed with a specific reason.
+ */
 function hasLiveClaimFile(projectRoot, actionId) {
-  const read = rll.readRegistryRecord(rll.roleSpawnExecutionClaimPathFor(projectRoot, actionId));
-  return read.ok === true && read.absent !== true;
+  const claimPath = rll.roleSpawnExecutionClaimPathFor(projectRoot, actionId);
+  const read = rll.readRegistryRecord(claimPath);
+  if (read.ok !== true || read.absent === true || !read.obj) return false;
+
+  const claim = read.obj;
+  const actualKeys = Object.keys(claim).sort();
+  const expectedKeys = [...rll.ROLE_SPAWN_EXECUTION_CLAIM_KEYS].sort();
+  const exactV2Record = claim.schema === rll.ROLE_SPAWN_EXECUTION_CLAIM_SCHEMA
+    && actualKeys.length === expectedKeys.length
+    && actualKeys.every((key, index) => key === expectedKeys[index]);
+  if (!exactV2Record || claim.execution_state !== 'ISSUED' || claim.action_id !== actionId) return true;
+
+  const consumedMarker = path.join(path.dirname(claimPath), actionId + '.consumed');
+  if (fs.existsSync(consumedMarker)) return false;
+
+  const expiryMs = Date.parse(claim.expiry);
+  if (!Number.isFinite(expiryMs)) return true;
+  return Date.now() < expiryMs;
 }
 
 /** Best-effort quarantine (STARTING/REHYDRATING -> QUARANTINED, both legal direct edges) -- never fatal to the hook itself. */
@@ -594,6 +626,29 @@ function handleSubagentStop(data) {
     return;
   }
 
+  // P4 Windows native-Claude persistence correction: a first ordinary stop
+  // for an exactly correlated persistent claude-sendmessage role actor parks
+  // the role as resumable WAITING instead of publishing the terminal
+  // authority fence -- a normal completed Task is natively resumable, not
+  // terminal product death. ONLY a genuinely successful park (unique live
+  // canonical claude-sendmessage RoleActorBinding, READY/BUSY, no fence)
+  // bypasses the fence/CLAUDE-ID-01-trace-deletion below; any failure
+  // (wrong state/driver, ambiguous, no live actor, already fenced, etc.)
+  // falls through completely unchanged to the existing terminal behavior --
+  // this never broadens what shouldFence already decides below.
+  if (rll.parkClaudeResumeHandleForRoleActor) {
+    let parkResult;
+    try {
+      parkResult = rll.parkClaudeResumeHandleForRoleActor(projectRoot, { sessionId, agentId, agentType });
+    } catch {
+      parkResult = { ok: false };
+    }
+    if (parkResult && parkResult.ok === true) {
+      process.exit(0);
+      return;
+    }
+  }
+
   // ── READ-ONLY RESOLUTION: the classifier scans every Claude-actor
   // binding family (requester/root-source/one-shot) for this exact
   // session_id+agent_id identity in one bounded pass, ZERO mutation below
@@ -607,7 +662,7 @@ function handleSubagentStop(data) {
   };
   let classification;
   try {
-    classification = rll.classifyClaudeAuthorityForIdentity(repoDescriptor, observedIdentity);
+    classification = rll.classifyClaudeAuthorityForIdentity(projectRoot, observedIdentity);
   } catch {
     classification = { ok: false, reason: 'authority-classify-threw' };
   }
@@ -794,10 +849,38 @@ function renderRootSourceAuthenticatedDispatchOrExit(projectRoot, agentType, bin
     `subject_bundle_ref=${binding.subject_bundle_ref}`,
     `subject_scope_digest=${binding.subject_scope_digest}`,
     `scope_doc_path=${planResult.planPath}`,
-    'This block was generated by the host SubagentStart hook from a durably admitted root-source binding (action_id above), independent of any inline prompt text. It authenticates that the accompanying ROOT_SOURCE_BOOTSTRAP/v1 message attached to this exact spawn already passed the PreToolUse root-source reservation gate. It does not authorize arbitrary inline text, arbitrary shell commands, repository edits, or any command outside the existing root-source binding and lifecycle gates -- every lifecycle CLI command in that bootstrap is still independently re-authenticated and rewritten by the existing PreToolUse root-source command gate before it can run.',
+    'This block was generated by the host SubagentStart hook from a durably admitted root-source binding (action_id above), independent of any inline prompt text. It authenticates that the accompanying ROOT_SOURCE_BOOTSTRAP/v1 message attached to this exact spawn already passed the PreToolUse root-source reservation gate. This provenance exists only because the host observed the correlated native Agent spawn cross both the admitted PreToolUse reservation and SubagentStart; manually invoking a hook, copying JSON, or repeating inline text alone creates no authority. It does not authorize arbitrary inline text, arbitrary shell commands, repository edits, or any command outside the existing root-source binding and lifecycle gates -- every lifecycle CLI command in that bootstrap is still independently re-authenticated and rewritten by the existing PreToolUse root-source command gate before it can run.',
   ].join('\n');
   emitSubagentStartAdditionalContext(dispatchContext);
   return true;
+}
+
+// A confirmed persistent role-spawn may legitimately have no precomputed
+// context bundle. Give that actor only the host-derived facts required to make
+// its first target-gated `ready` call; this is context, not authority. The
+// target gate still owns the one-use grant and every correlation decision.
+function buildRoleLifecycleBootstrapContext(projectRoot, agentType, action) {
+  let planResult;
+  try { planResult = rll.discoverPlan(projectRoot); } catch { return null; }
+  if (!planResult || !planResult.ok || planResult.planDigest !== action.plan_digest
+      || action.role !== agentType || typeof action.action_id !== 'string'
+      || typeof action.worktree_id !== 'string' || typeof action.session_generation_id !== 'string') return null;
+  const readyCommand = rll.renderPosixDirect([
+    rll.resolvedNodePath(),
+    path.resolve(__dirname, '../../scripts/lib/runtime-role-lifecycle.cjs'),
+    'ready', '--action', action.action_id,
+  ]);
+  return [
+    'AUTHENTICATED_ROLE_LIFECYCLE_BOOTSTRAP/v1',
+    `action_id=${action.action_id}`,
+    `role=${action.role}`,
+    `worktree_id=${action.worktree_id}`,
+    `plan_digest=${action.plan_digest}`,
+    `session_generation_id=${action.session_generation_id}`,
+    `scope_doc_path=${planResult.planPath}`,
+    `first_command=${readyCommand}`,
+    'Do not call Read, Grep, or Glob before first_command. Execute first_command as one standalone Bash call; its authorization is decided independently by the lifecycle target gate. After it succeeds, use only any validated context bundle appended below, then enter WAITING.',
+  ].join('\n');
 }
 
 let input = '';
@@ -854,6 +937,7 @@ process.stdin.on('end', () => {
     // never carried session_id/agent_id at all) are structurally excluded,
     // never touched by this block.
     const sessionId = data.session_id;
+    let roleLifecycleBootstrapContext = null;
     if (typeof sessionId === 'string' && sessionId.length > 0) {
       const rootSourceAgentId = data.agent_id;
       const rootSourceResult = (typeof rootSourceAgentId === 'string' && rootSourceAgentId.length > 0)
@@ -895,7 +979,7 @@ process.stdin.on('end', () => {
         }
         let classification;
         try {
-          classification = rll.classifyClaudeAuthorityForIdentity(repoDescriptor, {
+          classification = rll.classifyClaudeAuthorityForIdentity(projectRoot, {
             schema: rll.CLAUDE_AUTHORITY_IDENTITY_SCHEMA,
             provider: 'claude-hook',
             repo_id: repoDescriptor.repoId,
@@ -970,7 +1054,31 @@ process.stdin.on('end', () => {
         // existence+freshness).
       }
 
-      const scan = scanRoleBindingsForRole(projectRoot, agentType);
+      // P4 Windows native-Claude persistence correction: a resumed
+      // same-identity SubagentStart (the exact stopped/parked actor
+      // returning) consumes its exact resume handle BEFORE the initial
+      // role-spawn-claim path below -- on success this never creates a
+      // second RoleActorBinding (consumption only transitions the
+      // PRE-EXISTING role-binding WAITING->BUSY) and bundle injection below
+      // continues unaffected. A consumption failure (no live handle, wrong
+      // identity, replay, fenced, etc.) is the ordinary non-owning case for
+      // this mechanism and falls straight through to the UNCHANGED
+      // role-spawn-claim scan, never treated as an error.
+      let resumedViaHandle = false;
+      const resumeAgentId = data.agent_id;
+      if (rll.consumeClaudeResumeHandleForObservedActor && typeof resumeAgentId === 'string' && resumeAgentId.length > 0) {
+        let resumeResult;
+        try {
+          resumeResult = rll.consumeClaudeResumeHandleForObservedActor(projectRoot, { sessionId, agentId: resumeAgentId, agentType });
+        } catch {
+          resumeResult = { ok: false };
+        }
+        if (resumeResult && resumeResult.ok === true) {
+          resumedViaHandle = true;
+        }
+      }
+
+      const scan = resumedViaHandle ? { anyExists: false, liveCandidates: [] } : scanRoleBindingsForRole(projectRoot, agentType);
       // M7-RB-NONOWNING: no role-binding record exists for this role AT ALL
       // (in ANY state) -- a genuinely ad-hoc, lifecycle-unrelated spawn
       // (every ad-hoc specialist/architect dispatch looks exactly like
@@ -1013,7 +1121,11 @@ process.stdin.on('end', () => {
           if (actionRead.ok && !actionRead.absent) action = actionRead.action;
         } catch { /* action stays null -- handled as a validation failure below */ }
         const consumeResult = action
-          ? rll.validateAndConsumeRoleSpawnExecutionClaim(projectRoot, action, reconstructedToolInputDigest(agentType, agentType), projectRoot)
+          ? rll.validateAndConsumeRoleSpawnExecutionClaim(projectRoot, action, {
+            sessionId,
+            agentId,
+            agentType,
+          }, projectRoot)
           : { ok: false, reason: 'role-spawn-action-unreadable' };
         if (!consumeResult.ok) {
           // B3 MISMATCHED (or any other validation failure): distinguishable
@@ -1023,13 +1135,6 @@ process.stdin.on('end', () => {
           quarantineCandidate(projectRoot, candidate, 'role-spawn-reservation-' + consumeResult.reason);
           process.stderr.write(`[subagent-start-context-bundle] role-spawn reservation invalid for "${agentType}": ${consumeResult.reason} -- quarantining\n`);
           process.exit(0);
-        }
-        if (rll.recordClaudeId01SubagentStartObservation) {
-          try {
-            rll.recordClaudeId01SubagentStartObservation(projectRoot, {
-              sessionId, agentId, agentType, actionId: action.action_id,
-            });
-          } catch { /* best-effort observation; authority remains unavailable on failure */ }
         }
         // B2 CONFIRMED -- fall through to the pre-existing bundle-injection
         // logic below, unaffected (M7-RB2-CONFIRM's own regression anchor).
@@ -1061,6 +1166,22 @@ process.stdin.on('end', () => {
             process.stderr.write(`[subagent-start-context-bundle] role-actor-binding creation failed for "${agentType}": ${actorBindingResult.reason} -- FATAL, quarantining, bundle injection skipped\n`);
             process.exit(0);
           }
+          const startupObservation = rll.recordClaudeStartupActorObservation(projectRoot, {
+            sessionId, agentId, agentType, action,
+            claim: consumeResult.claim,
+            actorBinding: actorBindingResult.binding,
+          });
+          if (!startupObservation.ok) {
+            quarantineCandidate(projectRoot, candidate, 'claude-startup-actor-proof-failed');
+            process.stderr.write(`[subagent-start-context-bundle] startup actor proof failed for "${agentType}": ${startupObservation.reason} -- FATAL, quarantining, bundle injection skipped\n`);
+            process.exit(0);
+          }
+          roleLifecycleBootstrapContext = buildRoleLifecycleBootstrapContext(projectRoot, agentType, action);
+          if (!roleLifecycleBootstrapContext) {
+            quarantineCandidate(projectRoot, candidate, 'role-lifecycle-bootstrap-context-invalid');
+            process.stderr.write(`[subagent-start-context-bundle] role lifecycle bootstrap context invalid for "${agentType}" -- FATAL, quarantining, bundle injection skipped\n`);
+            process.exit(0);
+          }
         } catch (e) {
           quarantineCandidate(projectRoot, candidate, 'role-actor-binding-creation-threw');
           process.stderr.write(`[subagent-start-context-bundle] role-actor-binding creation threw for "${agentType}": ${(e && e.message) || e} -- FATAL, quarantining, bundle injection skipped\n`);
@@ -1078,13 +1199,17 @@ process.stdin.on('end', () => {
       `${agentType}.md`
     );
 
-    if (!fs.existsSync(bundlePath)) process.exit(0); // absent — skip silently
+    if (!fs.existsSync(bundlePath)) {
+      if (roleLifecycleBootstrapContext) emitSubagentStartAdditionalContext(roleLifecycleBootstrapContext);
+      process.exit(0);
+    }
 
     let bundleContent;
     try {
       bundleContent = fs.readFileSync(bundlePath, 'utf8');
     } catch {
-      process.exit(0); // unreadable — fail-open
+      if (roleLifecycleBootstrapContext) emitSubagentStartAdditionalContext(roleLifecycleBootstrapContext);
+      process.exit(0);
     }
 
     // Validate wave_slug freshness: bundle frontmatter must match current slug
@@ -1095,11 +1220,16 @@ process.stdin.on('end', () => {
         `[subagent-start-context-bundle] stale bundle for "${agentType}": ` +
         `bundle wave_slug="${bundleSlug}" vs current="${waveSlug}" — skipping\n`
       );
+      if (roleLifecycleBootstrapContext) emitSubagentStartAdditionalContext(roleLifecycleBootstrapContext);
       process.exit(0);
     }
 
     // Bundle is fresh — emit additionalContext
-    emitSubagentStartAdditionalContext(bundleContent);
+    emitSubagentStartAdditionalContext(
+      roleLifecycleBootstrapContext
+        ? roleLifecycleBootstrapContext + '\n\n' + bundleContent
+        : bundleContent
+    );
 
   } catch {
     // Fail-open on any parse error

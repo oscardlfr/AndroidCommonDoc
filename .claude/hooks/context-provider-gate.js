@@ -224,6 +224,13 @@ const ACCEPTED_RESULT_V1_KEYS = Object.freeze([
   'schema', 'schema_version',
 ].sort());
 const MAX_ACCEPTED_CONSULTATION_TRANSACTIONS_SCANNED = 1024;
+// A validate child authenticates its real process identity.  On Windows that
+// includes one bounded PowerShell Get-Process startup to observe PID birth,
+// which can legitimately exceed the historical 3 s POSIX-sized budget on a
+// cold host.  Keep both paths finite while giving Windows enough room to
+// complete the security check instead of killing a valid, already-granted
+// validation midway through it.
+const INTERNAL_VALIDATE_TIMEOUT_MS = process.platform === 'win32' ? 15000 : 3000;
 
 function hasExactAcceptedResultKeys(obj) {
   if (!obj || typeof obj !== 'object') return false;
@@ -365,7 +372,7 @@ function validateViaConsultationCli(coordRootForValidate, projectRoot, kind, art
       '--kind', kind,
       '--artifact', artifactPath,
       '--requester-binding', grantId,
-    ], { cwd: projectRoot, timeout: 3000, encoding: 'utf8' });
+    ], { cwd: projectRoot, timeout: INTERNAL_VALIDATE_TIMEOUT_MS, encoding: 'utf8' });
   } catch {
     return false;
   }
@@ -455,7 +462,12 @@ function isAcceptedConsultationTransactionValid(txnDir, requestId, repoId, expec
     const requestDigest = runtimeConsultationLib.sha256File(requestPath);
     if (acceptedObj.request_digest !== requestDigest) return false;
 
-    const expectedCandidatePath = path.join('results', acceptedObj.accepted_attempt_id + '.json');
+    // candidate_result_path is a protocol artifact reference, not a host
+    // filesystem path.  Its canonical spelling is POSIX-style on every
+    // platform; using path.join here produced `results\\...` on Windows and
+    // rejected every otherwise-valid accepted chain.  Use path.join only for
+    // the subsequent local file lookup.
+    const expectedCandidatePath = 'results/' + acceptedObj.accepted_attempt_id + '.json';
     const candidateRelative = String(acceptedObj.candidate_result_path || '');
     if (isOutsideConfinement(candidateRelative) || candidateRelative !== expectedCandidatePath) return false;
     const resultPath = path.join(txnDir, 'results', acceptedObj.accepted_attempt_id + '.json');
@@ -510,7 +522,7 @@ function classifyM7AuthorityForHookIdentity(projectRoot, sessionId, agentId) {
       runtime_session_key: sessionId,
       agent_id: agentId,
     };
-    classification = runtimeRoleLifecycle.classifyClaudeAuthorityForIdentity({ repoId }, observedIdentity);
+    classification = runtimeRoleLifecycle.classifyClaudeAuthorityForIdentity(projectRoot, observedIdentity);
   } catch {
     return { ok: false, reason: 'authority-classify-threw' };
   }
@@ -747,8 +759,22 @@ const CANONICAL_ENTRYPOINT_CLI_PATH = path.resolve(__dirname, '../../scripts/lib
 // CLI call. Every OTHER existing call site (root-init/publish-blob/etc, all
 // constructed by a human or ordinary orchestrator prose, never by a
 // bootstrap_message) already uses literal 'node' and remains unaffected.
+function canonicalRecognizedNodeToken(token) {
+  if (token === 'node') return 'node';
+  const trustedNodePath = runtimeRoleLifecycle.resolvedNodePath();
+  if (token === trustedNodePath) return trustedNodePath;
+  if (typeof token !== 'string' || !path.isAbsolute(token)) return null;
+  try {
+    return fs.realpathSync(token) === fs.realpathSync(trustedNodePath)
+      ? trustedNodePath
+      : null;
+  } catch {
+    return null;
+  }
+}
+
 function isRecognizedNodeToken(token) {
-  return token === 'node' || token === runtimeRoleLifecycle.resolvedNodePath();
+  return canonicalRecognizedNodeToken(token) !== null;
 }
 
 function findLifecycleCliInvocation(tokens) {
@@ -765,28 +791,57 @@ function findEntrypointCliInvocation(tokens) {
   return candidate === canonical ? 1 : -1;
 }
 
-// R131/P4: the five canonical skills document a closed bare direct command
-// beginning `node scripts/lib/runtime-collaboration-entrypoints.cjs execute`
-// (relative script path, no quoting) -- runtime-role-lifecycle.cjs own
+// R131/P4: the five canonical skills document a closed direct command beginning
+// `node scripts/lib/runtime-collaboration-entrypoints.cjs execute`. Claude emits
+// that command with a double-quoted native project-root on Windows, even when
+// the path contains no spaces. runtime-role-lifecycle.cjs own
 // parsePosixDirect deliberately accepts only every-token-single-quoted
-// canonical text, so that documented bare command can never parse through
-// the existing canonical path. This helper recognizes ONLY that specific,
-// closed bare-word grammar for this one entrypoint CLI invocation (relative
-// or absolute script token) and rewrites it into the exact token array the
+// canonical text, so neither the documented bare command nor that Windows form
+// can parse through the existing canonical path. This helper recognizes ONLY
+// the closed bare-word grammar plus double-quoted absolute Windows path tokens
+// for this one entrypoint CLI invocation (relative or absolute script token),
+// and rewrites it into the exact token array the
 // existing canonical renderPosixDirect form already produces, before any
 // downstream validation/mint/re-render runs. It does not loosen
 // parsePosixDirect or any other hook surface, and is not exported.
 const ENTRYPOINT_BARE_COMMAND_RE = /^[A-Za-z0-9_.\/:@+-]+(?: [A-Za-z0-9_.\/:@+-]+)*$/;
+const ENTRYPOINT_WINDOWS_TOKEN_RE = /(?:"([A-Za-z]:[\\/][A-Za-z0-9_.\\\/:@+ -]*)"|([A-Za-z0-9_.\/:@+-]+))(?: |$)/gy;
 const ENTRYPOINT_RELATIVE_CLI_PATH = 'scripts/lib/runtime-collaboration-entrypoints.cjs';
 
 function parseEntrypointCliCommand(command, event) {
   const canonicalTokens = runtimeRoleLifecycle.parsePosixDirect(command);
-  if (canonicalTokens) return canonicalTokens;
-  if (typeof command !== 'string' || !ENTRYPOINT_BARE_COMMAND_RE.test(command)) return null;
-  const tokens = command.split(' ');
+  if (canonicalTokens) {
+    const canonicalNode = canonicalRecognizedNodeToken(canonicalTokens[0]);
+    if (canonicalNode && canonicalNode !== canonicalTokens[0]) {
+      const rewritten = canonicalTokens.slice();
+      rewritten[0] = canonicalNode;
+      return rewritten;
+    }
+    return canonicalTokens;
+  }
+  if (typeof command !== 'string' || command.length === 0 || command.endsWith(' ')) return null;
+  let tokens;
+  if (ENTRYPOINT_BARE_COMMAND_RE.test(command)) {
+    tokens = command.split(' ');
+  } else {
+    tokens = [];
+    let offset = 0;
+    ENTRYPOINT_WINDOWS_TOKEN_RE.lastIndex = 0;
+    while (offset < command.length) {
+      ENTRYPOINT_WINDOWS_TOKEN_RE.lastIndex = offset;
+      const match = ENTRYPOINT_WINDOWS_TOKEN_RE.exec(command);
+      if (!match || match.index !== offset) return null;
+      tokens.push(match[1] === undefined ? match[2] : match[1]);
+      offset = ENTRYPOINT_WINDOWS_TOKEN_RE.lastIndex;
+    }
+  }
   if (tokens.length < 3 || !isRecognizedNodeToken(tokens[0]) || tokens[2] !== 'execute') return null;
   const scriptToken = tokens[1];
-  if (scriptToken === CANONICAL_ENTRYPOINT_CLI_PATH) return tokens;
+  if (scriptToken.replace(/\\/g, '/') === CANONICAL_ENTRYPOINT_CLI_PATH.replace(/\\/g, '/')) {
+    const rewritten = tokens.slice();
+    rewritten[1] = CANONICAL_ENTRYPOINT_CLI_PATH;
+    return rewritten;
+  }
   if (scriptToken !== ENTRYPOINT_RELATIVE_CLI_PATH) return null;
   if (typeof event.cwd !== 'string' || event.cwd.length === 0 || !path.isAbsolute(event.cwd)) return null;
   if (path.resolve(event.cwd, scriptToken) !== CANONICAL_ENTRYPOINT_CLI_PATH) return null;
@@ -974,6 +1029,32 @@ const LIFECYCLE_SUBCOMMAND_SCOPE_RESOLVERS = {
       worktreeId: rootScope.worktreeId, planDigest: rootScope.planDigest,
     };
   },
+  // P5 U2 live-wiring: exact mirror of the 'consult-root' resolver above --
+  // mixed-review-request structurally parallels consult-root throughout
+  // (same s16ResolveMainContext call shape in handleMixedReviewRequest),
+  // just decoding via decodeMixedReviewIntent (exported unconditionally
+  // from runtime-role-lifecycle.cjs specifically so this call is safe in
+  // production, not only reachable via a __testOnly-gated alias) and
+  // digesting under the 'mixed-review-request:' prefix instead of
+  // 'consult-root:', matching handleMixedReviewRequest's own
+  // sha256String('mixed-review-request:' + encodedIntent) exactly.
+  'mixed-review-request'(values) {
+    const rootScope = resolveProjectRootScope(values['--project-root']);
+    const encodedIntent = values['--intent'];
+    if (!rootScope || typeof encodedIntent !== 'string') return null;
+    let intent;
+    try {
+      intent = runtimeRoleLifecycle.decodeMixedReviewIntent(encodedIntent);
+    } catch {
+      return null;
+    }
+    if (!intent || !intent.ok || typeof intent.intent?.requester_role !== 'string') return null;
+    return {
+      projectRootDescriptor: values['--project-root'], role: intent.intent.requester_role,
+      argvDigest: runtimeConsultationLib.sha256String('mixed-review-request:' + encodedIntent), actionId: null,
+      worktreeId: rootScope.worktreeId, planDigest: rootScope.planDigest,
+    };
+  },
   'consult-root-status'(values) {
     const rootScope = resolveProjectRootScope(values['--project-root']);
     const intentId = values['--intent-id'];
@@ -1053,37 +1134,17 @@ function isGrantStillLive(projectRootDescriptor, grantId) {
  * grant mint failure -- caller falls through to the unmodified passthrough).
  */
 function resolveOrMintLifecycleGrant(subcommand, scope, sessionId) {
-  const cacheKey = runtimeConsultationLib.sha256String(
-    ['hook-lifecycle-grant-cache-v1', scope.worktreeId, scope.planDigest, subcommand, scope.argvDigest, sessionId].join(':')
-  );
-  const cachePath = path.join(
-    runtimeRoleLifecycle.registryRepoDir(scope.projectRootDescriptor), 'hook-lifecycle-grant-cache', cacheKey + '.json'
-  );
-
-  const cached = runtimeRoleLifecycle.readRegistryRecord(cachePath);
-  if (cached.ok && !cached.absent && cached.obj && typeof cached.obj.grant_id === 'string') {
-    if (isGrantStillLive(scope.projectRootDescriptor, cached.obj.grant_id)) {
-      return cached.obj.grant_id;
-    }
-  }
-
-  const bindingResult = runtimeRoleLifecycle.getOrCreateMainOrchestratorBindingForSession(
-    scope.projectRootDescriptor, sessionId, scope.worktreeId, scope.planDigest, MAIN_ORCHESTRATOR_BINDING_TTL_SECONDS
-  );
-  if (!bindingResult.ok) return null;
-
-  const profile = LIFECYCLE_BOOTSTRAP_ADMITTED_SUBCOMMANDS.includes(subcommand) ? 'bootstrap' : 'normal';
-  const mintResult = runtimeRoleLifecycle.mintLifecycleCommandGrant(
-    scope.projectRootDescriptor, bindingResult.binding, scope.argvDigest, scope.role, subcommand,
-    'main-orchestrator', 'orchestrator', profile, scope.actionId
-  );
-  if (!mintResult.ok) return null;
-
-  runtimeRoleLifecycle.writeRegistryRecordReplace(
-    cachePath,
-    Buffer.from(runtimeConsultationLib.canonicalJSONStringify({ grant_id: mintResult.grantId, cached_at: new Date().toISOString() }), 'utf8')
-  );
-  return mintResult.grantId;
+  const result = runtimeRoleLifecycle.resolveOrMintManagedLifecycleGrant({
+    projectRootDescriptor: scope.projectRootDescriptor,
+    sessionId,
+    subcommand,
+    argvDigest: scope.argvDigest,
+    role: scope.role,
+    actionId: scope.actionId,
+    worktreeId: scope.worktreeId,
+    planDigest: scope.planDigest,
+  });
+  return result.ok ? result.grantId : null;
 }
 
 /**
@@ -1174,7 +1235,10 @@ function tryInjectLifecycleGrant(toolInput, sessionId) {
   // via the SAME canonical renderer used everywhere else in this hook
   // family -- never string concatenation, which breaks the closed
   // single-quoted grammar the instant the unquoted flag/id is appended.
-  const rewritten = runtimeRoleLifecycle.renderPosixDirect(tokens.concat(['--lifecycle-binding', grantId]));
+  const canonicalNode = canonicalRecognizedNodeToken(tokens[0]);
+  const canonicalTokens = tokens.slice();
+  if (canonicalNode) canonicalTokens[0] = canonicalNode;
+  const rewritten = runtimeRoleLifecycle.renderPosixDirect(canonicalTokens.concat(['--lifecycle-binding', grantId]));
 
   // Part A defect A4 (Third HOLD): PLAN.md ~L600 -- "Each owning hook
   // returns supported hookSpecificOutput with hookEventName:'PreToolUse',
@@ -1579,6 +1643,89 @@ function tryInjectRequesterGrant(toolInput, sessionId, agentType, agentId) {
   };
 }
 
+/**
+ * P4 genuine-live closure: the first Bash input emitted by an authenticated
+ * root-source actor is still only a model proposal. Before ingress exists,
+ * the durable RootSourceBinding and its immutable action identify exactly one
+ * canonical publish_command. Replace any Bash proposal with that command and
+ * route it through the ordinary requester-grant injector. This removes model
+ * copying/inspection variance without granting arbitrary shell authority:
+ * absent, foreign, ambiguous, fenced, expired, post-ingress, or malformed
+ * state is never upgraded to a publish operation.
+ */
+function tryCanonicalizeRootSourceInitialPublish(toolInput, sessionId, agentType, agentId) {
+  if (!runtimeRoleLifecycle || !runtimeConsultationLib
+      || typeof agentType !== 'string' || typeof agentId !== 'string'
+      || typeof sessionId !== 'string' || sessionId.length === 0
+      || !(agentType === 'toolkit-specialist'
+        || harnessSuffixCandidateRole(agentType) === 'toolkit-specialist')) return null;
+  const projectRoot = process.env.CLAUDE_PROJECT_DIR || process.cwd();
+  const classified = classifyM7AuthorityForHookIdentity(projectRoot, sessionId, agentId);
+  if (!classified.ok || classified.classification.state !== 'ONE'
+      || classified.classification.family !== 'root-source') return null;
+  const binding = classified.classification.binding;
+  let worktreeId;
+  let planResult;
+  try {
+    worktreeId = runtimeRoleLifecycle.computeWorktreeId(projectRoot);
+    planResult = runtimeRoleLifecycle.discoverPlan(projectRoot);
+  } catch {
+    return m7DenyResult('[Sixteenth/root-source] unable to resolve scope for initial publish canonicalization.');
+  }
+  const roleMatches = binding.role === agentType
+    || harnessSuffixCandidateRole(agentType) === binding.role;
+  if (!planResult.ok || !roleMatches || binding.worktree_id !== worktreeId
+      || binding.plan_digest !== planResult.planDigest) {
+    return m7DenyResult('[Sixteenth/root-source] initial publish binding scope mismatch.');
+  }
+  const liveBinding = runtimeRoleLifecycle.validateRootSourceBindingFor(
+    projectRoot, binding.binding_id, binding.role, worktreeId, planResult.planDigest,
+  );
+  if (!liveBinding.ok) {
+    return m7DenyResult('[Sixteenth/root-source] initial publish binding is unavailable: '
+      + (liveBinding.reason || 'unknown'));
+  }
+  const ingressRead = runtimeRoleLifecycle.readRegistryRecord(
+    runtimeRoleLifecycle.rootSourceIngressPathFor(projectRoot, binding.binding_id),
+  );
+  if (!ingressRead.ok) {
+    return m7DenyResult('[Sixteenth/root-source] initial publish ingress state is unreadable.');
+  }
+  if (!ingressRead.absent) {
+    const ingressValid = runtimeRoleLifecycle.validateRootSourceIngressRecord(
+      ingressRead.obj, { binding_id: binding.binding_id, action_id: binding.action_id },
+    );
+    return ingressValid.ok
+      ? null
+      : m7DenyResult('[Sixteenth/root-source] initial publish ingress state is malformed.');
+  }
+  const actionRead = runtimeRoleLifecycle.readRegistryRecord(
+    runtimeRoleLifecycle.actionPathFor(projectRoot, binding.action_id),
+  );
+  if (!actionRead.ok || actionRead.absent) {
+    return m7DenyResult('[Sixteenth/root-source] initial publish action is unavailable.');
+  }
+  const actionValid = runtimeRoleLifecycle.validateRootSourceAction(actionRead.obj);
+  const action = actionRead.obj;
+  if (!actionValid.ok || action.action_id !== binding.action_id
+      || action.worktree_id !== binding.worktree_id || action.plan_digest !== binding.plan_digest
+      || action.session_generation_id !== binding.session_generation_id
+      || action.payload.subject_bundle_ref !== binding.subject_bundle_ref
+      || action.payload.subject_scope_digest !== binding.subject_scope_digest
+      || action.payload.request_expiry !== binding.request_expiry) {
+    return m7DenyResult('[Sixteenth/root-source] initial publish action/binding correlation failed.');
+  }
+  const lines = action.payload.bootstrap_message.split('\n');
+  if (lines.length !== 5 || !lines[3].startsWith('publish_command=')) {
+    return m7DenyResult('[Sixteenth/root-source] initial publish command is malformed.');
+  }
+  const expectedCommand = lines[3].slice('publish_command='.length);
+  if (toolInput && toolInput.command === expectedCommand) return null;
+  const canonicalInput = Object.assign({}, toolInput, { command: expectedCommand });
+  const injected = tryInjectRequesterGrant(canonicalInput, sessionId, agentType, agentId);
+  return injected || m7DenyResult('[Sixteenth/root-source] initial publish grant canonicalization failed.');
+}
+
 // ─────────────────────────────────────────────────────────────────────────
 // M6-CODEX-SUPERVISOR-ACTIVATION-CLOSURE, GROUP A: this hook is the SOLE
 // owning input modifier for the top-level supervisor-start Bash form
@@ -1779,7 +1926,7 @@ process.stdin.on('data', c => input += c);
 process.stdin.on('end', () => {
   clearTimeout(t);
   try {
-    const data = JSON.parse(input);
+    let data = JSON.parse(input);
     const toolName = data.tool_name || '';
     if (process.env.CLAUDE_CP_GATE_DISABLED === '1') process.exit(0);
 
@@ -1810,28 +1957,41 @@ process.stdin.on('end', () => {
       emitDeny('[HARD-NO-GO-item-5] malformed session_id/agent_type/agent_id on a recognized PreToolUse event -- explicit deny, never a crash-to-allow.');
     }
 
+    const directParentSessionId = process.env.RUNTIME_DIRECT_ROLE_PARENT_SESSION_ID;
+    if (runtimeRoleLifecycle && runtimeHostClaude &&
+        typeof directParentSessionId === 'string' && directParentSessionId.length > 0 &&
+        (typeof data.agent_id !== 'string' || data.agent_id.length === 0)) {
+      const projectRoot = process.env.CLAUDE_PROJECT_DIR || process.cwd();
+      const actor = runtimeHostClaude.resolveObservedClaudeActor(
+        projectRoot, data, { parentSessionId: directParentSessionId },
+      );
+      if (!actor.ok || actor.family !== 'direct-role-host') {
+        emitDeny('[DIRECT-ROLE-HOST] signed role identity is unavailable for this session.');
+      }
+      const admitted = runtimeRoleLifecycle.admitDirectRoleHostStartup(
+        projectRoot, actor, actor.actionId,
+      );
+      if (!admitted.ok) {
+        emitDeny('[DIRECT-ROLE-HOST] startup admission failed: ' + (admitted.reason || 'unknown') + '.');
+      }
+      data = Object.assign({}, data, {
+        session_id: actor.sessionId,
+        agent_id: actor.agentId,
+        agent_type: actor.agentType,
+      });
+    }
+
     const sessionId = data.session_id || 'unknown';
     const agentType = data.agent_type || '';
     const agentId = sanitizeId(data.agent_id || 'unknown');
 
-    // M6+M7 FINAL AUTHORITY CORRECTION (Group 1): feed this PreToolUse into
-    // the CLAUDE-ID-01 bounded-proof trace BEFORE any of this file's own
-    // relevant early exits/decisions below -- best-effort, never fatal, and
-    // independent of every other branch here. Uses the RAW hook-observed
-    // fields (never the 'unknown'-defaulted/sanitized locals above).
+    // P3 peer-custody integration: once the bounded CLAUDE-ID-01 actor proof
+    // is complete, correlate this exact observed actor to its already-minted
+    // role action/actor binding and persist the canonical peer binding.
+    // Earlier tool calls legitimately return UNAVAILABLE until the proof is
+    // complete; the first qualifying later call materializes it. This is
+    // best-effort observation only and grants no tool permission by itself.
     if (runtimeRoleLifecycle) {
-      try {
-        runtimeRoleLifecycle.recordClaudeId01PreToolUseObservation(
-          process.env.CLAUDE_PROJECT_DIR || process.cwd(),
-          { sessionId: data.session_id, agentId: data.agent_id, agentType: data.agent_type, toolUseId: data.tool_use_id }
-        );
-      } catch { /* best-effort -- never fatal to the gate */ }
-      // P3 peer-custody integration: once the bounded CLAUDE-ID-01 trace is
-      // complete, correlate this exact observed actor to its already-minted
-      // role action/actor binding and persist the canonical peer binding.
-      // Earlier tool calls legitimately return UNAVAILABLE until the proof is
-      // complete; the first qualifying later call materializes it. This is
-      // best-effort observation only and grants no tool permission by itself.
       try {
         runtimeRoleLifecycle.ensureClaudePeerBindingForObservedActor(
           process.env.CLAUDE_PROJECT_DIR || process.cwd(),
@@ -1849,6 +2009,18 @@ process.stdin.on('end', () => {
     // named role (architect/specialist) issuing one of these commands is
     // covered too.
     if (toolName === 'Bash') {
+      let initialRootSourceResult = null;
+      try {
+        initialRootSourceResult = tryCanonicalizeRootSourceInitialPublish(
+          data.tool_input, data.session_id, agentType, data.agent_id,
+        );
+      } catch {
+        initialRootSourceResult = null;
+      }
+      if (initialRootSourceResult) {
+        process.stdout.write(JSON.stringify(initialRootSourceResult.body));
+        process.exit(initialRootSourceResult.exitCode);
+      }
       let requesterInjectionResult = null;
       try {
         requesterInjectionResult = tryInjectRequesterGrant(data.tool_input, data.session_id, agentType, data.agent_id);

@@ -10,7 +10,7 @@
 
 import { describe, it, expect } from "vitest";
 import { mkdtempSync, rmSync, writeFileSync, mkdirSync } from "node:fs";
-import { execSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -26,16 +26,13 @@ const MANIFEST_REL = ".claude/registry/agents.manifest.yaml";
 
 function makeGitRepo(baselineYaml: string): string {
   const tmpRepo = mkdtempSync(join(tmpdir(), "abi-baseline-"));
-  execSync("git init", { cwd: tmpRepo, stdio: "pipe" });
-  execSync("git config user.email test@test.com", { cwd: tmpRepo, stdio: "pipe" });
-  execSync("git config user.name test", { cwd: tmpRepo, stdio: "pipe" });
+  execFileSync("git", ["init"], { cwd: tmpRepo, stdio: "pipe" });
+  execFileSync("git", ["config", "user.email", "test@test.com"], { cwd: tmpRepo, stdio: "pipe" });
+  execFileSync("git", ["config", "user.name", "test"], { cwd: tmpRepo, stdio: "pipe" });
   mkdirSync(join(tmpRepo, ".claude/registry"), { recursive: true });
   writeFileSync(join(tmpRepo, MANIFEST_REL), baselineYaml);
-  execSync("git add -A && git commit -m baseline", {
-    cwd: tmpRepo,
-    stdio: "pipe",
-    shell: "bash",
-  });
+  execFileSync("git", ["add", "-A"], { cwd: tmpRepo, stdio: "pipe" });
+  execFileSync("git", ["commit", "-m", "baseline"], { cwd: tmpRepo, stdio: "pipe" });
   return tmpRepo;
 }
 

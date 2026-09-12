@@ -947,16 +947,44 @@ test('P1IA-IBIND-BOUNDARY-MANUAL-ZERO-AUTHORITY-25 RED: manual/env/role/PID/argv
 
 const PROJECT_ROOT = path.resolve(__dirname, '../..');
 
-test('R131-BOUNDARY-ADMITTED-ENTRYPOINT-PRETOOLUSE-26: exact signed rewritten entrypoint command is admitted', () => {
+test('R131-BOUNDARY-ADMITTED-ENTRYPOINT-PRETOOLUSE-26: exact signed rewritten entrypoint command is admitted', (t) => {
   const lib = requireBoundaryLib();
   const host = require('../lib/runtime-host-claude.cjs');
   const rll = require('../lib/runtime-role-lifecycle.cjs');
   const entrypoints = require('../lib/runtime-collaboration-entrypoints.cjs');
   const intent = { scope: 'all' };
   const plan = entrypoints.planEntrypointStep('monitor-docs', intent, PROJECT_ROOT);
+  const sessionId = 'r131-boundary-production-' + crypto.randomBytes(12).toString('hex');
+  if (process.platform !== 'win32') {
+    t.skip('the checked-in host contract is pinned to the selected Windows host');
+    return;
+  }
+  const where = spawnSync('where.exe', ['claude'], { encoding: 'utf8' });
+  const candidates = where.status === 0 ? where.stdout.split(/\r?\n/).filter(Boolean) : [];
+  const certificate = JSON.parse(fs.readFileSync(path.join(PROJECT_ROOT, 'setup', 'claude-host-contract.json'), 'utf8')).certificate;
+  const executable = candidates.find((candidate) => {
+    try { return crypto.createHash('sha256').update(fs.readFileSync(candidate)).digest('hex') === certificate.executable_digest; } catch { return false; }
+  });
+  if (!executable) {
+    t.skip('the selected pinned Claude executable is not on PATH');
+    return;
+  }
+  assert.strictEqual(host.recordProductionSessionIdentity({
+    projectRoot: PROJECT_ROOT,
+    event: {
+      type: 'system', subtype: 'init', session_id: sessionId,
+      model: 'claude-sonnet-5', cwd: PROJECT_ROOT,
+      tools: ['Task', 'Bash', 'Read', 'SendMessage'], mcp_servers: [],
+    },
+    hostPin: {
+      executablePath: executable, cliVersion: certificate.cli_version,
+      observerPath: path.join(PROJECT_ROOT, 'scripts', 'tests', 'fixtures', 'claude-host-contract-probe.cjs'),
+      transportProfile: certificate.transport_profile, os: process.platform,
+    },
+  }).ok, true);
   const minted = host.mintProductionHostComposition({
     projectRoot: PROJECT_ROOT,
-    event: { hook_event_name: 'PreToolUse', tool_name: 'Bash', model: 'claude-sonnet-5' },
+    event: { hook_event_name: 'PreToolUse', tool_name: 'Bash', session_id: sessionId },
     entrypoint: 'monitor-docs', argvDigest: plan.argv_digest, roleScope: plan.role_scope,
   });
   assert.strictEqual(minted.ok, true);
@@ -1030,5 +1058,17 @@ test('R131-BOUNDARY-FAILURE-CLOSURE-29: admitted PostToolUseFailure closes and r
     assert.ok(fs.existsSync(path.join(closureDir(root), sDig + '__' + tDig + '.json')));
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('P1-NATIVE-OUTCOME-WIRING boundary records owning Agent outcomes and all actual boundary matchers cover Bash|Task|Agent|SendMessage', () => {
+  const source = fs.readFileSync(HOOK, 'utf8');
+  assert.match(source, /recordProductionNativeToolOutcome/);
+  const settings = JSON.parse(fs.readFileSync(path.join(PROJECT_ROOT, '.claude', 'settings.json'), 'utf8'));
+  for (const hookName of ['PreToolUse', 'PostToolUse', 'PostToolUseFailure']) {
+    const registrations = settings.hooks[hookName].filter((entry) =>
+      entry.hooks.some((hook) => /runtime-host-boundary\.js/.test(hook.command)));
+    assert.strictEqual(registrations.length, 1, hookName + ' must register exactly one runtime-host boundary');
+    assert.strictEqual(registrations[0].matcher, 'Bash|Task|Agent|SendMessage');
   }
 });

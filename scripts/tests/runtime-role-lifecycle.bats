@@ -106,6 +106,7 @@ bats_require_minimum_version 1.5.0
 # scripts/sh/run-bats.sh --project-root "$(pwd)" scripts/tests/runtime-role-lifecycle.bats
 
 IMPL="$BATS_TEST_DIRNAME/../lib/runtime-role-lifecycle.cjs"
+CLAUDE_HOST_FIXTURE="$BATS_TEST_DIRNAME/fixtures/runtime-claude-id01-v2-fixture.cjs"
 WAVE_SLUG="rll-test-wave"
 # Self-minted fixture token -- see "Key interpretive decisions" above.
 TEST_CAPABILITY="bats-runtime-role-lifecycle-fixture-capability"
@@ -125,9 +126,15 @@ _assert_isolated_runtime_tmp() {
     try { st = fs.lstatSync(process.argv[1]); } catch (err) { console.error("runtime-tmp stat failed: " + err.message); process.exit(1); }
     if (st.isSymbolicLink()) { console.error("runtime-tmp is a symlink"); process.exit(1); }
     if (!st.isDirectory()) { console.error("runtime-tmp is not a directory"); process.exit(1); }
-    if ((st.mode & 0o777) !== 0o700) { console.error("runtime-tmp wrong mode: " + (st.mode & 0o777).toString(8)); process.exit(1); }
-    if (typeof process.getuid === "function" && st.uid !== process.getuid()) { console.error("runtime-tmp wrong owner"); process.exit(1); }
-  ' "$dir"
+    if (process.platform === "win32") {
+      const rc = require(process.argv[2]);
+      const acl = rc.windowsPrivateDirectoryAcl(process.argv[1], { mode: "ensure" });
+      if (!acl.ok) { console.error("runtime-tmp Windows ACL is not private: " + JSON.stringify(acl)); process.exit(1); }
+    } else {
+      if ((st.mode & 0o777) !== 0o700) { console.error("runtime-tmp wrong mode: " + (st.mode & 0o777).toString(8)); process.exit(1); }
+      if (typeof process.getuid === "function" && st.uid !== process.getuid()) { console.error("runtime-tmp wrong owner"); process.exit(1); }
+    }
+  ' "$dir" "$BATS_TEST_DIRNAME/../lib/runtime-consultation.cjs"
 }
 
 setup() {
@@ -226,6 +233,17 @@ _mint_lifecycle_grant() {
   ' "$IMPL" "$PROJ" "$role_json" "$subcommand" "$argv_digest" "$action_id" "$runtime_session_key"
 }
 
+_prime_production_claude_admission() {
+  local session_id="$1"
+  node -e '
+    const fixture = require(process.argv[1]);
+    const minted = fixture.primeProductionClaudeHostAdmission({
+      projectRoot: process.argv[2], sessionId: process.argv[3],
+    });
+    process.stdout.write(minted.compositionId);
+  ' "$CLAUDE_HOST_FIXTURE" "$PROJ" "$session_id"
+}
+
 # ── Policy/routing fixture builders (runtime-collaboration-policy/v1, PLAN.md
 # ~L90-106; runtime-routing/v1, PLAN.md ~L1094-1110) ─────────────────────────
 # Each builder merges a small JSON "overrides" object over a fully-populated default
@@ -270,6 +288,17 @@ _upgrade_policy_v2() {
     value.selection={requested_host:"claude",requested_role_engine:"claude",required_continuity:"session-persistent",model_profile_ref:".claude/model-profiles.json#current",fallback:{mode:"deny",allowed:[]}};
     fs.writeFileSync(p,JSON.stringify(value));
   ' "$PROJ/scripts/lib/runtime-collaboration-policy.json"
+}
+
+_upgrade_policy_v2_with_opt_in() {
+  local opt_in_json="$1"
+  node -e '
+    const fs=require("fs"); const p=process.argv[1]; const optInRoles=JSON.parse(process.argv[2]);
+    const value=JSON.parse(fs.readFileSync(p,"utf8"));
+    value.schema="runtime-collaboration-policy/v2"; value.version=2;
+    value.selection={requested_host:"claude",requested_role_engine:"claude",required_continuity:"session-persistent",model_profile_ref:".claude/model-profiles.json#current",fallback:{mode:"deny",allowed:[]},codex_worker_opt_in_roles:optInRoles};
+    fs.writeFileSync(p,JSON.stringify(value));
+  ' "$PROJ/scripts/lib/runtime-collaboration-policy.json" "$opt_in_json"
 }
 
 _write_routing() {
@@ -855,12 +884,13 @@ _assert_lifecycle_result() {
   _write_policy '{}'
   _upgrade_policy_v2
   _write_routing "$PROJ/scripts/lib/runtime-routing.json" '{}'
+  run _prime_production_claude_admission "r131-lrl-58"
+  [ "$status" -eq 0 ]
   run node -e '
-    const crypto=require("crypto"); const r=require(process.argv[1]); const h=require(process.argv[2]); const root=process.argv[3];
-    const digest=crypto.createHash("sha256").update("entrypoint:monitor-docs:readonly").digest("hex");
-    const minted=h.mintProductionHostComposition({projectRoot:root,event:{hook_event_name:"PreToolUse",tool_name:"Bash",model:"claude-sonnet-5"},entrypoint:"monitor-docs",argvDigest:digest,roleScope:null});
-    const manifest=r.getCapabilityManifest(root); if(!minted.ok||!manifest.availableDrivers.includes("claude-sendmessage")) process.exit(1);
-  ' "$IMPL" "$BATS_TEST_DIRNAME/../lib/runtime-host-claude.cjs" "$PROJ"
+    const r=require(process.argv[1]);
+    const manifest=r.getCapabilityManifest(process.argv[2]);
+    if(!manifest.availableDrivers.includes("claude-sendmessage")) process.exit(1);
+  ' "$IMPL" "$PROJ"
   [ "$status" -eq 0 ]
 }
 
@@ -868,12 +898,8 @@ _assert_lifecycle_result() {
   _write_policy '{}'
   _upgrade_policy_v2
   _write_routing "$PROJ/scripts/lib/runtime-routing.json" '{}'
-  node -e '
-    const crypto=require("crypto"); const h=require(process.argv[1]); const root=process.argv[2];
-    const digest=crypto.createHash("sha256").update("entrypoint:monitor-docs:readonly").digest("hex");
-    const minted=h.mintProductionHostComposition({projectRoot:root,event:{hook_event_name:"PreToolUse",tool_name:"Bash",model:"claude-sonnet-5"},entrypoint:"monitor-docs",argvDigest:digest,roleScope:null});
-    if(!minted.ok) process.exit(1);
-  ' "$BATS_TEST_DIRNAME/../lib/runtime-host-claude.cjs" "$PROJ"
+  run _prime_production_claude_admission "r131-lrl-59"
+  [ "$status" -eq 0 ]
   local digest grant_id runtime_session_key fake_identity
   digest="$(_sha256_string 'ensure:arch-platform')"
   runtime_session_key="rll-bats-r131-lrl-59"
@@ -907,13 +933,17 @@ _assert_lifecycle_result() {
   _write_policy '{}'
   _upgrade_policy_v2
   _write_routing "$PROJ/scripts/lib/runtime-routing.json" '{}'
+  run _prime_production_claude_admission "r131-lrl-61"
+  [ "$status" -eq 0 ]
+  local composition_id="$output"
   run node -e '
-    const fs=require("fs"),path=require("path"),crypto=require("crypto"); const r=require(process.argv[1]); const h=require(process.argv[2]); const root=process.argv[3];
-    const digest=crypto.createHash("sha256").update("entrypoint:monitor-docs:readonly").digest("hex");
-    const minted=h.mintProductionHostComposition({projectRoot:root,event:{hook_event_name:"PreToolUse",tool_name:"Bash",model:"claude-sonnet-5"},entrypoint:"monitor-docs",argvDigest:digest,roleScope:null});
-    const file=path.join(r.registryRepoDir(root),"host-compositions",minted.compositionId+".json"); const record=JSON.parse(fs.readFileSync(file,"utf8")); record.expires_at=new Date(Date.now()-1000).toISOString(); fs.writeFileSync(file,JSON.stringify(record));
+    const fs=require("fs"),path=require("path"); const r=require(process.argv[1]); const root=process.argv[2];
+    const file=path.join(r.registryRepoDir(root),"host-compositions",process.argv[3]+".json");
+    const record=JSON.parse(fs.readFileSync(file,"utf8"));
+    record.expires_at=new Date(Date.now()-1000).toISOString();
+    fs.writeFileSync(file,JSON.stringify(record));
     if(r.getCapabilityManifest(root).availableDrivers.includes("claude-sendmessage")) process.exit(1);
-  ' "$IMPL" "$BATS_TEST_DIRNAME/../lib/runtime-host-claude.cjs" "$PROJ"
+  ' "$IMPL" "$PROJ" "$composition_id"
   [ "$status" -eq 0 ]
 }
 
@@ -925,5 +955,137 @@ _assert_lifecycle_result() {
     const r=require(process.argv[1]); const manifest=r.getCapabilityManifest(process.argv[2]);
     if(manifest.availableDrivers.includes("claude-sendmessage")) process.exit(1);
   ' "$IMPL" "$PROJ"
+  [ "$status" -eq 0 ]
+}
+
+@test "R131-LRL-63 PASS: v2 policy with codex_worker_opt_in_roles present as an empty array is still valid" {
+  _write_policy '{}'
+  _upgrade_policy_v2_with_opt_in '[]'
+  _write_routing "$PROJ/scripts/lib/runtime-routing.json" '{}'
+  local grant_id; grant_id="$(_mint_lifecycle_grant null probe "$(_sha256_string probe)")"
+  _run_lifecycle probe --project-root "$PROJ" --lifecycle-binding "$grant_id"
+  [ "$status" -eq 0 ]
+  _assert_lifecycle_result "probe" "" ""
+}
+
+
+@test "R131-LRL-64 FAIL: codex_worker_opt_in_roles must be an array (rejects a bare string)" {
+  _write_policy '{}'
+  _upgrade_policy_v2_with_opt_in '"context-provider"'
+  _write_routing "$PROJ/scripts/lib/runtime-routing.json" '{}'
+  _run_lifecycle probe --project-root "$PROJ"
+  [ "$status" -eq 3 ]
+  _assert_lifecycle_result "probe" "INVALID" "POLICY_INVALID"
+}
+
+
+@test "R131-LRL-65 FAIL: codex_worker_opt_in_roles rejects a non-canonical role name" {
+  _write_policy '{}'
+  _upgrade_policy_v2_with_opt_in '["not-a-real-role"]'
+  _write_routing "$PROJ/scripts/lib/runtime-routing.json" '{}'
+  _run_lifecycle probe --project-root "$PROJ"
+  [ "$status" -eq 3 ]
+  _assert_lifecycle_result "probe" "INVALID" "POLICY_INVALID"
+}
+
+
+@test "R131-LRL-66 FAIL: codex_worker_opt_in_roles rejects a duplicate role entry" {
+  _write_policy '{}'
+  _upgrade_policy_v2_with_opt_in '["context-provider","context-provider"]'
+  _write_routing "$PROJ/scripts/lib/runtime-routing.json" '{}'
+  _run_lifecycle probe --project-root "$PROJ"
+  [ "$status" -eq 3 ]
+  _assert_lifecycle_result "probe" "INVALID" "POLICY_INVALID"
+}
+
+
+@test "R131-LRL-67 PASS: explicitly-empty codex_worker_opt_in_roles still selects claude-sendmessage for arch-platform (defaults intact, literal empty-array form)" {
+  _write_policy '{}'
+  _upgrade_policy_v2_with_opt_in '[]'
+  _write_routing "$PROJ/scripts/lib/runtime-routing.json" '{}'
+  run _prime_production_claude_admission "r131-lrl-67"
+  [ "$status" -eq 0 ]
+  local digest grant_id runtime_session_key fake_identity
+  digest="$(_sha256_string 'ensure:arch-platform')"
+  runtime_session_key="rll-bats-r131-lrl-67"
+  fake_identity="{\"ok\":true,\"provider\":\"claude-hook\",\"runtime_session_key\":\"$runtime_session_key\"}"
+  grant_id="$(_mint_lifecycle_grant '"arch-platform"' ensure "$digest" null "$runtime_session_key")"
+  run env NODE_ENV=test \
+    RUNTIME_ROLE_LIFECYCLE_TEST_CAPABILITY="$TEST_CAPABILITY" \
+    RUNTIME_ROLE_LIFECYCLE_FAKE_IDENTITY="$fake_identity" \
+    RUNTIME_ROLE_LIFECYCLE_FAKE_CAPABILITIES='["claude-sendmessage"]' \
+    node "$IMPL" ensure --project-root "$PROJ" --role arch-platform --lifecycle-binding "$grant_id"
+  [ "$status" -eq 0 ]
+  run node -e '
+    const value=JSON.parse(process.argv[1]); if(value.status!=="ACTION_REQUIRED") process.exit(1);
+    if(value.actions.length!==1||value.actions[0].kind!=="role-spawn"||value.actions[0].operation!=="Agent") process.exit(1);
+  ' "$output"
+  [ "$status" -eq 0 ]
+}
+
+
+@test "R131-LRL-68: codex_worker_opt_in_roles=[context-provider] does not change arch-platform's OWN selection (still claude-sendmessage, sibling role unaffected)" {
+  _write_policy '{}'
+  _upgrade_policy_v2_with_opt_in '["context-provider"]'
+  _write_routing "$PROJ/scripts/lib/runtime-routing.json" '{}'
+  run _prime_production_claude_admission "r131-lrl-68"
+  [ "$status" -eq 0 ]
+  local digest grant_id runtime_session_key fake_identity
+  digest="$(_sha256_string 'ensure:arch-platform')"
+  runtime_session_key="rll-bats-r131-lrl-68"
+  fake_identity="{\"ok\":true,\"provider\":\"claude-hook\",\"runtime_session_key\":\"$runtime_session_key\"}"
+  grant_id="$(_mint_lifecycle_grant '"arch-platform"' ensure "$digest" null "$runtime_session_key")"
+  run env NODE_ENV=test \
+    RUNTIME_ROLE_LIFECYCLE_TEST_CAPABILITY="$TEST_CAPABILITY" \
+    RUNTIME_ROLE_LIFECYCLE_FAKE_IDENTITY="$fake_identity" \
+    RUNTIME_ROLE_LIFECYCLE_FAKE_CAPABILITIES='["claude-sendmessage"]' \
+    node "$IMPL" ensure --project-root "$PROJ" --role arch-platform --lifecycle-binding "$grant_id"
+  [ "$status" -eq 0 ]
+  run node -e '
+    const value=JSON.parse(process.argv[1]); if(value.status!=="ACTION_REQUIRED") process.exit(1);
+    if(value.actions.length!==1||value.actions[0].kind!=="role-spawn"||value.actions[0].operation!=="Agent") process.exit(1);
+  ' "$output"
+  [ "$status" -eq 0 ]
+}
+
+
+@test "R131-LRL-69 discrimination: opted-in role's own ensure() outcome differs from the sibling-role baseline in LRL-68" {
+  _write_policy '{}'
+  _upgrade_policy_v2_with_opt_in '["context-provider"]'
+  _write_routing "$PROJ/scripts/lib/runtime-routing.json" '{}'
+  run _prime_production_claude_admission "r131-lrl-69"
+  [ "$status" -eq 0 ]
+  local digest grant_id runtime_session_key fake_identity
+  digest="$(_sha256_string 'ensure:context-provider')"
+  runtime_session_key="rll-bats-r131-lrl-69"
+  fake_identity="{\"ok\":true,\"provider\":\"claude-hook\",\"runtime_session_key\":\"$runtime_session_key\"}"
+  grant_id="$(_mint_lifecycle_grant '"context-provider"' ensure "$digest" null "$runtime_session_key")"
+  # --separate-stderr: the UNAVAILABLE outcome accepted below is exactly when ensure writes
+  # its "[ensure] roles unavailable: <role>:<reason>" diagnostic to STDERR. bats `run` merges
+  # both streams into $output unless told otherwise, so the JSON.parse below would choke on
+  # that line rather than read the envelope. Only the stdout envelope is asserted here; the
+  # diagnostic itself stays covered by P5SP-WHYUNAVAILABLE.
+  run --separate-stderr env NODE_ENV=test \
+    RUNTIME_ROLE_LIFECYCLE_TEST_CAPABILITY="$TEST_CAPABILITY" \
+    RUNTIME_ROLE_LIFECYCLE_FAKE_IDENTITY="$fake_identity" \
+    RUNTIME_ROLE_LIFECYCLE_FAKE_CAPABILITIES='["claude-sendmessage"]' \
+    node "$IMPL" ensure --project-root "$PROJ" --role context-provider --lifecycle-binding "$grant_id"
+  # Host-dependent by design: real codex-app-server startability (pinned CLI +
+  # credential source) is a genuine per-machine fact this test deliberately
+  # does not fake -- RUNTIME_ROLE_LIFECYCLE_TEST_BACKEND=deterministic-app-server-v1
+  # would collapse the opt-in-role discrimination this test exists to prove,
+  # since that backend nulls policySelectedLifecycleDriverBase unconditionally
+  # for every role, not just opted-in ones (see the top-of-file comment on
+  # that env var). Exactly two outcomes are legitimate depending on host
+  # Codex readiness; both PROVE the opted-in role left the direct
+  # claude-sendmessage policy lock -- only the ORIGINAL baseline shape
+  # (role-spawn/claude-native, unconditional in LRL-68) is disproof.
+  [ "$status" -eq 0 ] || [ "$status" -eq 4 ]
+  run node -e '
+    const value=JSON.parse(process.argv[1]);
+    const isCapabilityUnavailable = value.code===4 && value.status==="UNAVAILABLE" && value.detail_code==="CAPABILITY_UNAVAILABLE" && value.actions.length===0;
+    const isSupervisorStart = value.code===0 && value.status==="ACTION_REQUIRED" && value.actions.length===1 && value.actions[0].kind==="supervisor-start" && value.actions[0].payload && value.actions[0].payload.bridge==="codex-app-server";
+    if (!isCapabilityUnavailable && !isSupervisorStart) process.exit(1);
+  ' "$output"
   [ "$status" -eq 0 ]
 }

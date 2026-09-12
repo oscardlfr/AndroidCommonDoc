@@ -147,6 +147,10 @@ jobs:
     name: Runtime Consultation Windows
     uses: ./.github/workflows/runtime-consultation-windows.yml
 
+  runtime-bridge-codex-windows:
+    name: Runtime Bridge Codex Windows
+    uses: ./.github/workflows/runtime-bridge-codex-windows.yml
+
   # ── Wave 3: Cross-cutting validation ───────────────────────────────────
 
   skill-registry:
@@ -193,6 +197,7 @@ jobs:
       - detekt-rules
       - mcp-server
       - runtime-consultation-windows
+      - runtime-bridge-codex-windows
       - skill-registry
       - agent-template-lint
     runs-on: ubuntu-latest
@@ -208,6 +213,7 @@ jobs:
             "${{ needs.detekt-rules.result }}"
             "${{ needs.mcp-server.result }}"
             "${{ needs.runtime-consultation-windows.result }}"
+            "${{ needs.runtime-bridge-codex-windows.result }}"
             "${{ needs.skill-registry.result }}"
             "${{ needs.agent-template-lint.result }}"
           )

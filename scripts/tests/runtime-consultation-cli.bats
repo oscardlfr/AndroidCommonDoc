@@ -182,9 +182,15 @@ _assert_isolated_runtime_tmp() {
     try { st = fs.lstatSync(process.argv[1]); } catch (err) { console.error("runtime-tmp stat failed: " + err.message); process.exit(1); }
     if (st.isSymbolicLink()) { console.error("runtime-tmp is a symlink"); process.exit(1); }
     if (!st.isDirectory()) { console.error("runtime-tmp is not a directory"); process.exit(1); }
-    if ((st.mode & 0o777) !== 0o700) { console.error("runtime-tmp wrong mode: " + (st.mode & 0o777).toString(8)); process.exit(1); }
-    if (typeof process.getuid === "function" && st.uid !== process.getuid()) { console.error("runtime-tmp wrong owner"); process.exit(1); }
-  ' "$dir"
+    if (process.platform === "win32") {
+      const rc = require(process.argv[2]);
+      const acl = rc.windowsPrivateDirectoryAcl(process.argv[1], { mode: "ensure" });
+      if (!acl.ok) { console.error("runtime-tmp Windows ACL is not private: " + JSON.stringify(acl)); process.exit(1); }
+    } else {
+      if ((st.mode & 0o777) !== 0o700) { console.error("runtime-tmp wrong mode: " + (st.mode & 0o777).toString(8)); process.exit(1); }
+      if (typeof process.getuid === "function" && st.uid !== process.getuid()) { console.error("runtime-tmp wrong owner"); process.exit(1); }
+    }
+  ' "$dir" "$BATS_TEST_DIRNAME/../lib/runtime-consultation.cjs"
 }
 
 setup() {
@@ -1925,13 +1931,14 @@ _wait_for_rendezvous_ready() {
 
   _wait_for_rendezvous_ready "$txn_dir" await-result-post-iteration
 
-  local tmp_copy; tmp_copy="$(mktemp)"
-  cp "$req_f" "$tmp_copy"
   local orig_ino; orig_ino="$(_inode_of "$req_f")"
+  local replacement; replacement="$txn_dir/request.same-bytes-replacement"
+  cp "$req_f" "$replacement"
+  chmod 600 "$replacement"
+  local replacement_ino; replacement_ino="$(_inode_of "$replacement")"
+  [ "$replacement_ino" != "$orig_ino" ] # simultaneous files must have distinct identities
   rm -f "$req_f"
-  cp "$tmp_copy" "$req_f"
-  chmod 600 "$req_f"
-  rm -f "$tmp_copy"
+  mv "$replacement" "$req_f"
   local new_ino; new_ino="$(_inode_of "$req_f")"
   [ "$new_ino" != "$orig_ino" ] # sanity: genuinely a different inode now
 
@@ -2219,8 +2226,10 @@ _wait_for_rendezvous_ready() {
     const fs = require("fs");
     const p = process.argv[1];
     const bytes = fs.readFileSync(p);
+    const replacement = p + ".same-bytes-replacement";
+    fs.writeFileSync(replacement, bytes, { mode: 0o600, flag: "wx" });
     fs.unlinkSync(p);
-    fs.writeFileSync(p, bytes, { mode: 0o600 });
+    fs.renameSync(replacement, p);
   ' "$txn_dir/cancel.json"
   local after_ino; after_ino="$(_inode_of "$txn_dir/cancel.json")"
   [ "$before_ino" != "$after_ino" ] || { echo "test setup failed: inode did not actually change ($before_ino)"; false; }
@@ -2394,8 +2403,10 @@ _wait_for_rendezvous_ready() {
     const fs = require("fs");
     const p = process.argv[1];
     const bytes = fs.readFileSync(p);
+    const replacement = p + ".same-bytes-replacement";
+    fs.writeFileSync(replacement, bytes, { mode: 0o600, flag: "wx" });
     fs.unlinkSync(p);
-    fs.writeFileSync(p, bytes, { mode: 0o600 });
+    fs.renameSync(replacement, p);
   ' "$txn_dir/accepted-result.json"
   local after_ino; after_ino="$(_inode_of "$txn_dir/accepted-result.json")"
   [ "$before_ino" != "$after_ino" ] || { echo "test setup failed: inode did not actually change ($before_ino)"; false; }
@@ -2759,8 +2770,13 @@ _wait_for_rendezvous_ready() {
   # cannot reject it; only a dev/ino identity comparison against what mkdir
   # actually created can.
   [ -d "$txn_dir/.lock" ]
+  mkdir "$txn_dir/.lock-replacement"
+  local original_lock_ino replacement_lock_ino
+  original_lock_ino="$(_inode_of "$txn_dir/.lock")"
+  replacement_lock_ino="$(_inode_of "$txn_dir/.lock-replacement")"
+  [ "$original_lock_ino" != "$replacement_lock_ino" ]
   rmdir "$txn_dir/.lock"
-  mkdir "$txn_dir/.lock"
+  mv "$txn_dir/.lock-replacement" "$txn_dir/.lock"
   [ -d "$txn_dir/.lock" ]
   [ ! -L "$txn_dir/.lock" ]
 
@@ -3499,17 +3515,20 @@ _assert_not_unknown_command() {
   local now expiry huge_question intent intent_b64
   now="$(_now_iso)"
   expiry="$(_iso_plus_seconds "$now" 1800)"
-  # Comfortably over the 131072-byte total-argv budget once wrapped in the intent
-  # JSON envelope and base64url-encoded -- checked BEFORE decode/allocation, so
-  # this need not itself be a schema-valid question.
-  huge_question="$(head -c 140000 /dev/zero | tr '\0' 'q')"
+  # Keep every individual token below Linux MAX_ARG_STRLEN while making the
+  # complete argv comfortably exceed 131072 bytes with repeated intent
+  # options. The total-argv guard must run before either duplicate-option or
+  # intent decoding/shape validation.
+  huge_question="$(head -c 24000 /dev/zero | tr '\0' 'q')"
   intent="$(printf '{"target_role":"arch-testing","question":"%s","expected_result_kind":"TEST_RESULT","expiry":"%s"}' "$huge_question" "$expiry")"
   intent_b64="$(printf '%s' "$intent" | _base64url_encode)"
 
   _run_cli publish-request --coordination-root "$COORD_ROOT" --plan "$PLAN_FILE" \
-    --subject-bundle "$SUBJECT_BUNDLE_FILE" --intent "$intent_b64" --fixed-ids --fixed-clock
+    --subject-bundle "$SUBJECT_BUNDLE_FILE" \
+    --intent "$intent_b64" --intent "$intent_b64" --intent "$intent_b64" \
+    --intent "$intent_b64" --intent "$intent_b64" --fixed-ids --fixed-clock
 
-  [ "$status" -eq 3 ]
+  [ "$status" -eq 3 ] || { printf '# RCC-caps-2 status=%s output=%s stderr=%s\n' "$status" "$output" "${stderr:-}" >&3; false; }
   _assert_cli_result "INVALID" "INVALID_ARGUMENT"
 
   # --fixed-ids makes the would-be request_id deterministic (DEFAULT_REQUEST_ID) --

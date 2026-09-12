@@ -92,12 +92,21 @@ if [[ -z "$TYPES_RAW" ]]; then
 fi
 
 # --- Parse valid_scopes from .commitlintrc.json ---
-if ! command -v jq &>/dev/null; then
-    echo -e "${RED}ERROR: jq is required but not found in PATH${RESET}" >&2
+if command -v jq &>/dev/null; then
+    SCOPES_RAW=$(jq -r '.valid_scopes | join(",")' "$SCOPES_FILE" 2>/dev/null || true)
+elif command -v node &>/dev/null; then
+    # Node is already a toolkit prerequisite and is a deterministic fallback
+    # for minimal WSL environments that do not include a Linux jq binary.
+    SCOPES_RAW=$(node -e '
+      const fs = require("fs");
+      const value = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+      if (!Array.isArray(value.valid_scopes)) process.exit(1);
+      process.stdout.write(value.valid_scopes.join(","));
+    ' "$SCOPES_FILE" 2>/dev/null || true)
+else
+    echo -e "${RED}ERROR: jq or node is required but neither was found in PATH${RESET}" >&2
     exit 1
 fi
-
-SCOPES_RAW=$(jq -r '.valid_scopes | join(",")' "$SCOPES_FILE" 2>/dev/null || true)
 
 if [[ -z "$SCOPES_RAW" ]]; then
     echo -e "${RED}ERROR: Could not parse valid_scopes from: ${SCOPES_FILE}${RESET}" >&2

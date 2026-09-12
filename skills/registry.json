@@ -754,7 +754,7 @@
       "description": "Analyze external content and extract patterns for routing to docs. Use when asked to ingest an article, URL, or pasted content.",
       "category": "guides",
       "tier": "extended",
-      "hash": "sha256:e3f7a2186c05b8f2fd675cad23bbd8621a678fc8e0ad9d1fb1be40263d47f6af",
+      "hash": "sha256:65ebcd1e65da59d8d6315932a6a5deb6ce94a0ada342ff175e153159025427c0",
       "dependencies": [],
       "frontmatter": {
         "name": "ingest-content",
@@ -788,7 +788,7 @@
       "description": "Show project context dashboard. Optionally ensures the persistent support plane with --orchestrate <slug> flag.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:f53a6042f3ea763667bb5f995ea6a494b528c74aa483374967932bf976b1fc31",
+      "hash": "sha256:d1e3b6e0d5b8d89f82baaa2a18965c4c6d8b6bca6f419dfe5cf89cb116d5be35",
       "dependencies": [],
       "frontmatter": {
         "name": "init-session",
@@ -958,7 +958,7 @@
       "description": "Monitor upstream doc sources for version drift and deprecations. Use when asked to check for outdated dependencies or doc freshness.",
       "category": "guides",
       "tier": "extended",
-      "hash": "sha256:156c5141c3f206415fe3acda582b21516d7146141db4341e5d483916193ba637",
+      "hash": "sha256:4cc6e16a32ef830d07021b4de965a91fc8703abf805fb6a325990d6ba94ff2da",
       "dependencies": [],
       "frontmatter": {
         "name": "monitor-docs",
@@ -1134,7 +1134,7 @@
       "description": "Resume session with a CEO/CTO dashboard — shows status by department from last session.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:c0f54caaf7d8de5523bab61e49333d02a2f4b44499c5e6c9810858366350bdcf",
+      "hash": "sha256:a00ef313753c2da40133a6ab4edc12dc2ab0e3abf997090c2fcc23e16c163e7c",
       "dependencies": [],
       "frontmatter": {
         "name": "resume-work",
@@ -1462,14 +1462,14 @@
       "name": "sync-l0",
       "type": "skill",
       "path": "skills/sync-l0/SKILL.md",
-      "description": "Synchronize L0 skills, agents, and commands from AndroidCommonDoc registry to the current project. Reads l0-manifest.json, resolves against skills/registry.json, materializes copies with version tracking.",
+      "description": "Synchronize L0 assets, and optionally install the source-referenced collaboration runtime in an L1/L2 consumer.",
       "category": "guides",
       "tier": "extended",
-      "hash": "sha256:92a8ac7202b1f38e3ac450e0d22670d7f24f0295dcf89921fc61b4cbb909111a",
+      "hash": "sha256:21ef1b4c7d3a20e120ae442aecbcfeb7bd281363a446446109bef3b4cfa8778a",
       "dependencies": [],
       "frontmatter": {
         "name": "sync-l0",
-        "description": "Synchronize L0 skills, agents, and commands from AndroidCommonDoc registry to the current project. Reads l0-manifest.json, resolves against skills/registry.json, materializes copies with version tracking.",
+        "description": "Synchronize L0 assets, and optionally install the source-referenced collaboration runtime in an L1/L2 consumer.",
         "intent": [
           "sync",
           "l0",
@@ -1835,7 +1835,7 @@
       "description": "Smart task routing through the canonical runtime collaboration entrypoint.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:f6c6ab7255fbeaff865441c91c3510854dcf26f97f654a0f2af19b5731a03dd4",
+      "hash": "sha256:a4895b2e53b214694b375f6d97510634f5135b667051b5f3560627f21c189f85",
       "dependencies": [],
       "frontmatter": {
         "name": "work",
@@ -2901,7 +2901,7 @@
       "description": "Owns mcp-server TypeScript source, .claude/hooks/*.js runtime code, and non-test shell tooling. Reports to arch-platform. Does NOT write test files (test-specialist's domain).",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:54f2c78f0fe19263f4a08d6848379a2cb08f4534cdc4f020c18cb161b47671a7",
+      "hash": "sha256:90ae8d06b01270166d4560062eb7b9df482b194ad013e79420fd5db3938a7643",
       "dependencies": [],
       "frontmatter": {
         "name": "toolkit-specialist",
@@ -3565,13 +3565,13 @@
       "name": "sync-l0",
       "type": "command",
       "path": ".claude/commands/sync-l0.md",
-      "description": "Propagate L0 skills, agents, and commands to consuming projects.",
+      "description": "Propagate L0 assets and optionally install the source-referenced runtime in L1/L2 consumers.",
       "category": "guides",
       "tier": "extended",
-      "hash": "sha256:d68fe8172ff9eab51ba35ca6477132986c717f83ead585d4d3009f3fd19bcd5d",
+      "hash": "sha256:5cccb369635e89631621237047b72a7d880a5cfd9371e61ca02100634280d979",
       "dependencies": [],
       "frontmatter": {
-        "description": "Propagate L0 skills, agents, and commands to consuming projects."
+        "description": "Propagate L0 assets and optionally install the source-referenced runtime in L1/L2 consumers."
       }
     },
     {

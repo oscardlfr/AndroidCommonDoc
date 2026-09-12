@@ -264,6 +264,11 @@ function writePlanFixture(projectRoot, waveSlug) {
   const waveDir = path.join(projectRoot, '.planning', 'wave-' + waveSlug);
   fs.mkdirSync(waveDir, { recursive: true });
   fs.writeFileSync(path.join(waveDir, 'PLAN.md'), '# fixture plan for agent-spawn-execution-gate.test.js (' + waveSlug + ')\n');
+  fs.mkdirSync(path.join(projectRoot, '.claude'), { recursive: true });
+  fs.writeFileSync(path.join(projectRoot, '.claude', 'model-profiles.json'), JSON.stringify({
+    current: 'balanced',
+    profiles: { balanced: { description: 'test profile', default_model: 'sonnet', overrides: {} } },
+  }));
 }
 
 function cleanup(dir) {
@@ -336,13 +341,15 @@ function mintFullyEligibleRoleSpawnAction(proj, role, sessionKey) {
 }
 
 function runMainOrchestratorAgentCall(toolInput, projDir, sessionId) {
+  const resolvedSessionId = sessionId || ('rb-' + Math.random().toString(36).slice(2));
   return runHook(
     {
       tool_name: 'Agent',
       tool_input: toolInput,
-      session_id: sessionId || ('rb-' + Math.random().toString(36).slice(2)),
+      session_id: resolvedSessionId,
       agent_type: '',
       agent_id: '',
+      tool_use_id: resolvedSessionId + '-agent-tool-use',
     },
     { CLAUDE_PROJECT_DIR: projDir, CLAUDE_WAVE_SLUG: '' }
   );
@@ -566,6 +573,62 @@ function runS16RootSourceOwningReserves() {
     const sessionId = 's16-root-source-owning-session';
     const setup = invokeRealRootSourceCli(proj, sessionId);
     const p = setup.action.payload;
+
+    // P4 genuine-live delivery closure: a claude-sendmessage dispatch is not
+    // durably observable merely because SendMessage returned. The same actor
+    // must publish exactly one delivery/v1 receipt, correlated from dispatch's
+    // own activation_action, before entering await-result. Keep this assertion
+    // on the real CURRENT bootstrap emitted by root-source; historical decode
+    // strings are intentionally outside this contract.
+    const bootstrap = p.bootstrap_message;
+    const bootstrapLines = bootstrap.split('\n');
+    assert.strictEqual(bootstrapLines.length, 5, 'S16 root-source CURRENT bootstrap must retain the exact five-line outer grammar');
+    const currentFinalLine = bootstrapLines[4];
+    const currentFinalLineBytes = Buffer.byteLength(currentFinalLine, 'utf8');
+    assert.ok(currentFinalLineBytes <= 4096, 'S16 root-source CURRENT final line must stay within the 4096-byte executable-prompt ceiling; actual=' + currentFinalLineBytes);
+    const publishStandaloneConstraint = 'Its Bash tool_input.command must equal the publish_command value exactly and contain no prefix, suffix, newline, diagnostic echo, redirection, wrapper, or shell control operator; read the structured tool result directly.';
+    const laterStandaloneConstraint = 'Each later lifecycle command below must likewise be one standalone Bash tool_input.command with no additional shell text.';
+    const publishFirstInstruction = 'Run publish_command immediately as the first tool action after this dispatch.';
+    const dispatchInstruction = 'As this same actor, run dispatch.';
+    const requestPathInstruction = 'set REQUEST to the exact artifact_ref returned by publish-request; use it rather than request_id as the path.';
+    const typedActivationCheck = 'Require activation_action.message to start with COORDINATION_CONSULT/v1 and one newline; parse only its suffix as MESSAGE.';
+    const scopedActivationCheck = 'Require kind=selected_driver=claude-sendmessage; request_artifact_path=REQUEST; request_id/attempt_id/lease_epoch match current activation; target_role=MESSAGE.target_role; request_artifact_path=MESSAGE.artifact_path; and MESSAGE has exactly artifact_path,kind,request_id,role,target_role with matching request_id and kind=consult.';
+    const singleActionDeliveryAuthorization = 'Otherwise send or deliver nothing and report the conflict. Pass activation_action.message unchanged as a string: do not parse, stringify, add quote bytes, or convert it to an object. Then execute one record-delivery after sendmessage-returned; null authorizes neither.';
+    const sendMessageInstruction = 'For kind claude-sendmessage, call SendMessage with activation_action.target_name and activation_action.message exactly.';
+    const deliveryCorrelationInstruction = 'After that SendMessage returns successfully, run record-delivery exactly once, substituting {{ATTEMPT_ID}} with activation_action.attempt_id and {{LEASE_EPOCH}} with String(activation_action.lease_epoch).';
+    const sendMessageDeliveryCommand = "Run claude-sendmessage record-delivery as: '{{NODE}}' '{{SCRIPT}}' 'record-delivery' '--coordination-root' '{{COORD_ROOT}}' '--request' '{{REQUEST}}' '--attempt' '{{ATTEMPT_ID}}' '--epoch' '{{LEASE_EPOCH}}' '--driver' 'claude-sendmessage' '--outcome' 'possibly-delivered' '--commit-point' 'sendmessage-returned'.";
+    const nullActivationInstruction = 'If activation_action is null, skip activation and do not run record-delivery.';
+    const awaitInstruction = 'Then run await-result --timeout 900 in the foreground and wait for completion before the next action.';
+    assert.strictEqual(currentFinalLine.split(publishFirstInstruction).length - 1, 1, 'S16 root-source CURRENT bootstrap must require publish_command exactly once as its first tool action');
+    assert.ok(currentFinalLine.includes(publishStandaloneConstraint), 'S16 root-source CURRENT bootstrap must retain the byte-exact standalone publish_command constraint');
+    assert.ok(currentFinalLine.includes(laterStandaloneConstraint), 'S16 root-source CURRENT bootstrap must retain the standalone constraint for every later lifecycle command');
+    assert.strictEqual(currentFinalLine.split(requestPathInstruction).length - 1, 1, 'S16 root-source CURRENT bootstrap must distinguish artifact_ref from request_id exactly once');
+    assert.strictEqual(currentFinalLine.split(typedActivationCheck).length - 1, 1, 'S16 root-source CURRENT bootstrap must require the typed wire marker and suffix-only validation');
+    assert.strictEqual(currentFinalLine.split(scopedActivationCheck).length - 1, 1, 'S16 root-source CURRENT bootstrap must contain exactly one closed claude-sendmessage correlation check');
+    assert.strictEqual(currentFinalLine.split(singleActionDeliveryAuthorization).length - 1, 1, 'S16 root-source CURRENT bootstrap must contain exactly one closed SendMessage/delivery authorization including the null zero-action branch');
+    assert.strictEqual(currentFinalLine.includes('For kind claude-agent'), false, 'S16 root-source CURRENT bootstrap must never instruct this subagent to call Agent');
+    assert.strictEqual(currentFinalLine.includes("'--driver' 'claude-agent'"), false, 'S16 root-source CURRENT bootstrap must never offer a claude-agent delivery branch');
+    assert.strictEqual(currentFinalLine.split(sendMessageInstruction).length - 1, 1, 'S16 root-source CURRENT bootstrap must contain exactly one claude-sendmessage host action');
+    assert.strictEqual(currentFinalLine.split(sendMessageDeliveryCommand).length - 1, 1, 'S16 root-source CURRENT bootstrap must contain exactly one literal standalone record-delivery command for claude-sendmessage');
+    const dispatchAt = currentFinalLine.indexOf(dispatchInstruction);
+    const typedActivationAt = currentFinalLine.indexOf(typedActivationCheck);
+    const scopedActivationAt = currentFinalLine.indexOf(scopedActivationCheck);
+    const singleActionDeliveryAt = currentFinalLine.indexOf(singleActionDeliveryAuthorization);
+    const sendMessageAt = currentFinalLine.indexOf(sendMessageInstruction);
+    const correlationAt = currentFinalLine.indexOf(deliveryCorrelationInstruction);
+    const sendMessageDeliveryCommandAt = currentFinalLine.indexOf(sendMessageDeliveryCommand);
+    const nullActivationAt = currentFinalLine.indexOf(nullActivationInstruction);
+    const awaitAt = currentFinalLine.indexOf(awaitInstruction);
+    assert.ok(dispatchAt >= 0, 'S16 root-source CURRENT bootstrap must retain the gated dispatch instruction');
+    assert.ok(typedActivationAt > dispatchAt, 'S16 root-source CURRENT bootstrap must require typed activation validation only after dispatch');
+    assert.ok(scopedActivationAt > typedActivationAt, 'S16 root-source CURRENT bootstrap must present the exact correlation checks after the typed wire-marker rule');
+    assert.ok(singleActionDeliveryAt > scopedActivationAt, 'S16 root-source CURRENT bootstrap must state the exactly-one SendMessage/delivery and null-zero contract after validating the activation correlation');
+    assert.ok(sendMessageAt > singleActionDeliveryAt, 'S16 root-source CURRENT bootstrap must authorize the closed activation_action after dispatch and before presenting SendMessage mechanics');
+    assert.ok(correlationAt > sendMessageAt, 'S16 root-source CURRENT bootstrap must require record-delivery only after SendMessage succeeds and bind it to activation_action.attempt_id/lease_epoch');
+    assert.ok(sendMessageDeliveryCommandAt > correlationAt, 'S16 root-source CURRENT bootstrap must present the literal claude-sendmessage record-delivery command after its successful-SendMessage correlation rule');
+    assert.ok(nullActivationAt > sendMessageDeliveryCommandAt, 'S16 root-source CURRENT bootstrap must explicitly prohibit host action and record-delivery for a null activation_action');
+    assert.ok(awaitAt > nullActivationAt, 'S16 root-source CURRENT bootstrap must place record-delivery and the null-activation exclusion before await-result');
+
     const toolInput = { subagent_type: p.agent_type, name: p.name, prompt: p.bootstrap_message };
     const hook = runHook({
       tool_name: 'Agent', tool_input: toolInput, tool_use_id: 's16-root-source-tool-use-01',
@@ -581,10 +644,11 @@ function runS16RootSourceOwningReserves() {
     assert.ok(fs.existsSync(reservationPath), 'S16 root-source owning call must publish the exact reservation path: ' + reservationPath);
     const reservation = JSON.parse(fs.readFileSync(reservationPath, 'utf8'));
     assert.deepStrictEqual(Object.keys(reservation).sort(), [
-      'action_digest', 'action_id', 'expiry', 'main_binding_id', 'reserved_at',
-      'runtime_session_key', 'schema', 'session_generation_id', 'tool_input_digest', 'tool_use_id',
+      'action_digest', 'action_id', 'canonical_input_digest', 'expiry', 'main_binding_id',
+      'model_deviation', 'proposed_input_digest', 'reserved_at', 'runtime_session_key',
+      'schema', 'session_generation_id', 'tool_input_digest', 'tool_use_id',
     ].sort(), 'S16 root-source reservation must be recursively closed');
-    assert.strictEqual(reservation.schema, 'runtime/root-source-reservation/v1');
+    assert.strictEqual(reservation.schema, 'runtime/root-source-reservation/v2');
     assert.strictEqual(reservation.action_id, setup.action.action_id);
     assert.strictEqual(reservation.main_binding_id, setup.mainBinding.binding_id);
     assert.strictEqual(reservation.session_generation_id, setup.generation);
@@ -592,6 +656,9 @@ function runS16RootSourceOwningReserves() {
     assert.strictEqual(reservation.tool_use_id, 's16-root-source-tool-use-01');
     assert.match(reservation.action_digest, /^[a-f0-9]{64}$/);
     assert.match(reservation.tool_input_digest, /^[a-f0-9]{64}$/);
+    assert.strictEqual(reservation.canonical_input_digest, reservation.tool_input_digest);
+    assert.match(reservation.proposed_input_digest, /^[a-f0-9]{64}$/);
+    assert.strictEqual(reservation.model_deviation, true);
     console.log('S16-RSG-ROOT-SOURCE-OWNING-RESERVES-01: PASS');
   } finally {
     cleanup(proj);
@@ -726,7 +793,7 @@ function runS16ExpiredHistoryLive() {
       body.hookSpecificOutput && body.hookSpecificOutput.permissionDecision, 'allow',
       label + ': a live root-source action must be allowed even when an expired historical action for the same role/worktree/plan exists; got: ' + JSON.stringify(body),
     );
-    assert.deepStrictEqual(body.hookSpecificOutput.updatedInput, rootSourceToolInputFor(live), label + ': updatedInput must be the live action payload');
+    assert.deepStrictEqual(body.hookSpecificOutput.updatedInput, rll.canonicalNativeAgentInputForAction(live), label + ': updatedInput must be the canonical five-key live action payload');
 
     const livePaths = rootSourceReservationPathsFor(proj, live.action_id);
     const historicalPaths = rootSourceReservationPathsFor(proj, historical.action_id);
@@ -735,7 +802,7 @@ function runS16ExpiredHistoryLive() {
     assert.ok(!fs.existsSync(historicalPaths.consumed), label + ': the historical action must NOT be consumed');
     assert.ok(!fs.existsSync(livePaths.consumed), label + ': the live reservation must not be consumed by the gate itself');
     const reservation = JSON.parse(fs.readFileSync(livePaths.reservation, 'utf8'));
-    assert.strictEqual(reservation.schema, 'runtime/root-source-reservation/v1');
+    assert.strictEqual(reservation.schema, 'runtime/root-source-reservation/v2');
     assert.strictEqual(reservation.action_id, live.action_id, label + ': reservation.action_id must be the live action');
     const liveOnDisk = rll.readRegistryRecord(rll.actionPathFor(proj, live.action_id));
     assert.strictEqual(liveOnDisk.ok && !liveOnDisk.absent, true);
@@ -1537,9 +1604,20 @@ runPositiveOwningNameAbsent();
 
     const actionRead = rll.findActionAcrossRepos(fixture.roleSpawnActionId);
     assert.strictEqual(actionRead.ok, true, 'RB1: the reserved action must still be readable: ' + JSON.stringify(actionRead));
-    const expectedDigest = proposedToolInputDigest(toolInput);
-    const consumeResult = rll.validateAndConsumeRoleSpawnExecutionClaim(fixture.repoDescriptor, actionRead.action, expectedDigest, proj);
+    const consumeResult = rll.validateAndConsumeRoleSpawnExecutionClaim(fixture.repoDescriptor, actionRead.action, {
+      sessionId: 'rb1-session', agentId: 'rb1-native-agent', agentType: RB_ROLE,
+    }, proj);
     assert.strictEqual(consumeResult.ok, true, 'RB1: a genuine, round-trip-consumable reservation claim must exist for this exact action after a successful hook call: ' + JSON.stringify(consumeResult));
+    assert.deepStrictEqual(Object.keys(consumeResult.claim).sort(), [
+      'action_digest', 'action_id', 'canonical_input_digest', 'created_at',
+      'execution_state', 'expiry', 'main_binding_id', 'model_deviation',
+      'plan_digest', 'proposed_input_digest', 'reservation_id', 'role',
+      'runtime_session_digest', 'schema', 'session_generation_id',
+      'source_tool_use_id_digest', 'worktree_id',
+    ].sort(), 'RB1: v2 claim key set must be closed');
+    assert.strictEqual(consumeResult.claim.schema, 'runtime/role-spawn-execution-claim/v2');
+    assert.strictEqual(consumeResult.claim.runtime_session_digest, rc.sha256String('rb1-session'));
+    assert.strictEqual(consumeResult.claim.source_tool_use_id_digest, rc.sha256String('rb1-session-agent-tool-use'));
     assert.strictEqual(consumeResult.claim.action_id, fixture.roleSpawnActionId, 'RB1: the claim must reference the exact action that was reserved: ' + JSON.stringify(consumeResult.claim));
     assert.ok(consumeResult.claim.reservation_id, 'RB1: the claim must carry a fresh reservation_id (the per-attempt receipt B2 will later correlate against): ' + JSON.stringify(consumeResult.claim));
 
@@ -1810,10 +1888,13 @@ runPositiveOwningNameAbsent();
   }
 }
 
-// RB7: an expired main-orchestrator binding must DENY reservation -- fresh
-// revalidation, never trusting a stale/expired authority snapshot, mirrors
-// validateAndConsumeExecutionClaim's own "re-validate expiry against the
-// CURRENT... never merely the claim's own stored expiry" discipline.
+// RB7: expiration of the governing main-orchestrator binding AND the role
+// action whose lifetime was bounded by it must DENY reservation.  A later
+// replacement binding for the same session may legitimately be minted, but
+// it must never resurrect the already-expired immutable action.  Persist the
+// two expired fixture records directly instead of sleeping: genuine Windows
+// PID-birth observation launches PowerShell and makes a tiny wall-clock TTL
+// both slow and timing-dependent.
 {
   const proj = makeGitProject();
   try {
@@ -1822,16 +1903,11 @@ runPositiveOwningNameAbsent();
     const worktreeId = rll.computeWorktreeId(proj);
     const planResult = rll.discoverPlan(proj);
     primeClaudeId01TraceForItem5(proj, 'context-provider', 'rb7-session', 'rb7-capability-primary');
-    // A binding minted with a short (3s) TTL -- long enough that the ensure
-    // CLI subprocess spawn below (which itself independently re-validates
-    // the binding has >=1000ms remaining, computeActionTtlSeconds's own
-    // 'binding-remaining-lifetime-insufficient' guard) does not race the
-    // expiry, but short enough to busy-wait past deterministically. The
-    // deadline is computed from the binding's OWN creation instant, not a
-    // fixed post-setup sleep -- robust regardless of how long the setup
-    // subprocess spawns below actually take.
-    const bindingResult = rll.createMainOrchestratorBinding(proj, identity, worktreeId, planResult.planDigest, 3);
-    const bindingCreatedAtMs = Date.now();
+    // Keep setup comfortably live on Windows, where genuine PID-birth
+    // observation starts a bounded PowerShell process.  After setup, replace
+    // this mutable registry record with the same exact binding at a past
+    // expiry; the owning hook must freshly reject that persisted state.
+    const bindingResult = rll.createMainOrchestratorBinding(proj, identity, worktreeId, planResult.planDigest, 30);
     const argvDigest = crypto.createHash('sha256').update('ensure:' + RB_ROLE).digest('hex');
     const grantResult = rll.mintLifecycleCommandGrant(proj, bindingResult.binding, argvDigest, RB_ROLE, 'ensure', 'main-orchestrator', 'orchestrator', 'normal', null);
     const ensureResult = spawnSync('node', [IMPL_RLL, 'ensure', '--project-root', proj, '--role', RB_ROLE, '--lifecycle-binding', grantResult.grantId], { env: process.env, encoding: 'utf8' });
@@ -1849,13 +1925,22 @@ runPositiveOwningNameAbsent();
     const roleActionBeforeExpiry = rll.findActionAcrossRepos(roleStateBeforeExpiry.record.pending_action_id);
     assert.ok(roleActionBeforeExpiry.ok && !roleActionBeforeExpiry.absent, 'RB7 setup: pending role action must resolve');
 
-    // Busy-wait until DEFINITELY past the binding's 3-second expiry,
-    // measured from its own creation instant (registry operations are pure
-    // local fs syscalls per this file's own withRegistryLock precedent --
-    // no async wait needed elsewhere in this suite, but binding expiry
-    // genuinely needs real wall-clock time here).
-    const deadline = bindingCreatedAtMs + 3300;
-    while (Date.now() < deadline) { /* busy-wait past the 3s binding TTL */ }
+    const expiredBinding = Object.assign({}, bindingResult.binding, {
+      expiry: new Date(Date.now() - 1000).toISOString().replace(/\.\d{3}Z$/, 'Z'),
+    });
+    const expiredWrite = rll.writeRegistryRecordReplace(
+      rll.mainOrchestratorBindingPathFor(proj, bindingResult.binding.binding_id),
+      Buffer.from(rc.canonicalJSONStringify(expiredBinding), 'utf8'),
+    );
+    assert.strictEqual(expiredWrite.ok, true, 'RB7 setup: persisted expired binding must replace cleanly');
+    const expiredAction = Object.assign({}, roleActionBeforeExpiry.action, {
+      expires_at: expiredBinding.expiry,
+    });
+    const expiredActionWrite = rll.writeRegistryRecordReplace(
+      rll.actionPathFor(proj, expiredAction.action_id),
+      Buffer.from(rc.canonicalJSONStringify(expiredAction), 'utf8'),
+    );
+    assert.strictEqual(expiredActionWrite.ok, true, 'RB7 setup: persisted expired action must replace cleanly');
 
     const toolInput = {
       subagent_type: RB_ROLE,
@@ -1863,7 +1948,7 @@ runPositiveOwningNameAbsent();
       prompt: roleActionBeforeExpiry.action.payload.bootstrap_message,
     };
     const r = runMainOrchestratorAgentCall(toolInput, proj, 'rb7-session');
-    assertPreToolUseDeny(r, 'RB7: reservation must be DENIED once the referenced main-orchestrator binding has expired, even though the role-spawn action and team-ensure state were both genuinely valid at mint time');
+    assertPreToolUseDeny(r, 'RB7: reservation must be DENIED once the governing main-orchestrator binding and its bounded role-spawn action have expired, even though the action and team-ensure state were both genuinely valid at mint time');
 
     // Discriminates a genuine denial from a VACUOUS pass (see RB5's own
     // comment for the same rationale): no reservation claim may exist for
@@ -1872,7 +1957,41 @@ runPositiveOwningNameAbsent();
     const claimPath = rll.roleSpawnExecutionClaimPathFor(proj, bindingStateAfter.record.pending_action_id);
     assert.strictEqual(fs.existsSync(claimPath), false, 'RB7: no reservation claim may exist at all once the authorizing binding has expired: ' + claimPath);
 
-    console.log('RB7 expired main-orchestrator binding denies reservation (fresh revalidation, never trusting stale authority), with no claim minted: PASS');
+    console.log('RB7 expired binding/action authority denies reservation (a replacement binding cannot resurrect the action), with no claim minted: PASS');
+  } finally {
+    cleanup(proj);
+  }
+}
+
+// RB7b (Windows genuine-live C32 regression): an old STARTING role-binding
+// can outlive its immutable pending role-spawn action.  The binding-backed
+// scanner must apply the same action-expiry test as its raw-actions scanner;
+// otherwise one expired historical generation plus one fresh generation is
+// falsely reported as an ambiguous owning union and blocks the fresh spawn.
+{
+  const proj = makeGitProject();
+  try {
+    writePlanFixture(proj, 'rb7b-expired-pending-history');
+    const historical = mintFullyEligibleRoleSpawnAction(proj, RB_ROLE, 'rb7b-historical-session');
+    const historicalRead = rll.findActionAcrossRepos(historical.roleSpawnActionId);
+    assert.ok(historicalRead.ok && !historicalRead.absent, 'RB7b setup: historical action must resolve');
+    const expiredHistoricalAction = Object.assign({}, historicalRead.action, {
+      expires_at: new Date(Date.now() - 1000).toISOString().replace(/\.\d{3}Z$/, 'Z'),
+    });
+    const expiredWrite = rll.writeRegistryRecordReplace(
+      rll.actionPathFor(proj, historical.roleSpawnActionId),
+      Buffer.from(rc.canonicalJSONStringify(expiredHistoricalAction), 'utf8'),
+    );
+    assert.strictEqual(expiredWrite.ok, true, 'RB7b setup: historical action must be durably expired');
+
+    const live = mintFullyEligibleRoleSpawnAction(proj, RB_ROLE, 'rb7b-live-session');
+    const toolInput = { subagent_type: RB_ROLE, name: RB_ROLE, prompt: live.bootstrapMessage };
+    const hook = runMainOrchestratorAgentCall(toolInput, proj, 'rb7b-live-session');
+    assert.strictEqual(hook.exit, 0, 'RB7b: a fresh exact spawn must not be blocked by an expired action still referenced by an old STARTING binding: ' + JSON.stringify(hook));
+    const body = parseHookJSON(hook.stdout, 'RB7b');
+    assert.strictEqual(body.hookSpecificOutput && body.hookSpecificOutput.permissionDecision, 'allow', 'RB7b: the fresh exact spawn must be genuinely allowed');
+
+    console.log('RB7b expired action behind historical STARTING binding does not create false owning ambiguity: PASS');
   } finally {
     cleanup(proj);
   }
@@ -1911,6 +2030,7 @@ runPositiveOwningNameAbsent();
         session_id: 'rb8-session',
         agent_type: '',
         agent_id: '',
+        tool_use_id: 'rb8-session-agent-tool-use',
       },
       envWithoutExecutorCapability
     );
@@ -1919,8 +2039,9 @@ runPositiveOwningNameAbsent();
     assert.strictEqual(body.hookSpecificOutput && body.hookSpecificOutput.permissionDecision, 'allow', 'RB8: must genuinely allow: ' + JSON.stringify(body));
 
     const actionRead = rll.findActionAcrossRepos(fixture.roleSpawnActionId);
-    const expectedDigest = proposedToolInputDigest(toolInput);
-    const consumeResult = rll.validateAndConsumeRoleSpawnExecutionClaim(fixture.repoDescriptor, actionRead.action, expectedDigest, proj);
+    const consumeResult = rll.validateAndConsumeRoleSpawnExecutionClaim(fixture.repoDescriptor, actionRead.action, {
+      sessionId: 'rb8-session', agentId: 'rb8-native-agent', agentType: RB_ROLE,
+    }, proj);
     assert.strictEqual(consumeResult.ok, true, 'RB8: the reservation minted without the executor capability flag must still be genuinely valid and round-trip-consumable: ' + JSON.stringify(consumeResult));
 
     console.log('RB8 reservation mint fires unconditionally, never gated behind the test-only executor capability flag (unlike SupervisorExecutionClaim): PASS');
@@ -2023,14 +2144,9 @@ runPositiveOwningNameAbsent();
   }
 }
 
-// RB11: the precise "same role, wrong payload" tightening of RB3 --
-// subagent_type correctly identifies WHICH action is owned (so this is
-// genuinely an OWNING-scope call, never non-owning), but `name` does not
-// match that action's own teammate_name. Must produce an EXPLICIT deny
-// decision (non-empty stdout, decision:'block') -- never silently fall
-// back to RB9/RB10a's empty-stdout non-owning shape. A mismatch inside an
-// owning scope is fundamentally different from "this mechanism doesn't
-// apply at all".
+// P1-A05-A06: subagent_type identifies the unique owner before presentation
+// validation. Missing/divergent name, prompt and background are replaced by
+// host-derived canonical values, never treated as a non-owning call.
 //
 // NOTE (flagged explicitly, mirrors the session-id note above): RB3
 // constructs its mismatch via a DIFFERENT subagent_type
@@ -2047,13 +2163,19 @@ runPositiveOwningNameAbsent();
   const proj = makeGitProject();
   try {
     writePlanFixture(proj, 'rb11-wave');
-    mintFullyEligibleRoleSpawnAction(proj, RB_ROLE, 'rb11-session');
+    const fixture = mintFullyEligibleRoleSpawnAction(proj, RB_ROLE, 'rb11-session');
     const mismatchedToolInput = { subagent_type: RB_ROLE, name: 'some-other-teammate-name' };
 
     const r = runMainOrchestratorAgentCall(mismatchedToolInput, proj, 'rb11-session');
-    assertPreToolUseDeny(r, 'RB11: an owning-scope mismatch (correct role, wrong payload) must produce an explicit deny decision -- never the empty-stdout non-owning shape');
+    assert.strictEqual(r.exit, 0, 'P1-A05-A06: canonicalizable owning proposal must exit cleanly: ' + JSON.stringify(r));
+    const body = parseHookJSON(r.stdout, 'P1-A05-A06');
+    assert.strictEqual(body.hookSpecificOutput && body.hookSpecificOutput.permissionDecision, 'allow');
+    const action = rll.findActionAcrossRepos(fixture.roleSpawnActionId).action;
+    assert.deepStrictEqual(body.hookSpecificOutput.updatedInput, rll.canonicalNativeAgentInputForAction(action));
+    const claim = JSON.parse(fs.readFileSync(rll.roleSpawnExecutionClaimPathFor(proj, fixture.roleSpawnActionId), 'utf8'));
+    assert.strictEqual(claim.model_deviation, true);
 
-    console.log('RB11 owning-scope tool_input mismatch (same role, wrong payload) produces an explicit deny decision, never a silent non-owning pass-through: PASS');
+    console.log('P1-A05-A06 owning name/prompt/background omissions are canonicalized and audited: PASS');
   } finally {
     cleanup(proj);
   }
@@ -2149,13 +2271,10 @@ runPositiveOwningNameAbsent();
   }
 }
 
-// Positive contrast (mirrors case 7's own "different agent_id -> genuinely
-// independent" framing, but grounded in two real, distinct spawn-actions):
-// two genuinely DIFFERENT spawn-actions, two genuinely DIFFERENT agent_ids,
-// each independently completing its OWN full CLAUDE-ID-01 trace. This is
-// NOT expected to be RED -- it is the "con IDs diferentes sí" half of item 5,
-// confirming the fixture technique itself (real, distinct spawn-actions) is
-// not what breaks the different-agent_id case.
+// Historical-v1 rejection contrast: even two different v1 probe peers no
+// longer create actor authority.  P1 replaced this generation-wide proof
+// with one consumed v2 claim plus that actor's authenticated ready outcome;
+// the positive v2 path lives in claude-id01-startup-v2.test.js.
 {
   const proj = makeGitProject();
   try {
@@ -2190,13 +2309,12 @@ runPositiveOwningNameAbsent();
       actionId: actionB.actionId,
     });
     const proofB = rll.checkClaudeId01ProofComplete(proj, sharedSessionId, worktreeId, planResult.planDigest, RB_ROLE, 'item5-diffid-agent-b');
-    assert.strictEqual(proofB.ok, true, 'two distinct actions and distinct observed agent IDs establish the generation capability: ' + JSON.stringify(proofB));
+    assert.strictEqual(proofB.ok, false, 'two distinct historical v1 peers must not establish the v2 actor capability: ' + JSON.stringify(proofB));
 
-    // Peer A's own proof is still independently intact after peer B's -- a
-    // different agent_id must never disturb an already-complete sibling.
+    // Neither historical peer may borrow or retain current actor authority.
     const proofAAfter = rll.checkClaudeId01ProofComplete(proj, sharedSessionId, worktreeId, planResult.planDigest, RB_ROLE, 'item5-diffid-agent-a');
-    assert.strictEqual(proofAAfter.ok, true, 'the established runtime capability is generation-scoped, not revoked by observing peer B: ' + JSON.stringify(proofAAfter));
-    console.log('ITEM5-DISTINCT-SPAWN-ACTIONS-DIFFERENT-AGENT-ID establishes the generation capability: PASS');
+    assert.strictEqual(proofAAfter.ok, false, 'historical generation-wide v1 capability must remain inert: ' + JSON.stringify(proofAAfter));
+    console.log('ITEM5-DISTINCT-SPAWN-ACTIONS-DIFFERENT-AGENT-ID remains historical and grants no v2 actor capability: PASS');
   } finally {
     cleanup(proj);
   }
@@ -2337,10 +2455,9 @@ runPositiveOwningNameAbsent();
 // an owning candidate exists must deny, never silently bypass).
 // ════════════════════════════════════════════════════════════════════════
 
-// RB-PROMPT-MISMATCH (Fix 1): tool_input.prompt not matching the reserved
-// action's own accredited bootstrap_message must deny with the new, exact
-// reason -- pre-fix nothing checks prompt at all (only subagent_type/name are
-// correlated), so a call is allowed regardless of what prompt carries.
+// P1-A01-A04: presentation drift is audit evidence, not authority. Once the
+// prompt-free owner is unique, the gate replaces the proposal with the exact
+// canonical five-key Agent input and records both digests.
 {
   const proj = makeGitProject();
   try {
@@ -2350,34 +2467,27 @@ runPositiveOwningNameAbsent();
     assert.notStrictEqual(toolInput.prompt, fixture.bootstrapMessage, 'RB-PROMPT-MISMATCH setup sanity: the fixture prompt must genuinely differ from the real bootstrap_message');
 
     const r = runMainOrchestratorAgentCall(toolInput, proj, 'rb-promptmismatch-session');
-    const body = assertPreToolUseDeny(r, 'RB-PROMPT-MISMATCH: a prompt not matching the reserved action\'s own bootstrap_message must deny');
-    assert.ok(body.hookSpecificOutput.permissionDecisionReason.toLowerCase().includes('prompt'), 'RB-PROMPT-MISMATCH: reason must reference the prompt mismatch specifically: ' + JSON.stringify(body));
+    assert.strictEqual(r.exit, 0, 'P1-A01-A04: canonicalizable prompt drift must exit cleanly: ' + JSON.stringify(r));
+    const body = parseHookJSON(r.stdout, 'P1-A01-A04');
+    assert.strictEqual(body.hookSpecificOutput && body.hookSpecificOutput.permissionDecision, 'allow');
+    assert.deepStrictEqual(body.hookSpecificOutput.updatedInput, rll.canonicalNativeAgentInputForAction(
+      rll.findActionAcrossRepos(fixture.roleSpawnActionId).action,
+    ));
 
     const claimPath = rll.roleSpawnExecutionClaimPathFor(proj, fixture.roleSpawnActionId);
-    assert.strictEqual(fs.existsSync(claimPath), false, 'RB-PROMPT-MISMATCH: no reservation claim may exist when the prompt does not match: ' + claimPath);
-    console.log('RB-PROMPT-MISMATCH tool_input.prompt not matching the action\'s own bootstrap_message denies with the new exact reason: PASS');
+    const claim = JSON.parse(fs.readFileSync(claimPath, 'utf8'));
+    assert.strictEqual(claim.schema, 'runtime/role-spawn-execution-claim/v2');
+    assert.strictEqual(claim.model_deviation, true);
+    assert.notStrictEqual(claim.proposed_input_digest, claim.canonical_input_digest);
+    console.log('P1-A01-A04 owning prompt drift is canonicalized and audited: PASS');
   } finally {
     cleanup(proj);
   }
 }
 
-// RB-DIGEST-SCOPE (Fix 2, RESOLVED 2026-08-09 -- see m7-correction-spec.md
-// "Fix 2 -- RESOLVED"): the accredited claim's tool_input_digest is
-// INTENTIONALLY scoped to role identity ({subagent_type, name}) only, never
-// widened to cover the full tool_input. Widening it is structurally
-// incompatible with subagent-start-context-bundle.js's own B2 confirmation:
-// SubagentStart never receives tool_input at all (confirmed empirically --
-// zero occurrences across every fixture in that file), so B2 cannot
-// reconstruct any digest wider than the two fields it already knows
-// (agentType alone supplies both subagent_type and name). This test proves
-// the scoping is deliberate, not an oversight this file's own original
-// header comment once flagged LOW CONFIDENCE: two otherwise-identical
-// reservations differing ONLY in an extra field (model) must produce the
-// IDENTICAL tool_input_digest. Divergent tool_input coverage where it
-// actually matters -- a caller-supplied prompt not matching the action's
-// own accredited bootstrap_message -- is RB-PROMPT-MISMATCH's job, above;
-// that check is the real, sufficient defense against a tampered/mismatched
-// spawn request, verified independently of this digest.
+// P1-A27-A30: a matching requested model selector is permitted as host
+// presentation metadata, then stripped from the executed canonical input.
+// Proposal and canonical digests remain distinct for audit.
 {
   const projA = makeGitProject();
   const projB = makeGitProject();
@@ -2386,8 +2496,8 @@ runPositiveOwningNameAbsent();
     writePlanFixture(projB, 'rb-digest-b-wave');
     const fixtureA = mintFullyEligibleRoleSpawnAction(projA, RB_ROLE, 'rb-digest-a-session');
     const fixtureB = mintFullyEligibleRoleSpawnAction(projB, RB_ROLE, 'rb-digest-b-session');
-    const toolInputA = { subagent_type: RB_ROLE, name: RB_ROLE, prompt: fixtureA.bootstrapMessage, model: 'model-a' };
-    const toolInputB = { subagent_type: RB_ROLE, name: RB_ROLE, prompt: fixtureB.bootstrapMessage, model: 'model-b' };
+    const toolInputA = { subagent_type: RB_ROLE, name: RB_ROLE, prompt: fixtureA.bootstrapMessage, model: 'sonnet' };
+    const toolInputB = { subagent_type: RB_ROLE, name: RB_ROLE, prompt: fixtureB.bootstrapMessage, model: 'sonnet' };
 
     const rA = runMainOrchestratorAgentCall(toolInputA, projA, 'rb-digest-a-session');
     assert.strictEqual(rA.exit, 0, 'RB-DIGEST-SCOPE setup A must succeed: ' + JSON.stringify(rA));
@@ -2396,11 +2506,13 @@ runPositiveOwningNameAbsent();
 
     const claimA = JSON.parse(fs.readFileSync(rll.roleSpawnExecutionClaimPathFor(projA, fixtureA.roleSpawnActionId), 'utf8'));
     const claimB = JSON.parse(fs.readFileSync(rll.roleSpawnExecutionClaimPathFor(projB, fixtureB.roleSpawnActionId), 'utf8'));
-    assert.strictEqual(
-      claimA.tool_input_digest, claimB.tool_input_digest,
-      'RB-DIGEST-SCOPE: two reservations whose tool_input differs ONLY in an extra field (model) must produce the IDENTICAL tool_input_digest -- the digest is intentionally scoped to role identity ({subagent_type,name}) only, never widened, since SubagentStart/B2 cannot reconstruct anything wider (it never receives tool_input): ' + JSON.stringify({ a: claimA.tool_input_digest, b: claimB.tool_input_digest })
-    );
-    console.log('RB-DIGEST-SCOPE tool_input_digest is intentionally scoped to role identity, unaffected by extra fields like model -- RB-PROMPT-MISMATCH covers divergent tool_input where it actually matters: PASS');
+    for (const claim of [claimA, claimB]) {
+      assert.strictEqual(claim.schema, 'runtime/role-spawn-execution-claim/v2');
+      assert.strictEqual(claim.model_deviation, true);
+      assert.notStrictEqual(claim.proposed_input_digest, claim.canonical_input_digest);
+      assert.strictEqual(Object.prototype.hasOwnProperty.call(claim, 'tool_input_digest'), false);
+    }
+    console.log('P1-A27-A30 matching requested model is stripped and proposal drift is audited: PASS');
   } finally {
     cleanup(projA);
     cleanup(projB);
@@ -2525,7 +2637,7 @@ runPositiveOwningNameAbsent();
         proj, 'spoof-primary-session',
       );
       const body = assertPreToolUseDeny(r, 'SPOOF-PRIMARY-toolkit-specialist-2');
-      assert.ok(/reserved harness numeric-suffix namespace/.test(body.hookSpecificOutput.permissionDecisionReason), 'SPOOF-PRIMARY: must be denied by the NEW suffix-namespace check specifically: ' + JSON.stringify(body));
+      assert.ok(/reserved persistent-role suffix/.test(body.hookSpecificOutput.permissionDecisionReason), 'SPOOF-PRIMARY: must be denied by the suffix-namespace check specifically: ' + JSON.stringify(body));
     }
 
     // Foreign canonical role's suffix -- proves generality, not hardcoded
@@ -2536,7 +2648,7 @@ runPositiveOwningNameAbsent();
         proj, 'spoof-foreign-session',
       );
       const body = assertPreToolUseDeny(r, 'SPOOF-FOREIGN-PREFIX-arch-platform-2');
-      assert.ok(/reserved harness numeric-suffix namespace/.test(body.hookSpecificOutput.permissionDecisionReason), 'SPOOF-FOREIGN-PREFIX: must be denied by the NEW suffix-namespace check: ' + JSON.stringify(body));
+      assert.ok(/reserved persistent-role suffix/.test(body.hookSpecificOutput.permissionDecisionReason), 'SPOOF-FOREIGN-PREFIX: must be denied by the suffix-namespace check: ' + JSON.stringify(body));
     }
 
     // Huge numeric suffix -- proves the shape-only regex never overflows,
@@ -2548,7 +2660,7 @@ runPositiveOwningNameAbsent();
         proj, 'spoof-huge-session',
       );
       const body = assertPreToolUseDeny(r, 'SPOOF-HUGE-NUMERIC-SUFFIX');
-      assert.ok(/reserved harness numeric-suffix namespace/.test(body.hookSpecificOutput.permissionDecisionReason), 'SPOOF-HUGE-NUMERIC-SUFFIX: must be denied: ' + JSON.stringify(body));
+      assert.ok(/reserved persistent-role suffix/.test(body.hookSpecificOutput.permissionDecisionReason), 'SPOOF-HUGE-NUMERIC-SUFFIX: must be denied: ' + JSON.stringify(body));
     }
 
     // Non-matching edge shapes: N<2, leading zero, non-numeric -- none of

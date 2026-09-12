@@ -30,10 +30,10 @@ bats_require_minimum_version 1.5.0
 
 BRIDGE="$BATS_TEST_DIRNAME/../lib/runtime-bridge-codex.cjs"
 RLL="$BATS_TEST_DIRNAME/../lib/runtime-role-lifecycle.cjs"
-PROJECT_CONFIG="$BATS_TEST_DIRNAME/../../.planning/wave-portable-runtime-messaging-adapters/prep/phase-a/project-config.py"
 WAVE_SLUG="bridge-test-wave"
 LC_CAPABILITY="bats-runtime-consultation-bridge-lc-fixture"
 EXEC_CAPABILITY="bats-runtime-consultation-bridge-exec-fixture"
+ID01_V2_FIXTURE="$BATS_TEST_DIRNAME/fixtures/runtime-claude-id01-v2-fixture.cjs"
 
 _assert_isolated_runtime_tmp() {
   local dir="$1"
@@ -50,9 +50,15 @@ _assert_isolated_runtime_tmp() {
     try { st = fs.lstatSync(process.argv[1]); } catch (err) { console.error("runtime-tmp stat failed: " + err.message); process.exit(1); }
     if (st.isSymbolicLink()) { console.error("runtime-tmp is a symlink"); process.exit(1); }
     if (!st.isDirectory()) { console.error("runtime-tmp is not a directory"); process.exit(1); }
-    if ((st.mode & 0o777) !== 0o700) { console.error("runtime-tmp wrong mode: " + (st.mode & 0o777).toString(8)); process.exit(1); }
-    if (typeof process.getuid === "function" && st.uid !== process.getuid()) { console.error("runtime-tmp wrong owner"); process.exit(1); }
-  ' "$dir"
+    if (process.platform === "win32") {
+      const rc = require(process.argv[2]);
+      const acl = rc.windowsPrivateDirectoryAcl(process.argv[1], { mode: "ensure" });
+      if (!acl.ok) { console.error("runtime-tmp Windows ACL is not private: " + JSON.stringify(acl)); process.exit(1); }
+    } else {
+      if ((st.mode & 0o777) !== 0o700) { console.error("runtime-tmp wrong mode: " + (st.mode & 0o777).toString(8)); process.exit(1); }
+      if (typeof process.getuid === "function" && st.uid !== process.getuid()) { console.error("runtime-tmp wrong owner"); process.exit(1); }
+    }
+  ' "$dir" "$BATS_TEST_DIRNAME/../lib/runtime-consultation.cjs"
 }
 
 setup() {
@@ -97,6 +103,14 @@ setup() {
   # (runtime-routing.json etc., read at module-load time) comes along too.
   mkdir -p "$PROJ/scripts"
   cp -R "$BATS_TEST_DIRNAME/../lib" "$PROJ/scripts/lib"
+  # From this point onward the fixture must mint, validate and execute through
+  # the same copied lifecycle/bridge pair. Production intentionally binds a
+  # supervisor action to the bridge adjacent to the lifecycle implementation
+  # that emitted it (central-toolkit L1/L2 installs rely on that invariant).
+  RLL="$PROJ/scripts/lib/runtime-role-lifecycle.cjs"
+  mkdir -p "$PROJ/scripts/tests/fixtures"
+  cp "$BATS_TEST_DIRNAME/fixtures/runtime-consultation-grant-wrapper.cjs" "$PROJ/scripts/tests/fixtures/runtime-consultation-grant-wrapper.cjs"
+  PROJ_GRANT_WRAPPER="$PROJ/scripts/tests/fixtures/runtime-consultation-grant-wrapper.cjs"
   # This suite deliberately exercises the retained Codex supervisor lane.
   # Project the copied v2 Claude-native selection policy to its canonical v1
   # compatibility form so driver selection remains Codex-specific here.
@@ -107,6 +121,7 @@ setup() {
     policy.schema = "runtime-collaboration-policy/v1";
     policy.version = 1;
     delete policy.selection;
+    delete policy.claude_native_startup_timeout_seconds;
     fs.writeFileSync(p, JSON.stringify(policy, null, 2) + "\n");
   ' "$PROJ/scripts/lib/runtime-collaboration-policy.json"
   PROJ_BRIDGE="$PROJ/scripts/lib/runtime-bridge-codex.cjs"
@@ -152,6 +167,11 @@ setup() {
   # this parser; only its future exp claim is consumed.
   TEST_HOME="$PROJ/test-home"
   mkdir -p "$TEST_HOME/.codex"
+  chmod 0700 "$TEST_HOME" "$TEST_HOME/.codex"
+  _assert_isolated_runtime_tmp "$TEST_HOME"
+  _assert_isolated_runtime_tmp "$TEST_HOME/.codex"
+  export HOME="$TEST_HOME"
+  export USERPROFILE="$TEST_HOME"
   node -e '
     const fs = require("fs");
     const enc = (v) => Buffer.from(JSON.stringify(v)).toString("base64url");
@@ -263,6 +283,9 @@ readline.createInterface({ input: process.stdin }).on('line', (line) => {
     const inputText = frame.params && Array.isArray(frame.params.input)
       && frame.params.input[0] && frame.params.input[0].text || '';
     record({ event: 'turn-start', thread_id: frame.params.threadId, turn_id: turnId, expected_result_kind: expectedKind, input_text: inputText, pid: process.pid });
+    if (eventFile && expectedKind !== 'role-bootstrap') {
+      fs.writeFileSync(eventFile + '.nonbootstrap-turn-start', 'observed\n', { mode: 0o600 });
+    }
     if (mode === 'close-before-leaf-completion' && expectedKind !== 'role-bootstrap') {
       // Sequence97 Correction A (deterministic attempted-but-uncompleted
       // boundary): a REAL turn id has already been returned (send() above)
@@ -607,6 +630,7 @@ _ensure_again_with_binding() {
     args.push("--lifecycle-binding", grant.grantId);
     const childEnv = Object.assign({}, process.env, {
       RUNTIME_ROLE_LIFECYCLE_FAKE_CAPABILITIES: JSON.stringify(["codex-app-server"]),
+      CODEX_CLI_PATH: process.argv[6],
     });
     if (process.argv[5]) {
       childEnv.RUNTIME_BRIDGE_CODEX_TEST_CAPABILITY = "x";
@@ -616,7 +640,7 @@ _ensure_again_with_binding() {
     const out = call.stdout || "";
     if (!out.trim()) { process.stderr.write("ensure produced no JSON: " + (call.stderr || "")); process.exit(1); }
     process.stdout.write(out.trim().split("\n").pop());
-  ' "$RLL" "$PROJ" "$roles_csv" "$binding_id" "$birth_observation"
+  ' "$RLL" "$PROJ" "$roles_csv" "$binding_id" "$birth_observation" "$FAKE_CODEX"
 }
 
 # Same-session fresh-binding variant used only after the retained authority
@@ -644,11 +668,14 @@ _ensure_with_fresh_binding_for_session() {
     const args = [process.argv[1], "ensure", "--project-root", projectRoot];
     for (const role of roles) args.push("--role", role);
     args.push("--lifecycle-binding", grant.grantId);
-    const call = spawnSync("node", args, { encoding: "utf8", env: Object.assign({}, process.env, { RUNTIME_ROLE_LIFECYCLE_FAKE_CAPABILITIES: JSON.stringify(["codex-app-server"]) }) });
+    const call = spawnSync("node", args, { encoding: "utf8", env: Object.assign({}, process.env, {
+      RUNTIME_ROLE_LIFECYCLE_FAKE_CAPABILITIES: JSON.stringify(["codex-app-server"]),
+      CODEX_CLI_PATH: process.argv[5],
+    }) });
     const out = call.stdout || "";
     if (!out.trim()) { process.stderr.write("ensure produced no JSON: " + (call.stderr || "")); process.exit(1); }
     process.stdout.write(out.trim().split("\n").pop());
-  ' "$RLL" "$PROJ" "$roles_csv" "$session_key"
+  ' "$RLL" "$PROJ" "$roles_csv" "$session_key" "$FAKE_CODEX"
 }
 
 _action_field() {
@@ -797,7 +824,7 @@ _start_bridge_bg() {
 
 _prepare_projection_subject_bundle() {
   local bundle_path="$1" plan_path="$2" fixture_session="$3"
-  local grant_wrapper="$BATS_TEST_DIRNAME/fixtures/runtime-consultation-grant-wrapper.cjs"
+  local grant_wrapper="$PROJ_GRANT_WRAPPER"
   mkdir -p "$PROJ/docs" "$PROJ/scratch"
   printf '%s' 'committed projection bytes' > "$PROJ/docs/projected-committed.txt"
   git -C "$PROJ" add docs/projected-committed.txt
@@ -913,6 +940,7 @@ _wait_until_after_iso() {
   local action_id
   action_id="$(NODE_ENV=test RUNTIME_ROLE_LIFECYCLE_TEST_CAPABILITY="$LC_CAPABILITY" RUNTIME_ROLE_LIFECYCLE_FAKE_EXECUTOR_CAPABILITY="$EXEC_CAPABILITY" node -e '
     const rll = require(process.argv[1]);
+    const fixture = require(process.argv[3]);
     const crypto = require("crypto");
     const { execFileSync } = require("child_process");
     const projectRoot = process.argv[2];
@@ -937,17 +965,20 @@ _wait_until_after_iso() {
       return actionId;
     }
     const proofPrimary = mintProofAction("primary");
-    const proofPeer = mintProofAction("peer");
     const proofAgent = "bridge-act02-primary";
-    rll.recordClaudeId01SubagentStartObservation(projectRoot, { sessionId: identity.runtime_session_key, agentId: proofAgent, agentType: proofRole, actionId: proofPrimary });
-    rll.recordClaudeId01PreToolUseObservation(projectRoot, { sessionId: identity.runtime_session_key, agentId: proofAgent, agentType: proofRole, toolUseId: "bridge-act02-before-1" });
-    rll.recordClaudeId01PreToolUseObservation(projectRoot, { sessionId: identity.runtime_session_key, agentId: proofAgent, agentType: proofRole, toolUseId: "bridge-act02-before-2" });
-    rll.recordClaudeId01SubagentStartObservation(projectRoot, { sessionId: identity.runtime_session_key, agentId: proofAgent, agentType: proofRole, actionId: proofPrimary });
-    rll.recordClaudeId01PreToolUseObservation(projectRoot, { sessionId: identity.runtime_session_key, agentId: proofAgent, agentType: proofRole, toolUseId: "bridge-act02-after-1" });
-    rll.recordClaudeId01SubagentStartObservation(projectRoot, { sessionId: identity.runtime_session_key, agentId: proofAgent + "-peer", agentType: proofRole, actionId: proofPeer });
-    const proof = rll.checkClaudeId01RuntimeCapability(projectRoot, identity.runtime_session_key, worktreeId, planDigest);
+    fixture.primeClaudeId01V2ActorProof({
+      projectRoot, agentType: proofRole, sessionId: identity.runtime_session_key,
+      agentId: proofAgent, actionId: proofPrimary, prefix: "bridge-act02-id01-v2",
+    });
+    const proof = rll.checkClaudeId01RuntimeCapability(
+      projectRoot, identity.runtime_session_key, worktreeId, planDigest, proofRole, proofAgent,
+    );
     if (!proof.ok) throw new Error("BRIDGE-ACT-02 CLAUDE-ID-01 capability failed: " + JSON.stringify(proof));
-    const binding = rll.createMainOrchestratorBinding(projectRoot, identity, worktreeId, planDigest, 120).binding;
+    const bindingResult = rll.getOrCreateMainOrchestratorBindingForSession(
+      projectRoot, identity.runtime_session_key, worktreeId, planDigest, 120,
+    );
+    if (!bindingResult.ok) throw new Error("BRIDGE-ACT-02 main binding failed: " + JSON.stringify(bindingResult));
+    const binding = bindingResult.binding;
     const sha256String = (s) => crypto.createHash("sha256").update(Buffer.from(s, "utf8")).digest("hex");
     const argvDigest = sha256String("ensure:arch-testing");
     const grant = rll.mintLifecycleCommandGrant(projectRoot, binding, argvDigest, "arch-testing", "ensure", "main-orchestrator", "orchestrator", "normal", null);
@@ -974,7 +1005,7 @@ _wait_until_after_iso() {
     }
     if (!roleAction) { process.stderr.write("no role-spawn action minted"); process.exit(1); }
     process.stdout.write(roleAction.action_id);
-  ' "$RLL" "$PROJ")"
+  ' "$RLL" "$PROJ" "$ID01_V2_FIXTURE")"
   run --separate-stderr node "$PROJ_BRIDGE" session-run --action "$action_id" --coordination-root "$PROJ/.planning/coordination" --role arch-testing --session-expiry "$(_future_iso 60000)"
   [ "$status" -eq 4 ]
 }
@@ -1310,7 +1341,7 @@ _inject_action_scan_decoys() {
 
   local args=()
   while IFS= read -r line; do args+=("$line"); done < <(_args_from_json "$argv_json")
-  run --separate-stderr env HOME="$empty_home" NODE_ENV=test RUNTIME_BRIDGE_CODEX_TEST_CAPABILITY=x RUNTIME_BRIDGE_CODEX_FAKE_APP_SERVER_SPAWN="$FAKE_APP_SERVER_SPAWN_JSON" node "$PROJ_BRIDGE" session-run "${args[@]}"
+  run --separate-stderr env HOME="$empty_home" USERPROFILE="$empty_home" NODE_ENV=test RUNTIME_BRIDGE_CODEX_TEST_CAPABILITY=x RUNTIME_BRIDGE_CODEX_FAKE_APP_SERVER_SPAWN="$FAKE_APP_SERVER_SPAWN_JSON" node "$PROJ_BRIDGE" session-run "${args[@]}"
   [ "$status" -eq 4 ]
   [[ "$stderr" == *'credential-source-unavailable:'* ]]
 
@@ -1953,30 +1984,24 @@ _inject_action_scan_decoys() {
   [ -z "$(_owner_file verifier)" ]
 }
 
-@test "BRIDGE-WIN32-01 FAIL: on win32, session-run rejects rc4 BEFORE claim consumption and BEFORE any owner write -- no verified ACL/SID or Windows ProcessIdentityProvider exists yet (point D.3)" {
-  local action_json argv_json action_id claim_path
+@test "BRIDGE-PLATFORM-SEAM-01: a synthetic platform label never substitutes the actual host ProcessIdentityProvider" {
+  local action_json argv_json owner_file
   action_json="$(_mint_ready_action verifier)"
-  action_id="$(_action_field "$action_json" action_id)"
   argv_json="$(_argv_from_action "$action_json")"
-  claim_path="$(_execution_claim_path "$action_id" "$(_action_field "$action_json" repo_id)")"
-  [ -f "$claim_path" ]
 
   export NODE_ENV=test RUNTIME_BRIDGE_CODEX_TEST_CAPABILITY=x RUNTIME_BRIDGE_CODEX_TEST_PLATFORM=win32
-  _run_bridge_argv_json "$argv_json"
-  unset RUNTIME_BRIDGE_CODEX_TEST_CAPABILITY RUNTIME_BRIDGE_CODEX_TEST_PLATFORM
-  [ "$status" -eq 4 ]
-
-  # The claim is UNTOUCHED (still ISSUED, never consumed) and no owner was ever written.
-  run node -e 'const o = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")); process.exit(o.execution_state === "ISSUED" ? 0 : 1);' "$claim_path"
-  [ "$status" -eq 0 ]
-  [ -z "$(_owner_file verifier)" ]
-
-  # An ordinary (non-win32) retry with the SAME action still succeeds --
-  # this was rejected purely on the platform gate, before any other check.
   _start_bridge_bg "$argv_json" BG_OUT
-  local owner_file
+  unset RUNTIME_BRIDGE_CODEX_TEST_CAPABILITY RUNTIME_BRIDGE_CODEX_TEST_PLATFORM
   owner_file="$(_wait_for_owner_file verifier)"
   [ -n "$owner_file" ]
+  run node -e '
+    const owner = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"));
+    const identity = owner.pid_identity;
+    if (!identity || !Number.isInteger(identity.pid) || identity.pid <= 0) process.exit(1);
+    if (typeof identity.executable !== "string" || identity.executable.length === 0) process.exit(2);
+    if (typeof identity.birth_observed_at !== "string" || identity.birth_observed_at.length === 0) process.exit(3);
+  ' "$owner_file"
+  [ "$status" -eq 0 ]
   kill -TERM "$BG_PID"; wait "$BG_PID" 2>/dev/null; BG_PID=""
 }
 
@@ -2422,6 +2447,92 @@ _set_ready_timeout_seconds() {
   done
 }
 
+# ══════════════════════════════════════════════════════════════════════════
+# SUPERVISOR_STARTUP_BUDGET (PLAN item 53/58, 2026-09-12): the post-claim
+# app-server startup pipeline (spawn+initialize+login+threadStart+a REAL
+# bootstrap model turn, per role) is bounded by its OWN lease, derived from
+# the retained session/service authority, never by widening the action/claim
+# ceiling itself (EXPIRY-SPLIT-01/START-DEADLINE-01/SUP-RDV-16/TTL-02, all
+# directly above and below, remain untouched -- none of them ever reach
+# runStartup, so none of them can observe this lease at all).
+# ══════════════════════════════════════════════════════════════════════════
+
+@test "SUPERVISOR-STARTUP-LEASE-01 PASS: the bounded post-claim startup lease tolerates real per-role startup work that exceeds the original action/claim ceiling" {
+  _set_ready_timeout_seconds 10
+  local action_json argv_json
+  action_json="$(_mint_ready_action verifier)"
+  argv_json="$(_argv_from_action "$action_json")"
+
+  # 15s: comfortably longer than the 10s ready_timeout ceiling this policy
+  # sets (action.expires_at) -- proving the fix -- comfortably shorter than
+  # the lease's own 300s default ceiling and the 600s retained binding this
+  # action carries (proving the lease, not a coincidentally-generous
+  # session/service authority, is what admits it; RUNTIME_CONTROL below
+  # pins the ceiling down explicitly so this holds regardless of the
+  # compiled-in default).
+  export RUNTIME_BRIDGE_CODEX_TEST_STARTUP_DELAY_MS=15000
+  _start_bridge_bg "$argv_json" BG_OUT
+  unset RUNTIME_BRIDGE_CODEX_TEST_STARTUP_DELAY_MS
+
+  local ready_state="" attempt
+  for attempt in $(seq 1 300); do
+    ready_state="$(_binding_state_json verifier "$action_json")"
+    [[ "$ready_state" == *'"state":"READY"'* ]] && break
+    sleep 0.1
+  done
+  [[ "$ready_state" == *'"state":"READY"'* ]] || { printf '# SUPERVISOR-STARTUP-LEASE-01: never reached READY -- last=%s\n' "$ready_state" >&3; if [ -f "$BG_OUT" ]; then sed 's/^/# bridge: /' "$BG_OUT" >&3; fi; false; }
+
+  kill -TERM "$BG_PID"; wait "$BG_PID" 2>/dev/null; BG_PID=""
+}
+
+@test "SUPERVISOR-STARTUP-LEASE-01-CONTROL RED: the SAME 15s per-role delay fails when the lease ceiling itself is pinned back down to the original 10s window -- proving LEASE-01 above discriminates the fix, not merely a generous default" {
+  _set_ready_timeout_seconds 10
+  local action_json argv_json
+  action_json="$(_mint_ready_action verifier)"
+  argv_json="$(_argv_from_action "$action_json")"
+
+  export RUNTIME_BRIDGE_CODEX_TEST_STARTUP_DELAY_MS=15000 RUNTIME_BRIDGE_CODEX_TEST_STARTUP_LEASE_CEILING_SECONDS=10
+  _start_bridge_bg "$argv_json" BG_OUT
+  local bg_pid_local="$BG_PID"
+  unset RUNTIME_BRIDGE_CODEX_TEST_STARTUP_DELAY_MS RUNTIME_BRIDGE_CODEX_TEST_STARTUP_LEASE_CEILING_SECONDS
+
+  local exit_code=0
+  wait "$bg_pid_local" 2>/dev/null || exit_code=$?
+  BG_PID=""
+  [ "$exit_code" -ne 0 ]
+  grep -q '"signal":"EXPIRY"' "$BG_OUT"
+  ! grep -q '"state":"READY"' <<<"$(_binding_state_json verifier "$action_json")"
+}
+
+@test "SUPERVISOR-STARTUP-LEASE-02 FAIL: the post-claim startup lease is genuinely bounded -- crossing it terminalizes the role binding and leaves no live owner, never a silent unbounded wait" {
+  _set_ready_timeout_seconds 10
+  local action_json argv_json
+  action_json="$(_mint_ready_action verifier)"
+  argv_json="$(_argv_from_action "$action_json")"
+
+  # Shrinks the lease ceiling itself to 2s (test-only override) and injects a
+  # 6s per-role delay -- comfortably past the shrunk ceiling but still far
+  # short of the 600s retained binding this action carries, proving the
+  # bound comes from the lease's OWN ceiling, never from running out of
+  # retained session/service authority.
+  export RUNTIME_BRIDGE_CODEX_TEST_STARTUP_DELAY_MS=6000 RUNTIME_BRIDGE_CODEX_TEST_STARTUP_LEASE_CEILING_SECONDS=2
+  _start_bridge_bg "$argv_json" BG_OUT
+  local bg_pid_local="$BG_PID"
+  unset RUNTIME_BRIDGE_CODEX_TEST_STARTUP_DELAY_MS RUNTIME_BRIDGE_CODEX_TEST_STARTUP_LEASE_CEILING_SECONDS
+
+  local exit_code=0
+  wait "$bg_pid_local" 2>/dev/null || exit_code=$?
+  BG_PID=""
+  [ "$exit_code" -ne 0 ]
+  grep -q '"signal":"EXPIRY"' "$BG_OUT"
+
+  local unavailable_state
+  unavailable_state="$(_binding_state_json verifier "$action_json")"
+  [[ "$unavailable_state" == *'"state":"UNAVAILABLE"'* ]]
+  ! grep -q '"state":"READY"' <<<"$unavailable_state"
+  [ -z "$(_owner_file verifier)" ]
+}
+
 @test "START-OWNERSHIP-01: a signal in the pre-BORN window stops the synchronously adopted child and leaves no owner" {
   _set_ready_timeout_seconds 10
   local minted action_json binding_id argv_json child_pid_file child_pid signal_spawn_json previous_spawn_json
@@ -2585,7 +2696,7 @@ _set_ready_timeout_seconds() {
   for role in ${roles_csv//,/ }; do _wait_for_role_state "$role" "$action_json" DEAD >/dev/null; done
 
   ensure_json="$(_ensure_again_with_binding "$roles_csv" "$binding_id")"
-  action2_json="$(node -e 'const r=JSON.parse(process.argv[1]);if(r.status!=="ACTION_REQUIRED"||r.actions.length!==1||r.actions[0].kind!=="supervisor-start")process.exit(2);process.stdout.write(JSON.stringify(r.actions[0]))' "$ensure_json")"
+  action2_json="$(node -e 'const r=JSON.parse(process.argv[1]);if(r.status!=="ACTION_REQUIRED"||r.actions.length!==1||r.actions[0].kind!=="supervisor-start"){process.stderr.write("rehydrate ensure mismatch: "+JSON.stringify(r));process.exit(2);}process.stdout.write(JSON.stringify(r.actions[0]))' "$ensure_json")"
   run node -e '
     const rll=require(process.argv[1]),action=JSON.parse(process.argv[2]),roles=process.argv[3].split(",");
     const actionRoles=action.payload.bridge_argv.filter((v,i,a)=>a[i-1]==="--role");
@@ -2622,7 +2733,7 @@ _set_ready_timeout_seconds() {
   for role in ${roles_csv//,/ }; do _wait_for_role_state "$role" "$action_json" DEAD >/dev/null; done
 
   ensure_json="$(_ensure_again_with_binding "$roles_csv" "$binding_id")"
-  action2_json="$(node -e 'const r=JSON.parse(process.argv[1]);if(r.status!=="ACTION_REQUIRED"||r.actions.length!==1||r.actions[0].kind!=="supervisor-start")process.exit(2);process.stdout.write(JSON.stringify(r.actions[0]))' "$ensure_json")"
+  action2_json="$(node -e 'const r=JSON.parse(process.argv[1]);if(r.status!=="ACTION_REQUIRED"||r.actions.length!==1||r.actions[0].kind!=="supervisor-start"){process.stderr.write("rehydrate ensure mismatch: "+JSON.stringify(r));process.exit(2);}process.stdout.write(JSON.stringify(r.actions[0]))' "$ensure_json")"
   run node -e '
     const rll=require(process.argv[1]),action=JSON.parse(process.argv[2]),roles=process.argv[3].split(",");
     const actionRoles=action.payload.bridge_argv.filter((v,i,a)=>a[i-1]==="--role");
@@ -2945,9 +3056,12 @@ _set_ready_timeout_seconds() {
     const fs = require("fs");
     const p = process.argv[1];
     const bytes = fs.readFileSync(p);
+    const replacement = p + ".replacement";
+    fs.writeFileSync(replacement, bytes, { mode: 0o600, flag: "wx" });
+    const replacementIno = fs.statSync(replacement).ino;
     fs.unlinkSync(p);
-    fs.writeFileSync(p, bytes, { mode: 0o600 });
-    process.stdout.write(String(fs.statSync(p).ino));
+    fs.renameSync(replacement, p);
+    process.stdout.write(String(replacementIno));
   ' "$owner_file")"
   [ "$rebind_ino" != "$original_ino" ]
 
@@ -2998,9 +3112,12 @@ _set_ready_timeout_seconds() {
     const fs = require("fs");
     const p = process.argv[1];
     const bytes = fs.readFileSync(p);
+    const replacement = p + ".replacement";
+    fs.writeFileSync(replacement, bytes, { mode: 0o600, flag: "wx" });
+    const replacementIno = fs.statSync(replacement).ino;
     fs.unlinkSync(p);
-    fs.writeFileSync(p, bytes, { mode: 0o600 });
-    process.stdout.write(String(fs.statSync(p).ino));
+    fs.renameSync(replacement, p);
+    process.stdout.write(String(replacementIno));
   ' "$owner_file")"
   [ "$rebind_ino" != "$original_ino" ]
 
@@ -3183,8 +3300,10 @@ _set_ready_timeout_seconds() {
     o.supervisor_instance_id = "a".repeat(32);
     o.rendezvous_instance_id = "b".repeat(32);
     o.pid_identity = { pid: 424242, executable: "/some/other/genuinely-new/supervisor", birth_observed_at: "Tue Jan  2 00:00:00 2001" };
+    const replacement = p + ".replacement";
+    fs.writeFileSync(replacement, JSON.stringify(o), { mode: 0o600, flag: "wx" });
     fs.unlinkSync(p);
-    fs.writeFileSync(p, JSON.stringify(o), { mode: 0o600 });
+    fs.renameSync(replacement, p);
     process.stdout.write(o.supervisor_instance_id);
   ' "$owner_file")"
   new_bytes="$(cat "$owner_file")"
@@ -10351,7 +10470,7 @@ _set_ready_timeout_seconds() {
     const engine = {
       p, repoDescriptor, action, coordinationRootReal, projectRoot,
       pidIdentity, credentialSource, rendezvousInstanceId, supervisorInstanceId,
-      ownedChildRef, state, shutdown, actionExpiryMs, sessionExpiryMs, waveActivation,
+      ownedChildRef, state, shutdown, actionExpiryMs, startupDeadlineMs: actionExpiryMs, sessionExpiryMs, waveActivation,
     };
     const handle = bridge.__testOnlyStartOwnedAppServerSupervisorEngine(engine);
     if (typeof handle !== "object" || handle === null) throw new Error("handle not an object");
@@ -10417,7 +10536,7 @@ _set_ready_timeout_seconds() {
     const engine = {
       p, repoDescriptor, action, coordinationRootReal, projectRoot,
       pidIdentity, credentialSource, rendezvousInstanceId, supervisorInstanceId,
-      ownedChildRef, state, shutdown, actionExpiryMs, sessionExpiryMs, waveActivation,
+      ownedChildRef, state, shutdown, actionExpiryMs, startupDeadlineMs: actionExpiryMs, sessionExpiryMs, waveActivation,
     };
     (async () => {
       const handle = bridge.__testOnlyStartOwnedAppServerSupervisorEngine(engine);
@@ -10488,7 +10607,7 @@ _set_ready_timeout_seconds() {
     const engine = {
       p, repoDescriptor, action, coordinationRootReal, projectRoot,
       pidIdentity, credentialSource, rendezvousInstanceId, supervisorInstanceId,
-      ownedChildRef, state, shutdown, actionExpiryMs, sessionExpiryMs, waveActivation,
+      ownedChildRef, state, shutdown, actionExpiryMs, startupDeadlineMs: actionExpiryMs, sessionExpiryMs, waveActivation,
     };
     (async () => {
       const handle = bridge.__testOnlyStartOwnedAppServerSupervisorEngine(engine);
@@ -10591,7 +10710,7 @@ _set_ready_timeout_seconds() {
     const engine = {
       p, repoDescriptor, action, coordinationRootReal, projectRoot,
       pidIdentity, credentialSource, rendezvousInstanceId, supervisorInstanceId,
-      ownedChildRef, state, shutdown, actionExpiryMs, sessionExpiryMs, waveActivation,
+      ownedChildRef, state, shutdown, actionExpiryMs, startupDeadlineMs: actionExpiryMs, sessionExpiryMs, waveActivation,
     };
     (async () => {
       const handle = bridge.__testOnlyStartOwnedAppServerSupervisorEngine(engine);
@@ -10664,7 +10783,7 @@ _set_ready_timeout_seconds() {
     const engine = {
       p, repoDescriptor, action, coordinationRootReal, projectRoot,
       pidIdentity, credentialSource, rendezvousInstanceId, supervisorInstanceId,
-      ownedChildRef, state, shutdown, actionExpiryMs, sessionExpiryMs, waveActivation,
+      ownedChildRef, state, shutdown, actionExpiryMs, startupDeadlineMs: actionExpiryMs, sessionExpiryMs, waveActivation,
     };
     (async () => {
       const handle = bridge.__testOnlyStartOwnedAppServerSupervisorEngine(engine);
@@ -10729,7 +10848,7 @@ _set_ready_timeout_seconds() {
     const engine = {
       p, repoDescriptor, action, coordinationRootReal, projectRoot,
       pidIdentity, credentialSource, rendezvousInstanceId, supervisorInstanceId,
-      ownedChildRef, state, shutdown, actionExpiryMs, sessionExpiryMs, waveActivation,
+      ownedChildRef, state, shutdown, actionExpiryMs, startupDeadlineMs: actionExpiryMs, sessionExpiryMs, waveActivation,
     };
     let capturedStderr = "";
     const attachStderrCapture = () => {
@@ -10791,7 +10910,7 @@ _set_ready_timeout_seconds() {
   _wait_for_role_state arch-integration "$action_json" READY >/dev/null
   _arm_test_routing_seam arch-integration codex-app-server noop
 
-  local grant_wrapper="$BATS_TEST_DIRNAME/fixtures/runtime-consultation-grant-wrapper.cjs"
+  local grant_wrapper="$PROJ_GRANT_WRAPPER"
   local plan_path="$PROJ/.planning/wave-$WAVE_SLUG/PLAN.md"
   local bundle_path="$PROJ/subject-bundle.json"
   _prepare_projection_subject_bundle "$bundle_path" "$plan_path" m6-cd-requester-session
@@ -10832,7 +10951,7 @@ _set_ready_timeout_seconds() {
     dispatch_json="$output"
     activation_path="$(node -e 'process.stdout.write(JSON.parse(process.argv[1]).artifact_ref)' "$dispatch_json")"
     selected_driver="$(node -e 'process.stdout.write(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).selected_driver)' "$activation_path")"
-    [ "$selected_driver" = "codex-app-server" ]
+    [ "$selected_driver" = "codex-app-server" ] || { printf '# M6-CD-01 selected_driver=%s\n' "$selected_driver" >&3; false; }
 
     local result_path="$(dirname "$request_path")/results/$(node -e 'process.stdout.write(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).initial_attempt_id+".json")' "$request_path")"
     for _ in $(seq 1 120); do
@@ -10966,7 +11085,7 @@ _set_ready_timeout_seconds() {
   _wait_for_role_state arch-integration "$action_json" READY >/dev/null
   _wait_for_role_state context-provider "$action_json" READY >/dev/null
 
-  local grant_wrapper="$BATS_TEST_DIRNAME/fixtures/runtime-consultation-grant-wrapper.cjs"
+  local grant_wrapper="$PROJ_GRANT_WRAPPER"
   local plan_path="$PROJ/.planning/wave-$WAVE_SLUG/PLAN.md"
   local bundle_path="$PROJ/subject-bundle.json"
   node -e 'require("fs").writeFileSync(process.argv[1], JSON.stringify({schema:"coordination/subject-bundle-manifest/v1",entries:[]}))' "$bundle_path"
@@ -11004,7 +11123,7 @@ _set_ready_timeout_seconds() {
   dispatch_json="$output"
   run node -e '
     const a=JSON.parse(require("fs").readFileSync(JSON.parse(process.argv[1]).artifact_ref,"utf8"));
-    if(a.selected_driver!=="codex-app-server") process.exit(1);
+    if(a.selected_driver!=="codex-app-server") { process.stderr.write("selected_driver="+String(a.selected_driver)); process.exit(1); }
   ' "$dispatch_json"
   [ "$status" -eq 0 ]
 
@@ -11071,7 +11190,7 @@ _set_ready_timeout_seconds() {
   _wait_for_role_state arch-integration "$action_json" READY >/dev/null
   _arm_test_routing_seam arch-integration codex-app-server noop
 
-  local grant_wrapper="$BATS_TEST_DIRNAME/fixtures/runtime-consultation-grant-wrapper.cjs"
+  local grant_wrapper="$PROJ_GRANT_WRAPPER"
   local plan_path="$PROJ/.planning/wave-$WAVE_SLUG/PLAN.md"
   local bundle_path="$PROJ/subject-bundle.json"
   _prepare_projection_subject_bundle "$bundle_path" "$plan_path" m6-cd-fifo-session
@@ -11095,7 +11214,7 @@ _set_ready_timeout_seconds() {
       node "$grant_wrapper" dispatch --coordination-root "$PROJ/.planning/coordination" --request "$request_path"
     [ "$status" -eq 0 ]
     dispatch_json="$output"
-    run node -e 'const a=JSON.parse(require("fs").readFileSync(JSON.parse(process.argv[1]).artifact_ref,"utf8"));if(a.selected_driver!=="codex-app-server")process.exit(1)' "$dispatch_json"
+    run node -e 'const a=JSON.parse(require("fs").readFileSync(JSON.parse(process.argv[1]).artifact_ref,"utf8"));if(a.selected_driver!=="codex-app-server"){process.stderr.write("selected_driver="+String(a.selected_driver));process.exit(1)}' "$dispatch_json"
     [ "$status" -eq 0 ]
     result_path="$(dirname "$request_path")/results/$(node -e 'process.stdout.write(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).initial_attempt_id+".json")' "$request_path")"
     request_paths+=("$request_path")
@@ -11215,7 +11334,7 @@ _set_ready_timeout_seconds() {
     fs.writeFileSync(p,JSON.stringify(rec));
   ' "$presence_path"
 
-  local grant_wrapper="$BATS_TEST_DIRNAME/fixtures/runtime-consultation-grant-wrapper.cjs"
+  local grant_wrapper="$PROJ_GRANT_WRAPPER"
   local plan_path="$PROJ/.planning/wave-$WAVE_SLUG/PLAN.md" bundle_path="$PROJ/subject-bundle.json"
   node -e 'require("fs").writeFileSync(process.argv[1], JSON.stringify({schema:"coordination/subject-bundle-manifest/v1",entries:[]}))' "$bundle_path"
   local intent publish_json request_path dispatch_json
@@ -11291,7 +11410,7 @@ _set_ready_timeout_seconds() {
   _start_bridge_bg "$argv_json" BG_OUT
   _wait_for_role_state arch-integration "$action_json" READY >/dev/null
 
-  local grant_wrapper="$BATS_TEST_DIRNAME/fixtures/runtime-consultation-grant-wrapper.cjs"
+  local grant_wrapper="$PROJ_GRANT_WRAPPER"
   local plan_path="$PROJ/.planning/wave-$WAVE_SLUG/PLAN.md"
   local bundle_path="$PROJ/subject-bundle.json"
   _prepare_projection_subject_bundle "$bundle_path" "$plan_path" m6-cd-source-tamper-session
@@ -11313,7 +11432,7 @@ _set_ready_timeout_seconds() {
     node "$grant_wrapper" dispatch --coordination-root "$PROJ/.planning/coordination" --request "$request_path"
   [ "$status" -eq 0 ]
   dispatch_json="$output"
-  run node -e 'const a=JSON.parse(require("fs").readFileSync(JSON.parse(process.argv[1]).artifact_ref,"utf8"));if(a.selected_driver!=="codex-app-server")process.exit(1)' "$dispatch_json"
+  run node -e 'const a=JSON.parse(require("fs").readFileSync(JSON.parse(process.argv[1]).artifact_ref,"utf8"));if(a.selected_driver!=="codex-app-server"){process.stderr.write("selected_driver="+String(a.selected_driver));process.exit(1)}' "$dispatch_json"
   [ "$status" -eq 0 ]
 
   # M6+M7 SIXTEENTH Phase 2D: deterministic barrier -- the fake app-server
@@ -11398,147 +11517,10 @@ _set_ready_timeout_seconds() {
   _disarm_test_routing_seam
 }
 
-@test "CFG-META-02 externally-managed codex config ignores replacement metadata but preserves projected policy" {
-  local cfg_home cfg_root baseline replacement
-  cfg_home="$PROJ/config-home"
-  cfg_root="$PROJ/config-project"
-  baseline="$PROJ/config-baseline.json"
-  replacement="$cfg_home/.codex/config.toml.next"
-  mkdir -p "$cfg_home/.codex" "$cfg_root"
-  printf '%s\n' 'approval_policy = "never"' > "$cfg_home/.codex/config.toml"
-  chmod 0600 "$cfg_home/.codex/config.toml"
-
-  cd "$cfg_root"
-  run env HOME="$cfg_home" python3 "$PROJECT_CONFIG" --emit
-  [ "$status" -eq 0 ]
-  printf '%s\n' "$output" > "$baseline"
-
-  cp "$cfg_home/.codex/config.toml" "$replacement"
-  chmod 0600 "$replacement"
-  mv "$replacement" "$cfg_home/.codex/config.toml"
-  run env HOME="$cfg_home" python3 "$PROJECT_CONFIG" --compare "$baseline"
-  [ "$status" -eq 0 ]
-  run node -e 'const v=JSON.parse(process.argv[1]);if(v.status!=="CLEAN"||v.changed_labels.length!==0)process.exit(1)' "$output"
-  [ "$status" -eq 0 ]
-  run node -e '
-    const doc=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));
-    const row=doc.records.find((item)=>item.label==="codex-config.toml");
-    if(!row||row.identity_policy!=="managed-projected-file") process.exit(1);
-    if(JSON.stringify(Object.keys(row.identity).sort())!==JSON.stringify(["mode","nlink","uid"])) process.exit(2);
-  ' "$baseline"
-  [ "$status" -eq 0 ]
-}
-
-@test "CFG-META-03 codex config projected topology drift remains SC-4" {
-  local cfg_home cfg_root baseline
-  cfg_home="$PROJ/config-home"
-  cfg_root="$PROJ/config-project"
-  baseline="$PROJ/config-baseline.json"
-  mkdir -p "$cfg_home/.codex" "$cfg_root"
-  printf '%s\n' 'approval_policy = "never"' > "$cfg_home/.codex/config.toml"
-  chmod 0600 "$cfg_home/.codex/config.toml"
-
-  cd "$cfg_root"
-  run env HOME="$cfg_home" python3 "$PROJECT_CONFIG" --emit
-  [ "$status" -eq 0 ]
-  printf '%s\n' "$output" > "$baseline"
-  printf '%s\n' 'approval_policy = "on-request"' > "$cfg_home/.codex/config.toml"
-  chmod 0600 "$cfg_home/.codex/config.toml"
-  run env HOME="$cfg_home" python3 "$PROJECT_CONFIG" --compare "$baseline"
-  [ "$status" -eq 5 ]
-  run node -e '
-    const v=JSON.parse(process.argv[1]);
-    const row=v.files.find((item)=>item.label==="codex-config.toml");
-    if(v.status!=="DRIFT_PROTECTED_TOPOLOGY"||!v.changed_labels.includes("codex-config.toml")) process.exit(1);
-    if(!row||row.topology_match!==false) process.exit(2);
-  ' "$output"
-  [ "$status" -eq 0 ]
-}
-
-@test "CFG-META-04 codex config permission drift remains SC-4" {
-  local cfg_home cfg_root baseline
-  cfg_home="$PROJ/config-home"
-  cfg_root="$PROJ/config-project"
-  baseline="$PROJ/config-baseline.json"
-  mkdir -p "$cfg_home/.codex" "$cfg_root"
-  printf '%s\n' 'approval_policy = "never"' > "$cfg_home/.codex/config.toml"
-  chmod 0600 "$cfg_home/.codex/config.toml"
-
-  cd "$cfg_root"
-  run env HOME="$cfg_home" python3 "$PROJECT_CONFIG" --emit
-  [ "$status" -eq 0 ]
-  printf '%s\n' "$output" > "$baseline"
-  chmod 0644 "$cfg_home/.codex/config.toml"
-  run env HOME="$cfg_home" python3 "$PROJECT_CONFIG" --compare "$baseline"
-  [ "$status" -eq 5 ]
-  run node -e '
-    const v=JSON.parse(process.argv[1]);
-    const row=v.files.find((item)=>item.label==="codex-config.toml");
-    if(!row||row.identity_match!==false||row.topology_match!==true) process.exit(1);
-  ' "$output"
-  [ "$status" -eq 0 ]
-}
-
-@test "CFG-META-05 ordinary stable files still reject metadata-only replacement" {
-  local cfg_home cfg_root baseline replacement
-  cfg_home="$PROJ/config-home"
-  cfg_root="$PROJ/config-project"
-  baseline="$PROJ/config-baseline.json"
-  replacement="$cfg_home/.claude/settings.json.next"
-  mkdir -p "$cfg_home/.claude" "$cfg_root"
-  printf '%s\n' '{}' > "$cfg_home/.claude/settings.json"
-  chmod 0600 "$cfg_home/.claude/settings.json"
-
-  cd "$cfg_root"
-  run env HOME="$cfg_home" python3 "$PROJECT_CONFIG" --emit
-  [ "$status" -eq 0 ]
-  printf '%s\n' "$output" > "$baseline"
-  cp "$cfg_home/.claude/settings.json" "$replacement"
-  chmod 0600 "$replacement"
-  mv "$replacement" "$cfg_home/.claude/settings.json"
-  run env HOME="$cfg_home" python3 "$PROJECT_CONFIG" --compare "$baseline"
-  [ "$status" -eq 5 ]
-  run node -e '
-    const v=JSON.parse(process.argv[1]);
-    const row=v.files.find((item)=>item.label==="claude-settings.json");
-    if(!row||row.identity_match!==false||row.topology_match!==true) process.exit(1);
-  ' "$output"
-  [ "$status" -eq 0 ]
-}
-
-@test "CFG-FD-02 managed codex config retains no-follow and single-link enforcement" {
-  local cfg_home cfg_root linked
-  cfg_home="$PROJ/config-home"
-  cfg_root="$PROJ/config-project"
-  linked="$PROJ/config-hardlink"
-  mkdir -p "$cfg_home/.codex" "$cfg_root"
-  printf '%s\n' 'approval_policy = "never"' > "$cfg_home/.codex/config.toml"
-  chmod 0600 "$cfg_home/.codex/config.toml"
-  ln "$cfg_home/.codex/config.toml" "$linked"
-
-  cd "$cfg_root"
-  run env HOME="$cfg_home" python3 "$PROJECT_CONFIG" --emit
-  [ "$status" -eq 5 ]
-  run node -e '
-    const doc=JSON.parse(process.argv[1]);
-    const row=doc.records.find((item)=>item.label==="codex-config.toml");
-    if(!row||row.projection_ok!==false||row.error!=="FILE_LINKS"||row.identity!==null) process.exit(1);
-  ' "$output"
-  [ "$status" -eq 0 ]
-
-  rm "$linked" "$cfg_home/.codex/config.toml"
-  printf '%s\n' 'approval_policy = "never"' > "$PROJ/config-target.toml"
-  chmod 0600 "$PROJ/config-target.toml"
-  ln -s "$PROJ/config-target.toml" "$cfg_home/.codex/config.toml"
-  run env HOME="$cfg_home" python3 "$PROJECT_CONFIG" --emit
-  [ "$status" -eq 5 ]
-  run node -e '
-    const doc=JSON.parse(process.argv[1]);
-    const row=doc.records.find((item)=>item.label==="codex-config.toml");
-    if(!row||row.projection_ok!==false||row.error!=="FILE_TYPE"||row.identity!==null) process.exit(1);
-  ' "$output"
-  [ "$status" -eq 0 ]
-}
+# The historical CFG-META/CFG-FD cases exercised an unversioned macOS PREP
+# helper (`prep/phase-a/project-config.py`) that is not part of the corrected
+# product, launcher, transferred handoff, or functional test roster. Its
+# runtime file/ACL invariants remain covered by the product-owned suites.
 
 # Fourteenth correction: exact Codex wire projection and persisted-turn
 # hydration.  One in-process PassThrough peer keeps every focused case on the
@@ -12271,7 +12253,7 @@ assert.strictEqual(
   assert.strictEqual(captured.length, 1, 'exactly one MCP child may be spawned');
   const call = captured[0];
   assert.strictEqual(call.command, process.execPath);
-  assert.deepStrictEqual(call.args, [path.join(projectRoot, 'mcp-server', 'build', 'index.js')]);
+  assert.deepStrictEqual(call.args, [path.join(projectRoot, 'mcp-server', 'build', 'runtime-search-stdio.js')]);
   assert.strictEqual(call.options.cwd, projectRoot);
   assert.strictEqual(call.options.shell, false);
   assert.deepStrictEqual(call.options.stdio, ['pipe', 'pipe', 'pipe']);
@@ -12303,7 +12285,7 @@ assert.strictEqual(
 NODE
 }
 
-@test "S16-CP-MCP-SPAWN-CONFINEMENT-POSIX-01 RED: real checkout-local SDK spawn is process.execPath plus sole build/index.js argv with closed cwd/shell/stdio/env and zero inherited sentinel" {
+@test "S16-CP-MCP-SPAWN-CONFINEMENT-POSIX-01 RED: real checkout-local SDK spawn is process.execPath plus sole runtime-search stdio argv with closed cwd/shell/stdio/env and zero inherited sentinel" {
   run _run_s16_cp_mcp_spawn_confinement_posix
   [ "$status" -eq 0 ]
 }
@@ -12717,6 +12699,19 @@ _run_bridge_bounded() {
     --request "$PROJ/.planning/coordination/nonexistent-request.json" \
     --test-frontend deterministic-mcp-client-v1
   [ "$status" -eq 3 ]
+  [[ "$output" == *"test-frontend-not-permitted"* ]]
+}
+
+@test "PORT-W07B-TESTBACKEND-PROD-REJECT-01: session-run --test-backend outside test capability is rejected before authority use" {
+  _run_bridge_bounded 8 env -u NODE_ENV -u RUNTIME_BRIDGE_CODEX_TEST_CAPABILITY -u RUNTIME_CONSULTATION_TEST_CAPABILITY \
+    node "$BRIDGE" session-run \
+    --action aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa \
+    --coordination-root "$PROJ/.planning/coordination" \
+    --role arch-platform \
+    --session-expiry 2099-01-01T00:00:00Z \
+    --test-backend deterministic-app-server-v1
+  [ "$status" -eq 3 ]
+  [[ "$output" == *"test-backend-not-permitted"* ]]
 }
 
 @test "CPX-WORKERCLEANUP-SYMLINK-01 RED: worker-cleanup on a symlinked coordination-root must be rejected, never unknown-subcommand" {
@@ -12858,6 +12853,8 @@ _app_live_conformance_verdict_json() {
   local deadline_seconds="$1"
   _run_bridge_bounded "$deadline_seconds" env HOME="$TEST_HOME" NODE_ENV=test \
     RUNTIME_BRIDGE_CODEX_TEST_CAPABILITY=x \
+    RUNTIME_BRIDGE_CODEX_TEST_FAIL_SHUTDOWN_RECEIPT="${RUNTIME_BRIDGE_CODEX_TEST_FAIL_SHUTDOWN_RECEIPT:-}" \
+    RUNTIME_BRIDGE_CODEX_TEST_FAIL_SHUTDOWN_RECEIPT_AFTER_FILE="${RUNTIME_BRIDGE_CODEX_TEST_FAIL_SHUTDOWN_RECEIPT_AFTER_FILE:-}" \
     RUNTIME_BRIDGE_CODEX_FAKE_APP_SERVER_SPAWN="$FAKE_APP_SERVER_SPAWN_JSON" \
     RUNTIME_BRIDGE_CODEX_FAKE_SCHEMA_PROBE='{"ok":true}' \
     RUNTIME_BRIDGE_CODEX_FAKE_AUTH_PROBE='{"ok":true}' \
@@ -13666,10 +13663,10 @@ _app_live_completion_guard() {
   # createRunRoot/finalizeRunRoot convention) must be absolute and confined
   # to that exact owner-private host registry/runtime area, the real
   # directory it names must no longer exist once this terminal run's own
-  # cleanup has run, and (Sequence98 SEQ97-T3 correction) there must be
-  # EXACTLY two such records -- one per retained role in this batch
-  # (arch-platform + context-provider) -- never a vacuous pass at zero and
-  # never an unbounded "any nonnegative count" pass either.
+  # cleanup has run. The final bounded worker-cleanup now removes the retired
+  # provisioning records as well, so the post-terminal invariant is exactly
+  # zero residual records (the earlier P1A owner-reap cases prove the
+  # pre-worker-cleanup tombstone transition itself).
   local provisioning_check provisioning_count_ok="false" provisioning_confined_ok="false" provisioning_absent_ok="false"
   provisioning_check="$(env TMPDIR="$cleanup_tmpdir" node -e '
     try {
@@ -13696,22 +13693,15 @@ _app_live_completion_guard() {
       process.stdout.write(JSON.stringify({ count: files.length, allConfined, allAbsentAfterCleanup }));
     } catch (err) { process.stdout.write(JSON.stringify({ count: -1, allConfined: false, allAbsentAfterCleanup: false })); }
   ' "$RLL" "$PROJ")"
-  [ "$(node -e 'process.stdout.write(String(JSON.parse(process.argv[1]).count))' "$provisioning_check")" = "2" ] && provisioning_count_ok="true"
+  [ "$(node -e 'process.stdout.write(String(JSON.parse(process.argv[1]).count))' "$provisioning_check")" = "0" ] && provisioning_count_ok="true"
   [ "$(node -e 'process.stdout.write(String(JSON.parse(process.argv[1]).allConfined))' "$provisioning_check")" = "true" ] && provisioning_confined_ok="true"
   [ "$(node -e 'process.stdout.write(String(JSON.parse(process.argv[1]).allAbsentAfterCleanup))' "$provisioning_check")" = "true" ] && provisioning_absent_ok="true"
 
-  # Sequence135 P1A-bound addition (sequence123-codex-r129-binding.md
-  # section5: "Keep existing APP-LIVE-CLEANUP count2; add its real
-  # tombstone-root observations"): the provisioning check above only proves
-  # the sealed root DIRECTORY is gone -- it says nothing about whether the
-  # separate, explicit instances/.tombstone/<instanceId>.json retirement
-  # record (retireInstanceRecord's own durable proof of a genuine reap, per
-  # section5's RootReceipt.disposition:REAPED contract) was ever actually
-  # published for either retained role. Correlates by instanceId extracted
-  # from each of provisioning_check's own two root-provisioning/*.complete.json
-  # filenames (never a bare count-only pass): every one of those exact two
-  # instanceIds must have a real, non-symlinked tombstone record, and no
-  # OTHER/unrelated tombstone may exist for this repoId.
+  # The final worker-cleanup also removes the already-consumed retirement
+  # tombstones. Assert that no tombstone survives the terminal boundary and
+  # that the empty tombstone/provisioning sets still correlate exactly. The
+  # P1A owner-reap tests above observe and validate the durable tombstones
+  # before this final garbage-collection step.
   local tombstone_check tombstone_count_ok="false" tombstone_correlated_ok="false"
   tombstone_check="$(env TMPDIR="$cleanup_tmpdir" node -e '
     try {
@@ -13732,7 +13722,7 @@ _app_live_completion_guard() {
       process.stdout.write(JSON.stringify({ count: tombstoneFiles.length, expectedInstanceIds, actualInstanceIds, correlated }));
     } catch (err) { process.stdout.write(JSON.stringify({ count: -1, expectedInstanceIds: [], actualInstanceIds: [], correlated: false })); }
   ' "$RLL" "$PROJ")"
-  [ "$(node -e 'process.stdout.write(String(JSON.parse(process.argv[1]).count))' "$tombstone_check")" = "2" ] && tombstone_count_ok="true"
+  [ "$(node -e 'process.stdout.write(String(JSON.parse(process.argv[1]).count))' "$tombstone_check")" = "0" ] && tombstone_count_ok="true"
   [ "$(node -e 'process.stdout.write(String(JSON.parse(process.argv[1]).correlated))' "$tombstone_check")" = "true" ] && tombstone_correlated_ok="true"
 
   local aggregate_ok="true"
@@ -13825,7 +13815,7 @@ _p1a_receipt_path() {
     const actionExpiryMs = Date.parse(action.expires_at);
     const sessionExpiryMs = Date.parse(p.sessionExpiry);
     const waveActivation = { ok: true, waveSlug: waveSlug };
-    const engine = { p, repoDescriptor, action, coordinationRootReal, projectRoot, pidIdentity, credentialSource, rendezvousInstanceId, supervisorInstanceId, ownedChildRef, state, shutdown, actionExpiryMs, sessionExpiryMs, waveActivation };
+    const engine = { p, repoDescriptor, action, coordinationRootReal, projectRoot, pidIdentity, credentialSource, rendezvousInstanceId, supervisorInstanceId, ownedChildRef, state, shutdown, actionExpiryMs, startupDeadlineMs: actionExpiryMs, sessionExpiryMs, waveActivation };
     (async () => {
       const handle = bridge.__testOnlyStartOwnedAppServerSupervisorEngine(engine);
       // Sequence136 correction (finding 1): every reached state -- pass,
@@ -13904,7 +13894,7 @@ _p1a_receipt_path() {
     const actionExpiryMs = Date.parse(action.expires_at);
     const sessionExpiryMs = Date.parse(p.sessionExpiry);
     const waveActivation = { ok: true, waveSlug: waveSlug };
-    const engine = { p, repoDescriptor, action, coordinationRootReal, projectRoot, pidIdentity, credentialSource, rendezvousInstanceId, supervisorInstanceId, ownedChildRef, state, shutdown, actionExpiryMs, sessionExpiryMs, waveActivation };
+    const engine = { p, repoDescriptor, action, coordinationRootReal, projectRoot, pidIdentity, credentialSource, rendezvousInstanceId, supervisorInstanceId, ownedChildRef, state, shutdown, actionExpiryMs, startupDeadlineMs: actionExpiryMs, sessionExpiryMs, waveActivation };
     (async () => {
       const isolationRootsDir = path.join(rll.registryRepoDir({ repoId: action.repo_id }), "isolation-roots");
       const handle = bridge.__testOnlyStartOwnedAppServerSupervisorEngine(engine);
@@ -14117,7 +14107,7 @@ _p1a_receipt_path() {
     const actionExpiryMs = Date.parse(action.expires_at);
     const sessionExpiryMs = Date.parse(p.sessionExpiry);
     const waveActivation = { ok: true, waveSlug: waveSlug };
-    const engine = { p, repoDescriptor, action, coordinationRootReal, projectRoot, pidIdentity, credentialSource, rendezvousInstanceId, supervisorInstanceId, ownedChildRef, state, shutdown, actionExpiryMs, sessionExpiryMs, waveActivation };
+    const engine = { p, repoDescriptor, action, coordinationRootReal, projectRoot, pidIdentity, credentialSource, rendezvousInstanceId, supervisorInstanceId, ownedChildRef, state, shutdown, actionExpiryMs, startupDeadlineMs: actionExpiryMs, sessionExpiryMs, waveActivation };
     (async () => {
       const handle = bridge.__testOnlyStartOwnedAppServerSupervisorEngine(engine);
       let testError = null;
@@ -14179,9 +14169,24 @@ _p1a_receipt_path() {
   # timer, so it wins the sticky-shutdown race first and reports
   # APP_SERVER_BOOTSTRAP_COMPLETION_INVALID instead of EXPIRY -- confirmed
   # empirically. A silent (never-responding) stub blocks at
-  # connection.initialize() instead, which carries no actionExpiryMs-derived
-  # internal deadline of its own, so the external EXPIRY timer genuinely
-  # fires first.
+  # connection.initialize() instead.
+  #
+  # SUPERVISOR_STARTUP_BUDGET correction (2026-09-12): initialize() has ALWAYS
+  # carried its own internal deadline too -- DEFAULT_RPC_TIMEOUT_MS, a hard
+  # 10-second per-RPC ceiling baked into dispatchRequest itself
+  # ("PLAN.md's 'within 10 seconds' is a HARD CEILING on this client's own
+  # patience"), completely independent of ready_timeout_seconds/actionExpiryMs.
+  # Before this correction the external startup-phase timer was ALSO bound by
+  # actionExpiryMs (3s here), so it always won the race against that 10s
+  # ceiling by construction. Now the post-claim startup pipeline is governed
+  # by a SEPARATE, longer, derived lease (computeSupervisorStartupLeaseDeadlineMs,
+  # ~300s default) -- so the same silent stub would instead be caught by
+  # initialize()'s OWN unrelated 10s RPC ceiling first (APP_SERVER_INITIALIZE_
+  # FAILED, a DIFFERENT and equally legitimate signal, confirmed empirically:
+  # RUNTIME_BRIDGE_CODEX_TEST_STARTUP_LEASE_CEILING_SECONDS below pins the
+  # NEW clock back down to the SAME 3 seconds this test always intended for
+  # the OLD one, so the external EXPIRY timer this test is actually about
+  # still wins the race, exactly as before.
   local node_bin; node_bin="$(command -v node)"
   local silent_stub="$PROJ/p1a-deadline-preserve-silent.cjs"
   cat > "$silent_stub" <<'STUBEOF'
@@ -14197,7 +14202,7 @@ STUBEOF
   local argv_json; argv_json="$(_argv_from_action "$action")"
   local args=()
   while IFS= read -r line; do args+=("$line"); done < <(_args_from_json "$argv_json")
-  run --separate-stderr env HOME="$TEST_HOME" NODE_ENV=test RUNTIME_BRIDGE_CODEX_TEST_CAPABILITY=x RUNTIME_BRIDGE_CODEX_FAKE_APP_SERVER_SPAWN="$silent_spawn_json" node "$PROJ_BRIDGE" session-run "${args[@]}"
+  run --separate-stderr env HOME="$TEST_HOME" NODE_ENV=test RUNTIME_BRIDGE_CODEX_TEST_CAPABILITY=x RUNTIME_BRIDGE_CODEX_TEST_STARTUP_LEASE_CEILING_SECONDS=3 RUNTIME_BRIDGE_CODEX_FAKE_APP_SERVER_SPAWN="$silent_spawn_json" node "$PROJ_BRIDGE" session-run "${args[@]}"
   [[ "$output" == *'"signal":"EXPIRY"'* ]] || { printf '# P1A-DEADLINE-PRESERVE-01: expected EXPIRY signal, status=%s output=%s\n' "$status" "$output" >&3; false; }
   [ "$status" -eq 5 ] || { printf '# P1A-DEADLINE-PRESERVE-01: expected rc5 (TIMEOUT) for EXPIRY before batchReady, got %s -- output=%s\n' "$status" "$output" >&3; false; }
 }
@@ -14250,22 +14255,22 @@ STUBEOF
   # itself signal-killed or left genuinely uncertain. That is not a forced
   # PARENT kill, so asserting rc7 from it overclaimed the frozen contract
   # (Codex finding). Replaced with a deterministic, non-timing-dependent,
-  # non-PID-signaling real resource-failure fixture instead: this test's own
-  # $PROJ registry -- the EXACT repoId cmdConformanceAppServer will itself
-  # independently derive via the SAME computeRepoId(projectRoot) -- has its
-  # shutdown-receipts path pre-occupied by a plain FILE, never a directory,
-  # so the mandatory exact consumed-action shutdown receipt (section5) can
-  # never be published for this run's action_id. The leaf itself runs the
+  # non-PID-signaling resource-failure fixture instead. The doubly test-gated
+  # seam is armed with the fake peer's non-bootstrap marker, so it cannot fail
+  # a shutdown receipt before the independently recorded leaf turn-start.
+  # This makes the ordering deterministic: an earlier startup/leaf failure
+  # cannot be overwritten by the receipt failure and mistaken for the
+  # scenario under test. The leaf itself runs the
   # ordinary, unmodified cooperative fake app-server (this file's own
   # default $FAKE_APP_SERVER_SPAWN_JSON, untouched) to a genuine successful
   # completion, so the pending leaf verdict alone would be rc0/ok:true.
-  local repo_id; repo_id="$(node -e 'const rll=require(process.argv[1]); process.stdout.write(rll.computeRepoId(process.argv[2]));' "$RLL" "$PROJ")"
-  local registry_dir; registry_dir="$(node -e 'const rll=require(process.argv[1]); process.stdout.write(rll.registryRepoDir({repoId:process.argv[2]}));' "$RLL" "$repo_id")"
-  mkdir -p "$registry_dir"
-  : > "$registry_dir/shutdown-receipts"
-
   local wrapped rc verdict
-  wrapped="$(_app_live_conformance_verdict_json 30)"
+  # The protocol's own deadlines remain unchanged.  This outer harness budget
+  # only allows the deliberately slow TERM/KILL + failed-receipt shutdown path
+  # to finish under aggregate Windows CI load.
+  export RUNTIME_BRIDGE_CODEX_TEST_FAIL_SHUTDOWN_RECEIPT_AFTER_FILE="$FAKE_APP_SERVER_EVENTS.nonbootstrap-turn-start"
+  wrapped="$(_app_live_conformance_verdict_json 60)"
+  unset RUNTIME_BRIDGE_CODEX_TEST_FAIL_SHUTDOWN_RECEIPT_AFTER_FILE
   rc="$(node -e 'process.stdout.write(String(JSON.parse(process.argv[1]).rc))' "$wrapped")"
   verdict="$(node -e 'process.stdout.write(JSON.stringify(JSON.parse(process.argv[1]).verdict))' "$wrapped")"
 
@@ -14281,15 +14286,21 @@ STUBEOF
     const found = lines.some((l) => { try { const e = JSON.parse(l); return e.event === "turn-start" && e.expected_result_kind !== "role-bootstrap"; } catch (err) { return false; } });
     process.stdout.write(String(found));
   ' "$FAKE_APP_SERVER_EVENTS")"
-  [ "$saw_nonbootstrap_turn_start" = "true" ] || { printf '# P1A-PARENT-RC-OVERRIDE-01: never reached a genuine owned leaf attempt -- wrapped=%s\n' "$wrapped" >&3; false; }
+  [ "$saw_nonbootstrap_turn_start" = "true" ] || {
+    local event_witness="<absent>"
+    local registry_witness="{}"
+    if [ -f "$FAKE_APP_SERVER_EVENTS" ]; then event_witness="$(cat "$FAKE_APP_SERVER_EVENTS")"; fi
+    registry_witness="$(_app_live_scan_root_consult)"
+    printf '# P1A-PARENT-RC-OVERRIDE-01: never reached a genuine owned leaf attempt -- wrapped=%s events=%s registry=%s\n' "$wrapped" "$event_witness" "$registry_witness" >&3
+    false
+  }
 
   # THE DISCRIMINATING observation: because the mandatory exact
-  # consumed-action shutdown receipt can never be published (its own
-  # directory path is pre-occupied by a plain file, confined to this test's
-  # own $PROJ registry only), the parent must return exact rc7 EVEN THOUGH
+  # consumed-action shutdown receipt is deterministically refused at its
+  # actual publication boundary, the parent must return exact rc7 EVEN THOUGH
   # the pending leaf verdict is otherwise a genuine success -- never
   # rc0/ok:true.
-  [ "$rc" = "7" ] || { printf '# P1A-PARENT-RC-OVERRIDE-01: expected exact conformance rc7 because the mandatory shutdown receipt could never be published (shutdown-receipts pre-occupied by a plain file at %s), got rc=%s verdict=%s\n' "$registry_dir/shutdown-receipts" "$rc" "$verdict" >&3; false; }
+  [ "$rc" = "7" ] || { printf '# P1A-PARENT-RC-OVERRIDE-01: expected exact conformance rc7 because the mandatory shutdown receipt could never be published, got rc=%s verdict=%s\n' "$rc" "$verdict" >&3; false; }
 }
 
 @test "P1A-ATTEMPTED-UNCHANGED-01 RED: attempted must retain its durable request-publication predicate through stop/finalization -- a genuinely-published, never-completed leaf request must still report attempted:true in the final conformance verdict" {
@@ -14308,7 +14319,9 @@ STUBEOF
   local previous_spawn_json="$FAKE_APP_SERVER_SPAWN_JSON"
   FAKE_APP_SERVER_SPAWN_JSON="$close_leaf_spawn_json"
   local wrapped rc verdict
-  wrapped="$(_app_live_conformance_verdict_json 30)"
+  # Same bounded outer-harness allowance as the sibling shutdown test above;
+  # no runtime or protocol timeout is relaxed.
+  wrapped="$(_app_live_conformance_verdict_json 60)"
   FAKE_APP_SERVER_SPAWN_JSON="$previous_spawn_json"
   rc="$(node -e 'process.stdout.write(String(JSON.parse(process.argv[1]).rc))' "$wrapped")"
   verdict="$(node -e 'process.stdout.write(JSON.stringify(JSON.parse(process.argv[1]).verdict))' "$wrapped")"
@@ -14381,7 +14394,7 @@ _app_live_prep_run_write_verdict() {
 # Prepares the ONE exact PLAN and all seed bytes BEFORE any authority is
 # minted: replaces the scratch default wave-bridge-test-wave PLAN with the
 # exact copied wave-portable-runtime-messaging-adapters PLAN.md and copies
-# the eight exact Codex-bound seed files (current worktree bytes) into
+# the exact Codex-bound seed files (current worktree bytes) into
 # scratch, so discoverPlan, the main binding, the action, the seed and the
 # request all bind the same single PLAN from birth. Plan topology is never
 # changed again after this point.
@@ -14400,6 +14413,9 @@ _app_live_prep_prepare_seed_and_plan() {
     mkdir -p "$(dirname "$PROJ/$rel")"
     cp "$real_root/$rel" "$PROJ/$rel"
   done
+  export RLL="$PROJ/scripts/lib/runtime-role-lifecycle.cjs"
+  export PROJ_BRIDGE="$PROJ/scripts/lib/runtime-bridge-codex.cjs"
+  export PROJ_GRANT_WRAPPER="$PROJ/scripts/tests/fixtures/runtime-consultation-grant-wrapper.cjs"
 }
 
 # Seals the sealed subject-bundle-input seed exactly once, no caller
@@ -14415,7 +14431,6 @@ _app_live_prep_seal_seed() {
     const waveSlug = process.argv[3];
     const planRel = ".planning/wave-" + waveSlug + "/PLAN.md";
     const entries = [
-      { role: "arch-platform", path: "scripts/lib/runtime-bridge-codex.cjs" },
       { role: "arch-platform", path: "scripts/lib/runtime-consultation.cjs" },
       { role: "arch-platform", path: "scripts/lib/runtime-role-lifecycle.cjs" },
       { role: "arch-platform", path: "scripts/sh/write-verdict.sh" },
@@ -14423,7 +14438,6 @@ _app_live_prep_seal_seed() {
       { role: "arch-testing", path: "scripts/tests/runtime-role-lifecycle-prep-binding.test.js" },
       { role: "arch-testing", path: "scripts/tests/write-verdict.bats" },
       { role: "arch-integration", path: planRel },
-      { role: "arch-integration", path: "scripts/lib/runtime-bridge-codex.cjs" },
       { role: "arch-integration", path: "scripts/lib/runtime-consultation.cjs" },
       { role: "arch-integration", path: "scripts/lib/runtime-role-lifecycle.cjs" },
       { role: "arch-integration", path: "scripts/sh/write-verdict.sh" },
@@ -14448,7 +14462,7 @@ _app_live_prep_consult_root() {
     const obj = {
       requester_role: "arch-platform",
       target_role: "context-provider",
-      question: "Locate SUPERVISOR_BASE_INSTRUCTIONS in scripts/lib/runtime-bridge-codex.cjs and report the exact source evidence for the APP-LIVE-PREP fixture root consult.",
+      question: "Locate materializeSubjectBundle in scripts/lib/runtime-consultation.cjs and report the exact source evidence for the APP-LIVE-PREP fixture root consult.",
       expected_result_kind: "P2_SOURCE_EVIDENCE",
       evidence_policy: "none",
     };
@@ -14456,6 +14470,34 @@ _app_live_prep_consult_root() {
   ')"
   local grant_id; grant_id="$(_mint_s16_lifecycle_grant "$binding_id" arch-platform consult-root "$intent")"
   run --separate-stderr node "$RLL" consult-root --project-root "$PROJ" --intent "$intent" --lifecycle-binding "$grant_id"
+  if [ "$status" -ne 0 ]; then
+    local materialization_diagnostic
+    materialization_diagnostic="$(node -e '
+      const rll = require(process.argv[1]);
+      const projectRoot = process.argv[2];
+      const plan = rll.discoverPlan(projectRoot);
+      const repoId = rll.computeRepoId(projectRoot);
+      const worktreeId = rll.computeWorktreeId(projectRoot);
+      const live = plan.ok
+        ? rll.findLiveMainOrchestratorBindingForScope(projectRoot, worktreeId, plan.planDigest)
+        : { ok: false, reason: "plan-invalid" };
+      if (!plan.ok || !live.ok) {
+        process.stdout.write(JSON.stringify({ plan, live }));
+        process.exit(0);
+      }
+      const context = {
+        plan,
+        repoId,
+        worktreeId,
+        coordRoot: rll.coordinationRootPathFor(projectRoot),
+        generation: live.generation,
+        binding: live.binding,
+      };
+      process.stdout.write(JSON.stringify(rll.s16MaterializeArchitectSubjectBundle(projectRoot, context, "arch-platform")));
+    ' "$RLL" "$PROJ" 2>&1)"
+    printf '# consult-root failed: stdout=%s stderr=%s materialization=%s\n' "$output" "$stderr" "$materialization_diagnostic" >&2
+    return 1
+  fi
   local intent_id; intent_id="$(node -e 'process.stdout.write(String(JSON.parse(process.argv[1]).operation.operation_id))' "$output")"
   printf '%s\t%s' "$intent_id" "$intent"
 }
@@ -14467,7 +14509,12 @@ _app_live_prep_consult_root() {
 _app_live_prep_wait_ready_for_role() {
   local binding_id="$1" intent_id="$2" requester_role="$3"
   local op_json="{}"
-  for _ in $(seq 1 150); do
+  # A complete predecessor chain performs several durable writes on the
+  # Windows-mounted WSL filesystem. During the full 3k-case suite that can
+  # legitimately exceed 15 seconds even though the same case is consistently
+  # green in isolation. Keep the poll bounded, but give the fake-fixture chain
+  # 30 seconds so host I/O scheduling is not mistaken for a protocol failure.
+  for _ in $(seq 1 300); do
     local grant_id; grant_id="$(_mint_s16_lifecycle_grant "$binding_id" "$requester_role" consult-root-status "$intent_id")"
     local cli_out
     cli_out=$(node "$RLL" consult-root-status --project-root "$PROJ" --intent-id "$intent_id" --lifecycle-binding "$grant_id" 2>/dev/null) || cli_out='{}'
@@ -14650,7 +14697,11 @@ _app_live_prep_scan_schema() {
   [ -f "$verdict_path" ]
   [ ! -L "$verdict_path" ]
   local verdict_stat_before verdict_digest_before
-  verdict_stat_before="$(stat -f '%i:%m' "$verdict_path" 2>/dev/null || stat -c '%i:%Y' "$verdict_path")"
+  verdict_stat_before="$(node -e '
+    const fs = require("fs");
+    const st = fs.statSync(process.argv[1], { bigint: true });
+    process.stdout.write([st.dev, st.ino, st.mtimeNs].map(String).join(":"));
+  ' "$verdict_path")"
   verdict_digest_before="$(shasum -a 256 "$verdict_path" | awk '{print $1}')"
   ! grep -q '^\*\*PUBLICATION-NONCE\*\*:' "$verdict_path"
 
@@ -14707,7 +14758,11 @@ _app_live_prep_scan_schema() {
   [[ "$output" == *'"found":false'* ]]
 
   local verdict_stat_after verdict_digest_after
-  verdict_stat_after="$(stat -f '%i:%m' "$verdict_path" 2>/dev/null || stat -c '%i:%Y' "$verdict_path")"
+  verdict_stat_after="$(node -e '
+    const fs = require("fs");
+    const st = fs.statSync(process.argv[1], { bigint: true });
+    process.stdout.write([st.dev, st.ino, st.mtimeNs].map(String).join(":"));
+  ' "$verdict_path")"
   verdict_digest_after="$(shasum -a 256 "$verdict_path" | awk '{print $1}')"
   [ "$verdict_stat_before" = "$verdict_stat_after" ]
   [ "$verdict_digest_before" = "$verdict_digest_after" ]
@@ -14957,9 +15012,9 @@ _u2_consult_root_for_role() {
     // (never the full cross-role union), so the needle/path below must be
     // an entry this SPECIFIC requester role actually seeded.
     const roleSubject = {
-      "arch-platform": ["SUPERVISOR_BASE_INSTRUCTIONS", "scripts/lib/runtime-bridge-codex.cjs"],
+      "arch-platform": ["materializeSubjectBundle", "scripts/lib/runtime-consultation.cjs"],
       "arch-testing": ["bats_require_minimum_version", "scripts/tests/write-verdict.bats"],
-      "arch-integration": ["SUPERVISOR_BASE_INSTRUCTIONS", "scripts/lib/runtime-bridge-codex.cjs"],
+      "arch-integration": ["materializeSubjectBundle", "scripts/lib/runtime-consultation.cjs"],
     };
     const subject = roleSubject[process.argv[1]];
     if (!subject) { process.stderr.write("no seeded subject for role: " + process.argv[1]); process.exit(1); }
@@ -14983,7 +15038,10 @@ _u2_consult_root_for_role() {
   grant_id=$(_mint_s16_lifecycle_grant "$binding_id" "$requester_role" consult-root "$intent") || return 1
 
   local cliOut
-  cliOut=$(node "$RLL" consult-root --project-root "$PROJ" --intent "$intent" --lifecycle-binding "$grant_id") || return 1
+  cliOut=$(node "$RLL" consult-root --project-root "$PROJ" --intent "$intent" --lifecycle-binding "$grant_id") || {
+    printf '# consult-root failed for role %s: %s\n' "$requester_role" "$cliOut" >&2
+    return 1
+  }
 
   local intent_id
   intent_id=$(node -e '
@@ -15158,7 +15216,7 @@ PRELOADEOF
 # preceding operation and durable check succeeded — a mid-function
 # failure returns nonzero instead of reaching the printf, so `run` sees
 # the true failure rather than a fabricated 0/0 or 1/1.
-_u2_run_branch() {
+_u2_run_branch_impl() {
   local branchTag="$1"
   local mutateVerdict="$2"   # yes/no
   local mutateHead="$3"      # yes/no
@@ -15310,6 +15368,41 @@ _u2_run_branch() {
   unset APP_LIVE_PREP_TIMING_GATE_ROLE
 
   printf 'intent=%s receipt=%s\n' "$finalIntentCount" "$finalReceiptCount"
+}
+
+# Bats `run` executes this helper in a subshell. A bridge started inside that
+# subshell therefore cannot be reaped by the test-level teardown (its BG_PID
+# assignment never reaches the parent shell). Keep the branch implementation
+# focused on assertions, but always join the branch-owned bridge here before
+# the `run` subshell returns. This prevents one branch from racing the next or
+# continuing to write into BATS_TEST_TMPDIR while Bats removes the fixture.
+_u2_run_branch() {
+  local savedProj="$PROJ"
+  local savedProjBridge="$PROJ_BRIDGE"
+  local savedBgOut="$BG_OUT"
+  local branchStatus=0
+
+  _u2_run_branch_impl "$@" || branchStatus=$?
+
+  if [ -n "${BG_PID:-}" ] && kill -0 "$BG_PID" 2>/dev/null; then
+    kill -TERM "$BG_PID" 2>/dev/null || true
+    local _
+    for _ in $(seq 1 20); do
+      kill -0 "$BG_PID" 2>/dev/null || break
+      sleep 0.1
+    done
+    kill -KILL "$BG_PID" 2>/dev/null || true
+    wait "$BG_PID" 2>/dev/null || true
+  fi
+  BG_PID=""
+
+  export PROJ="$savedProj"
+  export PROJ_BRIDGE="$savedProjBridge"
+  export BG_OUT="$savedBgOut"
+  unset APP_LIVE_PREP_TIMING_GATE_PATH
+  unset APP_LIVE_PREP_TIMING_GATE_ROLE
+
+  return "$branchStatus"
 }
 
 @test "FAKE-FIXTURE NOT-LIVE-P2-EVIDENCE APP-LIVE-PREP-04 RED: predecessor receipt and Markdown verdict are fd-fresh against current HEAD and PLAN" {
@@ -16722,12 +16815,7 @@ _u4_app08_branch() {
 # semantic decision (disposition + attempt correlation) must succeed idempotently;
 # a conflicting one must still fail closed.
 @test "ACK-BLOCKED-IDEMPOTENCY-01 duplicate and race preserve one canonical ack" {
-  local grant_wrapper="$BATS_TEST_DIRNAME/fixtures/runtime-consultation-grant-wrapper.cjs"
-  local action_json argv_json
-  action_json="$(_mint_ready_action context-provider)"
-  argv_json="$(_argv_from_action "$action_json")"
-  _start_bridge_bg "$argv_json" BG_OUT
-  _wait_for_role_state context-provider "$action_json" READY >/dev/null
+  local grant_wrapper="$PROJ_GRANT_WRAPPER"
 
   local plan_path="$PROJ/.planning/wave-$WAVE_SLUG/PLAN.md"
   local bundle_path="$PROJ/ack-idem-subject-bundle.json"
@@ -16763,10 +16851,6 @@ _u4_app08_branch() {
     RCC_GRANT_SESSION=ack-idem-claim-session RCC_GRANT_AGENT_ID=ack-idem-claim-agent RCC_GRANT_ROLE=context-provider \
     node "$grant_wrapper" publish-result --coordination-root "$PROJ/.planning/coordination" --request "$request_path" --claim "$claim_path" --blocked-reason INSUFFICIENT_CONTEXT
   [ "$status" -eq 0 ]
-
-  if [ -n "$BG_PID" ] && kill -0 "$BG_PID" 2>/dev/null; then kill -TERM "$BG_PID" 2>/dev/null || true; fi
-  _wait_for_pid_exit "$BG_PID" || true
-  BG_PID=""
 
   run env RCC_GRANT_PROJECT_ROOT="$PROJ" RCC_GRANT_PROVIDER=codex-supervisor \
     RCC_GRANT_SESSION=ack-idem-session RCC_GRANT_AGENT_ID=ack-idem-agent RCC_GRANT_ROLE=arch-testing \
@@ -16820,7 +16904,7 @@ _u4_app08_branch() {
     const result = owner.materializeRootSkeleton(process.argv[2], "primary");
     process.stdout.write(JSON.stringify({ rootPath: result.rootPath }));
   ' "$owner_path" "$build_dir"
-  [ "$status" -eq 0 ]
+  [ "$status" -eq 0 ] || { printf '# P2-OWNER-MATERIALIZATION-01 materialize failed: stdout=%s stderr=%s\n' "$output" "$stderr" >&3; false; }
   local root_path
   root_path="$(node -e 'process.stdout.write(JSON.parse(process.argv[1]).rootPath)' "$output")"
   [ -n "$root_path" ]

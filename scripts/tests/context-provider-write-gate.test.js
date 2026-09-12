@@ -56,7 +56,12 @@ const path = require('path');
 const assert = require('assert');
 
 const HOOK = path.resolve(__dirname, '../../.claude/hooks/context-provider-write-gate.js');
-const WRITE_BUNDLE_SH = path.resolve(__dirname, '../sh/write-bundle.sh');
+// Forward slashes remain valid on POSIX and are also understood by Git Bash
+// on Windows; a quoted drive path containing backslashes is not.
+const WRITE_BUNDLE_SH = path.resolve(__dirname, '../sh/write-bundle.sh').replace(/\\/g, '/');
+const BASH_EXE = process.platform === 'win32'
+  ? path.join(process.env.ProgramFiles || 'C:\\Program Files', 'Git', 'bin', 'bash.exe')
+  : 'bash';
 
 function runHook(payload, env = {}) {
   const input = typeof payload === 'string' ? payload : JSON.stringify(payload);
@@ -104,6 +109,14 @@ function makeTempProject() {
   return dir;
 }
 
+function removeTempProject(dir) {
+  // Git/MSYS can retain a short-lived handle to .git on Windows after the
+  // immediately preceding child exits. Node only retries recursive removal
+  // when maxRetries is non-zero; the same bounded cleanup is harmless on
+  // POSIX and keeps the test deterministic without hiding persistent errors.
+  fs.rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+}
+
 function bundlePath(projDir, slug, role) {
   return path.join(projDir, '.planning', `wave-${slug}`, 'context-bundles', `${role}.md`);
 }
@@ -149,12 +162,17 @@ function runFor(cmd, sessionId, projDir, extraToolInput) {
     assert.strictEqual(body.hookSpecificOutput.updatedInput.description, 'wg-allow fixture description', 'WG-ALLOW: updatedInput must preserve every other original tool_input field, not just command: ' + JSON.stringify(body));
 
     const target = bundlePath(proj, 'wg-test', 'test-specialist');
-    const real = spawnSync('bash', ['-c', cmd], { cwd: proj, encoding: 'utf8' });
+    // Enter the fixture inside Bash instead of passing it as CreateProcess
+    // cwd. On Windows, Node can otherwise retain the child-cwd directory
+    // handle until this parent exits, making the immediate fixture teardown
+    // fail with EPERM even though the child has completed.
+    const shellProj = proj.replace(/\\/g, '/').replace(/"/g, '\\"');
+    const real = spawnSync(BASH_EXE, ['-c', `cd "${shellProj}" && ${cmd}`], { encoding: 'utf8' });
     assert.strictEqual(real.status, 0, 'WG-ALLOW: the real write-bundle.sh invocation this gate allowed must itself succeed: ' + JSON.stringify(real));
     assert.strictEqual(fs.existsSync(target), true, 'WG-ALLOW: end-to-end proof -- the allowed real invocation must genuinely produce the bundle file: ' + target);
     console.log('WG-ALLOW well-formed real-shape heredoc invocation allowed end-to-end (decision + real write): PASS');
   } finally {
-    fs.rmSync(proj, { recursive: true, force: true });
+    removeTempProject(proj);
   }
 }
 
@@ -167,7 +185,7 @@ function runFor(cmd, sessionId, projDir, extraToolInput) {
     assertPreToolUseDeny(r, 'WG-MISSING-ROLE: a real heredoc invocation missing --role must block');
     console.log('WG-MISSING-ROLE missing --role on a real heredoc invocation blocks: PASS');
   } finally {
-    fs.rmSync(proj, { recursive: true, force: true });
+    removeTempProject(proj);
   }
 }
 
@@ -180,7 +198,7 @@ function runFor(cmd, sessionId, projDir, extraToolInput) {
     assertPreToolUseDeny(r, 'WG-MISSING-PLANID: a real heredoc invocation missing --plan-id must block');
     console.log('WG-MISSING-PLANID missing --plan-id on a real heredoc invocation blocks: PASS');
   } finally {
-    fs.rmSync(proj, { recursive: true, force: true });
+    removeTempProject(proj);
   }
 }
 
@@ -195,7 +213,7 @@ function runFor(cmd, sessionId, projDir, extraToolInput) {
     assertPreToolUseDeny(r, 'WG-DUPLICATE-FLAG: a duplicate --role must block');
     console.log('WG-DUPLICATE-FLAG duplicate --role blocks: PASS');
   } finally {
-    fs.rmSync(proj, { recursive: true, force: true });
+    removeTempProject(proj);
   }
 }
 
@@ -208,7 +226,7 @@ function runFor(cmd, sessionId, projDir, extraToolInput) {
     assertPreToolUseDeny(r, 'WG-EXTRA-POSITIONAL: an extra positional token must block');
     console.log('WG-EXTRA-POSITIONAL stray positional token blocks: PASS');
   } finally {
-    fs.rmSync(proj, { recursive: true, force: true });
+    removeTempProject(proj);
   }
 }
 
@@ -225,7 +243,7 @@ function runFor(cmd, sessionId, projDir, extraToolInput) {
     assertPreToolUseDeny(r, 'WG-CHAINING-AFTER: chaining appended after a valid invocation must block');
     console.log('WG-CHAINING-AFTER trailing chaining operator after a valid invocation blocks: PASS');
   } finally {
-    fs.rmSync(proj, { recursive: true, force: true });
+    removeTempProject(proj);
   }
 }
 
@@ -252,7 +270,7 @@ function runFor(cmd, sessionId, projDir, extraToolInput) {
     assert.strictEqual(r.exit, 0, 'WG-LOOKALIKE-PATH: a same-basename script at a DIFFERENT directory must never be recognized as write-bundle.sh -- TODAY substring matching wrongly recognizes and validates it (and rejects its malformed --role), proving it was treated as genuine: ' + JSON.stringify(r));
     console.log('WG-LOOKALIKE-PATH same-basename script in a different directory is never recognized as the sanctioned writer (never inspected at all): PASS');
   } finally {
-    fs.rmSync(proj, { recursive: true, force: true });
+    removeTempProject(proj);
     fs.rmSync(evilDir, { recursive: true, force: true });
   }
 }
@@ -276,7 +294,7 @@ function runFor(cmd, sessionId, projDir, extraToolInput) {
     assert.strictEqual(r.exit, 0, 'WG-SUBSTRING-ONLY: a command that only MENTIONS write-bundle.sh as text (not tokens[0]=bash/sh, tokens[1]=<resolved path>) must never trigger validation at all -- TODAY substring-plus-regex-anywhere extraction wrongly inspects and blocks it: ' + JSON.stringify(r));
     console.log('WG-SUBSTRING-ONLY a non-invocation textual mention of write-bundle.sh never triggers the validation path: PASS');
   } finally {
-    fs.rmSync(proj, { recursive: true, force: true });
+    removeTempProject(proj);
   }
 }
 
@@ -297,7 +315,7 @@ function runFor(cmd, sessionId, projDir, extraToolInput) {
     assert.strictEqual(fs.existsSync(target), false, 'WG-BYPASS: zero-write proof -- the bypassed target file must never exist when the gate blocks');
     console.log('WG-BYPASS direct bypass write still blocked + zero-write proof (unchanged, independent mechanism): PASS');
   } finally {
-    fs.rmSync(proj, { recursive: true, force: true });
+    removeTempProject(proj);
   }
 }
 
@@ -310,7 +328,7 @@ function runFor(cmd, sessionId, projDir, extraToolInput) {
     assertPreToolUseDeny(r, 'WG-REJECT-LIST-DEVELOP: --slug develop must block');
     console.log('WG-REJECT-LIST-DEVELOP --slug develop (reject-list) blocks on the real heredoc shape: PASS');
   } finally {
-    fs.rmSync(proj, { recursive: true, force: true });
+    removeTempProject(proj);
   }
 }
 
@@ -325,7 +343,7 @@ function runFor(cmd, sessionId, projDir, extraToolInput) {
     assert.strictEqual(r.exit, 0, 'WG-POSITIVE-CONTROL-SLUG: a non-reject-list --slug must be allowed: ' + JSON.stringify(r));
     console.log('WG-POSITIVE-CONTROL-SLUG non-reject-list --slug allowed (positive control): PASS');
   } finally {
-    fs.rmSync(proj, { recursive: true, force: true });
+    removeTempProject(proj);
   }
 }
 
@@ -337,7 +355,7 @@ function runFor(cmd, sessionId, projDir, extraToolInput) {
     assert.strictEqual(r.exit, 0, 'WG-UNRELATED: an unrelated bash command must be allowed: ' + JSON.stringify(r));
     console.log('WG-UNRELATED unrelated bash command allowed: PASS');
   } finally {
-    fs.rmSync(proj, { recursive: true, force: true });
+    removeTempProject(proj);
   }
 }
 

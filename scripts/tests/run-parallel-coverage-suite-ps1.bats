@@ -53,6 +53,9 @@ CMD
   else
     PWSH="powershell.exe"
   fi
+  if ! "$PWSH" -NoProfile -Command "exit 0" >/dev/null 2>&1; then
+    skip "PowerShell is discoverable but not executable from this Bash runtime"
+  fi
 
   # Convert paths and choose PATH separator per OS.
   # Windows (cygpath): Windows paths + ; separator.
