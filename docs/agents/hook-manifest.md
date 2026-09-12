@@ -4,7 +4,7 @@ sources: [androidcommondoc]
 targets: [all]
 version: 5
 last_updated: "2026-08"
-description: "Consumer hook manifest: classifies all 37 L0 hook files as consumer-required / consumer-optional / l0-internal"
+description: "Consumer hook manifest: classifies all 39 L0 hook files as consumer-required / consumer-optional / l0-internal"
 slug: hook-manifest
 status: active
 layer: L0
@@ -14,7 +14,7 @@ category: agents
 
 # L0 Hook Manifest
 
-Reference classification for all 37 hook files in `.claude/hooks/`. Consumers use this to reconcile their `settings.json` against the full L0 hook set.
+Reference classification for all 39 hook files in `.claude/hooks/`. Consumers use this to reconcile their `settings.json` against the full L0 hook set.
 
 > **CI-enforced** — the `hook-manifest-coverage` job in `.github/workflows/drift-audit.yml` fails the build if the hook table below drifts from `.claude/hooks/` (a missing, phantom, or duplicated hook). The table is the source of truth for coverage.
 
@@ -56,7 +56,7 @@ This subsection documents verification methodology only; it does not assert that
 
 ## Hook Table
 
-### JavaScript Hooks (33)
+### JavaScript Hooks (35)
 
 | Hook | Status | Rationale |
 |------|--------|-----------|
@@ -66,6 +66,8 @@ This subsection documents verification methodology only; it does not assert that
 | `context-provider-consulted.js` | consumer-required | Gating: sets the session flag the gate checks (pair with context-provider-gate) — see [context-provider-adoption-hooks](context-provider-adoption-hooks.md) |
 | `context-provider-write-gate.js` | consumer-required | Gating: confines context-provider's sole write capability (publishing its own nested-consultation `result/v2` via `write-bundle.sh`) — CP's read-only boundary otherwise stays intact — see [runtime-messaging-cp-writer](runtime-messaging-cp-writer.md) |
 | `runtime-consultation-target-gate.js` | consumer-required | Gating: resolves target lifecycle-ready state plus every native target claim/lease/result/stop-ack grant for the Wave-1 consultation protocol — see [runtime-messaging-state-machine](runtime-messaging-state-machine.md) |
+| `runtime-host-boundary.js` | consumer-required | Gating: enforces the retained-host identity and lifecycle boundary for runtime collaboration tool calls |
+| `runtime-host-session-start.js` | consumer-required | Session startup: captures the host session identity required by the retained-host boundary before runtime collaboration begins |
 | `agent-spawn-execution-gate.js` | consumer-required | Topology: PreToolUse gate on the `Agent` tool, main-orchestrator context only. Before a real `Agent()` call executes for a genuine role-lifecycle action ("owning" call — some pending action truly exists for the exact `subagent_type` named), atomically reserves that action via a no-clobber execution-claim record, revalidating binding/PLAN/session/role/expiry fresh. Every other `Agent()` call ("non-owning" — the overwhelming majority of ordinary ad-hoc specialist/architect dispatch) is silent pass-through with zero side effects, governed only by other hooks (`agent-spawn-validator.js` etc.) — see [runtime-messaging-drivers](runtime-messaging-drivers.md) |
 | `hook-control-plane-utils.js` | l0-internal | Shared CommonJS runtime dependency for propagated hooks; copy with importing hooks, never register in `settings.json` |
 | `coordination-artifact.js` | l0-internal | Shared CommonJS runtime dependency for propagated hooks (read/validate coordination artifacts — consult/result/request/approval/stop/message; writes are owned by `write-coordination-artifact.sh`, not this module); copy with importing hooks, never register in `settings.json` — see [coordination-artifact-schema](coordination-artifact-schema.md) |

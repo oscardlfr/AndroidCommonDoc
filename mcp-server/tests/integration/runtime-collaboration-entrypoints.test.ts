@@ -10,6 +10,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import fs from "fs";
 import * as path from "path";
+import os from "os";
 import { createRequire } from "module";
 import { spawnSync } from "node:child_process";
 
@@ -94,6 +95,31 @@ const HEX64_C = "c".repeat(64);
 const HEX64_D = "d".repeat(64);
 const HEX64_E = "e".repeat(64);
 const HEX64_F = "f".repeat(64);
+
+function withIsolatedPlanRoot<T>(fn: (projectRoot: string) => T): T {
+  const projectRoot = fs.mkdtempSync(
+    path.join(os.tmpdir(), "acd-entrypoint-plan-"),
+  );
+  const gitInit = spawnSync("git", ["init", "--quiet", projectRoot], {
+    encoding: "utf8",
+  });
+  if (gitInit.status !== 0) {
+    fs.rmSync(projectRoot, { recursive: true, force: true });
+    throw new Error(`git init failed: ${gitInit.stderr || gitInit.stdout}`);
+  }
+  const planDirectory = path.join(
+    projectRoot,
+    ".planning",
+    "wave-entrypoint-test",
+  );
+  fs.mkdirSync(planDirectory, { recursive: true });
+  fs.writeFileSync(path.join(planDirectory, "PLAN.md"), "# Test plan\n");
+  try {
+    return fn(projectRoot);
+  } finally {
+    fs.rmSync(projectRoot, { recursive: true, force: true });
+  }
+}
 
 function defaultSelectionResult() {
   return {
@@ -908,7 +934,7 @@ describe("P3 runtime-collaboration-entrypoints (RED)", () => {
     expect(wrongActor.status).toBe("BLOCKED");
   });
 
-  it("24. all five entrypoints share the canonical deterministic step planner", () => {
+  it("24. all five entrypoints share the canonical deterministic step planner without live ignored planning state", () => {
     const mod = loadEntrypoint({ fresh: true });
     const cases: Array<[string, any, string | null]> = [
       ["init-session", { mode: "start" }, "ensure"],
@@ -917,15 +943,17 @@ describe("P3 runtime-collaboration-entrypoints (RED)", () => {
       ["ingest-content", { request_ref: "request:" + HEX64_A, approval_ref: "approval:" + HEX64_B }, null],
       ["monitor-docs", { scope: "all" }, null],
     ];
-    for (const [entrypoint, intent, command] of cases) {
-      const first = mod.planEntrypointStep(entrypoint, intent, ROOT);
-      const second = mod.planEntrypointStep(entrypoint, intent, ROOT);
-      expect(first).toEqual(second);
-      expect(first.command).toBe(command);
-      expect(Object.keys(first).sort()).toEqual(["command", "argv_digest", "role_scope"].sort());
-      expect(first.argv_digest).toMatch(/^[0-9a-f]{64}$/);
-      expect(Object.isFrozen(first)).toBe(true);
-    }
+    withIsolatedPlanRoot((projectRoot) => {
+      for (const [entrypoint, intent, command] of cases) {
+        const first = mod.planEntrypointStep(entrypoint, intent, projectRoot);
+        const second = mod.planEntrypointStep(entrypoint, intent, projectRoot);
+        expect(first).toEqual(second);
+        expect(first.command).toBe(command);
+        expect(Object.keys(first).sort()).toEqual(["command", "argv_digest", "role_scope"].sort());
+        expect(first.argv_digest).toMatch(/^[0-9a-f]{64}$/);
+        expect(Object.isFrozen(first)).toBe(true);
+      }
+    });
   });
 
   it("25. production resume-work reads and returns the durable five-role state instead of reporting READY with an empty role map", async () => {
