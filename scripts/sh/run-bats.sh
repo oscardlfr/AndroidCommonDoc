@@ -141,8 +141,29 @@ now_utc() {
 }
 
 # _bats_resolvable — true iff bats can be run WITHOUT a network install attempt.
+# task #19 fix: npx --no-install resolves bats only as an npm-managed package (local
+# node_modules or a global npm install) -- it does NOT do a plain PATH lookup. On a box
+# where a genuinely working `bats` sits on PATH via a non-npm-resolvable arrangement
+# (confirmed on this Windows/Git-Bash sandbox: `npx --no-install bats --version` fails
+# with a Windows "not recognized" error even though `command -v bats` finds a working
+# binary), the npx-only probe reported false unresolvability and the script refused to
+# run at all. Fall back to a plain PATH lookup when npx's package-scoped resolution
+# fails; npx is still tried FIRST and exclusively wins when it succeeds, so existing
+# fake-npx test mocks (which prepend a working fake npx onto $PATH) are unaffected.
 _bats_resolvable() {
-    command -v npx >/dev/null 2>&1 && npx --no-install bats --version >/dev/null 2>&1
+    { command -v npx >/dev/null 2>&1 && npx --no-install bats --version >/dev/null 2>&1; } \
+        || command -v bats >/dev/null 2>&1
+}
+
+# _bats_invoke <args...> — runs bats via whichever method _bats_resolvable found,
+# mirroring its exact priority order (npx --no-install first, plain PATH `bats` as
+# fallback). Callers must have already confirmed _bats_resolvable before calling this.
+_bats_invoke() {
+    if command -v npx >/dev/null 2>&1 && npx --no-install bats --version >/dev/null 2>&1; then
+        npx --no-install bats "$@"
+    else
+        bats "$@"
+    fi
 }
 
 # ── Derived fields (computed regardless of outcome; scope reflects caller intent) ─────────
@@ -176,7 +197,7 @@ if [[ "$EVAL_ONLY" == "false" ]]; then
     mkdir -p "$(dirname "$LOG")"
     if _bats_resolvable; then
         bats_rc=0
-        npx --no-install bats "${TARGETS[@]}" > "$LOG" 2>&1 || bats_rc=$?
+        _bats_invoke "${TARGETS[@]}" > "$LOG" 2>&1 || bats_rc=$?
         echo "[run-bats] bats exited $bats_rc (content-authoritative eval follows)" >&2
     else
         FACT_BATS_UNRESOLVABLE=true
@@ -262,7 +283,7 @@ else
     # Not valid with --eval-only (no targets in scope for --count).
     if [[ "$EVAL_ONLY" == "false" && "$CROSS_CHECK" == "true" ]]; then
         if _bats_resolvable; then
-            count_n=$(npx --no-install bats --count "${TARGETS[@]}" 2>/dev/null || true)
+            count_n=$(_bats_invoke --count "${TARGETS[@]}" 2>/dev/null || true)
             count_n=${count_n:-0}
             if [[ -n "$count_n" && "$count_n" -gt 0 && "$count_n" -ne "$FACT_EXPECTED" ]]; then
                 echo "[run-bats] WARN: --cross-check-count: npx bats --count=$count_n vs plan 1..${FACT_EXPECTED}" >&2

@@ -195,11 +195,29 @@ run_doc_structure_vitest() {
     # resolved — otherwise an explicit --toolkit-root override is silently lost.
     export ANDROID_COMMON_DOC="$TOOLKIT_ROOT"
 
-    local vitest_out
-    vitest_out=$(cd "$mcp_dir" && npx vitest run tests/integration/doc-structure.test.ts 2>&1) || {
+    local vitest_out vitest_rc
+    vitest_out=$(cd "$mcp_dir" && npx vitest run tests/integration/doc-structure.test.ts 2>&1)
+    vitest_rc=$?
+    # Task follow-up (same class as run-bats.sh task #19): on this Windows/Git-Bash
+    # sandbox, npx's shim-invocation of a locally-installed vitest fails outright (exit
+    # 1, a Windows "not recognized" cmd.exe error, LOCALE-DEPENDENT text -- confirmed
+    # empirically) before vitest itself ever starts, so no vitest-specific output is
+    # produced at all. Detect that case via a LOCALE-INDEPENDENT signal instead of the
+    # OS error text: vitest's own CLI always prints a "Test Files" summary line on any
+    # genuine run, pass or fail -- its total absence means npx never actually invoked
+    # vitest. Fall back to a direct node invocation of the same local vitest
+    # devDependency, bypassing npx's broken shim spawn entirely. A test stub that
+    # intercepts `npx vitest ...` and exits 0 (scripts/tests/qg-doc-validators.bats
+    # #DV12) short-circuits this whole block unchanged, since the fallback only
+    # triggers on a non-zero exit.
+    if [ "$vitest_rc" -ne 0 ] && ! grep -q "Test Files" <<< "$vitest_out"; then
+        vitest_out=$(cd "$mcp_dir" && node node_modules/vitest/vitest.mjs run tests/integration/doc-structure.test.ts 2>&1)
+        vitest_rc=$?
+    fi
+    if [ "$vitest_rc" -ne 0 ]; then
         echo "FAIL|doc-structure vitest exited non-zero: $(echo "$vitest_out" | tail -5 | tr '\n' ' ')"
         return 0
-    }
+    fi
     echo "PASS|doc-structure vitest passed"
 }
 

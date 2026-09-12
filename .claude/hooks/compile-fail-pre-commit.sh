@@ -9,7 +9,18 @@ set -euo pipefail
 INPUT=$(cat)
 
 # Extract command from tool input
-COMMAND=$(echo "$INPUT" | jq -r '.tool_input.command // empty') || exit 0
+COMMAND=$(printf '%s' "$INPUT" | node -e '
+  let raw = "";
+  process.stdin.setEncoding("utf8");
+  process.stdin.on("data", (chunk) => { raw += chunk; });
+  process.stdin.on("end", () => {
+    try {
+      const value = JSON.parse(raw);
+      const command = value?.tool_input?.command;
+      if (typeof command === "string") process.stdout.write(command);
+    } catch {}
+  });
+') || exit 0
 if [ -z "$COMMAND" ]; then
   exit 0
 fi
@@ -48,15 +59,17 @@ while IFS= read -r kt_file; do
 done <<< "$STAGED_KT"
 
 if [ -n "$VIOLATIONS" ]; then
-  jq -n --arg reason "compile-fail-pre-commit: staged .kt files contain error() patterns that cause compile failures. Fix or remove before committing:
-${VIOLATIONS}" \
-    '{
+  REASON="compile-fail-pre-commit: staged .kt files contain error() patterns that cause compile failures. Fix or remove before committing:
+${VIOLATIONS}"
+  node -e '
+    process.stdout.write(JSON.stringify({
       hookSpecificOutput: {
         hookEventName: "PreToolUse",
         permissionDecision: "deny",
-        permissionDecisionReason: $reason
-      }
-    }'
+        permissionDecisionReason: process.argv[1],
+      },
+    }));
+  ' "$REASON"
   exit 0
 fi
 

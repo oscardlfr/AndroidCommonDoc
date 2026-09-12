@@ -23,7 +23,7 @@ teardown() {
 
 # Helper: build a PreToolUse JSON payload for a git commit command
 make_commit_input() {
-    jq -n --arg cmd "$1" '{"tool_input": {"command": $cmd}}'
+    node -e 'process.stdout.write(JSON.stringify({tool_input:{command:process.argv[1]}}))' "$1"
 }
 
 @test "allows commit when no staged .kt files" {
