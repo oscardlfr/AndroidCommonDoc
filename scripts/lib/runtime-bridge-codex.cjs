@@ -8259,6 +8259,15 @@ function startOwnedAppServerSupervisorEngine(engine) {
     };
     const bornRecordPath = path.join(registryRepoDir({ repoId: repoDescriptor.repoId }), 'instances', roleInstanceId + '.json');
     try {
+      // On an elevated Windows host, a newly-created child directory can
+      // inherit a user-private DACL while its owner defaults to
+      // BUILTIN\Administrators. Harden the authority-bearing leaf itself
+      // before publishing the immutable BORN record; relying on the parent
+      // registry boundary alone is not enough to prove owner confinement.
+      const bornRecordDir = ensureSecureRegistryDir(path.dirname(bornRecordPath));
+      if (!bornRecordDir.ok) {
+        throw new Error('BORN_RECORD_DIRECTORY_INSECURE:' + (bornRecordDir.reason || 'unknown'));
+      }
       publishNoClobber(bornRecordPath, Buffer.from(canonicalJSONStringify(bornRecord), 'utf8'));
     } catch (err) {
       // P1-A / sequence145 correction (finding P1A-144-02): same reasoning

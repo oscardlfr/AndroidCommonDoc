@@ -281,6 +281,14 @@ function Get-AclSnapshotDriftEnv {
 function Set-OwnerConfinedDirectoryAcl {
   param([Parameter(Mandatory)][string]$Path)
   $currentUserSid = ([System.Security.Principal.WindowsIdentity]::GetCurrent()).User.Value
+  # An elevated Windows token can default newly-created objects to the
+  # BUILTIN\Administrators owner even while the current identity is an
+  # ordinary user SID. A DACL grant alone does not change that owner, so make
+  # the fixture's ownership contract explicit before asserting it.
+  $owner = Invoke-ChildProcess -FilePath 'icacls.exe' -ArgumentList @(
+    $Path, '/setowner', ('*' + $currentUserSid)
+  )
+  Assert-True ($owner.ExitCode -eq 0) "icacls failed to set the fixture owner on $Path : $($owner.Stdout) $($owner.Stderr)"
   $r = Invoke-ChildProcess -FilePath 'icacls.exe' -ArgumentList @(
     $Path, '/inheritance:r', '/grant:r', ('*' + $currentUserSid + ':(OI)(CI)F')
   )
