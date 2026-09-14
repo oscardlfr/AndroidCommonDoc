@@ -79,31 +79,29 @@ jobs:
             echo "::error::planner script not found at $PLANNER_SCRIPT (neither target checkout nor toolkit fallback has it)"
             exit 1
           fi
-          node "$PLANNER_SCRIPT" --suite-root scripts/tests \
-            --shard-index "${{ matrix.shard }}" --shard-count 4 \
-            > "$RUNNER_TEMP/bats-shard.nul"
+          node "$PLANNER_SCRIPT" --suite-root scripts/tests --shard-count 4 --json \
+            > "$RUNNER_TEMP/bats-shard-plan.json"
+          # One planner invocation drives both this shard's file list AND its
+          # mcp-server prerequisite flag from the SAME plan object -- never
+          # two separate invocations (NUL mode + JSON mode) that could in
+          # principle disagree with each other.
+          node -e '
+            const fs = require("fs");
+            const plan = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+            const shard = plan.shards[Number(process.argv[2])];
+            if (!shard) { console.error("shard index out of range: " + process.argv[2]); process.exit(1); }
+            fs.writeFileSync(process.argv[3], shard.files.map((f) => f + "\0").join(""));
+            fs.appendFileSync(process.env.GITHUB_ENV, "SHARD_NEEDS_MCP_SERVER=" + Boolean(shard.needsMcpServer) + "\n");
+          ' "$RUNNER_TEMP/bats-shard-plan.json" "${{ matrix.shard }}" "$RUNNER_TEMP/bats-shard.nul"
           file_count=$(tr -cd '\0' < "$RUNNER_TEMP/bats-shard.nul" | wc -c)
           echo "shard ${{ matrix.shard }}: $file_count files"
           # Newline manifest for the failure-artifact upload only -- safe
           # because the planner already rejects any newline-containing path
           # before this NUL-delimited file list is ever produced.
           tr '\0' '\n' < "$RUNNER_TEMP/bats-shard.nul" > "$RUNNER_TEMP/bats-shard-manifest.txt"
-          # Ownership of runtime-consultation-bridge.bats carries an
-          # undeclared prerequisite: its P2-OWNER-MATERIALIZATION-01 case
-          # calls materializeRootSkeleton, which needs a built mcp-server/build.
-          # The old monolithic job satisfied this only by incidental ordering
-          # with another suite file that happened to build it first. Detect
-          # ownership from the deterministic manifest itself (exact-line
-          # match) -- never a hardcoded shard index -- so this still tracks
-          # correctly if balancing ever reassigns the file to a different shard.
-          if grep -qxF 'scripts/tests/runtime-consultation-bridge.bats' "$RUNNER_TEMP/bats-shard-manifest.txt"; then
-            echo "OWNS_RUNTIME_CONSULTATION_BRIDGE=true" >> "$GITHUB_ENV"
-          else
-            echo "OWNS_RUNTIME_CONSULTATION_BRIDGE=false" >> "$GITHUB_ENV"
-          fi
 
-      - name: Build mcp-server (runtime-consultation-bridge.bats prerequisite)
-        if: env.OWNS_RUNTIME_CONSULTATION_BRIDGE == 'true'
+      - name: Build mcp-server (mcp-server/node_modules symlink prerequisite)
+        if: env.SHARD_NEEDS_MCP_SERVER == 'true'
         working-directory: mcp-server
         run: |
           npm ci

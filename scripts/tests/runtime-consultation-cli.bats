@@ -1516,7 +1516,7 @@ _wait_for_rendezvous_ready() {
 # Correction C): direct, unit-level coverage of the exported helper itself --
 # purely consultation-layer (request/result/ack/cancel under a planRoot), no
 # lifecycle/binding/action coupling, so this suite never needs the heavy
-# 5-role E2E plane runtime-consultation-role-gate.bats's own S16-ROOT-SOURCE-*
+# 5-role E2E plane runtime-consultation-role-gate-plane.bats's own S16-ROOT-SOURCE-*
 # tests require.
 # ══════════════════════════════════════════════════════════════════════════
 

@@ -43,7 +43,7 @@ bats_require_minimum_version 1.5.0
 #   - Every invocation sets `NODE_ENV=test` + `RUNTIME_CONSULTATION_TEST_CAPABILITY`
 #     (the "harness-created" test capability the CLI ABI requires for `--fixed-ids`/
 #     `--fixed-clock`). CORRECTED (M7 completeness, 2026-08-09): WP1/WP4's
-#     `role-command-grant/v1` authority layer (tested by `runtime-consultation-role-gate.bats`,
+#     `role-command-grant/v1` authority layer (tested by `runtime-consultation-role-gate-core.bats`,
 #     not this file) is NOT bypassable under the test capability -- empirically confirmed:
 #     `validateAndConsumeRoleCommandGrantForCommand` (runtime-consultation.cjs) runs
 #     unconditionally in main(), with no isTestCapability() exemption of its own. This

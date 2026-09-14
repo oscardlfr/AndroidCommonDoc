@@ -17,9 +17,9 @@ bats_require_minimum_version 1.5.0
 #         job (needs: bats), never inside the matrix job body
 #   #CP9  Failure-artifact upload is scoped to the shard's log + manifest,
 #         never the whole scripts/tests/ tree
-#   #CP10 The shard owning runtime-consultation-bridge.bats (by exact-line
-#         manifest match, never a hardcoded shard index) builds mcp-server
-#         (npm ci + npm run build) before Bats runs
+#   #CP10 Any shard whose files need mcp-server (per the planner's own
+#         content-based needsMcpServer classification, never a hardcoded
+#         filename/shard index) builds it (npm ci + npm run build) before Bats runs
 #
 # Rationale: the CI inline bats guard (reusable-shell-tests.yml) duplicates the
 # completeness logic from run-bats.sh by design (consumer-portability invariant —
@@ -195,32 +195,44 @@ README_WORKFLOW="$REPO_ROOT/.github/workflows/readme-audit.yml"
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
-# #CP10  Sequence 11: the shard owning runtime-consultation-bridge.bats
-#        builds mcp-server before Bats runs
+# #CP10  Sequence C19 (CI run 34897150035): any shard whose files need
+#        mcp-server builds it before Bats runs
 #
-# P2-OWNER-MATERIALIZATION-01 (inside runtime-consultation-bridge.bats) calls
-# materializeRootSkeleton, which needs a built mcp-server/build -- an
-# undeclared ambient prerequisite the old monolithic job satisfied only by
-# incidental step ordering with another suite file. Ownership must be
-# detected from the deterministic manifest (exact-line match), never a
-# hardcoded shard index, and the build must run before Bats, only in the
-# owning shard.
+# Sequence 11's original mechanism keyed off ONE hardcoded filename
+# (runtime-consultation-bridge.bats) via an exact manifest-line match. C18's
+# weight-based rebalancing split that file's two sibling hot files
+# (runtime-consultation-role-gate.bats -- itself later split again in
+# Sequence C20 into runtime-consultation-role-gate-{core,plane,evidence}.bats
+# -- and runtime-consultation-e2e.bats) into their OWN shards, each with the
+# identical undeclared mcp-server/node_modules
+# symlink prerequisite -- the exact-filename mechanism could not generalize to
+# them, and CI run 34897150035 proved it: both siblings' shards failed every
+# test with "Cannot find module '@modelcontextprotocol/sdk/client/index.js'".
+# The fix is the planner's own content-based needsMcpServer classification
+# (plan-bats-shards.cjs), consulted once via its --json report -- so this
+# tracks correctly no matter how many hot files exist or how balancing
+# assigns them, never a hardcoded filename or shard index.
 # ─────────────────────────────────────────────────────────────────────────────
-@test "#CP10 PARITY: runtime-consultation-bridge.bats shard builds mcp-server (npm ci + npm run build) before Bats, via a manifest-derived ownership flag, never a hardcoded shard index" {
+@test "#CP10 PARITY: any shard whose files need mcp-server (planner-classified) builds it (npm ci + npm run build) before Bats, never a hardcoded filename or shard index" {
     [ -f "$WORKFLOW" ] || {
         echo "WORKFLOW not found: $WORKFLOW" >&2
         return 1
     }
 
-    # Exact-file manifest match: -x (whole line) + -F (literal), never a
-    # substring/prefix match that could false-positive on another file.
-    grep -qF "grep -qxF 'scripts/tests/runtime-consultation-bridge.bats'" "$WORKFLOW"
+    # Driven by the planner's own JSON report and its needsMcpServer field --
+    # never a re-invented/duplicated classification inside the workflow.
+    grep -qF -- '--json' "$WORKFLOW"
+    grep -qF 'shard.needsMcpServer' "$WORKFLOW"
 
-    # Ownership env flag, set from the manifest match and read by the
-    # conditional build step.
-    grep -qF 'OWNS_RUNTIME_CONSULTATION_BRIDGE=true' "$WORKFLOW"
-    grep -qF 'OWNS_RUNTIME_CONSULTATION_BRIDGE=false' "$WORKFLOW"
-    grep -qF "if: env.OWNS_RUNTIME_CONSULTATION_BRIDGE == 'true'" "$WORKFLOW"
+    # The superseded exact-filename mechanism (Sequence 11) must be genuinely
+    # gone, not left dead alongside the new one.
+    ! grep -qF 'runtime-consultation-bridge.bats' "$WORKFLOW"
+    ! grep -qF 'OWNS_RUNTIME_CONSULTATION_BRIDGE' "$WORKFLOW"
+
+    # Shard-scoped env flag, written from the planner's own classification and
+    # read by the conditional build step.
+    grep -qF 'SHARD_NEEDS_MCP_SERVER=' "$WORKFLOW"
+    grep -qF "if: env.SHARD_NEEDS_MCP_SERVER == 'true'" "$WORKFLOW"
 
     # Never a hardcoded shard index driving the decision.
     ! grep -qE "matrix\.shard[[:space:]]*==[[:space:]]*'?0'?" "$WORKFLOW"

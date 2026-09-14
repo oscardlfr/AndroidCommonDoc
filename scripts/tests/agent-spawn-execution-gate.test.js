@@ -1370,7 +1370,7 @@ function runRedRootSourceStaleGrantAfterTerminal() {
     const cliEnv = Object.assign({}, process.env, { NODE_ENV: 'test', RUNTIME_CONSULTATION_TEST_CAPABILITY: TEST_CAP });
 
     // Carrier publish-request: an UNRELATED, ordinary stable requester
-    // identity -- mirrors runtime-consultation-role-gate.bats's own proven
+    // identity -- mirrors runtime-consultation-role-gate-evidence.bats's own proven
     // M7-ROOT-TERMINAL-CUT-16 precedent exactly (read in full, team-lead
     // guidance 2026-08-17): a root-source binding's own publish-request
     // pre-ingress bootstrap flow is a one-time, ceremony-integrated step

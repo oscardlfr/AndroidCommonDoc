@@ -9,15 +9,20 @@ bats_require_minimum_version 1.5.0
 #   4. Mixed runtime chain       9. Restart rediscovery
 #   5. Historical evidence      10. Cleanup
 #
-# Self-contained (this codebase's convention: no shared `load` between bats files --
-# every file owns its own setup/teardown/fixtures). The S16E2E retained-plane
-# infrastructure below (bootstrap_project, fake-codex-app-server, fake-context7-server,
+# Self-contained (this file predates Sequence C20's shared lib -- see
+# scripts/tests/lib/role-gate-shared.bash's own header for the now-established
+# `load`-based exception). The S16E2E retained-plane infrastructure below
+# (bootstrap_project, fake-codex-app-server, fake-context7-server,
 # start/stop_retained_plane, root-source setup, CP-evidence helpers) is adapted from the
-# proven, currently-green scripts/tests/runtime-consultation-role-gate.bats -- copied,
-# not reinvented, per this mission's own dispatch. Scenarios 6/7 use the separate,
-# simpler scripts/sh/write-coordination-artifact.sh generic writer (request/approval/
-# result kinds), which is a DIFFERENT script from runtime-consultation.cjs and carries
-# no role-command-grant authority layer of its own.
+# proven, currently-green scripts/tests/runtime-consultation-role-gate-plane.bats
+# (formerly runtime-consultation-role-gate.bats, split in Sequence C20) --
+# copied, not reinvented, per this mission's own dispatch. Scenarios 6/7 use the
+# separate, simpler scripts/sh/write-coordination-artifact.sh generic writer
+# (request/approval/result kinds), which is a DIFFERENT script from
+# runtime-consultation.cjs and carries no role-command-grant authority layer
+# of its own.
+#
+# ci-prerequisite: mcp-server
 #
 # Invocation: bash scripts/sh/run-bats.sh --project-root "$(pwd)" scripts/tests/runtime-consultation-e2e.bats
 
@@ -101,7 +106,7 @@ teardown() {
 }
 
 # ══════════════════════════════════════════════════════════════════════════
-# Shared core helpers (mirrors runtime-consultation-role-gate.bats verbatim)
+# Shared core helpers (mirrors scripts/tests/lib/role-gate-shared.bash verbatim)
 # ══════════════════════════════════════════════════════════════════════════
 
 _render_posix_direct() {
@@ -221,7 +226,7 @@ _wave1_write_subject_bundle() {
 
 # ══════════════════════════════════════════════════════════════════════════
 # S16E2E retained-plane infrastructure (adapted verbatim from
-# runtime-consultation-role-gate.bats -- real ensure -> real SupervisorExecutionClaim
+# scripts/tests/lib/role-gate-shared.bash -- real ensure -> real SupervisorExecutionClaim
 # -> real session-run subprocess against a real JSONL fake-codex-app-server protocol
 # peer; the fake substitutes ONLY the external model boundary).
 # ══════════════════════════════════════════════════════════════════════════
@@ -662,7 +667,7 @@ _s16e2e_stop_retained_plane() {
 }
 
 # ══════════════════════════════════════════════════════════════════════════
-# Root-source setup (adapted from runtime-consultation-role-gate.bats's
+# Root-source setup (adapted from runtime-consultation-role-gate-plane.bats's
 # S16-ROOT-SOURCE-E2E spec): real five-role plane -> real root-source CLI -> real
 # Agent/SubagentStart -> real WAL publish+ingress via hook/CLI.
 # ══════════════════════════════════════════════════════════════════════════
@@ -789,7 +794,7 @@ _s16e2e_setup_through_ingress() {
 }
 
 # ══════════════════════════════════════════════════════════════════════════
-# CP-evidence / consult-root helpers (adapted from runtime-consultation-role-gate.bats)
+# CP-evidence / consult-root helpers (adapted from runtime-consultation-role-gate-evidence.bats)
 # ══════════════════════════════════════════════════════════════════════════
 
 _s16e2e_consult_root_plan_root() {

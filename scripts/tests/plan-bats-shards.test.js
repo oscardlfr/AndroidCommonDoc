@@ -9,6 +9,8 @@ const path = require('node:path');
 const { execFileSync } = require('node:child_process');
 const {
   discoverInventory, buildPlan, selectShard, formatNulDelimited, formatPlanReport, parseArgs,
+  computeWeight, itemWeight, MARKER_WEIGHTS, MARKER_PATTERNS,
+  needsMcpServer, parseCiPrerequisites, CI_PREREQUISITE_DIRECTIVE_RE, KNOWN_CI_PREREQUISITES,
 } = require('../tools/plan-bats-shards.cjs');
 
 const PLANNER_PATH = path.join(__dirname, '..', 'tools', 'plan-bats-shards.cjs');
@@ -309,6 +311,154 @@ test('CLI: fails closed (nonzero exit, stderr message) on an out-of-range shard 
   }
 });
 
+// ── weight (Sequence C18: runtime-cost proxy, not raw byte size) ─────────
+
+test('computeWeight adds bytes plus each marker occurrence at its configured weight', () => {
+  const bytes = 1000;
+  const plain = 'no markers here at all';
+  assert.strictEqual(computeWeight(bytes, plain), bytes);
+
+  const oneSpawn = '_start_bridge_bg "$argv_json" BG_OUT';
+  assert.strictEqual(computeWeight(bytes, oneSpawn), bytes + MARKER_WEIGHTS.bridgeSpawn);
+
+  const onePlane = '_s16e2e_start_retained_plane "$session_id"';
+  assert.strictEqual(computeWeight(bytes, onePlane), bytes + MARKER_WEIGHTS.retainedPlaneStart);
+
+  const both = oneSpawn + '\n' + onePlane + '\n' + onePlane;
+  assert.strictEqual(
+    computeWeight(bytes, both),
+    bytes + MARKER_WEIGHTS.bridgeSpawn + 2 * MARKER_WEIGHTS.retainedPlaneStart,
+  );
+});
+
+test('computeWeight counts every alias in the bridgeSpawn pattern (bridge.bats and the role-gate split files each use a different one)', () => {
+  assert.strictEqual(computeWeight(0, '_start_bridge_bg'), MARKER_WEIGHTS.bridgeSpawn);
+  assert.strictEqual(computeWeight(0, '_s16e2e_start_bridge_bg'), MARKER_WEIGHTS.bridgeSpawn);
+  assert.strictEqual(computeWeight(0, '_run_bridge_argv_json'), MARKER_WEIGHTS.bridgeSpawn);
+});
+
+test('itemWeight falls back to .bytes when .weight is absent (hand-built fixtures, backward compatible)', () => {
+  assert.strictEqual(itemWeight({ bytes: 42 }), 42);
+  assert.strictEqual(itemWeight({ bytes: 42, weight: 999 }), 999);
+});
+
+test('buildPlan balances by weight, not raw bytes: a small-bytes/high-marker-count file outweighs a much larger plain file', () => {
+  const heavySmall = {
+    relPath: 'heavy-small.bats', absPath: '/x/heavy-small.bats',
+    bytes: 100, weight: computeWeight(100, '_s16e2e_start_retained_plane '.repeat(3)),
+  };
+  const lightLarge = {
+    relPath: 'light-large.bats', absPath: '/x/light-large.bats',
+    bytes: 900000, weight: 900000,
+  };
+  assert.ok(itemWeight(heavySmall) > itemWeight(lightLarge), 'fixture sanity: three retained-plane starts must outweigh 900000 plain bytes');
+  const plan = buildPlan([heavySmall, lightLarge], 2);
+  // Each in its OWN shard (the greedy balancer never doubles up the two
+  // heaviest items while an empty shard remains) -- proves the DECISION
+  // used weight, since by raw bytes heavySmall (100) would trivially have
+  // been packed alongside lightLarge instead.
+  const shardOf = (relPath) => plan.find((s) => s.files.some((f) => f.relPath === relPath)).index;
+  assert.notStrictEqual(shardOf('heavy-small.bats'), shardOf('light-large.bats'));
+});
+
+// ── mcp-server prerequisite classification ───────────────────────────────
+//
+// Sequence C19 (CI run 34897150035) keyed this off an exact symlink-text
+// line. Sequence C20 replaced that with an explicit, closed, source-
+// controlled directive ("# ci-prerequisite: mcp-server") because splitting
+// runtime-consultation-role-gate.bats into three files sharing a
+// scripts/tests/lib/*.bash helper library moved the symlink line OUT of
+// every *.bats file the planner scans and into the shared library instead --
+// a symlink-text marker would have silently stopped detecting any of the
+// split files. Still content-based, never filename/display-name inference --
+// just anchored to a declared contract instead of an implementation detail.
+
+test('parseCiPrerequisites finds zero, one, or many directive lines and fails closed on an unknown or duplicate name', () => {
+  assert.deepStrictEqual(parseCiPrerequisites('no directive here at all', 'x.bats'), new Set());
+  assert.deepStrictEqual(parseCiPrerequisites('# ci-prerequisite: mcp-server', 'x.bats'), new Set(['mcp-server']));
+  // Whitespace tolerance and mid-file placement.
+  assert.deepStrictEqual(
+    parseCiPrerequisites('line one\n#   ci-prerequisite:   mcp-server  \nline three', 'x.bats'),
+    new Set(['mcp-server']),
+  );
+  assert.throws(
+    () => parseCiPrerequisites('# ci-prerequisite: not-a-real-thing', 'x.bats'),
+    /unknown ci-prerequisite directive: not-a-real-thing/,
+  );
+  assert.throws(
+    () => parseCiPrerequisites('# ci-prerequisite: mcp-server\n# ci-prerequisite: mcp-server', 'x.bats'),
+    /duplicate ci-prerequisite directive: mcp-server/,
+  );
+});
+
+test('KNOWN_CI_PREREQUISITES is currently exactly {mcp-server} -- a deliberately closed set, never open-ended', () => {
+  assert.deepStrictEqual([...KNOWN_CI_PREREQUISITES], ['mcp-server']);
+});
+
+test('needsMcpServer is true only for an explicit ci-prerequisite directive, never a mere textual mention of mcp-server', () => {
+  const plain = 'no mcp-server mention here at all';
+  assert.strictEqual(needsMcpServer(plain, 'x.bats'), false);
+
+  // A mere textual mention (a comment, or a narrower symlink of just one
+  // sub-package, e.g. agent-spawn-validator.bats's own
+  // mcp-server/node_modules/yaml symlink) must NOT trip this -- only the
+  // literal directive line does.
+  const narrowMention = 'ln -sfn "$PROJECT_ROOT/mcp-server/node_modules/yaml" "$tmp_root/mcp-server/node_modules/yaml"';
+  assert.strictEqual(needsMcpServer(narrowMention, 'x.bats'), false);
+  const symlinkAlone = 'ln -s "$BATS_TEST_DIRNAME/../../mcp-server/node_modules" "$PROJ/mcp-server/node_modules"';
+  assert.strictEqual(needsMcpServer(symlinkAlone, 'x.bats'), false);
+
+  assert.strictEqual(needsMcpServer('# ci-prerequisite: mcp-server', 'x.bats'), true);
+});
+
+test('discoverInventory and buildPlan propagate needsMcpServer from the directive to the owning shard', () => {
+  const root = makeFixture({
+    'hot.bats': 10,
+    'cold.bats': 900,
+  });
+  try {
+    fs.writeFileSync(path.join(root, 'hot.bats'), '#!/usr/bin/env bats\n# ci-prerequisite: mcp-server\n');
+    const inventory = discoverInventory(root);
+    const hot = inventory.find((f) => f.relPath.endsWith('/hot.bats'));
+    const cold = inventory.find((f) => f.relPath.endsWith('/cold.bats'));
+    assert.strictEqual(hot.needsMcpServer, true);
+    assert.strictEqual(cold.needsMcpServer, false);
+
+    const plan = buildPlan(inventory, 2);
+    const hotShard = plan.find((s) => s.files.some((f) => f.relPath === hot.relPath));
+    const coldShard = plan.find((s) => s.files.some((f) => f.relPath === cold.relPath));
+    assert.strictEqual(hotShard.needsMcpServer, true);
+    assert.strictEqual(
+      hotShard.files.find((f) => f.relPath === hot.relPath).needsMcpServer, true,
+    );
+    if (coldShard !== hotShard) assert.strictEqual(coldShard.needsMcpServer, false);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('discoverInventory fails closed on a file with an unknown ci-prerequisite directive', () => {
+  const root = makeFixture({ 'bad.bats': 1 });
+  try {
+    fs.writeFileSync(path.join(root, 'bad.bats'), '# ci-prerequisite: bogus-thing\n');
+    assert.throws(() => discoverInventory(root), /unknown ci-prerequisite directive: bogus-thing/);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('formatPlanReport exposes needsMcpServer per shard', () => {
+  const inventory = [
+    { relPath: 'a.bats', absPath: '/x/a.bats', bytes: 10, needsMcpServer: true },
+    { relPath: 'b.bats', absPath: '/x/b.bats', bytes: 20, needsMcpServer: false },
+  ];
+  const plan = buildPlan(inventory, 2);
+  const report = formatPlanReport('scripts/tests', plan, inventory);
+  const shardOf = (relPath) => report.shards.find((s) => s.files.includes(relPath));
+  assert.strictEqual(shardOf('a.bats').needsMcpServer, true);
+  assert.strictEqual(shardOf('b.bats').needsMcpServer, false);
+});
+
 // ── reality check against the real suite ────────────────────────────────
 
 test('REALITY: the real scripts/tests suite plans into 4 shards, exhaustively, with the largest file whole in exactly one shard', () => {
@@ -326,4 +476,113 @@ test('REALITY: the real scripts/tests suite plans into 4 shards, exhaustively, w
     owners[0].files.filter((f) => f.relPath === largest.relPath).length, 1,
     'the largest suite file must appear exactly once within its shard',
   );
+});
+
+// Sequence C18 regression guard: CI run 34897150035 proved that byte-only
+// balancing concentrates runtime-consultation-role-gate.bats,
+// runtime-consultation-e2e.bats, runtime-consultation-protocol.bats and
+// runtime-consultation-windows.bats together in one shard (with
+// runtime-consultation-bridge.bats alone in another) -- the combined shard
+// ran past 20 minutes despite fewer total bytes than the bridge-only shard,
+// because the retained-plane/bridge-spawn cost these three "hot" files
+// carry is not proportional to their byte size. C18's fix pinned the three
+// hot files of that era to three different shards; Sequence C20 then split
+// runtime-consultation-role-gate.bats itself into three files (-core/-plane/
+// -evidence) because even isolated, its own critical path (~19 minutes)
+// remained the outlier -- only -plane and -evidence carry any
+// retained-plane/bridge-spawn marker (-core is deliberately zero-marker, the
+// grant-mechanics tests that never touch a live plane). The current hot set
+// is therefore FOUR files, known by name here (not a display-name/
+// description regex) and expected in four DIFFERENT shards now that
+// shardCount also happens to be four.
+const HOT_BASENAMES = Object.freeze([
+  'runtime-consultation-bridge.bats',
+  'runtime-consultation-role-gate-plane.bats',
+  'runtime-consultation-role-gate-evidence.bats',
+  'runtime-consultation-e2e.bats',
+]);
+
+test('REALITY WEIGHT: bridge/role-gate-plane/role-gate-evidence/e2e (the only files with retained-plane/bridge-spawn markers) are assigned to four different shards', () => {
+  const realTestsDir = path.join(REPO_ROOT, 'scripts', 'tests');
+  const inventory = discoverInventory(realTestsDir);
+  // discoverInventory's relPath is suiteRootArg-relative (absolute here,
+  // since realTestsDir is absolute) -- match by basename suffix, never a
+  // hardcoded repo-relative string shape.
+  const hotEntries = HOT_BASENAMES.map((name) => {
+    const found = inventory.find((f) => f.relPath.endsWith('/' + name));
+    assert.ok(found, `expected suite file missing: ${name}`);
+    return found;
+  });
+  const plan = buildPlan(inventory, 4);
+  const shardOf = (relPath) => plan.find((s) => s.files.some((f) => f.relPath === relPath)).index;
+  const shardIndices = hotEntries.map((f) => shardOf(f.relPath));
+  assert.strictEqual(
+    new Set(shardIndices).size, HOT_BASENAMES.length,
+    `expected ${HOT_BASENAMES.length} distinct shards, got ${JSON.stringify(shardIndices)} for ${JSON.stringify(HOT_BASENAMES)}`,
+  );
+});
+
+test('REALITY WEIGHT: runtime-consultation-role-gate-core.bats (the zero-marker split sibling) carries weight equal to its own bytes', () => {
+  const realTestsDir = path.join(REPO_ROOT, 'scripts', 'tests');
+  const inventory = discoverInventory(realTestsDir);
+  const core = inventory.find((f) => f.relPath.endsWith('/runtime-consultation-role-gate-core.bats'));
+  assert.ok(core, 'expected runtime-consultation-role-gate-core.bats in the real suite');
+  assert.strictEqual(core.weight, core.bytes, 'the core split file must carry zero retained-plane/bridge-spawn markers');
+});
+
+test('REALITY WEIGHT: every top-level suite file other than the four hot files carries zero retained-plane/bridge-spawn markers (weight equals bytes)', () => {
+  const realTestsDir = path.join(REPO_ROOT, 'scripts', 'tests');
+  const inventory = discoverInventory(realTestsDir);
+  const isHot = (relPath) => HOT_BASENAMES.some((name) => relPath.endsWith('/' + name));
+  const unexpectedlyHeavy = inventory.filter((f) => !isHot(f.relPath) && f.weight !== f.bytes);
+  assert.deepStrictEqual(
+    unexpectedlyHeavy.map((f) => f.relPath.split('/').pop()), [],
+    'a new file outside the known four now carries expensive-operation markers -- update HOT_BASENAMES above if intentional',
+  );
+});
+
+// Sequence C20 regression guard: exactly the four files above declare
+// "# ci-prerequisite: mcp-server" (grep-verified against every *.bats file
+// in this suite) -- a DIFFERENT, independently-declared fact from
+// HOT_BASENAMES' own weight-marker membership (one is a derived runtime-cost
+// proxy, the other an authorial directive), which currently happen to
+// coincide but are asserted separately so a future divergence in either
+// direction is caught rather than silently assumed.
+const MCP_PREREQUISITE_BASENAMES = Object.freeze([
+  'runtime-consultation-bridge.bats',
+  'runtime-consultation-role-gate-plane.bats',
+  'runtime-consultation-role-gate-evidence.bats',
+  'runtime-consultation-e2e.bats',
+]);
+
+test('REALITY MCP: exactly the four known files need mcp-server (including the split role-gate siblings); every other suite file, including role-gate-core.bats, does not', () => {
+  const realTestsDir = path.join(REPO_ROOT, 'scripts', 'tests');
+  const inventory = discoverInventory(realTestsDir);
+  const isMcpHot = (relPath) => MCP_PREREQUISITE_BASENAMES.some((name) => relPath.endsWith('/' + name));
+  const mismatched = inventory.filter((f) => f.needsMcpServer !== isMcpHot(f.relPath));
+  assert.deepStrictEqual(
+    mismatched.map((f) => ({ name: f.relPath.split('/').pop(), needsMcpServer: f.needsMcpServer })), [],
+    'needsMcpServer classification disagrees with the known mcp-prerequisite file set -- a file gained/lost its ci-prerequisite directive',
+  );
+});
+
+test('REALITY MCP: in the real 4-shard plan, every shard needsMcpServer exactly iff it holds an mcp-prerequisite file', () => {
+  const realTestsDir = path.join(REPO_ROOT, 'scripts', 'tests');
+  const inventory = discoverInventory(realTestsDir);
+  const plan = buildPlan(inventory, 4);
+  const isMcpHot = (relPath) => MCP_PREREQUISITE_BASENAMES.some((name) => relPath.endsWith('/' + name));
+  const mcpShardIndices = new Set(
+    plan.filter((s) => s.files.some((f) => isMcpHot(f.relPath))).map((s) => s.index),
+  );
+  for (const shard of plan) {
+    assert.strictEqual(
+      shard.needsMcpServer, mcpShardIndices.has(shard.index),
+      `shard ${shard.index} needsMcpServer=${shard.needsMcpServer} disagrees with whether it holds an mcp-prerequisite file`,
+    );
+  }
+  // Under the CURRENT real suite all four mcp-prerequisite files land in
+  // four different shards (the REALITY WEIGHT test above), so every shard
+  // legitimately needs the build today -- no "at least one shard without"
+  // assumption here, since that would no longer be true and would only be
+  // an artifact of today's exact file set, not a real invariant.
 });

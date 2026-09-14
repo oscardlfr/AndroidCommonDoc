@@ -2913,7 +2913,7 @@ for (const row of SIMPLE_SUBCOMMAND_TABLE) {
 // --coordination-root (no complex transaction fixture) and are empirically
 // idempotent (verified directly against the real CLI during this pass's own
 // test-writing) -- so, unlike the target/consultation surface (claim et
-// al., covered in runtime-consultation-role-gate.bats, which cannot reach
+// al., covered in runtime-consultation-role-gate-core.bats, which cannot reach
 // full business success without a real request.json this file does not
 // build), a positive test here CAN and DOES assert genuine end-to-end
 // SUCCESS via a real spawned CLI subprocess, not merely "flag recognized".
@@ -2977,7 +2977,7 @@ function extractRequesterBinding(command) {
 // `rewrittenCommand` (a hookSpecificOutput.updatedInput.command string) --
 // the only way to prove the core genuinely, atomically consumes+validates
 // an injected grant, never merely that the hook's own JSON claims one
-// exists. Mirrors runtime-consultation-role-gate.bats's own
+// exists. Mirrors runtime-consultation-role-gate-core.bats's own
 // _run_cli_command helper.
 function runRewrittenCliCommand(rewrittenCommand) {
   const tokens = rll.parsePosixDirect(rewrittenCommand);
@@ -3318,7 +3318,7 @@ function primeClaudeId01Trace(projDir, agentType, sessionId, agentId) {
 // await-result/record-delivery/takeover/worker-stop/cleanup -- need a real
 // transaction fixture and are out of THIS file's scope; the full requester
 // authority round trip against those, plus the core-level adversarial
-// matrix, lives in runtime-consultation-role-gate.bats.)
+// matrix, lives in runtime-consultation-role-gate-core.bats.)
 const REQUESTER_SIMPLE_SUBCOMMAND_TABLE = [
   { name: 'root-init', buildCmd: rootInitCommand },
   { name: 'root-validate', buildCmd: rootValidateCommand },
@@ -4479,7 +4479,7 @@ const PREMATURE_EXECUTION_GATE_HOOK_FOR_ROOT_SOURCE = path.resolve(__dirname, '.
 // decodeRootSourceBootstrapIntentFromAction) alongside actionId. Does NOT
 // itself run the Agent-gate or SubagentStart -- callers combine this with
 // harnessSuffixRealAgentGate + harnessSuffixRealSubagentStart, mirroring
-// runtime-consultation-role-gate.bats's own _s16e2e_setup_through_binding
+// runtime-consultation-role-gate-plane.bats's own _s16e2e_setup_through_binding
 // steps 3/4/5 exactly.
 function harnessSuffixMintRootSourceAction(proj, sessionId, question) {
   s16PublishRetainedPlane(proj, sessionId);
@@ -4509,7 +4509,7 @@ function harnessSuffixMintRootSourceAction(proj, sessionId, question) {
 // at SubagentStart time -- a SILENT non-owning no-op (exit 0, no binding
 // ever created), never an error -- exactly the ENOENT-on-scandir symptom
 // this helper's own prior absence produced. Mirrors
-// runtime-consultation-role-gate.bats's own _s16e2e_setup_through_binding
+// runtime-consultation-role-gate-plane.bats's own _s16e2e_setup_through_binding
 // step 4 exactly: the gate call's own subagent_type/name are the action's
 // OWN bare canonical payload values (agentTypeP/nameP) -- the harness's
 // suffix decision happens only later, independently, at the SEPARATE

@@ -114,7 +114,7 @@ const HEX_CSPRNG_32_RE = /^[0-9a-f]{32}$/;
 // and the split grant-validation/consumption pipeline
 // were all already generic (keyed off this map's own entries, never a
 // hardcoded subcommand list) -- see RCG-REQ12-*-NOGRANT in
-// runtime-consultation-role-gate.bats.
+// runtime-consultation-role-gate-core.bats.
 function localComputePrincipalId() {
   if (typeof process.getuid === 'function') return 'uid-' + process.getuid();
   return 'user-' + sha256String(os.userInfo().username);

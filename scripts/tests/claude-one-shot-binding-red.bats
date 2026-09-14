@@ -2869,7 +2869,7 @@ _cosb_capability_check() {
 # path math (coordRoot/repoId/waveSlug/planDigest, confirmed by direct read
 # against runtime-consultation-cli.test.js's own planRootPathFor helper).
 # R2-C (M6-M7-R2C-TEST-SEAM-CLOSURE-20260820) seam, mirrors
-# runtime-consultation-role-gate.bats' own _s16e2e_arm_test_routing_seam:
+# scripts/tests/lib/role-gate-shared.bash's own _s16e2e_arm_test_routing_seam:
 # GROUP4 correction round 1 -- the prior helper (materialize a synthetic
 # routing-policies/<digest>.json AFTER publish) never updated the just-
 # published request's own routing_policy_digest field, so every dispatch
@@ -2881,7 +2881,8 @@ _cosb_capability_check() {
 # (so the recorded digest is correct from the start, for every child process
 # this test spawns afterward -- both mint helpers and dispatch itself all
 # inherit the exported env) is the same fix-shape already proven in
-# runtime-consultation-role-gate.bats. $RUNTIME_TMP is this file's own
+# scripts/tests/lib/role-gate-shared.bash's own _s16e2e_arm_test_routing_seam.
+# $RUNTIME_TMP is this file's own
 # setup()-exported TMPDIR (mode 0700), the seam's own containment check target.
 _cosb_g4_arm_test_routing_seam() {
   local target_role="$1"; shift
@@ -3778,7 +3779,7 @@ _c4_publish_terminal_result() {
 # Root-source's mintRoleCommandGrant branch (~4918-4947, own requestId!==
 # ingress.request_id check at mint time, same decoupled argvDigest parameter)
 # is structurally identical -- covered separately in
-# runtime-consultation-role-gate.bats, which already owns this codebase's
+# runtime-consultation-role-gate-evidence.bats, which already owns this codebase's
 # real root-source binding/ingress fixture chain.
 # ══════════════════════════════════════════════════════════════════════════
 

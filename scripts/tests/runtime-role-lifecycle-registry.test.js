@@ -6522,14 +6522,14 @@ test('M7-CLASSIFIER-ADVERSARY-SCAN-CAP-R12-5 (guard, confirm): a family director
 // ════════════════════════════════════════════════════════════════════════════
 // M7 FINAL CORRECTION (test-specialist, batch 3 of 3): R17, structural half
 // ONLY. Mirrors this codebase's own established M7-SUPERSEDED-RESOLVER-ABSENT
-// technique (runtime-consultation-role-gate.bats) for a duplicated per-family
+// technique (runtime-consultation-role-gate-evidence.bats) for a duplicated per-family
 // resolver -- here, runtime-consultation.cjs's own ROOT_SOURCE_INGRESS_FIELDS_LOCAL
 // (~L6277-6291), a logic-duplicate of rll.validateRootSourceIngressRecord's
 // own shape check, confirmed still present and still used by
 // readRootSourceIngressOrThrow via assertClosedShape.
 //
 // A behavioral half (malformed/cross-binding ingress -> real CLI status/
-// detail_code) was ATTEMPTED in runtime-consultation-role-gate.bats, reusing
+// detail_code) was ATTEMPTED in runtime-consultation-role-gate-evidence.bats, reusing
 // the real root-source binding+ingress fixture chain plus the wrapper's
 // `cancel` subcommand -- but was REMOVED after empirically finding that
 // `enforceRootSourceGrantBoundary`/`readRootSourceIngressOrThrow` are not

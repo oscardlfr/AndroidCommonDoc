@@ -27,6 +27,8 @@ bats_require_minimum_version 1.5.0
 # own precedent. Execution claims are minted through the ACTUAL
 # `fakeHostExecutorExecute`, gated behind its own DOUBLE test-capability
 # check -- never a hand-typed guess at either artifact's shape.
+#
+# ci-prerequisite: mcp-server
 
 BRIDGE="$BATS_TEST_DIRNAME/../lib/runtime-bridge-codex.cjs"
 RLL="$BATS_TEST_DIRNAME/../lib/runtime-role-lifecycle.cjs"
@@ -150,7 +152,7 @@ setup() {
   # that tree at all, so any test that reaches a real context-provider turn
   # (e.g. M6-CD-02, which never touches Context7) ENOENTs inside the
   # internal search step before ever reaching its own assertions. Verbatim
-  # copy of runtime-consultation-role-gate.bats's own
+  # copy of scripts/tests/lib/role-gate-shared.bash's own
   # _s16e2e_bootstrap_project precedent: symlink the real checkout's
   # already-built output + node_modules (100MB+, never copied) so resolution
   # succeeds for real instead of stubbing the internal MCP boundary. No
@@ -546,7 +548,7 @@ _mint_execution_claim() {
 }
 
 # R2-C (M6-M7-R2C-TEST-SEAM-CLOSURE-20260820) seam, mirrors
-# runtime-consultation-role-gate.bats' own _s16e2e_arm_test_routing_seam and
+# scripts/tests/lib/role-gate-shared.bash's own _s16e2e_arm_test_routing_seam and
 # claude-one-shot-binding-red.bats' own _cosb_g4_arm_test_routing_seam.
 # M6-CD correction round 1: this file's own _mint_ready_action/_mint_raw_action
 # mints a genuine, real MainOrchestratorBinding as a normal side effect of
@@ -10353,16 +10355,6 @@ _set_ready_timeout_seconds() {
   env -u CODEX_CLI_PATH HOME="$TEST_HOME" "$node_bin" "$PROJ_BRIDGE" session-run "${args[@]}" >"$BG_OUT" 2>&1 &
   BG_PID=$!
 
-  local owner_file="" f
-  for _ in $(seq 1 1000); do
-    for f in "$owner_owners_dir"/*/verifier.json; do
-      if [ -f "$f" ]; then owner_file="$f"; break; fi
-    done
-    [ -n "$owner_file" ] && break
-    sleep 0.01
-  done
-  [ -n "$owner_file" ]
-
   # A genuine bounded window (the SAME _wait_for_pid_exit primitive every
   # other clean-termination test in this file already relies on) for the
   # unresolved-spawn-command path to fail visibly and exit.
@@ -10373,6 +10365,29 @@ _set_ready_timeout_seconds() {
   # app-server spawn command must fail visibly and the process must exit --
   # it must never hang forever as though nothing had been tried.
   [ "$exited" -eq 0 ]
+
+  # C19 correction (CI run 34897150035, shard0 not-ok 405): this used to poll
+  # for the LIVE owner-claim file, but that file is written and unlinked
+  # again inside a genuine single-digit-hundred-ms window -- confirmed live,
+  # a mere 0.2s artificial scheduling delay before this exact subprocess-free
+  # 0.01s-resolution bash-glob poll made it observe the live file 0/5 times.
+  # The sampling gap, not the bound, is what misses it, so no amount of
+  # faster/longer polling can fix this. releaseOwnedRoleOwner
+  # (role-owner-registry.cjs) durably fsyncs a no-clobber tombstone at
+  # <role>/.tombstone/<role>.json.<supervisorInstanceId> BEFORE it ever
+  # unlinks the live file, and session-run-shutdown-coordinator.cjs genuinely
+  # awaits that release before the terminal envelope/exit code is emitted --
+  # so by the time _wait_for_pid_exit above has already confirmed process
+  # exit, the tombstone is unconditionally durable on disk. A single
+  # post-exit existence check is therefore exact proof the owner claim was
+  # genuinely made AND cleanly released, with no window left to miss at all
+  # (confirmed live: the SAME 5/5 delayed runs that missed the live file
+  # found this tombstone 5/5 times).
+  local tomb="" g
+  for g in "$owner_owners_dir"/*/.tombstone/verifier.json.*; do
+    if [ -f "$g" ]; then tomb="$g"; break; fi
+  done
+  [ -n "$tomb" ]
 }
 
 # ══════════════════════════════════════════════════════════════════════════
@@ -12432,7 +12447,7 @@ NODE
 # never-populated `observed` array -- a non-hermetic test that could only
 # ever fail (nothing ever pushed to `observed`), never a false green. This
 # version uses the SAME real HTTPS socket-boundary fixture
-# runtime-consultation-role-gate.bats's own CP-EVIDENCE-E2E family already
+# runtime-consultation-role-gate-evidence.bats's own CP-EVIDENCE-E2E family already
 # established (resolveTestContext7SocketAgent's env-var-driven loopback
 # redirect): a real local TLS server answers from a fixture queue, and every
 # assertion reads back what that server itself actually received over the
@@ -12459,7 +12474,7 @@ _run_s16_cp_context7_supplied_id_zero_search() {
     }]));
   ' "$responses_path"
 
-  # Verbatim copy of runtime-consultation-role-gate.bats's own
+  # Verbatim copy of scripts/tests/lib/role-gate-shared.bash's own
   # _s16e2e_bootstrap_project fake-context7-server.cjs -- same fixture
   # shape/behavior, never a second, independently-typed reimplementation.
   cat > "$server_script" <<'CTX7EOF'
