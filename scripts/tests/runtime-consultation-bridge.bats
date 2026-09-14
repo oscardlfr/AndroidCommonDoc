@@ -15791,13 +15791,32 @@ _u3_bootstrap_bridge() {
   # Same singleton-correlation discipline as APP01: presence.thread_id
   # must equal review.thread_id for the SAME retained arch-platform
   # worker, established before any reservation exists.
+  #
+  # presence is republished with thread_id=null at bootstrap-READY ("idle
+  # is explicitly represented by null", app-server-supervisor-role-bootstrap.cjs)
+  # and only gets a real thread_id once the retained-poll tick actually opens
+  # this worker's review thread (p2-review-thread.cjs's acquireP2ReviewThread)
+  # -- an async event with no promised ordering against the root-consult-ready
+  # wait above. A single same-instant read of the (already-existing, idle)
+  # singleton record can legitimately still show thread_id=null under load;
+  # poll the SAME record until thread_id is populated, mirroring
+  # _u2_wait_singleton's own bounded 0.2s-step discipline, rather than
+  # widening any timeout.
   local presenceSelector
   presenceSelector=$(node -e 'process.stdout.write(JSON.stringify({role: "arch-platform"}))')
-  local presenceRecord
-  presenceRecord=$(_u2_wait_singleton "coordination/worker-presence/v1" "$presenceSelector" 10)
-  [ -n "$presenceRecord" ]
-  local presence_thread_id
-  presence_thread_id="$(_u2_field "$presenceRecord" "thread_id")"
+  local presenceRecord presence_thread_id
+  local presenceWaited=0
+  while true; do
+    presenceRecord=$(_u2_wait_singleton "coordination/worker-presence/v1" "$presenceSelector" 10)
+    [ -n "$presenceRecord" ]
+    presence_thread_id="$(_u2_field "$presenceRecord" "thread_id")"
+    [ -n "$presence_thread_id" ] && break
+    if awk "BEGIN{exit !($presenceWaited >= 10)}"; then
+      break
+    fi
+    sleep 0.2
+    presenceWaited=$(awk "BEGIN{print $presenceWaited + 0.2}")
+  done
   [ -n "$presence_thread_id" ]
 
   local reviewSelector
@@ -16969,6 +16988,33 @@ _u4_app08_branch() {
 # also carry its own sourced dependency (scripts/sh/lib/wave-slug.sh), or a
 # genuine PREP verdict write fails closed with p2-prep-write-verdict-nonzero.
 @test "P2-OWNER-MATERIALIZATION-01 copied write-verdict dependency executes in isolated root" {
+  # CI ambient-dependency fix: .planning/wave*/ is gitignored (local
+  # wave-scoped planning state, never committed -- see .gitignore), so a
+  # fresh GitHub Actions checkout lacks the PLAN.md that resolveSourceFacts()
+  # (runtime-p2-prep-conformance-owner.cjs) reads from the real checkout
+  # root. materializeRootSkeleton only validates digest self-consistency
+  # (the copy matches whatever was read at resolveSourceFacts() time), never
+  # specific PLAN.md content, so materializing a minimal legitimate fixture
+  # here -- only when genuinely absent -- is a complete no-op on any host
+  # where the real local file already exists, and never touches git.
+  # Isolation (Codex Sequence 9 audit): track exactly which of these ambient
+  # paths THIS test creates -- .planning/, its wave dir, and PLAN.md -- so
+  # cleanup below removes only what this test created, never a pre-existing
+  # PLAN or directory, and cleanup runs unconditionally (even when
+  # materializeRootSkeleton returns nonzero), before the captured result is
+  # asserted.
+  local real_planning_dir="$BATS_TEST_DIRNAME/../../.planning"
+  local real_plan_dir="$real_planning_dir/wave-portable-runtime-messaging-adapters"
+  local real_plan_path="$real_plan_dir/PLAN.md"
+  local created_planning_dir=0 created_plan_dir=0 created_plan_file=0
+  [ -d "$real_planning_dir" ] || created_planning_dir=1
+  [ -d "$real_plan_dir" ] || created_plan_dir=1
+  if [ ! -f "$real_plan_path" ]; then
+    created_plan_file=1
+    mkdir -p "$real_plan_dir"
+    printf '# PLAN.md (P2-OWNER-MATERIALIZATION-01 CI fixture)\n\nMinimal placeholder materialized only because this checkout has no local .planning/ tree.\n' > "$real_plan_path"
+  fi
+
   local build_dir="${BATS_TEST_TMPDIR}/p2-owner-materialization-build"
   mkdir -p "$build_dir"
   chmod 0700 "$build_dir"
@@ -16980,9 +17026,20 @@ _u4_app08_branch() {
     const result = owner.materializeRootSkeleton(process.argv[2], "primary");
     process.stdout.write(JSON.stringify({ rootPath: result.rootPath }));
   ' "$owner_path" "$build_dir"
-  [ "$status" -eq 0 ] || { printf '# P2-OWNER-MATERIALIZATION-01 materialize failed: stdout=%s stderr=%s\n' "$output" "$stderr" >&3; false; }
+  # Capture immediately: the two `run` calls later in this test (wave-slug
+  # ownership check, write-verdict.sh) overwrite bats' $status/$output/$stderr.
+  local materialize_status="$status" materialize_output="$output" materialize_stderr="$stderr"
+
+  # Cleanup is unconditional (runs even on nonzero status above) and strictly
+  # bounded to what was created above -- deepest path first, real directories
+  # left untouched even if rmdir would otherwise succeed on them.
+  if [ "$created_plan_file" -eq 1 ]; then rm -f "$real_plan_path"; fi
+  if [ "$created_plan_dir" -eq 1 ]; then rmdir "$real_plan_dir" 2>/dev/null || true; fi
+  if [ "$created_planning_dir" -eq 1 ]; then rmdir "$real_planning_dir" 2>/dev/null || true; fi
+
+  [ "$materialize_status" -eq 0 ] || { printf '# P2-OWNER-MATERIALIZATION-01 materialize failed: stdout=%s stderr=%s\n' "$materialize_output" "$materialize_stderr" >&3; false; }
   local root_path
-  root_path="$(node -e 'process.stdout.write(JSON.parse(process.argv[1]).rootPath)' "$output")"
+  root_path="$(node -e 'process.stdout.write(JSON.parse(process.argv[1]).rootPath)' "$materialize_output")"
   [ -n "$root_path" ]
 
   local wave_slug_lib="$root_path/scripts/sh/lib/wave-slug.sh"
