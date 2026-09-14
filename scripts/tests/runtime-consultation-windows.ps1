@@ -1247,7 +1247,11 @@ Invoke-Case -Name 'W07b deterministic backend/frontend attach reuses one supervi
   # using it here would correctly fail the production argv/path correlation.
   $session = Start-CapturedProcess -FilePath ([string]$action.payload.bridge_argv[0]) -ArgumentList $sessionArgs -EnvVars $bridgeEnv
   try {
-    $readyDeadline = [DateTime]::UtcNow.AddSeconds(15)
+    # Cold-runner observation allowance only (test-side poll, not a production
+    # timeout/expiry/protocol change): GitHub's cold Windows runner can cross a
+    # 15s READY-descriptor poll under the modularized runtime's many small
+    # cold CommonJS loads.
+    $readyDeadline = [DateTime]::UtcNow.AddSeconds(30)
     $descriptorFiles = @()
     do {
       $descriptorFiles = @(Get-ChildItem -LiteralPath $w07bPrivateTemp -Recurse -File -Filter 'deterministic-mcp-loopback.json' -ErrorAction SilentlyContinue)
