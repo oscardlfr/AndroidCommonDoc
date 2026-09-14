@@ -20,8 +20,32 @@ function architectSourceQuestionFor(role) {
   return question;
 }
 const MAX_RECORD_BYTES = 1048576;
-const SEED_CAPS = Object.freeze({ max_files_per_role: 24, max_bytes_per_file: 1048576, max_total_bytes_per_role: 8388608 });
+// Matches the canonical production subject-bundle cap exactly
+// (scripts/lib/runtime-role-lifecycle/p2-subject-bundle.cjs's own
+// max_files_per_role) -- this fixture must stay a REPRESENTATIVE instance of
+// the real cap, never a raised ceiling invented to make a test pass.
+const SEED_CAPS = Object.freeze({ max_files_per_role: 40, max_bytes_per_file: 1048576, max_total_bytes_per_role: 8388608 });
 
+function consultationModuleSeedPaths() {
+  const toolkitRoot = path.resolve(__dirname, '../..');
+  const modulesRoot = path.join(__dirname, 'runtime-consultation');
+  const paths = [];
+  const walk = (dirPath) => {
+    for (const name of fs.readdirSync(dirPath).slice().sort()) {
+      const filePath = path.join(dirPath, name);
+      const stat = fs.lstatSync(filePath);
+      if (stat.isSymbolicLink()) continue;
+      if (stat.isDirectory()) walk(filePath);
+      else if (stat.isFile() && name.endsWith('.cjs')) {
+        paths.push(path.relative(toolkitRoot, filePath).split(path.sep).join('/'));
+      }
+    }
+  };
+  walk(modulesRoot);
+  return paths;
+}
+
+const CONSULTATION_MODULE_SEED_PATHS = consultationModuleSeedPaths();
 const SEED_ENTRIES = Object.freeze([
   Object.freeze({ role: 'arch-integration', path: '.planning/wave-portable-runtime-messaging-adapters/PLAN.md' }),
   Object.freeze({ role: 'arch-integration', path: 'scripts/lib/runtime-bridge-codex.cjs' }),
@@ -34,11 +58,23 @@ const SEED_ENTRIES = Object.freeze([
   Object.freeze({ role: 'arch-platform', path: 'scripts/lib/runtime-bridge-codex.cjs' }),
   Object.freeze({ role: 'arch-platform', path: 'scripts/lib/runtime-consultation.cjs' }),
   Object.freeze({ role: 'arch-platform', path: 'scripts/lib/runtime-role-lifecycle.cjs' }),
-  Object.freeze({ role: 'arch-platform', path: 'scripts/sh/write-verdict.sh' }),
   Object.freeze({ role: 'arch-testing', path: 'scripts/tests/runtime-consultation-bridge.bats' }),
   Object.freeze({ role: 'arch-testing', path: 'scripts/tests/runtime-role-lifecycle-prep-binding.test.js' }),
   Object.freeze({ role: 'arch-testing', path: 'scripts/tests/write-verdict.bats' }),
-]);
+  // The platform and testing reviewers jointly own the consultation
+  // implementation tree; the integration reviewer receives the stable
+  // facades, orchestration tests, PLAN and verdict surface instead of a
+  // duplicate copy of every internal implementation module. Recursive
+  // module inclusion is split evenly across the two roles (never dumped
+  // entirely on one) so that BOTH stay strictly under the real production
+  // max_files_per_role cap (40) with their existing fixed entries included
+  // -- 3 fixed + 29 modules = 32 for arch-platform, 3 fixed + 28 modules =
+  // 31 for arch-testing -- rather than raising the cap to fit.
+  ...CONSULTATION_MODULE_SEED_PATHS.slice(0, Math.ceil(CONSULTATION_MODULE_SEED_PATHS.length / 2)).map((modulePath) =>
+    Object.freeze({ role: 'arch-platform', path: modulePath })),
+  ...CONSULTATION_MODULE_SEED_PATHS.slice(Math.ceil(CONSULTATION_MODULE_SEED_PATHS.length / 2)).map((modulePath) =>
+    Object.freeze({ role: 'arch-testing', path: modulePath })),
+].sort((a, b) => (a.role === b.role ? a.path.localeCompare(b.path) : a.role.localeCompare(b.role))));
 
 const MAX_PINNED_BINARY_BYTES = 512 * 1024 * 1024;
 const EXPECTED_APP_SERVER_ARGS = Object.freeze(['app-server', '--listen', 'stdio://', '--strict-config']);

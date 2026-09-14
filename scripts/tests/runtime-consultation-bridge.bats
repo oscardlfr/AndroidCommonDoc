@@ -1831,7 +1831,7 @@ _inject_action_scan_decoys() {
   [ "$after" = "$replacement" ]
 }
 
-@test "SUP-RDV-11 FAIL: a tombstone-write failure during cleanup (non-writable parent directory) reports ok:false and exits 7, never ok:true" {
+@test "SUP-RDV-11 FAIL: a structurally invalid tombstone directory reports ok:false and exits 7, never ok:true" {
   local action_json argv_json owner_file owner_dir
   action_json="$(_mint_ready_action verifier)"
   argv_json="$(_argv_from_action "$action_json")"
@@ -1840,12 +1840,16 @@ _inject_action_scan_decoys() {
   [ -n "$owner_file" ]
   owner_dir="$(dirname "$owner_file")"
 
-  chmod 0500 "$owner_dir"
+  # A mere mode change is no longer an irreparable failure: the production
+  # registry hardening primitive intentionally restores an owner-controlled
+  # directory before publishing. Occupying the required directory path with
+  # a regular file is deterministic on POSIX and cannot be repaired without
+  # deleting caller-visible data, so cleanup must fail closed.
+  printf '%s\n' 'not-a-directory' > "$owner_dir/.tombstone"
   kill -TERM "$BG_PID"
   local exit_code=0
   wait "$BG_PID" 2>/dev/null || exit_code=$?
   BG_PID=""
-  chmod 0700 "$owner_dir"
 
   [ "$exit_code" -eq 7 ]
   grep -q '"ok":false' "$BG_OUT"
@@ -10166,7 +10170,23 @@ _set_ready_timeout_seconds() {
 @test "C2-B-COVERAGE FAIL: every INBOUND_RUNTIME root genuinely consumed by C2 -- derived from the bundle itself, exactly 25 -- is referenced via generated.roots[...], and the 4 frame-level JSONRPC wrappers additionally carry dedicated behavioral choke-point proof" {
   run node -e '
     const fs = require("fs");
-    const source = fs.readFileSync(process.argv[1], "utf8");
+    const path = require("path");
+    // Sequence 15 extracted every generated.roots[...] call site out of the
+    // facade into the bridge module tree (app-server-protocol-schema.cjs and
+    // siblings) -- so the wiring proof below must scan the whole tree, never
+    // the facade file alone, or it would wrongly report every extracted
+    // reference as missing.
+    const facadeSource = fs.readFileSync(process.argv[1], "utf8");
+    const moduleDir = path.join(path.dirname(process.argv[1]), "runtime-bridge-codex");
+    const moduleSources = [];
+    (function walk(dir) {
+      for (const name of fs.readdirSync(dir).sort()) {
+        const full = path.join(dir, name);
+        if (fs.lstatSync(full).isDirectory()) walk(full);
+        else if (name.endsWith(".cjs")) moduleSources.push(fs.readFileSync(full, "utf8"));
+      }
+    })(moduleDir);
+    const source = [facadeSource, ...moduleSources].join("\n");
     const bundle = require(process.argv[2]);
     const testSource = fs.readFileSync(process.argv[3], "utf8");
     const inboundRoots = Object.keys(bundle.roots).filter((k) => Array.isArray(bundle.roots[k].directions) && bundle.roots[k].directions.includes("INBOUND_RUNTIME"));
@@ -10413,13 +10433,19 @@ _set_ready_timeout_seconds() {
     if (typeof bridge.__testOnlyStartOwnedAppServerSupervisorEngine !== "function") {
       throw new Error("missing __testOnlyStartOwnedAppServerSupervisorEngine export");
     }
-    const source = fs.readFileSync(bridgePath, "utf8");
+    // Sequence 15 extracted cmdConformance out of the facade into its own
+    // module (cmd-conformance.cjs); main(argv) stayed in the facade, so the
+    // two markers this test bounds itself with no longer live in the same
+    // file. Scan cmdConformance in its own confirmed owner module instead.
+    const path = require("path");
+    const modulePath = path.join(path.dirname(bridgePath), "runtime-bridge-codex", "cmd-conformance.cjs");
+    const source = fs.readFileSync(modulePath, "utf8");
     const startMarker = "function cmdConformance(rawArgv)";
-    const endMarker = "function main(argv)";
+    const endMarker = "function cmdConformanceMcpStub";
     const startIndex = source.indexOf(startMarker);
     const endIndex = source.indexOf(endMarker, startIndex);
     if (startIndex === -1 || endIndex === -1 || endIndex <= startIndex) {
-      throw new Error("could not locate cmdConformance body boundaries");
+      throw new Error("could not locate cmdConformance body boundaries in " + modulePath);
     }
     const body = source.slice(startIndex, endIndex);
     if (body.includes("startOwnedAppServerSupervisorEngine") || body.includes("runOwnedAppServerSupervisorEngine")) {
@@ -13188,7 +13214,11 @@ _app_live_completion_guard() {
   # never a direct in-process handler call or export-based bypass.
   local body launches_lifecycle_child no_direct_bypass
   local source_launches_ok="false" source_no_bypass_ok="false"
-  body="$(awk '/^function main\(/{exit} /^function cmdConformance\(/{p=1} p' "$BRIDGE")"
+  # Sequence 15 extracted the app-server conformance flow (including this
+  # exact consult-root child spawn) out of cmdConformance into its own
+  # dedicated module -- see the APP-LIVE-CLEANUP-01 fix above for the same
+  # relocation.
+  body="$(cat "$(dirname "$BRIDGE")/runtime-bridge-codex/cmd-conformance-app-server.cjs")"
   launches_lifecycle_child="$(node -e 'const b=process.argv[1]; process.stdout.write(String(b.includes("runtime-role-lifecycle.cjs") && b.includes("consult-root")))' "$body")"
   no_direct_bypass="$(node -e '
     const b = process.argv[1];
@@ -13599,7 +13629,13 @@ _app_live_completion_guard() {
   # exact composition sequence94/95 froze and this binding requires.
   local body worker_cleanup_mentioned direct_call_present
   local worker_cleanup_mentioned_ok="false" no_direct_cleanup_call_ok="false"
-  body="$(awk '/^function main\(/{exit} /^function cmdConformance\(/{p=1} p' "$BRIDGE")"
+  # Sequence 15 extracted the app-server conformance flow (including the
+  # bounded worker-cleanup child spawn) out of cmdConformance into its own
+  # dedicated module (runtime-bridge-codex/cmd-conformance-app-server.cjs),
+  # which cmdConformance (now just a thin dispatcher in cmd-conformance.cjs)
+  # delegates to for mode:'app-server' -- scan the module that actually owns
+  # the behavior this test characterizes.
+  body="$(cat "$(dirname "$BRIDGE")/runtime-bridge-codex/cmd-conformance-app-server.cjs")"
   worker_cleanup_mentioned="$(node -e 'process.stdout.write(String(process.argv[1].includes("worker-cleanup")))' "$body")"
   direct_call_present="$(node -e 'process.stdout.write(String(process.argv[1].includes("cmdWorkerCleanup(")))' "$body")"
   [ "$worker_cleanup_mentioned" = "true" ] && worker_cleanup_mentioned_ok="true"
@@ -14391,18 +14427,23 @@ _app_live_prep_run_write_verdict() {
   (cd "$PROJ" && bash scripts/sh/write-verdict.sh "$@")
 }
 
-# Prepares the ONE exact PLAN and all seed bytes BEFORE any authority is
-# minted: replaces the scratch default wave-bridge-test-wave PLAN with the
-# exact copied wave-portable-runtime-messaging-adapters PLAN.md and copies
-# the exact Codex-bound seed files (current worktree bytes) into
-# scratch, so discoverPlan, the main binding, the action, the seed and the
-# request all bind the same single PLAN from birth. Plan topology is never
-# changed again after this point.
+# Prepares one hermetic PLAN and all seed bytes BEFORE any authority is
+# minted. The PLAN fixture is synthesized from tracked test semantics rather
+# than copied from the developer-only .planning tree (which is absent in CI).
+# Exact Codex-bound source bytes are copied into scratch so discoverPlan, the
+# main binding, the action, the seed and the request all bind the same single
+# PLAN from birth. Plan topology is never changed again after this point.
 _app_live_prep_prepare_seed_and_plan() {
   local real_root; real_root="$(cd "$BATS_TEST_DIRNAME/../.." && pwd -P)"
   rm -rf "$PROJ/.planning/wave-$WAVE_SLUG"
   mkdir -p "$PROJ/.planning/wave-$APP_LIVE_PREP_WAVE_SLUG"
-  cp "$real_root/.planning/wave-$APP_LIVE_PREP_WAVE_SLUG/PLAN.md" "$PROJ/.planning/wave-$APP_LIVE_PREP_WAVE_SLUG/PLAN.md"
+  printf '%s\n' \
+    '# Portable runtime messaging adapters test plan' \
+    '' \
+    '## P2 — authentic CP/PREP' \
+    '' \
+    'Sequential three-architect closeout contract for the hermetic APP-LIVE-PREP fixture.' \
+    > "$PROJ/.planning/wave-$APP_LIVE_PREP_WAVE_SLUG/PLAN.md"
   local rel
   for rel in \
     scripts/lib/runtime-bridge-codex.cjs scripts/lib/runtime-consultation.cjs \
@@ -14413,6 +14454,8 @@ _app_live_prep_prepare_seed_and_plan() {
     mkdir -p "$(dirname "$PROJ/$rel")"
     cp "$real_root/$rel" "$PROJ/$rel"
   done
+  mkdir -p "$PROJ/scripts/lib/runtime-consultation"
+  cp -R "$real_root/scripts/lib/runtime-consultation/." "$PROJ/scripts/lib/runtime-consultation/"
   export RLL="$PROJ/scripts/lib/runtime-role-lifecycle.cjs"
   export PROJ_BRIDGE="$PROJ/scripts/lib/runtime-bridge-codex.cjs"
   export PROJ_GRANT_WRAPPER="$PROJ/scripts/tests/fixtures/runtime-consultation-grant-wrapper.cjs"
@@ -14427,13 +14470,13 @@ _app_live_prep_prepare_seed_and_plan() {
 _app_live_prep_seal_seed() {
   run --separate-stderr node -e '
     const rll = require(process.argv[1]);
+    const path = require("path");
     const projectRoot = process.argv[2];
     const waveSlug = process.argv[3];
     const planRel = ".planning/wave-" + waveSlug + "/PLAN.md";
     const entries = [
       { role: "arch-platform", path: "scripts/lib/runtime-consultation.cjs" },
       { role: "arch-platform", path: "scripts/lib/runtime-role-lifecycle.cjs" },
-      { role: "arch-platform", path: "scripts/sh/write-verdict.sh" },
       { role: "arch-testing", path: "scripts/tests/runtime-consultation-bridge.bats" },
       { role: "arch-testing", path: "scripts/tests/runtime-role-lifecycle-prep-binding.test.js" },
       { role: "arch-testing", path: "scripts/tests/write-verdict.bats" },
@@ -14444,8 +14487,41 @@ _app_live_prep_seal_seed() {
       { role: "arch-integration", path: "scripts/tests/runtime-consultation-bridge.bats" },
       { role: "arch-integration", path: "scripts/tests/runtime-role-lifecycle-prep-binding.test.js" },
       { role: "arch-integration", path: "scripts/tests/write-verdict.bats" },
-    ].sort((a, b) => (a.role === b.role ? a.path.localeCompare(b.path) : a.role.localeCompare(b.role)));
-    const caps = { max_files_per_role: 24, max_bytes_per_file: 1048576, max_total_bytes_per_role: 8388608 };
+    ];
+    const fs = require("fs");
+    const modulesRoot = path.join(projectRoot, "scripts", "lib", "runtime-consultation");
+    const modulePaths = [];
+    const walk = (dirPath) => {
+      for (const name of fs.readdirSync(dirPath).slice().sort()) {
+        const filePath = path.join(dirPath, name);
+        const stat = fs.lstatSync(filePath);
+        if (stat.isSymbolicLink()) continue;
+        if (stat.isDirectory()) walk(filePath);
+        else if (stat.isFile() && name.endsWith(".cjs")) {
+          modulePaths.push(path.relative(projectRoot, filePath).split(path.sep).join("/"));
+        }
+      }
+    };
+    walk(modulesRoot);
+    // Split evenly across the two implementing-reviewer roles so BOTH stay
+    // strictly under the real production max_files_per_role cap (40) with
+    // their own fixed entries included, never by raising the cap to fit a
+    // one-role dump (arch-platform: 2 fixed + 29 modules = 31; arch-testing:
+    // 3 fixed + 28 modules = 31).
+    const half = Math.ceil(modulePaths.length / 2);
+    for (const modulePath of modulePaths.slice(0, half)) {
+      entries.push({ role: "arch-platform", path: modulePath });
+    }
+    for (const modulePath of modulePaths.slice(half)) {
+      entries.push({ role: "arch-testing", path: modulePath });
+    }
+    const counts = new Map();
+    for (const entry of entries) counts.set(entry.role, (counts.get(entry.role) || 0) + 1);
+    for (const [role, count] of counts) {
+      if (count > 40) throw new Error(`APP-LIVE-PREP seed exceeds per-role cap: ${role}=${count}`);
+    }
+    entries.sort((a, b) => (a.role === b.role ? a.path.localeCompare(b.path) : a.role.localeCompare(b.role)));
+    const caps = { max_files_per_role: 40, max_bytes_per_file: 1048576, max_total_bytes_per_role: 8388608 };
     const result = rll.sealP2SubjectBundleInput(projectRoot, { waveSlug, entries, caps });
     process.stdout.write(JSON.stringify(result));
   ' "$RLL" "$PROJ" "$APP_LIVE_PREP_WAVE_SLUG"

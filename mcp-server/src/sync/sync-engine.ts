@@ -835,6 +835,9 @@ export async function computeRuntimeToolkitInventory(toolkitRoot: string): Promi
     ...["init-session", "resume-work", "work", "ingest-content", "monitor-docs"].map((skill) => `skills/${skill}/SKILL.md`),
     ...["init-session", "resume-work", "work", "ingest-content", "monitor-docs"].map((command) => `.claude/commands/${command}.md`),
   ];
+  await collectInventoryDirectory(canonicalRoot, "scripts/lib/runtime-consultation", files);
+  await collectInventoryDirectory(canonicalRoot, "scripts/lib/runtime-role-lifecycle", files);
+  await collectInventoryDirectory(canonicalRoot, "scripts/lib/runtime-bridge-codex", files);
   await collectInventoryDirectory(canonicalRoot, "mcp-server/build", files);
   const unique = [...new Set(files)].sort();
   const inventory: RuntimeToolkitInventoryEntry[] = [];

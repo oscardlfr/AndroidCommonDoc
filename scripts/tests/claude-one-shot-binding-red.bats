@@ -97,6 +97,7 @@ bats_require_minimum_version 1.5.0
 # Invocation: bats scripts/tests/claude-one-shot-binding-red.bats (from repo root)
 
 RLL_IMPL="$BATS_TEST_DIRNAME/../lib/runtime-role-lifecycle.cjs"
+RLL_MODULE_DIR="$BATS_TEST_DIRNAME/../lib/runtime-role-lifecycle"
 RC_IMPL="$BATS_TEST_DIRNAME/../lib/runtime-consultation.cjs"
 HOOK="$BATS_TEST_DIRNAME/../../.claude/hooks/subagent-start-context-bundle.js"
 # HARD NO-GO correction (2026-08-15): moved up from its own former spot
@@ -216,17 +217,29 @@ teardown() {
   [ "$status" -eq 0 ]
 }
 
-@test "COSB-MISSING-SCHEMA-LITERAL: either runtime-role-lifecycle.cjs or runtime-consultation.cjs contains the literal schema string 'runtime/claude-one-shot-binding/v1' -- confirms the schema itself, not merely a conveniently-named constructor pair, lands (a differently-named implementation using the correct literal schema would still satisfy THIS check, so it does not silently miss a same-behavior/different-name landing). Pre-fix, neither file contained this literal anywhere." {
+@test "COSB-MISSING-SCHEMA-LITERAL: the lifecycle facade/package or runtime-consultation.cjs contains the literal schema string 'runtime/claude-one-shot-binding/v1' -- confirms the schema itself, not merely a conveniently-named constructor pair, lands (a differently-named implementation using the correct literal schema would still satisfy THIS check, so it does not silently miss a same-behavior/different-name landing). Pre-fix, neither file contained this literal anywhere." {
   run node -e '
     const fs = require("fs");
+    const path = require("path");
     const needle = "runtime/claude-one-shot-binding/v1";
-    const files = [process.argv[1], process.argv[2]];
+    const files = [process.argv[1], process.argv[3]];
+    const visit = (dir) => {
+      for (const name of fs.readdirSync(dir).sort()) {
+        const candidate = path.join(dir, name);
+        const stat = fs.lstatSync(candidate);
+        if (stat.isSymbolicLink()) process.exit(2);
+        if (stat.isDirectory()) visit(candidate);
+        else if (stat.isFile()) files.push(candidate);
+        else process.exit(2);
+      }
+    };
+    visit(process.argv[2]);
     let found = false;
     for (const f of files) {
       if (fs.readFileSync(f, "utf8").includes(needle)) { found = true; break; }
     }
     process.exit(found ? 0 : 1);
-  ' "$RLL_IMPL" "$RC_IMPL"
+  ' "$RLL_IMPL" "$RLL_MODULE_DIR" "$RC_IMPL"
   [ "$status" -eq 0 ]
 }
 

@@ -409,7 +409,7 @@ describe('Artifact A: s16ResolveMixedReviewPair', () => {
     // frozen and its detail_code vocabulary is closed, so the reason goes to stderr, which is not
     // part of the ABI; stdout stays byte-identical.
     const source = fs.readFileSync(
-      path.join(__dirname, '..', 'lib', 'runtime-role-lifecycle.cjs'), 'utf8',
+      path.join(__dirname, '..', 'lib', 'runtime-role-lifecycle', 'cli-envelope.cjs'), 'utf8',
     );
     const helperAt = source.indexOf('function reportRetainedPairRejection(');
     assert.ok(helperAt > 0, 'the lifecycle CLI must report a retained-pair rejection');
@@ -421,12 +421,17 @@ describe('Artifact A: s16ResolveMixedReviewPair', () => {
     assert.ok(/catch \(err\) \{/.test(helper),
       'a diagnostic must never be able to change the outcome it is describing');
 
-    // Both call sites report before emitting their ordinary envelope.
+    // Both call sites report before emitting their ordinary envelope. handleConsultRoot and
+    // handleMixedReviewRequest now live in cli-consult-handlers.cjs (see that module's own
+    // header comment).
+    const consultSource = fs.readFileSync(
+      path.join(__dirname, '..', 'lib', 'runtime-role-lifecycle', 'cli-consult-handlers.cjs'), 'utf8',
+    );
     for (const command of ['consult-root', 'mixed-review-request']) {
       const reportCall = `reportRetainedPairRejection('${command}', retained);`;
       const emitCall = `unavailableError('${command}', 'CAPABILITY_UNAVAILABLE');`;
-      const reportAt = source.indexOf(reportCall);
-      const emitAt = source.indexOf(emitCall);
+      const reportAt = consultSource.indexOf(reportCall);
+      const emitAt = consultSource.indexOf(emitCall);
       assert.ok(reportAt > 0, command + ' must report its rejection reason');
       assert.ok(emitAt > reportAt && emitAt - reportAt < 80,
         command + ' must report immediately before emitting CAPABILITY_UNAVAILABLE');
@@ -578,7 +583,9 @@ function isolateFunctionBody(sourcePath, functionName) {
   return lines.slice(startIdx, endIdx + 1).join('\n');
 }
 
-const RBC_SOURCE_PATH = path.resolve(__dirname, '../lib/runtime-bridge-codex.cjs');
+// Sequence 15: executeMixedReviewRequest was relocated out of the facade
+// into its own extracted module -- see that module's own header comment.
+const ROOT_MIXED_REVIEW_SOURCE_PATH = path.resolve(__dirname, '../lib/runtime-bridge-codex/root-mixed-review.cjs');
 
 describe('Artifact B: executeMixedReviewRequest (fixed signature, no internal re-resolution)', () => {
   test('export exists (RED until toolkit-specialist companion dispatch lands)', () => {
@@ -586,7 +593,7 @@ describe('Artifact B: executeMixedReviewRequest (fixed signature, no internal re
   });
 
   test('structural: the function own body never references s16ResolveRetainedPair or resolveLiveCodexAppServerWorker (the bug class is impossible by construction, not just avoided at runtime)', () => {
-    const body = isolateFunctionBody(RBC_SOURCE_PATH, 'executeMixedReviewRequest');
+    const body = isolateFunctionBody(ROOT_MIXED_REVIEW_SOURCE_PATH, 'executeMixedReviewRequest');
     assert.ok(body, 'could not isolate executeMixedReviewRequest own body via the real on-disk source -- function-not-found or body exceeds the 500-line isolation window');
     assert.ok(!body.includes('s16ResolveRetainedPair'), 'executeMixedReviewRequest own body still references s16ResolveRetainedPair -- the internal re-resolution regression may have returned');
     assert.ok(!body.includes('resolveLiveCodexAppServerWorker'), 'executeMixedReviewRequest own body still references resolveLiveCodexAppServerWorker directly -- the internal re-resolution regression may have returned');
@@ -964,6 +971,43 @@ describe('Artifact D: collectPendingMixedReviewRequest (poll-loop hook, sibling 
 
       rll.readRegistryRecord = () => ({ ok: false, reason: 'SECURITY_INVALID' });
       assert.throws(() => fn(worker, '/fake/coordination/root'), /SECURITY_INVALID/, 'stable security failures must remain fail-closed');
+    } finally {
+      rll.listPendingMixedReviewIntentsForRole = originalList;
+      rll.readRegistryRecord = originalRead;
+    }
+  });
+
+  test('a rejected dispatch reports through the injected supervisor callback without a free-variable failure', async () => {
+    const fn = rbc.__testOnlyCollectPendingMixedReviewRequest;
+    const originalList = rll.listPendingMixedReviewIntentsForRole;
+    const originalRead = rll.readRegistryRecord;
+    const worker = makeFakeWorker({ repoDescriptor: { repoId: crypto.randomBytes(32).toString('hex') } });
+    const text = 'rejected dispatch subject';
+    let reported = null;
+    try {
+      rll.listPendingMixedReviewIntentsForRole = () => ({
+        ok: true,
+        intents: [{ intent_id: crypto.randomBytes(16).toString('hex') }],
+      });
+      rll.readRegistryRecord = () => ({
+        ok: true,
+        absent: false,
+        obj: {
+          schema: 'runtime/mixed-review-subject/v1',
+          text,
+          digest: crypto.createHash('sha256').update(text, 'utf8').digest('hex'),
+        },
+      });
+      fn(
+        worker,
+        '/fake/coordination/root',
+        (error) => { reported = error; },
+        () => Promise.reject(new Error('synthetic-dispatch-failure')),
+      );
+      assert.ok(worker.activePromise, 'the rejected request must still enter the single-flight slot');
+      await worker.activePromise;
+      assert.strictEqual(reported && reported.message, 'synthetic-dispatch-failure');
+      assert.strictEqual(worker.activePromise, null, 'finally must release the single-flight slot');
     } finally {
       rll.listPendingMixedReviewIntentsForRole = originalList;
       rll.readRegistryRecord = originalRead;

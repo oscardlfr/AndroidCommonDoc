@@ -141,6 +141,13 @@ $ProgressPreference = 'SilentlyContinue'
 
 $RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $BridgeImplPath = (Resolve-Path (Join-Path $PSScriptRoot '..\lib\runtime-bridge-codex.cjs')).Path
+$BridgeAppServerPinPath = (Resolve-Path (Join-Path $PSScriptRoot '..\lib\runtime-bridge-codex\app-server-pin.cjs')).Path
+$BridgePreflightProbesPath = (Resolve-Path (Join-Path $PSScriptRoot '..\lib\runtime-bridge-codex\preflight-probes.cjs')).Path
+$BridgeCredentialModulePaths = @(
+  (Resolve-Path (Join-Path $PSScriptRoot '..\lib\runtime-bridge-codex\credential-source-read.cjs')).Path,
+  (Resolve-Path (Join-Path $PSScriptRoot '..\lib\runtime-bridge-codex\credential-source-provider.cjs')).Path,
+  (Resolve-Path (Join-Path $PSScriptRoot '..\lib\runtime-bridge-codex\credential-evidence-store.cjs')).Path
+)
 
 # "Harness-created" test capability (same rationale as runtime-consultation-
 # windows.ps1's own $TestCapability) -- a value distinct from every other
@@ -432,11 +439,11 @@ process.stdout.write(JSON.stringify(result === undefined ? null : result, replac
 # Real (non-mocked) structural source-scan for the PLATFORM case -- see the
 # file header's "PLATFORM CASE (c)" note for why this is a source-text proof
 # rather than a dynamic one. Isolates the named top-level function's own body
-# by finding its `function <name>(` declaration line (column 0, this file's
-# own established style throughout runtime-bridge-codex.cjs) through the next
-# column-0 `}` line, then checks for substrings within that isolated body
-# only -- never a whole-file scan, so a coincidental match elsewhere in this
-# 18000+ line file cannot produce a false pass. Extended (TOCTOU snapshot-
+# by finding its `function <name>(` declaration line in the facade or its
+# bounded internal owner module, through the next closing brace at the same
+# indentation, then checks for substrings within that isolated body
+# only -- never a whole-owner scan, so a coincidental match elsewhere in the
+# facade or its module tree cannot produce a false pass. Extended (TOCTOU snapshot-
 # mismatch coverage, arch-platform verdict) with a third field,
 # hasSnapshotCompare, reused by the new SNAPSHOT cases below -- same
 # isolated-body text, no separate scan.
@@ -448,14 +455,16 @@ const functionName = process.argv[2];
 const posixReasonLiteral = process.argv[3];
 const source = fs.readFileSync(bridgePath, 'utf8');
 const lines = source.split(/\r?\n/);
-const startIdx = lines.findIndex((line) => line.startsWith('function ' + functionName + '('));
+const startPattern = new RegExp('^(\\s*)function ' + functionName + '\\(');
+const startIdx = lines.findIndex((line) => startPattern.test(line));
 if (startIdx < 0) {
   process.stderr.write('function-not-found:' + functionName + '\n');
   process.exit(1);
 }
+const functionIndent = startPattern.exec(lines[startIdx])[1];
 let endIdx = -1;
 for (let i = startIdx + 1; i < lines.length && i - startIdx <= 500; i++) {
-  if (lines[i] === '}') { endIdx = i; break; }
+  if (lines[i] === functionIndent + '}') { endIdx = i; break; }
 }
 if (endIdx < 0) {
   process.stderr.write('function-end-not-found-within-500-lines:' + functionName + '\n');
@@ -500,7 +509,19 @@ function Invoke-Site4 {
 
 function Invoke-StructuralScan {
   param([Parameter(Mandatory)][string]$FunctionName, [Parameter(Mandatory)][string]$PosixReasonLiteral)
-  return Invoke-ChildProcess -FilePath 'node' -ArgumentList @('-e', $script:StructuralPlatformScopeScript, $BridgeImplPath, $FunctionName, $PosixReasonLiteral)
+  $ownerPath = $BridgeImplPath
+  if ($FunctionName -eq 'readProtectedHostCodexPin' -or $FunctionName -eq 'validatePinnedCodexExecutable') {
+    $ownerPath = $BridgeAppServerPinPath
+  } elseif ($FunctionName -eq 'r2ReadOwnedAuthFileSecurely') {
+    $ownerPath = $BridgePreflightProbesPath
+  } elseif ($FunctionName -eq 'readOwnedStableBuffer' -or $FunctionName -eq 'readCredentialSourceFd' -or $FunctionName -eq 'createCredentialSourceProvider' -or $FunctionName -eq 'readCredentialAbsenceCheckpointsFd') {
+    $matches = @($BridgeCredentialModulePaths | Where-Object {
+      (Get-Content -LiteralPath $_ -Raw).Contains("function $FunctionName(")
+    })
+    if ($matches.Count -ne 1) { throw "expected one implementation owner for $FunctionName, found $($matches.Count)" }
+    $ownerPath = $matches[0]
+  }
+  return Invoke-ChildProcess -FilePath 'node' -ArgumentList @('-e', $script:StructuralPlatformScopeScript, $ownerPath, $FunctionName, $PosixReasonLiteral)
 }
 
 # ─────────────────────────────────────────────────────────────────────────────

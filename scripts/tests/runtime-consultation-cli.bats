@@ -1370,7 +1370,20 @@ _wait_for_rendezvous_ready() {
 @test "CANCEL-AUDIT-01 source-audit: the shape-check pattern assertClosedShape(o, CANCEL_V1_FIELDS) appears in exactly the three sanctioned cancel.json choke-point wrappers (readCanonicalCancelRecordOptional, readCanonicalCancelRecordRequired, classifyCanonicalCancelRecord), never inline at a command body -- mechanically enforces Codex NO-GO round 8's 'single choke point, no alternative readers' requirement." {
   run node -e '
     const fs = require("fs");
-    const src = fs.readFileSync(process.argv[1], "utf8");
+    const path = require("path");
+    function regularSources(root) {
+      const found = [];
+      for (const entry of fs.readdirSync(root, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
+        const candidate = path.join(root, entry.name);
+        const stat = fs.lstatSync(candidate);
+        if (stat.isSymbolicLink()) continue;
+        if (stat.isDirectory()) found.push(...regularSources(candidate));
+        else if (stat.isFile() && entry.name.endsWith(".cjs")) found.push(candidate);
+      }
+      return found;
+    }
+    const sources = [process.argv[1], ...regularSources(path.join(path.dirname(process.argv[1]), "runtime-consultation"))];
+    const src = sources.map((source) => fs.readFileSync(source, "utf8")).join("\n");
     const pattern = "assertClosedShape(o, CANCEL_V1_FIELDS)";
     const count = src.split(pattern).length - 1;
     if (count !== 3) {
@@ -1399,7 +1412,20 @@ _wait_for_rendezvous_ready() {
 @test "CANCEL-AUDIT-02 source-audit: the ONLY literal references to the cancel.json filename and the ONLY calls to cancelPathFor() are inside the sanctioned choke-point wrappers, the one known writer, or cancelPathFor's own definition -- mechanically strengthens CANCEL-AUDIT-01 against a raw reader, an aliased field table, or a hand-rolled shape-check that never calls assertClosedShape at all (Codex NO-GO round 10: a bare textual count of one specific call pattern would not catch any of those)." {
   run node -e '
     const fs = require("fs");
-    const src = fs.readFileSync(process.argv[1], "utf8");
+    const path = require("path");
+    function regularSources(root) {
+      const found = [];
+      for (const entry of fs.readdirSync(root, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
+        const candidate = path.join(root, entry.name);
+        const stat = fs.lstatSync(candidate);
+        if (stat.isSymbolicLink()) continue;
+        if (stat.isDirectory()) found.push(...regularSources(candidate));
+        else if (stat.isFile() && entry.name.endsWith(".cjs")) found.push(candidate);
+      }
+      return found;
+    }
+    const sources = [process.argv[1], ...regularSources(path.join(path.dirname(process.argv[1]), "runtime-consultation"))];
+    const src = sources.map((source) => fs.readFileSync(source, "utf8")).join("\n");
 
     // 1. The literal filename string must appear in EXACTLY three places: cancelPathFor
     //    itself (the sole path constructor), the filename check inside

@@ -91,6 +91,25 @@ test('BRIDGE-NOCONSOLE never paints a console window on the operator\'s desktop'
     ['runtime-role-lifecycle.cjs', path.join(__dirname, '..', 'lib', 'runtime-role-lifecycle.cjs')],
     ['claude-functional-certification.cjs', path.join(__dirname, '..', 'tools', 'claude-functional-certification.cjs')],
   ];
+  const runtimeModuleRoots = [
+    path.join(__dirname, '..', 'lib', 'runtime-consultation'),
+    path.join(__dirname, '..', 'lib', 'runtime-bridge-codex'),
+  ];
+  const walkRuntimeModules = (dirPath) => {
+    for (const name of fs.readdirSync(dirPath).slice().sort()) {
+      const filePath = path.join(dirPath, name);
+      const stat = fs.lstatSync(filePath);
+      if (stat.isSymbolicLink()) continue;
+      if (stat.isDirectory()) walkRuntimeModules(filePath);
+      else if (stat.isFile() && name.endsWith('.cjs')) {
+        sources.push([
+          path.relative(path.join(__dirname, '..', 'lib'), filePath).split(path.sep).join('/'),
+          filePath,
+        ]);
+      }
+    }
+  };
+  for (const moduleRoot of runtimeModuleRoots) walkRuntimeModules(moduleRoot);
   const spawnCall = /\b(?:spawn|spawnSync|execFile|execFileSync)\(/;
   const commentLine = /^\s*(?:\/\/|\*|\/\*)/;
   const bareIdentifierArgument = /^\s*([A-Za-z_$][\w$]*),\s*$/;
@@ -176,9 +195,12 @@ test('BRIDGE-GENRETIRED the retained supervisor observes its own retirement and 
       'an unusable liveness answer must never be read as still-live: ' + JSON.stringify(unusable));
   }
 
-  const source = fs.readFileSync(path.join(__dirname, '..', 'lib', 'runtime-bridge-codex.cjs'), 'utf8');
+  // Sequence 15: retainedSessionGenerationStatus was relocated out of the
+  // facade into the per-connection composition root that now defines it.
+  const source = fs.readFileSync(path.join(__dirname, '..', 'lib', 'runtime-bridge-codex', 'app-server-connection.cjs'), 'utf8');
   // It re-uses the existing liveness proof rather than inventing a second one.
   const helperAt = source.indexOf('function retainedSessionGenerationStatus(');
+  assert.ok(helperAt >= 0, 'test precondition: retainedSessionGenerationStatus must exist as a named function');
   const helper = source.slice(helperAt, source.indexOf('\nfunction ', helperAt + 1));
   assert.ok(helper.includes('sessionGenerationIsLive'),
     'the re-check must reuse the existing session-generation proof, never a second one');
@@ -187,10 +209,15 @@ test('BRIDGE-GENRETIRED the retained supervisor observes its own retirement and 
 
   // The retained service loop consults it before admitting work, and again per worker, exactly
   // where it already re-checks its own session expiry -- so retirement during work stops the loop
-  // from taking anything new, while shutdown settles what this supervisor already owns.
-  const loopAt = source.indexOf('const pollRetainedWorkers = async () => {');
+  // from taking anything new, while shutdown settles what this supervisor already owns. The whole
+  // retained-worker poll loop now lives in its own extracted module -- see
+  // app-server-supervisor-retained-polling.cjs's own header comment.
+  const retainedPollingSource = fs.readFileSync(
+    path.join(__dirname, '..', 'lib', 'runtime-bridge-codex', 'app-server-supervisor-retained-polling.cjs'), 'utf8',
+  );
+  const loopAt = retainedPollingSource.indexOf('const pollRetainedWorkers = async () => {');
   assert.ok(loopAt > 0, 'the retained service loop must exist');
-  const loop = source.slice(loopAt, source.indexOf('\n  const workerFailureSignal', loopAt) + 1 || source.length);
+  const loop = retainedPollingSource.slice(loopAt, retainedPollingSource.indexOf('\n  return Object.freeze', loopAt) + 1 || retainedPollingSource.length);
   const checks = loop.match(/generationRetired\(\)/g) || [];
   assert.ok(checks.length >= 2,
     'the loop must re-check on entry and per worker, as it already does for its own expiry: '
@@ -203,15 +230,15 @@ test('BRIDGE-GENRETIRED the retained supervisor observes its own retirement and 
   assert.ok(entryGuard.indexOf('generationRetired()') < entryGuard.indexOf('Date.now() >= sessionExpiryMs'),
     'retirement is checked alongside the expiry it sits beside, before any work is taken');
   // The wrapper the loop calls delegates to the throttled re-check and records when it last looked.
-  const wrapperAt = source.indexOf('const generationRetired = () => {');
+  const wrapperAt = retainedPollingSource.indexOf('const generationRetired = () => {');
   assert.ok(wrapperAt > 0 && wrapperAt < loopAt, 'the wrapper must be declared before the loop');
-  const wrapper = source.slice(wrapperAt, source.indexOf('};', wrapperAt));
+  const wrapper = retainedPollingSource.slice(wrapperAt, retainedPollingSource.indexOf('};', wrapperAt));
   assert.ok(/retainedSessionGenerationStatus\(action, lastGenerationCheckMs, Date\.now\(\)\)/.test(wrapper),
     'the wrapper must delegate to the throttled re-check for this action');
   assert.ok(/lastGenerationCheckMs = observed\.checkedAtMs;/.test(wrapper),
     'a due check must advance the throttle, so the registry is not re-read every tick');
   // Retirement is not an error: after the batch is READY this is the clean, expected end.
-  assert.ok(!/SESSION_GENERATION_RETIRED[^']*FAILED/.test(source),
+  assert.ok(!/SESSION_GENERATION_RETIRED[^']*FAILED/.test(retainedPollingSource),
     'retirement must not be reported as a failure signal');
 });
 
@@ -240,28 +267,45 @@ test('BRIDGE-EXITREASON names why a retained child died and why its root survive
     'APP_SERVER_CHILD_EXIT:exited-1:after-9ms:stderr-fatal; out of memory');
 
   const source = fs.readFileSync(path.join(__dirname, '..', 'lib', 'runtime-bridge-codex.cjs'), 'utf8');
-  assert.ok(!source.includes("shutdown('APP_SERVER_CHILD_EXIT')"),
+  // The spawn/adoption + BORN-provenance checkpoint (including this exact
+  // lifetime measurement and child-exit wiring) now lives in its own
+  // extracted module -- see app-server-supervisor-worker-spawn.cjs's own
+  // header comment.
+  const workerSpawnSource = fs.readFileSync(
+    path.join(__dirname, '..', 'lib', 'runtime-bridge-codex', 'app-server-supervisor-worker-spawn.cjs'), 'utf8',
+  );
+  assert.ok(!source.includes("shutdown('APP_SERVER_CHILD_EXIT')") && !workerSpawnSource.includes("shutdown('APP_SERVER_CHILD_EXIT')"),
     'the bare, reasonless child-exit shutdown must not survive');
   // The lifetime must be measured from the spawn, not from whenever the handler happened to run.
-  assert.ok(/const ownedChildSpawnedAtMs = Date\.now\(\);/.test(source),
+  assert.ok(/const ownedChildSpawnedAtMs = Date\.now\(\);/.test(workerSpawnSource),
     'the child lifetime must be measured from its spawn');
-  assert.ok(/captureRegistryTailText\(stderrCapture, \d{4,}\)[\s\S]{0,80}\)\);\n\s+\}\n\s+\};/.test(source)
-    || /describeOwnedChildExit\([\s\S]{0,200}captureRegistryTailText\(stderrCapture, \d{4,}\)/.test(source),
+  assert.ok(/captureRegistryTailText\(stderrCapture, \d{4,}\)[\s\S]{0,80}\)\);\n\s+\}\n\s+\};/.test(workerSpawnSource)
+    || /describeOwnedChildExit\([\s\S]{0,200}captureRegistryTailText\(stderrCapture, \d{4,}\)/.test(workerSpawnSource),
     'the child-exit signal must carry the captured child stderr');
 
   // A rejected cleanup keeps the closed code every consumer matches on, and adds the detail that
-  // separates "never eligible" from "attempted and refused".
-  const rejections = source.match(/reason: 'CLEANUP_REJECTED',?\s*(?:reason_detail: [^\n]+)?/g) || [];
+  // separates "never eligible" from "attempted and refused". Lives in the
+  // ledger-cleanup module, not the facade.
+  const ledgerCleanupSource = fs.readFileSync(
+    path.join(__dirname, '..', 'lib', 'runtime-bridge-codex', 'supervisor-ledger-cleanup.cjs'), 'utf8',
+  );
+  const rejections = ledgerCleanupSource.match(/reason: 'CLEANUP_REJECTED',?\s*(?:reason_detail: [^\n]+)?/g) || [];
   assert.ok(rejections.length >= 2, 'both cleanup rejection branches must be present');
   for (const rejection of rejections) {
     assert.ok(/reason_detail:/.test(rejection),
       'every CLEANUP_REJECTED must carry a detail: ' + rejection);
   }
-  assert.ok(source.includes("reason_detail: 'authorization-declined'"),
+  assert.ok(ledgerCleanupSource.includes("reason_detail: 'authorization-declined'"),
     'a declined authorization must be distinguishable from a refused cleanup');
-  assert.ok(/reason_detail: String\(\(cleanupResult && cleanupResult\.reason\) \|\| 'no-reason-reported'\)/.test(source),
+  assert.ok(/reason_detail: String\(\(cleanupResult && cleanupResult\.reason\) \|\| 'no-reason-reported'\)/.test(ledgerCleanupSource),
     'a refused cleanup must preserve the reason cleanupRoot reported');
-  assert.ok(/detail: rootReceipt\.reason_detail \|\| null,/.test(source),
+  // The stop timeline's own root-cleanup loop (stage 4) is what turns a
+  // non-REAPED receipt into a failure entry -- now in its own extracted
+  // module.
+  const stopTimelineSource = fs.readFileSync(
+    path.join(__dirname, '..', 'lib', 'runtime-bridge-codex', 'app-server-supervisor-stop-timeline.cjs'), 'utf8',
+  );
+  assert.ok(/detail: rootReceipt\.reason_detail \|\| null,/.test(stopTimelineSource),
     'the shutdown receipt failure entry must carry that detail');
 });
 
@@ -308,7 +352,7 @@ test('BRIDGE-PROJECTDOC keeps the child from loading project docs it may not rea
   assert.equal(validate(write(finalized.replace('inherit = "none"', 'inherit = "all"'))).ok, false);
 
   // The write site must use the constant rather than restating the bytes.
-  const source = fs.readFileSync(path.join(__dirname, '..', 'lib', 'runtime-bridge-codex.cjs'), 'utf8');
+  const source = bridgeOwnerSource('createRunRoot');
   assert.ok(source.includes('fs.writeFileSync(configPath, INITIAL_ISOLATION_CONFIG_TOML,'),
     'the materialized config must come from the exported constant');
 });
@@ -346,13 +390,19 @@ test('BRIDGE-THREADFAIL names the thread-start rejection instead of one bare sig
   assert.equal(new Set(rendered).size, rendered.length);
 
   const source = fs.readFileSync(path.join(__dirname, '..', 'lib', 'runtime-bridge-codex.cjs'), 'utf8');
-  assert.ok(!source.includes("shutdown('APP_SERVER_THREAD_START_FAILED')"),
+  // The role bootstrap RPC handshake (including this exact thread-start
+  // failure branch) now lives in its own extracted module -- see
+  // app-server-supervisor-role-bootstrap.cjs's own header comment.
+  const roleBootstrapSource = fs.readFileSync(
+    path.join(__dirname, '..', 'lib', 'runtime-bridge-codex', 'app-server-supervisor-role-bootstrap.cjs'), 'utf8',
+  );
+  assert.ok(!source.includes("shutdown('APP_SERVER_THREAD_START_FAILED')") && !roleBootstrapSource.includes("shutdown('APP_SERVER_THREAD_START_FAILED')"),
     'the bare, reasonless thread-start shutdown must not survive');
-  assert.ok(!source.includes("shutdown('APP_SERVER_ROLE_PROFILE_UNRESOLVED')"),
+  assert.ok(!source.includes("shutdown('APP_SERVER_ROLE_PROFILE_UNRESOLVED')") && !roleBootstrapSource.includes("shutdown('APP_SERVER_ROLE_PROFILE_UNRESOLVED')"),
     'the adjacent role-profile refusal must also name its cause');
   // The reported duration must measure the call, not the whole startup.
-  const branch = source.slice(source.indexOf('const threadStartedAtMs = Date.now();'),
-    source.indexOf('const threadStartedAtMs = Date.now();') + 900);
+  const branch = roleBootstrapSource.slice(roleBootstrapSource.indexOf('const threadStartedAtMs = Date.now();'),
+    roleBootstrapSource.indexOf('const threadStartedAtMs = Date.now();') + 900);
   assert.ok(/describeThreadStartFailure\(\s*threadResult,\s*Date\.now\(\) - threadStartedAtMs,/.test(branch),
     'the thread-start signal must report its own elapsed time');
   assert.ok(/captureRegistryTailText\(stderrCapture, \d{4,}\)/.test(branch),
@@ -398,7 +448,7 @@ test('BRIDGE-PATHBUDGET keeps the isolation root inside the child state path bud
     'the refusal must report the length that exceeded the budget');
 
   // The boundary itself: one character under the budget passes, one over does not.
-  const source = fs.readFileSync(path.join(__dirname, '..', 'lib', 'runtime-bridge-codex.cjs'), 'utf8');
+  const source = bridgeOwnerSource('isolationRootChildPathBudget');
   const declared = /const CHILD_STATE_PATH_BUDGET_CHARS = (\d+);/.exec(source);
   assert.ok(declared, 'the budget must be a named constant');
   const limit = Number(declared[1]);
@@ -417,7 +467,8 @@ test('BRIDGE-PATHBUDGET keeps the isolation root inside the child state path bud
 
   // The refusal must come before the intent record and before the leaf directory exist -- a root
   // that cannot host the child must leave nothing behind.
-  const provisioner = source.slice(source.indexOf("const intendedPath = path.join(registryRepoDir({ repoId }), 'isolation-roots', instanceId);"));
+  const createSource = bridgeOwnerSource('createRunRoot');
+  const provisioner = createSource.slice(createSource.indexOf("const intendedPath = path.join(registryRepoDir({ repoId }), 'isolation-roots', instanceId);"));
   const guardAt = provisioner.indexOf('isolationRootChildPathBudget(intendedPath)');
   const intentAt = provisioner.indexOf('root-provision-intent/v1');
   const ancestorAt = provisioner.indexOf('validateAncestorChainNoSymlinks(intendedPath)');
@@ -503,12 +554,21 @@ test('BRIDGE-BORNSTDERR reports what the dying child said, and never leaks it', 
     bridge.describeInitializeFailure({ ok: false, reason: 'timeout' }, 10000, ''),
     'APP_SERVER_INITIALIZE_FAILED:timeout:after-10000ms');
 
-  const source = fs.readFileSync(path.join(__dirname, '..', 'lib', 'runtime-bridge-codex.cjs'), 'utf8');
+  // Spawn/adoption + BORN-provenance now lives in its own extracted module;
+  // the role-bootstrap RPC handshake (including the initialize-failure
+  // branch) lives in a second, separate one -- see each module's own
+  // header comment.
+  const workerSpawnSource = fs.readFileSync(
+    path.join(__dirname, '..', 'lib', 'runtime-bridge-codex', 'app-server-supervisor-worker-spawn.cjs'), 'utf8',
+  );
+  const roleBootstrapSource = fs.readFileSync(
+    path.join(__dirname, '..', 'lib', 'runtime-bridge-codex', 'app-server-supervisor-role-bootstrap.cjs'), 'utf8',
+  );
   // The evidence only exists if the loop is allowed one turn: the win32 proof blocks it with
   // execFileSync, so the child's exit and stderr callbacks are queued and undelivered when the
   // branch is reached. The reported duration must still measure the proof, not that turn.
-  const branch = source.slice(source.indexOf("ledgerEntry.spawnState = 'BORN';"),
-    source.indexOf('const bornRecord = {'));
+  const branch = workerSpawnSource.slice(workerSpawnSource.indexOf("ledgerEntry.spawnState = 'BORN';"),
+    workerSpawnSource.indexOf('const bornRecord = {'));
   assert.ok(/const bornProvenanceElapsedMs = Date\.now\(\) - bornProvenanceStartedAtMs;/.test(branch),
     'the reported duration must be measured before the diagnostic turn');
   assert.ok(/await new Promise\(\(resolve\) => \{ setImmediate\(resolve\); \}\);/.test(branch),
@@ -516,11 +576,11 @@ test('BRIDGE-BORNSTDERR reports what the dying child said, and never leaks it', 
   assert.ok(/captureRegistryTailText\(stderrCapture, \d{4,}\)/.test(branch),
     'the already-captured child stderr must be read into the born-provenance signal');
   const initAnchor = 'if (!initResult || initResult.ok !== true) {';
-  const initBranch = source.slice(source.indexOf(initAnchor), source.indexOf(initAnchor) + 400);
+  const initBranch = roleBootstrapSource.slice(roleBootstrapSource.indexOf(initAnchor), roleBootstrapSource.indexOf(initAnchor) + 400);
   assert.ok(/captureRegistryTailText\(stderrCapture, \d{4,}\)/.test(initBranch),
     'the initialize failure must read the same captured stderr');
   // ...and that turn must not let the generic child-exit signal overwrite the precise one.
-  assert.ok(/if \(composingBornProvenanceFailure\) return;/.test(source),
+  assert.ok(/if \(composingBornProvenanceFailure\) return;/.test(workerSpawnSource),
     'a child exit observed while the failure is being composed must not replace the signal');
 });
 
@@ -580,12 +640,13 @@ test('BRIDGE-BORNFAIL names the failing born-provenance step instead of one bare
   assert.equal(describe_({ ok: false, reason: 'second-observation-absent', subReason: 'process-absent' }, 693),
     'APP_SERVER_BORN_PROVENANCE_UNAVAILABLE:second-observation-absent:process-absent:after-693ms');
   // The bare, reasonless signal must no longer be emitted.
-  const source = fs.readFileSync(path.join(__dirname, '..', 'lib', 'runtime-bridge-codex.cjs'), 'utf8');
-  assert.ok(!source.includes("shutdown('APP_SERVER_BORN_PROVENANCE_UNAVAILABLE')"),
+  const facadeSource = fs.readFileSync(path.join(__dirname, '..', 'lib', 'runtime-bridge-codex.cjs'), 'utf8');
+  const provenanceSource = fs.readFileSync(path.join(__dirname, '..', 'lib', 'runtime-bridge-codex', 'owned-child-provenance.cjs'), 'utf8');
+  assert.ok(!facadeSource.includes("shutdown('APP_SERVER_BORN_PROVENANCE_UNAVAILABLE')"),
     'the bare, reasonless born-provenance shutdown must not survive');
   // And the win32 proof must not fall back to an unattributable {ok:false}.
-  const winBranch = source.slice(source.indexOf('async function observeOwnedChildBornProvenance'),
-    source.indexOf("if (process.platform === 'linux')"));
+  const winBranch = provenanceSource.slice(provenanceSource.indexOf('async function observeOwnedChildBornProvenance'),
+    provenanceSource.indexOf("if (process.platform === 'linux')"));
   assert.ok(!/return \{ ok: false \};/.test(winBranch),
     'the win32 born-provenance branch must attribute every rejection');
 });
@@ -629,6 +690,89 @@ process.env.NODE_ENV = 'test';
 process.env.RUNTIME_BRIDGE_CODEX_TEST_CAPABILITY = TEST_CAPABILITY;
 
 const IMPL = path.resolve(__dirname, '../lib/runtime-bridge-codex.cjs');
+const IMPL_MODULE_DIR = path.resolve(__dirname, '../lib/runtime-bridge-codex');
+function bridgeImplementationSources() {
+  const moduleFiles = [];
+  const visit = (directory) => {
+    for (const name of fs.readdirSync(directory).slice().sort()) {
+      const file = path.join(directory, name);
+      const stat = fs.lstatSync(file);
+      if (stat.isSymbolicLink()) continue;
+      if (stat.isDirectory()) visit(file);
+      else if (stat.isFile() && name.endsWith('.cjs')) moduleFiles.push(file);
+    }
+  };
+  visit(IMPL_MODULE_DIR);
+  return [IMPL, ...moduleFiles].map((file) => ({ file, source: fs.readFileSync(file, 'utf8') }));
+}
+function escapeRegExpLiteral(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+// Matches an EXACT (optionally async) function declaration name -- the
+// mandatory `\s*\(` immediately after the name is what excludes a
+// longer, prefix-colliding sibling declaration (e.g. requesting
+// createAppServerConnection must never match createAppServerConnectionModule,
+// since "Module(" can never satisfy `\s*\(` directly after the requested name).
+function exactFunctionDeclRegExp(functionName, flags) {
+  return new RegExp('\\b(?:async\\s+)?function\\s+' + escapeRegExpLiteral(functionName) + '\\s*\\(', flags);
+}
+function bridgeOwnerSource(functionName) {
+  const declRe = exactFunctionDeclRegExp(functionName, 'g');
+  const owners = bridgeImplementationSources().filter(({ source }) => {
+    declRe.lastIndex = 0;
+    return declRe.test(source);
+  });
+  assert.strictEqual(owners.length, 1,
+    functionName + ' must have exactly one implementation owner (exact declaration match), found ' + owners.map(({ file }) => file).join(', '));
+  const countRe = exactFunctionDeclRegExp(functionName, 'g');
+  const occurrences = owners[0].source.match(countRe) || [];
+  assert.strictEqual(occurrences.length, 1,
+    functionName + ' must be declared exactly once in its owner file, found ' + occurrences.length);
+  return owners[0].source;
+}
+// Brace-depth extraction (never a parser dependency): once the exact
+// declaration is located, first skip past its OWN parameter list by
+// paren-depth (so a multi-line destructured parameter list can never be
+// mistaken for the body's own closing brace), then take the function body
+// from its first `{` to the matching `}` by brace depth. Deterministic for
+// this package's plain factory-function style; returns ONLY the requested
+// function, never an enclosing/adjacent one.
+function bridgeOwnedFunctionSource(functionName) {
+  const source = bridgeOwnerSource(functionName);
+  const declRe = exactFunctionDeclRegExp(functionName);
+  const declMatch = declRe.exec(source);
+  assert.ok(declMatch, functionName + ' exact declaration must be locatable after ownership was already confirmed');
+  const start = declMatch.index;
+  let i = start + declMatch[0].length; // just past the declaration's own '('
+  let parenDepth = 1;
+  while (i < source.length && parenDepth > 0) {
+    if (source[i] === '(') parenDepth++;
+    else if (source[i] === ')') parenDepth--;
+    i++;
+  }
+  while (i < source.length && source[i] !== '{') i++;
+  assert.ok(source[i] === '{', functionName + ' must have a function body opening brace after its parameter list');
+  let braceDepth = 0;
+  let bodyEnd = -1;
+  for (; i < source.length; i++) {
+    if (source[i] === '{') braceDepth++;
+    else if (source[i] === '}') { braceDepth--; if (braceDepth === 0) { bodyEnd = i + 1; break; } }
+  }
+  assert.ok(bodyEnd > start, functionName + ' function body must close its own braces');
+  return source.slice(start, bodyEnd);
+}
+test('SEQUENCE 22: bridgeOwnedFunctionSource/bridgeOwnerSource resolve the exact requested declaration, never a prefix-colliding sibling', () => {
+  const connBody = bridgeOwnedFunctionSource('createAppServerConnection');
+  assert.ok(connBody.startsWith('function createAppServerConnection(opts)'),
+    'requesting createAppServerConnection must return a body starting at its own exact declaration, got: ' + connBody.slice(0, 60));
+  assert.ok(!connBody.includes('createAppServerConnectionModule'),
+    'the extracted body must never include the prefix-colliding enclosing declaration createAppServerConnectionModule');
+  assert.throws(() => bridgeOwnerSource('doesNotExistAnywhere12345'), /must have exactly one implementation owner/,
+    'a name with zero exact declarations anywhere must fail closed, never silently return an unrelated file');
+});
+function bridgePackageSource() {
+  return bridgeImplementationSources().map(({ source }) => source).join('\n');
+}
 const rbc = require(IMPL);
 const rll = require(path.resolve(__dirname, '../lib/runtime-role-lifecycle.cjs'));
 const rc = require(path.resolve(__dirname, '../lib/runtime-consultation.cjs'));
@@ -1499,7 +1643,7 @@ describe('CredentialSourceProvider/v1 real backing (Group A / M6, user-authorize
   });
 
   test('STRUCTURAL (identity-change/TOCTOU proxy): createCredentialSourceProvider routes through the fd-bound identity-rechecking reader, never a naive path read', () => {
-    const sourceText = fs.readFileSync(IMPL, 'utf8');
+    const sourceText = bridgeOwnerSource('createCredentialSourceProvider');
     const fnStart = sourceText.indexOf('function createCredentialSourceProvider(opts) {');
     assert.ok(fnStart >= 0, 'test precondition: createCredentialSourceProvider must exist as a named function with this exact signature');
     const fnStartNext = sourceText.indexOf('function createCredentialSourceProviderForFdTests', fnStart);
@@ -6279,7 +6423,7 @@ describe('CORRECTION ROUND (HARD NO-GO RESPONSE) -- Block B: Recorder and durabl
   });
 
   test('ATTACK: the durable checkpoint write is a direct truncate-write (fs.writeFileSync), never atomic temp-write-fsync-rename-directory-barrier -- a process crash mid-write can leave a truncated/corrupt evidence file rather than either the old or new complete content', () => {
-    const sourceText = fs.readFileSync(path.resolve(__dirname, '../lib/runtime-bridge-codex.cjs'), 'utf8');
+    const sourceText = bridgeOwnerSource('publishCredentialAbsenceCheckpoint');
     const fnStart = sourceText.indexOf('function publishCredentialAbsenceCheckpoint');
     assert.ok(fnStart >= 0, 'test precondition: publishCredentialAbsenceCheckpoint must exist as a named function');
     const fnBody = sourceText.slice(fnStart, sourceText.indexOf('\n}', fnStart) + 2);
@@ -6322,7 +6466,7 @@ describe('CORRECTION ROUND (HARD NO-GO RESPONSE) -- Block C: Isolation and root 
   test('ATTACK: the ancestor-chain walker treats an EACCES (or any non-ENOENT) lstat error identically to "does not exist, safe to stop" -- fails OPEN instead of closed on a genuine read error', () => {
     const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'c3-nogo-c-ancestor-eacces-'));
     try {
-      const sourceText = fs.readFileSync(path.resolve(__dirname, '../lib/runtime-bridge-codex.cjs'), 'utf8');
+      const sourceText = bridgeOwnerSource('validateAncestorChainNoSymlinks');
       const fnStart = sourceText.indexOf('function validateAncestorChainNoSymlinks');
       assert.ok(fnStart >= 0, 'test precondition: validateAncestorChainNoSymlinks must exist as a named function');
       const fnBody = sourceText.slice(fnStart, sourceText.indexOf('\n}', fnStart + 200) + 2);
@@ -6355,7 +6499,7 @@ describe('CORRECTION ROUND (HARD NO-GO RESPONSE) -- Block C: Isolation and root 
       // itself to throw EACCES/EIO in a portable, root-safe way inside this
       // suite's hermetic constraints is not achievable; the file-hiding
       // consequence is demonstrated via the return-type/fail-closed check.)
-      const sourceText = fs.readFileSync(path.resolve(__dirname, '../lib/runtime-bridge-codex.cjs'), 'utf8');
+      const sourceText = bridgeOwnerSource('listFilesRecursiveSafe');
       const fnStart = sourceText.indexOf('function listFilesRecursiveSafe');
       assert.ok(fnStart >= 0, 'test precondition: listFilesRecursiveSafe must exist as a named function');
       const fnBody = sourceText.slice(fnStart, sourceText.indexOf('\n}', fnStart + 100) + 2);
@@ -6380,7 +6524,7 @@ describe('CORRECTION ROUND (HARD NO-GO RESPONSE) -- Block C: Isolation and root 
     const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'c3-nogo-c-state-mutate-'));
     const fixture = makeSealedIsolationFixture(tmp);
     try {
-      const sourceText = fs.readFileSync(path.resolve(__dirname, '../lib/runtime-bridge-codex.cjs'), 'utf8');
+      const sourceText = bridgeOwnerSource('handleMatchesSnapshot');
       const fnStart = sourceText.indexOf('function handleMatchesSnapshot');
       assert.ok(fnStart >= 0, 'test precondition: handleMatchesSnapshot must exist as a named function');
       const fnBody = sourceText.slice(fnStart, sourceText.indexOf('\n}', fnStart) + 2);
@@ -6439,18 +6583,12 @@ describe('CORRECTION ROUND (HARD NO-GO RESPONSE) -- Block C: Isolation and root 
 // here), never silently dropped.
 describe('CORRECTION ROUND (HARD NO-GO RESPONSE) -- Block D: credential source, spawn, retirement/cleanup', () => {
   test('ATTACK: readCredentialSourceFd never verifies file owner, exact mode, or nlink==1 -- only isFile()/size are checked, so a credential file owned by a different user, world-writable, or hard-linked elsewhere is accepted identically to a genuinely safe one', () => {
-    const sourceText = fs.readFileSync(path.resolve(__dirname, '../lib/runtime-bridge-codex.cjs'), 'utf8');
-    const fnStart = sourceText.indexOf('function readCredentialSourceFd');
-    assert.ok(fnStart >= 0, 'test precondition: readCredentialSourceFd must exist as a named function');
-    const fnBody = sourceText.slice(fnStart, sourceText.indexOf('\nfunction ', fnStart + 100));
+    const fnBody = bridgeOwnedFunctionSource('readCredentialSourceFd');
     assert.ok(/\.uid\b/.test(fnBody) && /\.mode\b/.test(fnBody) && /nlink/.test(fnBody), 'readCredentialSourceFd must verify the current owner (st.uid against the expected/host-known owner), exact mode, and nlink===1 before trusting file content -- currently only st.isFile() and st.size are ever inspected, confirmed by direct source read: ' + fnBody);
   });
 
   test('ATTACK: readCredentialSourceFd trusts sourceIdentity DIRECTLY from the parsed JSON content itself -- never derived by the host -- so a credential file can self-report any sourceIdentity it wants', () => {
-    const sourceText = fs.readFileSync(path.resolve(__dirname, '../lib/runtime-bridge-codex.cjs'), 'utf8');
-    const fnStart = sourceText.indexOf('function readCredentialSourceFd');
-    assert.ok(fnStart >= 0, 'test precondition: readCredentialSourceFd must exist as a named function');
-    const fnBody = sourceText.slice(fnStart, sourceText.indexOf('\nfunction ', fnStart + 100));
+    const fnBody = bridgeOwnedFunctionSource('readCredentialSourceFd');
     assert.ok(!/sourceIdentity:\s*parsed\.sourceIdentity/.test(fnBody), 'sourceIdentity must be derived by the HOST (e.g. from credentialPath or a host-side registry lookup), never read directly off the parsed JSON content -- currently the return statement is literally `sourceIdentity: parsed.sourceIdentity`, trusting the file\'s own self-report outright: ' + fnBody);
 
     // Empirical confirmation via the real fd-bound read path.
@@ -6473,7 +6611,7 @@ describe('CORRECTION ROUND (HARD NO-GO RESPONSE) -- Block D: credential source, 
   });
 
   test('ATTACK: spawnWithIntent falls back to a direct child.kill(\'SIGTERM\') when no opts.stopOwnedChild is supplied -- the "no child.kill() fallback anywhere inside C3\'s own code" requirement is violated by the DEFAULT parameter itself, not merely reachable via a missing check', () => {
-    const sourceText = fs.readFileSync(path.resolve(__dirname, '../lib/runtime-bridge-codex.cjs'), 'utf8');
+    const sourceText = bridgePackageSource();
     assert.ok(!/:\s*\(child\)\s*=>\s*child\.kill\(/.test(sourceText), 'spawnWithIntent must require opts.stopOwnedChild to be supplied (reject construction/the call outright if absent) -- it must never itself provide a child.kill()-calling fallback default, confirmed present via direct source read: ' + sourceText.slice(sourceText.indexOf('const stopOwnedChild ='), sourceText.indexOf('const stopOwnedChild =') + 200));
   });
 
@@ -6871,17 +7009,26 @@ describe('FOURTH HARD NO-GO RESPONSE -- Block A: real C2/Broker settlement', () 
 });
 
 describe('THIRD HARD NO-GO RESPONSE -- Block A: real broker/C2 settlement', () => {
-  test('STRUCTURAL: createAppServerConnection never references onRefreshOutcome anywhere in its own body -- the entire CredentialBroker/refreshProvider machinery from the last 2 rounds is never actually wired to the real C2 connection object', () => {
-    const sourceText = fs.readFileSync(path.resolve(__dirname, '../lib/runtime-bridge-codex.cjs'), 'utf8');
-    const connStart = sourceText.indexOf('function createAppServerConnection');
-    assert.ok(connStart >= 0, 'test precondition: createAppServerConnection must exist as a named function');
-    const nextTopLevelFn = sourceText.indexOf('\nfunction createBroker');
-    const connBody = sourceText.slice(connStart, nextTopLevelFn > connStart ? nextTopLevelFn : connStart + 200000);
-    assert.ok(connBody.includes('onRefreshOutcome'), 'createAppServerConnection must call bindConnection\'s (or an equivalent real broker\'s) onRefreshOutcome to receive settlement -- currently zero references exist anywhere in its own body, confirmed by direct source scan of ' + connBody.length + ' characters: the two subsystems are architecturally disconnected');
+  test('STRUCTURAL: the real C2 connection is wired end to end to the CredentialBroker/refreshProvider machinery -- credentialBinding flows from createAppServerConnection into createCredentialRefresh, which registers its onRefreshOutcome settlement listener, and refresh server-requests are delegated through that same controller (sequence-15 modularization: the composition now spans app-server-connection.cjs + app-server-credential-refresh.cjs, never one monolithic function body)', () => {
+    // bridgeOwnedFunctionSource now matches the EXACT declaration (requires
+    // "(" immediately after the name), so it correctly excludes the sibling
+    // outer factory createAppServerConnectionModule in the same owner file
+    // -- see the "hardened ownership helper" regression test above.
+    const connBody = bridgeOwnedFunctionSource('createAppServerConnection');
+    assert.match(connBody, /const\s*\{[^}]*\bcredentialBinding\b[^}]*\}\s*=\s*opts;/,
+      'createAppServerConnection must accept/destructure credentialBinding from its opts -- confirmed by direct source scan of its own (unique-owner) body: ' + connBody.slice(0, 400));
+    assert.match(connBody, /createCredentialRefresh\(\{[^}]*\bcredentialBinding\b[^}]*\}\)/s,
+      'createAppServerConnection must pass its own credentialBinding into createCredentialRefresh(...) -- the two subsystems must be wired at composition time, never left disconnected');
+    assert.match(connBody, /handleRefreshServerRequest\s*:\s*\(\.\.\.args\)\s*=>\s*credentialRefresh\.handleRefreshServerRequest\(\.\.\.args\)/,
+      'createAppServerConnection must delegate the refresh server-request through the returned credentialRefresh controller\'s own handleRefreshServerRequest, never handle it inline or drop it');
+
+    const refreshBody = bridgeOwnedFunctionSource('createCredentialRefresh');
+    assert.match(refreshBody, /credentialBinding\s*&&\s*typeof\s*credentialBinding\.onRefreshOutcome\s*===\s*'function'/,
+      'createCredentialRefresh must register the settlement listener on the injected credentialBinding.onRefreshOutcome -- confirmed by direct source scan of its own (unique-owner) body: ' + refreshBody.slice(0, 400));
   });
 
   test('STRUCTURAL: the host-wide refresh lock is released INSIDE the synchronous runRefreshCheckpointOrder call (in its own finally block), never held until a real, external settlement -- confirmed via direct source read', () => {
-    const sourceText = fs.readFileSync(path.resolve(__dirname, '../lib/runtime-bridge-codex.cjs'), 'utf8');
+    const sourceText = bridgeOwnerSource('acquireRefreshLock');
     const fnStart = sourceText.indexOf('function runRefreshCheckpointOrder');
     assert.ok(fnStart >= 0, 'test precondition: runRefreshCheckpointOrder must exist as a named function');
     const fnBody = sourceText.slice(fnStart, sourceText.indexOf('\n    function refreshProvider', fnStart));
@@ -6889,7 +7036,7 @@ describe('THIRD HARD NO-GO RESPONSE -- Block A: real broker/C2 settlement', () =
   });
 
   test('STRUCTURAL: the refresh lock\'s owner identity is the connectionId, never a fresh CSPRNG attemptId minted per attempt', () => {
-    const sourceText = fs.readFileSync(path.resolve(__dirname, '../lib/runtime-bridge-codex.cjs'), 'utf8');
+    const sourceText = bridgeOwnerSource('acquireRefreshLock');
     const fnStart = sourceText.indexOf('function acquireRefreshLock');
     assert.ok(fnStart >= 0, 'test precondition: acquireRefreshLock must exist');
     const callSiteIdx = sourceText.indexOf('acquireRefreshLock(connectionId)');
@@ -8087,7 +8234,7 @@ describe('Block C item 6: injectable sensitive-roots confinement on createIsolat
 
 describe('THIRD HARD NO-GO RESPONSE -- Block D: spawn identity, late-spawn authority, credential-source hardening', () => {
   test('STRUCTURAL: requireProvenChildIdentity validates ONLY the child\'s pid -- no birth identity (e.g. an observed birth time/token) and no executable identity (e.g. the child\'s own executable path) are captured or verified at all', () => {
-    const sourceText = fs.readFileSync(path.resolve(__dirname, '../lib/runtime-bridge-codex.cjs'), 'utf8');
+    const sourceText = bridgeOwnerSource('requireProvenChildIdentity');
     const fnStart = sourceText.indexOf('function requireProvenChildIdentity');
     assert.ok(fnStart >= 0, 'test precondition: requireProvenChildIdentity must exist');
     const fnBody = sourceText.slice(fnStart, sourceText.indexOf('\n}', fnStart) + 2);
@@ -8134,12 +8281,7 @@ describe('THIRD HARD NO-GO RESPONSE -- Block D: spawn identity, late-spawn autho
   });
 
   test('STRUCTURAL: readCredentialSourceFd never calls fs.lstatSync at all, and calls fs.fstatSync exactly ONCE (before the read only) -- no re-fstat/re-lstat after the read to confirm the file\'s identity/metadata stayed stable throughout the whole operation, and no BigInt-precision identity tuple (dev/ino) is ever captured for that comparison', () => {
-    const sourceText = fs.readFileSync(path.resolve(__dirname, '../lib/runtime-bridge-codex.cjs'), 'utf8');
-    const fnStart = sourceText.indexOf('function readCredentialSourceFd');
-    assert.ok(fnStart >= 0, 'test precondition: readCredentialSourceFd must exist');
-    const nextFnIdx = sourceText.indexOf('\nfunction ', fnStart + 10);
-    assert.ok(nextFnIdx > fnStart, 'test precondition: could not locate the next top-level function boundary');
-    const fnBody = sourceText.slice(fnStart, nextFnIdx);
+    const fnBody = bridgeOwnedFunctionSource('readCredentialSourceFd');
     const fstatCount = (fnBody.match(/fs\.fstatSync\(/g) || []).length;
     const lstatCount = (fnBody.match(/fs\.lstatSync\(/g) || []).length;
     const bigintFstatCount = (fnBody.match(/fs\.fstatSync\([^)]*bigint:\s*true/g) || []).length;
@@ -8491,7 +8633,7 @@ describe('THIRD HARD NO-GO RESPONSE -- Block E: closing residual ACTIVE gaps', (
   });
 
   test('C3-ISO-D20 status (DOCUMENTATION, not a coverage gap this file can close): confirms a distinct cross-call "PATH_DRIFT" rejection reason -- produced by comparing a SECOND withValidatedReadView/withValidatedRoot resolve against an EARLIER one -- is structurally ABSENT; each call independently captures its own before/after snapshot (REBIND_DURING_USE) with no memory of any prior call at all. Passes today; if PATH_DRIFT starts appearing, D20 needs a genuine behavioral test written against the real new cross-call mechanism, not this documentation check', () => {
-    const sourceText = fs.readFileSync(path.resolve(__dirname, '../lib/runtime-bridge-codex.cjs'), 'utf8');
+    const sourceText = bridgePackageSource();
     assert.strictEqual(sourceText.includes('PATH_DRIFT'), false, 'PATH_DRIFT must remain structurally absent for this documentation test to remain accurate -- if this now exists, D20 needs a real behavioral test instead');
   });
 
@@ -12529,12 +12671,7 @@ describe('CORRECTION PASS ROUND 7 -- Finding 1: isValidCleanupAuthorization gaps
   });
 
   test('STRUCTURAL CONFIRMATION (was HELD pending toolkit-specialist\'s own architecture decision; confirmed already landed as CORRECTION PASS ROUND 7 Finding 1 item 5 by direct source read before this test was written): isValidCleanupAuthorization\'s PID_ABSENT branch derives the instance record\'s fd-bound identity from the SAME already-open readDurableRegistryRecordFd call (its own .identity field), never a second, separate fdBoundIdentityTuple open on the same path -- eliminates the prior TOCTOU window between two independent opens of the same file', () => {
-    const sourceText = fs.readFileSync(path.resolve(__dirname, '../lib/runtime-bridge-codex.cjs'), 'utf8');
-    const fnStart = sourceText.indexOf('function isValidCleanupAuthorization');
-    assert.ok(fnStart >= 0, 'test precondition: isValidCleanupAuthorization must exist');
-    const fnEnd = sourceText.indexOf('function cleanupRoot(handle, authorization, testHooks)', fnStart);
-    assert.ok(fnEnd > fnStart, 'test precondition: could not locate the function\'s own end boundary (cleanupRoot must immediately follow it, unchanged structural precedent)');
-    const fnBody = sourceText.slice(fnStart, fnEnd);
+    const fnBody = bridgeOwnerSource('isValidCleanupAuthorization');
     const separateIdentityOpens = (fnBody.match(/fdBoundIdentityTuple\(/g) || []).length;
     assert.strictEqual(separateIdentityOpens, 0, 'isValidCleanupAuthorization must never call fdBoundIdentityTuple as a SEPARATE fd-open on the instance record path -- its identity must come from the SAME already-open readDurableRegistryRecordFd call\'s own returned .identity field, closing the TOCTOU window between two independent opens: ' + fnBody);
     assert.ok(/instanceRecordRead\.identity/.test(fnBody), 'the instance record\'s fd-bound identity must be read from readDurableRegistryRecordFd\'s own .identity field (the same already-open, already-verified fd), not re-derived via a second open: ' + fnBody);
@@ -13179,12 +13316,7 @@ describe('VERDICT 4 (Round 8 continuation) -- reaper/retirement validation gaps'
     });
 
     test('STRUCTURAL (documents a genuine, disclosed scoping limit, not a silent gap): executable_path is intentionally NOT re-verified in this same check -- confirmed via the reaper\'s own neighboring comment explaining why (no reliable, cross-platform mechanism exists in this file to query the CURRENT executable of an arbitrary already-known pid)', () => {
-      const sourceText = fs.readFileSync(path.resolve(__dirname, '../lib/runtime-bridge-codex.cjs'), 'utf8');
-      const fnStart = sourceText.indexOf('function reapTombstonedRoot');
-      assert.ok(fnStart >= 0, 'test precondition: reapTombstonedRoot must exist');
-      const nextFnIdx = sourceText.indexOf('\nfunction ', fnStart + 10);
-      assert.ok(nextFnIdx > fnStart, 'test precondition: could not locate the next top-level function boundary');
-      const fnBody = sourceText.slice(fnStart, nextFnIdx);
+      const fnBody = bridgeOwnedFunctionSource('reapTombstonedRoot');
       assert.ok(/executable_path is NOT re-verified here/.test(fnBody), 'the reaper\'s own body must explicitly document why executable_path is not cross-checked here (a genuine scoping limit), not silently omit it without explanation');
       assert.ok(!/retiredInstanceRecord\.executable_path/.test(fnBody), 'confirms this really is not implemented yet (this test must be revisited if that ever changes)');
     });
@@ -14187,21 +14319,34 @@ describe('M6 (production lifecycle + canonical-role activation): session-run to 
   // anchors, confirmed by direct source read before writing this test) --
   // never a new/invented pattern.
   test('M6 STRUCTURAL: cmdSessionRun reaches the already-built createAppServerConnection or the child-spawn registry, never ending at an idle setInterval alone (session-run to app-server wiring gap) -- confirmed by direct source scan', () => {
-    const sourceText = fs.readFileSync(path.resolve(__dirname, '../lib/runtime-bridge-codex.cjs'), 'utf8');
-    const fnStart = sourceText.indexOf('async function cmdSessionRun');
+    // Sequence 15: cmdSessionRun (facade -> cmd-session-run.cjs) no longer
+    // owns the batch lifecycle inline -- it delegates to the owned
+    // supervisor engine module, which is what now carries both the
+    // keep-alive stub and the real spawn/connection reachability this test
+    // exists to prove is never merely dead-ended.
+    const controllerSource = fs.readFileSync(
+      path.resolve(__dirname, '../lib/runtime-bridge-codex/cmd-session-run.cjs'), 'utf8',
+    );
+    const fnStart = controllerSource.indexOf('async function cmdSessionRun');
     assert.ok(fnStart >= 0, 'test precondition: cmdSessionRun must exist as a named function');
-    const sectionEnd = sourceText.indexOf('// ── C2: app-server JSONL client + schemas ──', fnStart);
-    assert.ok(sectionEnd > fnStart, 'test precondition: the known trailing C2 section marker must be found after cmdSessionRun');
-    const fnBody = sourceText.slice(fnStart, sectionEnd);
-    // Anchor-validity check: the bounded slice must contain a KNOWN,
-    // currently-true fact (the idle setInterval stub) -- proving the slice
-    // genuinely scans cmdSessionRun's real body, not an empty/misaligned
-    // range that would make the assertion below pass or fail for the wrong
-    // reason.
-    assert.ok(fnBody.includes('setInterval'), 'anchor-validity: the bounded body must contain the known CURRENT setInterval stub, confirming the slice scans the right section (' + fnBody.length + ' characters)');
     assert.ok(
-      fnBody.includes('createAppServerConnection') || fnBody.includes('spawnWithIntent') || fnBody.includes('createSupervisorOwnedChildRegistry'),
-      'cmdSessionRun must reach the app-server client or the child-spawn registry instead of ending at the idle setInterval alone -- currently zero references exist anywhere in its own body, confirmed by direct source scan of ' + fnBody.length + ' characters (M6 gap)',
+      controllerSource.indexOf('startOwnedAppServerSupervisorEngine(', fnStart) > fnStart,
+      'cmdSessionRun must delegate to the owned supervisor engine, never dead-end before ever constructing it',
+    );
+
+    const engineBody = fs.readFileSync(
+      path.resolve(__dirname, '../lib/runtime-bridge-codex/owned-app-server-supervisor-engine.cjs'), 'utf8',
+    );
+    // Anchor-validity check: the engine body must contain a KNOWN,
+    // currently-true fact (the idle keep-alive stub) -- proving the scan
+    // targets the right module, not an empty/misaligned one that would
+    // make the assertion below pass or fail for the wrong reason.
+    assert.ok(engineBody.includes('setInterval'), 'anchor-validity: the engine body must contain the known CURRENT setInterval stub (' + engineBody.length + ' characters)');
+    assert.ok(
+      engineBody.includes('createSupervisorOwnedChildRegistry')
+        || engineBody.includes('workerSpawn.spawnRoleWorker(')
+        || engineBody.includes('roleBootstrap.bootstrapRoleWorker('),
+      'the owned supervisor engine must reach the app-server client or the child-spawn registry instead of ending at the idle setInterval alone -- currently zero references exist anywhere in its own body, confirmed by direct source scan of ' + engineBody.length + ' characters (M6 gap)',
     );
   });
 });
@@ -14413,12 +14558,22 @@ describe('M6 (P0-3): production codex executable resolution', () => {
 
 describe('M6 (P0-4): READY gating -- credential readiness and full RPC chain', () => {
   function cmdSessionRunBody() {
-    const sourceText = fs.readFileSync(path.resolve(__dirname, '../lib/runtime-bridge-codex.cjs'), 'utf8');
+    // Sequence 15: cmdSessionRun itself (the CLI command controller) was
+    // relocated out of the facade into its own module; the facade now only
+    // composes it. See that module's own header comment.
+    const sourceText = fs.readFileSync(path.resolve(__dirname, '../lib/runtime-bridge-codex/cmd-session-run.cjs'), 'utf8');
     const fnStart = sourceText.indexOf('async function cmdSessionRun');
     assert.ok(fnStart >= 0, 'test precondition: cmdSessionRun must exist as a named function');
-    const sectionEnd = sourceText.indexOf('// ── C2: app-server JSONL client + schemas ──', fnStart);
-    assert.ok(sectionEnd > fnStart, 'test precondition: the known trailing C2 section marker must be found after cmdSessionRun');
+    const sectionEnd = sourceText.indexOf('  return Object.freeze({\n    cmdSessionRun,', fnStart);
+    assert.ok(sectionEnd > fnStart, 'test precondition: the module\'s own closing export block must be found after cmdSessionRun');
     return sourceText.slice(fnStart, sectionEnd);
+  }
+
+  function ownedSupervisorEngineBody() {
+    // The per-role bootstrap loop and the whole-batch READY transition it
+    // must precede both now live in the owned supervisor engine module --
+    // see that module's own header comment.
+    return fs.readFileSync(path.resolve(__dirname, '../lib/runtime-bridge-codex/owned-app-server-supervisor-engine.cjs'), 'utf8');
   }
 
   test('cmdSessionRun structural (P0-4): credential read is a genuine call before execution-claim consumption', () => {
@@ -14427,7 +14582,7 @@ describe('M6 (P0-4): READY gating -- credential readiness and full RPC chain', (
     const consumeIndex = fnBody.indexOf('validateAndConsumeExecutionClaim(');
     assert.ok(credentialIndex >= 0, 'the session credential resolver must be invoked, not merely named in prose');
     assert.ok(consumeIndex > credentialIndex, 'credential validation must precede the first authority-consuming write');
-    const sourceText = fs.readFileSync(path.resolve(__dirname, '../lib/runtime-bridge-codex.cjs'), 'utf8');
+    const sourceText = fs.readFileSync(path.resolve(__dirname, '../lib/runtime-bridge-codex/session-run-test-backend.cjs'), 'utf8');
     const resolverStart = sourceText.indexOf('function resolveSessionRunCredentialSource');
     const resolverEnd = sourceText.indexOf('\n}', resolverStart);
     assert.ok(resolverStart >= 0 && resolverEnd > resolverStart, 'credential resolver helper must exist');
@@ -14435,17 +14590,31 @@ describe('M6 (P0-4): READY gating -- credential readiness and full RPC chain', (
   });
 
   test('cmdSessionRun structural (P0-4): initialize -> login -> role profile -> bootstrap thread/turn/completion/archive -> presence -> batch READY remains ordered', () => {
-    const fnBody = cmdSessionRunBody();
+    // The per-role RPC bootstrap sequence now lives in its own extracted
+    // module (app-server-supervisor-role-bootstrap.cjs); the whole-batch
+    // READY transition it must precede stays in the orchestrator itself.
+    // See that module's own header comment.
+    const roleBootstrapSource = fs.readFileSync(
+      path.resolve(__dirname, '../lib/runtime-bridge-codex/app-server-supervisor-role-bootstrap.cjs'), 'utf8',
+    );
     const calls = [
       '.initialize(', '.login(', 'resolveCanonicalRoleProfile(', '.threadStart(',
       '.turnStart(', 'waitForValidatedTurnCompletion(', '.threadArchive(',
-      'publishWorkerPresenceReady(', 'transitionSupervisorBatchToReady(',
+      'publishWorkerPresenceReady(',
     ];
-    const indices = calls.map((call) => fnBody.indexOf(call));
+    const indices = calls.map((call) => roleBootstrapSource.indexOf(call));
     indices.forEach((index, i) => assert.ok(index >= 0, 'missing production call: ' + calls[i]));
     for (let i = 1; i < indices.length; i += 1) {
       assert.ok(indices[i] > indices[i - 1], calls[i] + ' must occur after ' + calls[i - 1]);
     }
+    // The orchestrator must invoke the whole per-role bootstrap module
+    // before ever attempting the whole-batch READY transition. Both call
+    // sites now live in the owned supervisor engine module (Sequence 15).
+    const engineBody = ownedSupervisorEngineBody();
+    const bootstrapCallIndex = engineBody.indexOf('roleBootstrap.bootstrapRoleWorker(');
+    const batchReadyIndex = engineBody.indexOf('transitionSupervisorBatchToReady(');
+    assert.ok(bootstrapCallIndex >= 0, 'missing production call: roleBootstrap.bootstrapRoleWorker(');
+    assert.ok(batchReadyIndex > bootstrapCallIndex, 'transitionSupervisorBatchToReady( must occur after roleBootstrap.bootstrapRoleWorker(');
   });
 });
 
@@ -14470,47 +14639,91 @@ describe('M6 (P0-4): READY gating -- credential readiness and full RPC chain', (
 
 describe('M6 (Group A / C4 slice, sub-items c/d/e): app-server worker -- READY gating, per-role isolation, RoleScheduler/v1', () => {
   function cmdSessionRunBody() {
-    const sourceText = fs.readFileSync(path.resolve(__dirname, '../lib/runtime-bridge-codex.cjs'), 'utf8');
+    // Sequence 15: cmdSessionRun itself (the CLI command controller) was
+    // relocated out of the facade into its own module; the facade now only
+    // composes it. See that module's own header comment.
+    const sourceText = fs.readFileSync(path.resolve(__dirname, '../lib/runtime-bridge-codex/cmd-session-run.cjs'), 'utf8');
     const fnStart = sourceText.indexOf('async function cmdSessionRun');
     assert.ok(fnStart >= 0, 'test precondition: cmdSessionRun must exist as a named function');
-    const sectionEnd = sourceText.indexOf('// ── C2: app-server JSONL client + schemas ──', fnStart);
-    assert.ok(sectionEnd > fnStart, 'test precondition: the known trailing C2 section marker must be found after cmdSessionRun');
+    const sectionEnd = sourceText.indexOf('  return Object.freeze({\n    cmdSessionRun,', fnStart);
+    assert.ok(sectionEnd > fnStart, 'test precondition: the module\'s own closing export block must be found after cmdSessionRun');
     return sourceText.slice(fnStart, sectionEnd);
   }
 
+  function ownedSupervisorEngineBody() {
+    // The per-role bootstrap loop and the whole-batch READY transition it
+    // must precede both now live in the owned supervisor engine module --
+    // see that module's own header comment.
+    return fs.readFileSync(path.resolve(__dirname, '../lib/runtime-bridge-codex/owned-app-server-supervisor-engine.cjs'), 'utf8');
+  }
+
   test('sub-item (c): worker presence is published before the complete batch READY transition', () => {
-    const fnBody = cmdSessionRunBody();
-    const presenceIndex = fnBody.indexOf('publishWorkerPresenceReady(');
+    // publishWorkerPresenceReady( now lives in the extracted per-role
+    // bootstrap module; the orchestrator's own per-role loop must still
+    // invoke that whole module before ever attempting the batch transition.
+    const roleBootstrapSource = fs.readFileSync(
+      path.resolve(__dirname, '../lib/runtime-bridge-codex/app-server-supervisor-role-bootstrap.cjs'), 'utf8',
+    );
+    assert.ok(roleBootstrapSource.indexOf('publishWorkerPresenceReady(') >= 0, 'worker-presence publication call must exist');
+    const fnBody = ownedSupervisorEngineBody();
+    const bootstrapCallIndex = fnBody.indexOf('roleBootstrap.bootstrapRoleWorker(');
     const batchIndex = fnBody.indexOf('transitionSupervisorBatchToReady(');
-    assert.ok(presenceIndex >= 0, 'worker-presence publication call must exist');
-    assert.ok(batchIndex > presenceIndex, 'complete batch READY must occur only after per-role presence publication');
+    assert.ok(bootstrapCallIndex >= 0, 'per-role bootstrap module invocation must exist');
+    assert.ok(batchIndex > bootstrapCallIndex, 'complete batch READY must occur only after per-role presence publication');
   });
 
   test('sub-item (d): the bootstrap section creates root, child, connection and thread inside a loop over every requested role', () => {
-    const fnBody = cmdSessionRunBody();
+    const fnBody = ownedSupervisorEngineBody();
     const sectionStart = fnBody.indexOf('const readyEvidence = [];');
     const sectionEnd = fnBody.indexOf('const batchReadyResult =', sectionStart);
     assert.ok(sectionStart >= 0 && sectionEnd > sectionStart, 'bootstrap-section anchors must exist');
     const bootstrap = fnBody.slice(sectionStart, sectionEnd);
     assert.ok(bootstrap.includes('for (const role of p.roles) {'), 'bootstrap must iterate the complete role set');
-    for (const call of ['createRunRoot(', 'spawnWithIntent(', 'createAppServerConnection(', '.threadStart(']) {
+    // Root provisioning, spawn/adoption and the RPC bootstrap sequence are
+    // now three extracted per-role stage modules; the orchestrator's own
+    // loop must call all three, in order, and each stage's own module must
+    // still perform the real, named primitive.
+    for (const call of ['startupPreflight.provisionRoleRoot(', 'workerSpawn.spawnRoleWorker(', 'roleBootstrap.bootstrapRoleWorker(']) {
       assert.ok(bootstrap.includes(call), 'per-role bootstrap is missing ' + call);
     }
+    const preflightSource = fs.readFileSync(
+      path.resolve(__dirname, '../lib/runtime-bridge-codex/app-server-supervisor-startup-preflight.cjs'), 'utf8',
+    );
+    const workerSpawnSource = fs.readFileSync(
+      path.resolve(__dirname, '../lib/runtime-bridge-codex/app-server-supervisor-worker-spawn.cjs'), 'utf8',
+    );
+    const roleBootstrapSource = fs.readFileSync(
+      path.resolve(__dirname, '../lib/runtime-bridge-codex/app-server-supervisor-role-bootstrap.cjs'), 'utf8',
+    );
+    assert.ok(preflightSource.includes('createRunRoot('), 'root provisioning stage is missing createRunRoot(');
+    assert.ok(workerSpawnSource.includes('spawnWithIntent('), 'worker-spawn stage is missing spawnWithIntent(');
+    assert.ok(roleBootstrapSource.includes('createAppServerConnection(') && roleBootstrapSource.includes('.threadStart('),
+      'role-bootstrap stage is missing createAppServerConnection(/.threadStart(');
   });
 
   test('sub-item (e): disk inbox -> claim/lease -> FIFO queue -> scheduled WAL -> read projection -> turn/start -> delivery/result remains ordered', () => {
-    const sourceText = fs.readFileSync(path.resolve(__dirname, '../lib/runtime-bridge-codex.cjs'), 'utf8');
-    const executeStart = sourceText.indexOf('async function executeRetainedWorkerRequest');
-    const executeEnd = sourceText.indexOf('/**\n * `session-run', executeStart);
-    const executeBody = sourceText.slice(executeStart, executeEnd);
+    // Sequence 15: executeRetainedWorkerRequest and startAndAwaitWorkerTurn
+    // were each relocated out of the facade into their own extracted
+    // modules -- see retained-worker-request.cjs / worker-turn-execution.cjs.
+    const executeSourceText = fs.readFileSync(
+      path.resolve(__dirname, '../lib/runtime-bridge-codex/retained-worker-request.cjs'), 'utf8',
+    );
+    const executeStart = executeSourceText.indexOf('async function executeRetainedWorkerRequest');
+    const executeEnd = executeSourceText.indexOf('  return Object.freeze({\n    executeRetainedWorkerRequest,', executeStart);
+    assert.ok(executeStart >= 0 && executeEnd > executeStart, 'test precondition: executeRetainedWorkerRequest anchors must exist');
+    const executeBody = executeSourceText.slice(executeStart, executeEnd);
     const scheduled = executeBody.indexOf('hostBridgeScheduleTurn(');
     const thread = executeBody.indexOf('.threadStart(', scheduled);
     const turn = executeBody.indexOf('startAndAwaitWorkerTurn(', thread);
     assert.ok(scheduled >= 0 && thread > scheduled && turn > thread, 'scheduled intent WAL must precede root thread and turn service');
 
-    const startStart = sourceText.indexOf('async function startAndAwaitWorkerTurn');
-    const startEnd = sourceText.indexOf('async function waitForAcceptedChild', startStart);
-    const startBody = sourceText.slice(startStart, startEnd);
+    const startSourceText = fs.readFileSync(
+      path.resolve(__dirname, '../lib/runtime-bridge-codex/worker-turn-execution.cjs'), 'utf8',
+    );
+    const startStart = startSourceText.indexOf('async function startAndAwaitWorkerTurn');
+    const startEnd = startSourceText.indexOf('async function waitForAcceptedChild', startStart);
+    assert.ok(startStart >= 0 && startEnd > startStart, 'test precondition: startAndAwaitWorkerTurn anchors must exist');
+    const startBody = startSourceText.slice(startStart, startEnd);
     const projection = startBody.indexOf('buildTurnReadProjection(');
     const preflight = startBody.indexOf('validateTurnReadProjection(', projection);
     const turnStart = startBody.indexOf('.turnStart(', preflight);
@@ -14520,12 +14733,17 @@ describe('M6 (Group A / C4 slice, sub-items c/d/e): app-server worker -- READY g
     assert.ok(projection >= 0 && preflight > projection && turnStart > preflight && delivery > turnStart && completion > delivery && postflight > completion,
       'projection preflight, turn/start, delivery commit, completion and postflight must remain strictly ordered');
 
-    const fnBody = cmdSessionRunBody();
-    const listInbox = fnBody.indexOf('hostBridgeListInbox(');
-    const claim = fnBody.indexOf('hostBridgeClaim(', listInbox);
-    const enqueue = fnBody.indexOf('worker.queue.push(', claim);
-    const sort = fnBody.indexOf('worker.queue.sort(', enqueue);
-    const service = fnBody.indexOf('executeRetainedWorkerRequest(', sort);
+    // The retained-worker poll loop itself (disk inbox -> claim -> enqueue
+    // -> sort -> service) now lives in its own extracted module -- see
+    // app-server-supervisor-retained-polling.cjs's own header comment.
+    const retainedPollingSource = fs.readFileSync(
+      path.resolve(__dirname, '../lib/runtime-bridge-codex/app-server-supervisor-retained-polling.cjs'), 'utf8',
+    );
+    const listInbox = retainedPollingSource.indexOf('hostBridgeListInbox(');
+    const claim = retainedPollingSource.indexOf('hostBridgeClaim(', listInbox);
+    const enqueue = retainedPollingSource.indexOf('worker.queue.push(', claim);
+    const sort = retainedPollingSource.indexOf('worker.queue.sort(', enqueue);
+    const service = retainedPollingSource.indexOf('executeRetainedWorkerRequest(', sort);
     assert.ok(listInbox >= 0 && claim > listInbox && enqueue > claim && sort > enqueue && service > sort,
       'canonical disk inbox admission must claim, enqueue, sort FIFO and only then begin service');
   });

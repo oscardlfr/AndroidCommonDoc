@@ -1992,9 +1992,10 @@ test('rotate: noop, WITH a registered+validated disk consumer, genuinely reaches
 // roles against the exact same scope, both racing
 // mintSupervisorBatchUnderTransaction's single lock. A test-only
 // RUNTIME_ROLE_LIFECYCLE_TEST_TX_DELAY_MS widens the critical section so the
-// second process's real busy-spin (withRegistryLock, 2000 attempts, no
-// backoff) has ample time to observe the lock genuinely held rather than
-// racing past it by luck.
+// second process observes the lock genuinely held rather than racing past it
+// by luck. The transaction-only contention budget then gives Windows enough
+// time for its ACL-secured durable writes while leaving every ordinary
+// withRegistryLock caller's fail-fast policy unchanged.
 test('SupervisorLifecycleTransaction: two concurrent REAL processes ensure()-ing DISJOINT roles for the SAME scope produce EXACTLY ONE action total, and the loser leaves zero orphaned action files (point 1, deterministic multi-process race)', async () => {
   const dir = makeGitProject();
   try {
@@ -2214,9 +2215,14 @@ test('P5SP-ALT host-admission and the role-tool bootstrap are alternatives, neve
   const source = fs.readFileSync(
     path.join(__dirname, '..', 'lib', 'runtime-role-lifecycle.cjs'), 'utf8',
   );
-  const admitAt = source.indexOf('function admitDirectRoleHostStartupUnlocked(');
+  // admitDirectRoleHostStartupUnlocked now lives in its own extracted
+  // module -- see direct-role-host-admission.cjs's own header comment.
+  const admissionSource = fs.readFileSync(
+    path.join(__dirname, '..', 'lib', 'runtime-role-lifecycle', 'direct-role-host-admission.cjs'), 'utf8',
+  );
+  const admitAt = admissionSource.indexOf('function admitDirectRoleHostStartupUnlocked(');
   assert.ok(admitAt > 0, 'the host-admission implementation must exist');
-  const admit = source.slice(admitAt, source.indexOf('\nfunction ', admitAt + 1));
+  const admit = admissionSource.slice(admitAt, admissionSource.indexOf('\nfunction ', admitAt + 1));
 
   // At-most-once: a marker is published under a no-clobber write, and a second, DIFFERENT admission
   // for the same action is a conflict rather than a second transition.
@@ -2259,7 +2265,7 @@ test('P5SP-WHYUNAVAILABLE an unavailable ensure names which role and why', () =>
   // CAPABILITY_UNAVAILABLE is exactly what made the live cause unattributable -- the resolver's own
   // reason had to be reconstructed from outside the run by a separate watcher.
   const source = fs.readFileSync(
-    path.join(__dirname, '..', 'lib', 'runtime-role-lifecycle.cjs'), 'utf8',
+    path.join(__dirname, '..', 'lib', 'runtime-role-lifecycle', 'ensure-handler.cjs'), 'utf8',
   );
   const noteAt = source.indexOf('const noteUnavailable = (role, reason) =>');
   assert.ok(noteAt > 0, 'ensure must record why a role is unavailable');
@@ -2537,7 +2543,7 @@ test('RSR-RECOVERY an unprovable pid identity is never rounded down to dead', ()
     // unprovable one: the indeterminate branch returns before anything is released, and nothing
     // downgrades an unusable observation into a proof of death.
     const source = fs.readFileSync(
-      path.join(__dirname, '..', 'lib', 'runtime-role-lifecycle.cjs'), 'utf8',
+      path.join(__dirname, '..', 'lib', 'runtime-role-lifecycle', 'retained-supervisor-reconciliation.cjs'), 'utf8',
     );
     const reconcileAt = source.indexOf('function reconcileRetainedSupervisorForEnsure(');
     const reconcile = source.slice(reconcileAt, source.indexOf('\nfunction ', reconcileAt + 1));

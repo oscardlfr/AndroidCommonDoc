@@ -2904,10 +2904,22 @@ _write_takeover() {
   # marker the FIRST time it genuinely observes EEXIST on `.lock` -- asserting
   # on that file directly proves this invocation entered the real contention
   # branch, not merely that it hadn't finished yet.
-  sleep 0.3
-  [ -s "$pr_out" ] && { echo "publish-result already produced output before cancel released the lock -- it did not genuinely block:"; cat "$pr_out"; false; }
-  kill -0 "$pr_pid" 2>/dev/null || { echo "publish-result process already exited before cancel released the lock"; false; }
-  [ -e "$txn_dir/.lock-contention-observed" ] || { echo "publish-result never observed a genuine EEXIST on .lock -- cannot prove it is blocked IN acquireLock's own retry loop, as opposed to merely not yet having reached it"; false; }
+  # Deterministic (not a fixed wall-clock guess): poll, bounded, for the
+  # contention marker to appear, failing IMMEDIATELY and loudly the instant
+  # either strong invariant below is ever violated during the wait -- a
+  # slower host (more subprocess/module-load contention) must never be
+  # misread as "did not genuinely block", only as "needed more real time to
+  # reach the same code branch".
+  local observed=""
+  for _ in $(seq 1 100); do
+    if [ -s "$pr_out" ]; then
+      echo "publish-result already produced output before cancel released the lock -- it did not genuinely block:"; cat "$pr_out"; false
+    fi
+    kill -0 "$pr_pid" 2>/dev/null || { echo "publish-result process already exited before cancel released the lock"; false; }
+    if [ -e "$txn_dir/.lock-contention-observed" ]; then observed=1; break; fi
+    sleep 0.05
+  done
+  [ -n "$observed" ] || { echo "publish-result never observed a genuine EEXIST on .lock within the bounded wait -- cannot prove it is blocked IN acquireLock's own retry loop, as opposed to merely not yet having reached it"; false; }
 
   touch "$txn_dir/.rendezvous-cancel-post-publish-pre-recheck-go"
   wait "$cancel_pid"

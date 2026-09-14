@@ -1320,7 +1320,25 @@ Invoke-Case -Name 'W07b deterministic backend/frontend attach reuses one supervi
     $currentSid = ([System.Security.Principal.WindowsIdentity]::GetCurrent()).User.Value
     $allowedRegistrySids = @($currentSid, 'S-1-5-18', 'S-1-5-32-544')
     foreach ($registryDir in $registryDirs) {
-      $registryAcl = Get-Acl -LiteralPath $registryDir.FullName
+      $registryAcl = $null
+      try {
+        $registryAcl = Get-Acl -LiteralPath $registryDir.FullName -ErrorAction Stop
+      } catch [System.Management.Automation.ItemNotFoundException] {
+        # role-read-view/current is retired (renamed away, then removed) by the
+        # retained worker's own closeTurnReadProjection the instant a turn's
+        # terminal result is durably published and it returns to idle (see
+        # retained-worker-request.cjs / turn-projection-build.cjs, proven by
+        # the Sequence 16 "closeTurnReadProjection durably retires..."
+        # characterization test) -- a legitimate, expected lifecycle
+        # transition this snapshot-then-verify loop can race against, never a
+        # missing-dependency or premature-cleanup defect. Only that exact,
+        # understood leaf name is tolerated; any other directory vanishing
+        # here still fails loudly, and the tolerated one is independently
+        # re-confirmed gone (not a transient Get-Acl glitch) before skipping.
+        Assert-True ($registryDir.Name -eq 'current') "an unexpected registry directory vanished before its ACL could be verified: $($registryDir.FullName)"
+        Assert-True (-not (Test-Path -LiteralPath $registryDir.FullName)) "Get-Acl reported missing but Test-Path still finds: $($registryDir.FullName)"
+        continue
+      }
       if ($registryDir.FullName -eq $principalDirs[0].FullName) {
         Assert-True $registryAcl.AreAccessRulesProtected "runtime registry principal boundary still inherits ACLs: $($registryDir.FullName)"
       }

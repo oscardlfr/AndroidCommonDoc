@@ -81,6 +81,19 @@ test('P3-RUNTIME-CONTEXT L0 self-use and explicit L1/L2 source references resolv
   }
 });
 
+test('P3-RUNTIME-INVENTORY includes every modular runtime dependency tree', () => {
+  const inventory = computeRuntimeToolkitInventory(TOOLKIT_ROOT);
+  assert.strictEqual(inventory.ok, true, JSON.stringify(inventory));
+  const paths = new Set(inventory.entries.map((entry) => entry.relative_path));
+  assert.ok(paths.has('scripts/lib/runtime-consultation.cjs'));
+  assert.ok(paths.has('scripts/lib/runtime-consultation/primitives.cjs'));
+  assert.ok(paths.has('scripts/lib/runtime-consultation/cli-argv.cjs'));
+  assert.ok(paths.has('scripts/lib/runtime-consultation/git-identity.cjs'));
+  assert.ok(paths.has('scripts/lib/runtime-consultation/coordination-paths.cjs'));
+  assert.ok(paths.has('scripts/lib/runtime-role-lifecycle/claude-id01-startup.cjs'));
+  assert.ok(paths.has('scripts/lib/runtime-bridge-codex/process-identity.cjs'));
+});
+
 test('P3-RUNTIME-CONTEXT malformed, disabled, ambiguous, remote, wrong-layer and foreign toolkit pins fail closed', () => {
   const mutations = [
     (m) => { delete m.runtime; },

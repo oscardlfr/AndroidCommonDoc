@@ -29,8 +29,48 @@ const os = require('node:os');
 const path = require('node:path');
 
 const IMPL = path.resolve(__dirname, '../lib/runtime-role-lifecycle.cjs');
+const CONSULTATION_IMPL = path.resolve(__dirname, '../lib/runtime-consultation.cjs');
+const CONSULTATION_MODULES_DIR = path.resolve(__dirname, '../lib/runtime-consultation');
+
+function runtimeConsultationSourceUnits() {
+  const units = [];
+  const addRegularFile = (filePath) => {
+    const stat = fs.lstatSync(filePath);
+    assert.ok(stat.isFile() && !stat.isSymbolicLink(), 'runtime consultation source must be a regular non-symlink file: ' + filePath);
+    units.push({
+      label: path.relative(path.dirname(CONSULTATION_IMPL), filePath).split(path.sep).join('/'),
+      source: fs.readFileSync(filePath, 'utf8'),
+    });
+  };
+  const walk = (dirPath) => {
+    for (const name of fs.readdirSync(dirPath).slice().sort()) {
+      const filePath = path.join(dirPath, name);
+      const stat = fs.lstatSync(filePath);
+      if (stat.isSymbolicLink()) continue;
+      if (stat.isDirectory()) walk(filePath);
+      else if (stat.isFile() && name.endsWith('.cjs')) addRegularFile(filePath);
+    }
+  };
+  addRegularFile(CONSULTATION_IMPL);
+  walk(CONSULTATION_MODULES_DIR);
+  return units;
+}
+
+function runtimeConsultationFunctionBody(functionName) {
+  const marker = 'function ' + functionName + '(';
+  const owners = runtimeConsultationSourceUnits().filter(({ source }) => source.includes(marker));
+  assert.strictEqual(owners.length, 1, 'expected exactly one runtime consultation module to own ' + marker + '; owners=' + JSON.stringify(owners.map(({ label }) => label)));
+  const owner = owners[0];
+  const defIdx = owner.source.indexOf(marker);
+  const nextFunctionOffset = owner.source.indexOf('\nfunction ', defIdx + marker.length);
+  const moduleExportsOffset = owner.source.indexOf('\nmodule.exports = {', defIdx + marker.length);
+  const candidates = [nextFunctionOffset, moduleExportsOffset].filter((offset) => offset > defIdx);
+  const end = candidates.length > 0 ? Math.min(...candidates) : owner.source.length;
+  return { label: owner.label, body: owner.source.slice(defIdx, end) };
+}
+
 const rll = require(IMPL);
-const rc = require(path.resolve(__dirname, '../lib/runtime-consultation.cjs'));
+const rc = require(CONSULTATION_IMPL);
 const claudeHost = require(path.resolve(__dirname, '../lib/runtime-host-claude.cjs'));
 
 const claudeId01SessionEvidence = new Map();
@@ -5246,11 +5286,11 @@ test('M7-REQUESTER-EXPIRY-CAP-GUARD-24 (guard, preserve): createRequesterBinding
 
 test('M7-NO-RECOVERY-ABI-GUARD-26 (guard, preserve): neither runtime-role-lifecycle.cjs nor runtime-consultation.cjs define a resume-* command or an AuthorityIdentityLock concept -- M7 section 1 is explicit this design deliberately has neither (along with a stop seal, stale-lock sweep, PID recovery, deletion-based retirement, or best-effort lock stealing, none of which this codebase has ever implemented either) -- this guard locks the one concretely-checkable piece (a literal resume-* command string, or the AuthorityIdentityLock name) against silent regression', () => {
   const rllSrc = fs.readFileSync(IMPL, 'utf8');
-  const rcSrc = fs.readFileSync(path.resolve(__dirname, '../lib/runtime-consultation.cjs'), 'utf8');
+  const rcSources = runtimeConsultationSourceUnits();
   assert.ok(!rllSrc.includes("'resume-"), 'runtime-role-lifecycle.cjs must never define a resume-* subcommand string literal');
-  assert.ok(!rcSrc.includes("'resume-"), 'runtime-consultation.cjs must never define a resume-* subcommand string literal');
+  assert.ok(rcSources.every(({ source }) => !source.includes("'resume-")), 'runtime consultation facade/modules must never define a resume-* subcommand string literal');
   assert.ok(!rllSrc.includes('AuthorityIdentityLock'), 'runtime-role-lifecycle.cjs must never introduce an AuthorityIdentityLock concept');
-  assert.ok(!rcSrc.includes('AuthorityIdentityLock'), 'runtime-consultation.cjs must never introduce an AuthorityIdentityLock concept');
+  assert.ok(rcSources.every(({ source }) => !source.includes('AuthorityIdentityLock')), 'runtime consultation facade/modules must never introduce an AuthorityIdentityLock concept');
 });
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -5312,7 +5352,9 @@ test('M7-TRACE-CLEANUP-NONAUTH-23 (RED): a durable fence must already be written
 });
 
 test('M7-ROLEACTOR-COMPAT-GUARD-27 (guard, preserve): RoleActorBinding creation never references the M7 Claude-actor-fence mechanism -- M7 section 2.2 is explicit that RoleActorBinding, retained Codex supervisor authority, lifecycle grants, and one-shot worker-stop-ack all remain outside this Claude actor-cut contract; this guard locks that structural isolation against silent regression once fence-awareness lands for the requester/root-source/one-shot families elsewhere in this file', () => {
-  const src = fs.readFileSync(IMPL, 'utf8');
+  // createRoleActorBinding now lives in its own extracted module -- see
+  // orchestrator-role-bindings.cjs's own header comment.
+  const src = fs.readFileSync(path.join(path.dirname(IMPL), 'runtime-role-lifecycle', 'orchestrator-role-bindings.cjs'), 'utf8');
   const defIdx = src.indexOf('function createRoleActorBinding(');
   assert.notStrictEqual(defIdx, -1, 'fixture sanity: createRoleActorBinding must still be found as a named function in the source');
   const window = src.slice(defIdx, defIdx + 2000);
@@ -6179,9 +6221,9 @@ test('M7-CAPABILITY-DEADLINE-ENFORCED-04B (RED): a capability whose deadline was
 // ════════════════════════════════════════════════════════════════════════════
 
 test('M7-RENDEZVOUS-GO-SYMLINK-UNCHECKED-17 (RED): testM7Rendezvous\'s own .go-side poll (both this file\'s definition and its runtime-consultation.cjs mirror) must reject a symlinked .go path via an explicit lstat/isSymbolicLink check BEFORE trusting its byte contents -- today both bodies call plain fs.readFileSync(goPath) with no such check, so a symlink pointing at correct bytes elsewhere would be wrongly accepted as the real release signal', () => {
-  const rllSrc = fs.readFileSync(path.resolve(__dirname, '../lib/runtime-role-lifecycle.cjs'), 'utf8');
-  const rcSrc = fs.readFileSync(path.resolve(__dirname, '../lib/runtime-consultation.cjs'), 'utf8');
-  for (const [label, src] of [['runtime-role-lifecycle.cjs', rllSrc], ['runtime-consultation.cjs', rcSrc]]) {
+  const rllSrc = fs.readFileSync(path.resolve(__dirname, '../lib/runtime-role-lifecycle/m7-rendezvous.cjs'), 'utf8');
+  const consultationOwner = runtimeConsultationFunctionBody('testM7Rendezvous');
+  for (const [label, src] of [['runtime-role-lifecycle/m7-rendezvous.cjs', rllSrc], [consultationOwner.label, consultationOwner.body]]) {
     const defIdx = src.indexOf('function testM7Rendezvous(');
     assert.notStrictEqual(defIdx, -1, 'fixture sanity: testM7Rendezvous must still be found as a named function in ' + label);
     const window = src.slice(defIdx, defIdx + 2500);
@@ -6499,9 +6541,9 @@ test('M7-CLASSIFIER-ADVERSARY-SCAN-CAP-R12-5 (guard, confirm): a family director
 // ════════════════════════════════════════════════════════════════════════════
 
 test('M7-SUPERSEDED-RESOLVER-ABSENT-ROOT-INGRESS-LOCAL-R17 (RED): ROOT_SOURCE_INGRESS_FIELDS_LOCAL must be genuinely ABSENT from runtime-consultation.cjs -- M7 section 6/12 requires every duplicated per-family shape-checker be superseded by delegating to the ONE canonical rll.validateRootSourceIngressRecord (already exported); today this hook-local field-check table still exists and readRootSourceIngressOrThrow still validates against it via assertClosedShape', () => {
-  const src = fs.readFileSync(path.resolve(__dirname, '../lib/runtime-consultation.cjs'), 'utf8');
+  const sources = runtimeConsultationSourceUnits();
   assert.strictEqual(
-    src.includes('ROOT_SOURCE_INGRESS_FIELDS_LOCAL'), false,
+    sources.some(({ source }) => source.includes('ROOT_SOURCE_INGRESS_FIELDS_LOCAL')), false,
     'M7 section 6/12: runtime-consultation.cjs must delegate root-source ingress shape validation to rll.validateRootSourceIngressRecord, never maintain its own duplicate field-check table -- today ROOT_SOURCE_INGRESS_FIELDS_LOCAL still exists and is still used'
   );
 });
@@ -6619,7 +6661,7 @@ test('M7-SUBAGENTSTOP-PREFLIGHT-BEFORE-SHOULDFENCE-R13 (RED): handleSubagentStop
 // other) has one unambiguous, grep-able contract to implement/assert against.
 // ════════════════════════════════════════════════════════════════════════════
 
-test('M7-RENDEZVOUS-GO-TOCTOU-SYMLINK-SWAP-R14 (RED): testM7Rendezvous must reject an existing-but-invalid .go sentinel (here: swapped mid-flight for a symlink to a byte-identical-but-different file) IMMEDIATELY with the stable M7_RENDEZVOUS_INVALID_GO_SENTINEL error, never by silently accepting it as a genuine release nor by falling through to the generic 5000ms timeout -- deterministically swaps the .go path for a symlink BETWEEN the lstat call and the readFileSync call by monkey-patching fs.lstatSync as a synchronous side effect; today both bodies perform two SEPARATE syscalls against the path string with no sentinel-validity check on the existing-but-wrong case, so this swap is silently accepted as a genuine release even though neither ever re-verifies the identity of what it actually read', () => {
+test('M7-RENDEZVOUS-GO-TOCTOU-SYMLINK-SWAP-R14: testM7Rendezvous rejects an existing-but-invalid .go sentinel (here: swapped mid-flight for a symlink to a byte-identical-but-different file) on its first observation with the stable M7_RENDEZVOUS_INVALID_GO_SENTINEL error, never by silently accepting it as a genuine release and never by entering the poll loop\'s own backoff or falling through to the generic 5000ms timeout -- deterministically swaps the .go path for a symlink BETWEEN the lstat call and the fd-bound read by monkey-patching fs.lstatSync as a synchronous side effect; the fd-bound implementation (lstat pre-identity, O_NOFOLLOW open, fstat identity/shape correlation, read from the held fd) must detect the swap immediately rather than accepting it or falling back to polling', () => {
   const dir = makeGitProject();
   const { worktreeId, planDigest } = requesterBindingFixtureBase(dir);
   const role = 'arch-testing';
@@ -6635,6 +6677,7 @@ test('M7-RENDEZVOUS-GO-TOCTOU-SYMLINK-SWAP-R14 (RED): testM7Rendezvous must reje
   // false for exactly this reason).
   const rendezvousDir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'm7-r14-')));
   const originalLstatSync = fs.lstatSync;
+  const originalAtomicsWait = Atomics.wait;
   const savedEnv = {
     NODE_ENV: process.env.NODE_ENV,
     RUNTIME_ROLE_LIFECYCLE_TEST_CAPABILITY: process.env.RUNTIME_ROLE_LIFECYCLE_TEST_CAPABILITY,
@@ -6659,6 +6702,18 @@ test('M7-RENDEZVOUS-GO-TOCTOU-SYMLINK-SWAP-R14 (RED): testM7Rendezvous must reje
       }
       return result;
     };
+    // Deterministic (non-wall-clock) proof of "no further polling": the
+    // rendezvous poll loop's own m7SleepSync backs off exclusively via
+    // Atomics.wait, and this whole synchronous createRequesterBinding call
+    // never legitimately needs a genuine Atomics.wait for any OTHER reason
+    // -- so counting real invocations here isolates the observation to the
+    // rendezvous loop without conflating unrelated waits. A rejection on the
+    // FIRST observation of the swapped sentinel must leave this at exactly 0.
+    let atomicsWaitCalls = 0;
+    Atomics.wait = function patchedAtomicsWait(...args) {
+      atomicsWaitCalls += 1;
+      return originalAtomicsWait.apply(Atomics, args);
+    };
 
     process.env.NODE_ENV = 'test';
     process.env.RUNTIME_ROLE_LIFECYCLE_TEST_CAPABILITY = 'm7-r14-toctou-capability';
@@ -6671,13 +6726,11 @@ test('M7-RENDEZVOUS-GO-TOCTOU-SYMLINK-SWAP-R14 (RED): testM7Rendezvous must reje
     const identity = { ok: true, provider: 'claude-hook', runtime_session_key: sessionId };
 
     let threw = null;
-    const callStart = Date.now();
     try {
       rll.createRequesterBinding(dir, identity, agentId, role, worktreeId, planDigest, 3600);
     } catch (e) {
       threw = e;
     }
-    const callElapsedMs = Date.now() - callStart;
 
     assert.strictEqual(swapped, true, 'fixture sanity: the lstat-then-read interception must have genuinely engaged (fs.lstatSync must have been called on the exact .go path at least once) for this race to be meaningful');
     assert.notStrictEqual(
@@ -6686,14 +6739,15 @@ test('M7-RENDEZVOUS-GO-TOCTOU-SYMLINK-SWAP-R14 (RED): testM7Rendezvous must reje
     );
     assert.strictEqual(
       typeof threw.message === 'string' && threw.message.includes('M7_RENDEZVOUS_INVALID_GO_SENTINEL'), true,
-      'M7 correction round 1 (C10): testM7Rendezvous must throw the ONE stable test-only invalid-sentinel error (message containing the literal M7_RENDEZVOUS_INVALID_GO_SENTINEL) for an EXISTING-but-invalid .go path (here: a symlink), distinguishable from every other failure mode -- today the thrown error is a generic timeout/other error, never this specific literal: ' + JSON.stringify({ message: threw.message, name: threw.name })
+      'M7 correction round 1 (C10): testM7Rendezvous must throw the ONE stable test-only invalid-sentinel error (message containing the literal M7_RENDEZVOUS_INVALID_GO_SENTINEL) for an EXISTING-but-invalid .go path (here: a symlink), distinguishable from every other failure mode (a generic timeout/other error is never acceptable here): ' + JSON.stringify({ message: threw.message, name: threw.name })
     );
-    assert.ok(
-      callElapsedMs < 2000,
-      'M7 correction round 1 (C10): an existing-but-invalid .go sentinel must be rejected IMMEDIATELY (no further polling), never by falling through to the ~5000ms RUNTIME_M7_RENDEZVOUS_MAX_WAIT_MS timeout budget -- today this call took ' + callElapsedMs + 'ms, consistent with the generic timeout path rather than a fast, specific detection'
+    assert.strictEqual(
+      atomicsWaitCalls, 0,
+      'an existing-but-invalid .go sentinel must be rejected on its FIRST observation, never by entering the poll loop\'s own backoff (Atomics.wait, via m7SleepSync) even once and never by falling through to the ~5000ms RUNTIME_M7_RENDEZVOUS_MAX_WAIT_MS generic-timeout budget -- a nonzero count here means detection fell back to polling instead of failing fast: observed ' + atomicsWaitCalls + ' backoff call(s)'
     );
   } finally {
     fs.lstatSync = originalLstatSync;
+    Atomics.wait = originalAtomicsWait;
     for (const [k, v] of Object.entries(savedEnv)) {
       if (v === undefined) delete process.env[k]; else process.env[k] = v;
     }

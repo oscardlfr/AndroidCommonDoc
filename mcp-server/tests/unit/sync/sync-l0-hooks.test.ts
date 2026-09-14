@@ -126,6 +126,18 @@ describe("source-referenced runtime installation", () => {
     expect(first.consumerLayer).toBe("L2");
     expect(first.registrations).toBe(14);
     expect(first.toolkitContentDigest).toMatch(/^[0-9a-f]{64}$/);
+    const inventoryPaths = new Set(first.inventory?.map((entry) => entry.relative_path));
+    expect(inventoryPaths.has("scripts/lib/runtime-consultation.cjs")).toBe(true);
+    expect(inventoryPaths.has("scripts/lib/runtime-consultation/primitives.cjs")).toBe(true);
+    expect(inventoryPaths.has("scripts/lib/runtime-consultation/cli-argv.cjs")).toBe(true);
+    expect(inventoryPaths.has("scripts/lib/runtime-consultation/git-identity.cjs")).toBe(true);
+    expect(inventoryPaths.has("scripts/lib/runtime-consultation/coordination-paths.cjs")).toBe(true);
+    expect(inventoryPaths.has("scripts/lib/runtime-role-lifecycle/claude-id01-startup.cjs")).toBe(true);
+    expect(inventoryPaths.has("scripts/lib/runtime-bridge-codex/process-identity.cjs")).toBe(true);
+    const verifierInventory = runtimeContext.computeRuntimeToolkitInventory(REAL_L0_ROOT);
+    expect(verifierInventory.ok).toBe(true);
+    expect(first.inventory).toEqual(verifierInventory.entries);
+    expect(first.toolkitContentDigest).toBe(verifierInventory.digest);
     const role = await readFile(join(projectRoot, ".claude", "agents", "arch-platform.md"), "utf8");
     expect(role).toBe(await readFile(join(REAL_L0_ROOT, ".claude", "agents", "arch-platform.md"), "utf8"));
     const settings = JSON.parse(await readFile(join(projectRoot, ".claude", "settings.json"), "utf8"));

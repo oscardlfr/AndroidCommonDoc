@@ -34,6 +34,7 @@ const path = require('node:path');
 
 const rll = require(path.resolve(__dirname, '../lib/runtime-role-lifecycle.cjs'));
 const rc = require(path.resolve(__dirname, '../lib/runtime-consultation.cjs'));
+const p2Owner = require(path.resolve(__dirname, '../lib/runtime-p2-prep-conformance-owner.cjs'));
 
 function makeGitProject() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rll-p2seed-'));
@@ -57,7 +58,7 @@ function writePlanFixture(projectRoot, waveSlug) {
 const P2_SEED_SCHEMA = 'runtime/p2-subject-bundle-seed/v1';
 const P2_SEED_WAVE_SLUG = 'p2-seed-red-a1';
 const P2_SEED_CAPS = Object.freeze({
-  max_files_per_role: 24,
+  max_files_per_role: 40,
   max_bytes_per_file: 1048576,
   max_total_bytes_per_role: 8388608,
 });
@@ -103,6 +104,20 @@ function buildSortedEntries() {
   });
   return out;
 }
+
+test('production P2 review packages remain within the sealed per-role file cap', () => {
+  const counts = new Map();
+  for (const entry of p2Owner.SEED_ENTRIES) {
+    counts.set(entry.role, (counts.get(entry.role) || 0) + 1);
+  }
+  assert.ok(counts.size > 0, 'production seed must contain role assignments');
+  for (const [role, count] of counts) {
+    assert.ok(
+      count <= p2Owner.SEED_CAPS.max_files_per_role,
+      `${role} has ${count} files; cap is ${p2Owner.SEED_CAPS.max_files_per_role}`,
+    );
+  }
+});
 
 function buildValidP2SubjectBundleSeedRecord(dir, waveSlug) {
   writePlanFixture(dir, waveSlug);
@@ -594,9 +609,9 @@ test('P2-MAT-04 builder enforces file count size and total caps', () => {
 // ── P2 request-birth wiring ─────────────────────────────────────────────
 
 test('P2-REQ-01 consult-root selects architect materializer at request birth', () => {
-  const source = fs.readFileSync(path.resolve(__dirname, '../lib/runtime-role-lifecycle.cjs'), 'utf8');
+  const source = fs.readFileSync(path.resolve(__dirname, '../lib/runtime-role-lifecycle/cli-consult-handlers.cjs'), 'utf8');
   const start = source.indexOf('function handleConsultRoot(rawArgv)');
-  const end = source.indexOf('function handleConsultRootStatus(rawArgv)', start);
+  const end = source.indexOf('function handleMixedReviewRequest(rawArgv)', start);
   assert.ok(start >= 0 && end > start, 'handleConsultRoot source slice must remain identifiable');
   const body = source.slice(start, end);
   assert.ok(
@@ -610,9 +625,9 @@ test('P2-REQ-01 consult-root selects architect materializer at request birth', (
 });
 
 test('P2-REQ-02 immutable intent is born from materialized subject fields', () => {
-  const source = fs.readFileSync(path.resolve(__dirname, '../lib/runtime-role-lifecycle.cjs'), 'utf8');
+  const source = fs.readFileSync(path.resolve(__dirname, '../lib/runtime-role-lifecycle/cli-consult-handlers.cjs'), 'utf8');
   const start = source.indexOf('function handleConsultRoot(rawArgv)');
-  const end = source.indexOf('function handleConsultRootStatus(rawArgv)', start);
+  const end = source.indexOf('function handleMixedReviewRequest(rawArgv)', start);
   const body = source.slice(start, end);
   const retainedAt = body.indexOf('const retained = s16ResolveRetainedPair(');
   const materializeAt = body.indexOf('const artifacts = s16MaterializeArchitectSubjectBundle(');
@@ -630,7 +645,7 @@ test('P2-REQ-02 immutable intent is born from materialized subject fields', () =
 });
 
 test('P2-REQ-03 selector preserves legacy fallback and bridge cannot materialize', () => {
-  const lifecycleSource = fs.readFileSync(path.resolve(__dirname, '../lib/runtime-role-lifecycle.cjs'), 'utf8');
+  const lifecycleSource = fs.readFileSync(path.resolve(__dirname, '../lib/runtime-role-lifecycle/p2-materialization.cjs'), 'utf8');
   const start = lifecycleSource.indexOf('function s16MaterializeArchitectSubjectBundle(');
   const end = lifecycleSource.indexOf('function s16ReadOptionalValidated(', start);
   assert.ok(start >= 0 && end > start, 'role-bound selector must exist as the declared sibling -- RED until implemented');

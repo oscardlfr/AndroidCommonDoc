@@ -125,7 +125,12 @@ function computeRuntimeToolkitInventory(toolkitRoot) {
     ...['init-session', 'resume-work', 'work', 'ingest-content', 'monitor-docs'].map((skill) => `skills/${skill}/SKILL.md`),
     ...['init-session', 'resume-work', 'work', 'ingest-content', 'monitor-docs'].map((command) => `.claude/commands/${command}.md`),
   ];
-  try { collectDirectory(root, 'mcp-server/build', files); } catch { return fail('runtime-toolkit-inventory-invalid'); }
+  try {
+    collectDirectory(root, 'scripts/lib/runtime-consultation', files);
+    collectDirectory(root, 'scripts/lib/runtime-role-lifecycle', files);
+    collectDirectory(root, 'scripts/lib/runtime-bridge-codex', files);
+    collectDirectory(root, 'mcp-server/build', files);
+  } catch { return fail('runtime-toolkit-inventory-invalid'); }
   const entries = [];
   try {
     for (const relative of [...new Set(files)].sort()) {

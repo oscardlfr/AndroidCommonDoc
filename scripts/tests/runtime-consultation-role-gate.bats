@@ -718,7 +718,23 @@ _tg_write_activation_for_request_tampered() {
       created_at: new Date().toISOString().replace(/\.\d{3}Z$/, "Z"),
       activation_liveness_expiry: rc.activationLivenessDeadline(reqObj),
     };
-    Object.assign(obj, JSON.parse(e.TG_OVERRIDES));
+    const overrides = JSON.parse(e.TG_OVERRIDES);
+    // Sequence 25: a literal future timestamp baked into the overrides JSON
+    // at TABLE-SETUP time (before the other real hook subprocess
+    // invocations in the same table run) goes stale on a slow host -- by
+    // the time THIS row is reached, minutes of real wall-clock time may
+    // have already elapsed, so a value that was "+30s in the future" at
+    // setup time can easily already be in the PAST at write time, silently
+    // defeating the not-in-the-future dimension it exists to prove
+    // (root-caused via a standalone resolveActivationForRequestPath repro:
+    // the validator already correctly denies a genuinely-future created_at
+    // at check time). This sentinel is computed fresh, immediately before
+    // writing, so the margin is always relative to the actual check-time
+    // clock, regardless of how long earlier rows in the same table took.
+    if (overrides.created_at === "__FRESH_NEAR_FUTURE_30S__") {
+      overrides.created_at = new Date(Date.now() + 30000).toISOString().replace(/\.\d{3}Z$/, "Z");
+    }
+    Object.assign(obj, overrides);
     const out = path.join(e.TG_ACTIVATION_DIR, obj.attempt_id + ".json");
     fs.writeFileSync(out, JSON.stringify(obj), { mode: 0o600 });
     fs.chmodSync(out, 0o600);
@@ -839,7 +855,7 @@ _tg_run_tamper_table() {
     return 1
   fi
 
-  local near_future all_zero_hex64 alt_hex64_1 alt_hex64_2 fake_native_hex32 far_expiry
+  local all_zero_hex64 alt_hex64_1 alt_hex64_2 fake_native_hex32 far_expiry
   # Stage D (M7-FINAL-REMEDIATION-20260818, D8a mutation-survival finding):
   # +1h was ALSO caught by the separate created_at<=activation_liveness_expiry
   # check (activationLivenessDeadline's own ~300s window from the request's
@@ -848,7 +864,17 @@ _tg_run_tamper_table() {
   # not a false pass. +30s stays inside that same ~300s window while still
   # being strictly in the future relative to "now", isolating the
   # not-in-the-future check on its own.
-  near_future="$(node -e 'process.stdout.write(new Date(Date.now()+30000).toISOString().replace(/\.\d{3}Z$/,"Z"))')"
+  #
+  # Sequence 25: the actual +30s value is no longer computed here -- a value
+  # baked in at table-setup time goes stale (no longer actually in the
+  # future) by the time this row's own real hook subprocess runs, after
+  # however long the PENDING + 7 preceding tamper rows took on this host
+  # (empirically observed to exceed 30s, causing a deterministic false pass
+  # that looked like a production gap but was not one -- see
+  # _tg_write_activation_for_request_tampered's own sentinel handling).
+  # "__FRESH_NEAR_FUTURE_30S__" defers the +30s computation to that helper,
+  # immediately before the write, so the margin is always relative to the
+  # real check-time clock.
   far_expiry="2099-01-01T00:00:00Z"
   all_zero_hex64="$(node -e 'process.stdout.write("0".repeat(64))')"
   alt_hex64_1="$(node -e 'process.stdout.write(require("crypto").randomBytes(32).toString("hex"))')"
@@ -878,7 +904,7 @@ _tg_run_tamper_table() {
     "routing_digest-mismatch|noop|{\"routing_policy_digest\":\"$alt_hex64_2\"}" \
     "driver_native-nonclaude_has_native|noop|{\"native_spawn_action_id\":\"$fake_native_hex32\"}" \
     "driver_native-nonclaude_has_target_binding|noop|{\"native_target_binding_id\":\"$fake_binding_hex32\"}" \
-    "created_at-future|noop|{\"created_at\":\"$near_future\"}" \
+    "created_at-future|noop|{\"created_at\":\"__FRESH_NEAR_FUTURE_30S__\"}" \
     "expiry-mismatch|noop|{\"activation_liveness_expiry\":\"$far_expiry\"}" \
   ; do
     local label driver overrides out

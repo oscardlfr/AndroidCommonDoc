@@ -89,6 +89,45 @@ const os = require('node:os');
 const path = require('node:path');
 
 const IMPL = path.resolve(__dirname, '../lib/runtime-consultation.cjs');
+const CONSULTATION_MODULES_DIR = path.resolve(__dirname, '../lib/runtime-consultation');
+
+function runtimeConsultationSourceUnits() {
+  const units = [];
+  const addRegularFile = (filePath) => {
+    const stat = fs.lstatSync(filePath);
+    assert.ok(stat.isFile() && !stat.isSymbolicLink(), 'runtime consultation source must be a regular non-symlink file: ' + filePath);
+    units.push({
+      filePath,
+      label: path.relative(path.dirname(IMPL), filePath).split(path.sep).join('/'),
+      source: fs.readFileSync(filePath, 'utf8'),
+    });
+  };
+  const walk = (dirPath) => {
+    for (const name of fs.readdirSync(dirPath).slice().sort()) {
+      const filePath = path.join(dirPath, name);
+      const stat = fs.lstatSync(filePath);
+      if (stat.isSymbolicLink()) continue;
+      if (stat.isDirectory()) walk(filePath);
+      else if (stat.isFile() && name.endsWith('.cjs')) addRegularFile(filePath);
+    }
+  };
+  addRegularFile(IMPL);
+  walk(CONSULTATION_MODULES_DIR);
+  return units;
+}
+
+function runtimeConsultationFunctionBody(functionName) {
+  const marker = 'function ' + functionName + '(';
+  const owners = runtimeConsultationSourceUnits().filter(({ source }) => source.includes(marker));
+  assert.strictEqual(owners.length, 1, 'expected exactly one runtime consultation module to own ' + marker + '; owners=' + JSON.stringify(owners.map(({ label }) => label)));
+  const owner = owners[0];
+  const defIdx = owner.source.indexOf(marker);
+  const nextFunctionOffset = owner.source.indexOf('\nfunction ', defIdx + marker.length);
+  const moduleExportsOffset = owner.source.indexOf('\nmodule.exports = {', defIdx + marker.length);
+  const candidates = [nextFunctionOffset, moduleExportsOffset].filter((offset) => offset > defIdx);
+  const end = candidates.length > 0 ? Math.min(...candidates) : owner.source.length;
+  return { label: owner.label, body: owner.source.slice(defIdx, end) };
+}
 // M7/WP4 Phase B.3 regression fixture (dispatch arch-testing-20260809T092330Z):
 // root-init/root-validate/claim/lease-heartbeat/publish-result/worker-stop-ack
 // are now grant-mandatory (PLAN.md §15b); this suite predates that
@@ -2604,11 +2643,10 @@ test('LOCK-08a: a mutable read requires a LIVE authentic same-txn transition-loc
 // record (request/claim/result/...) is hashed from the SAME accredited fd-bound read
 // (readDurableRecord / publishNoClobber bytes), never re-hashed by path.
 test('AUDIT-sha256File: sha256File is called ONLY on planPath (non-authoritative input); zero coordination-record by-path hashes remain', () => {
-  const src = fs.readFileSync(IMPL, 'utf8');
-  const offenders = src.split('\n')
-    .map((line, i) => ({ line: line.trim(), n: i + 1 }))
+  const offenders = runtimeConsultationSourceUnits().flatMap(({ label, source }) => source.split('\n')
+    .map((line, i) => ({ file: label, line: line.trim(), n: i + 1 }))
     .filter((x) => /sha256File\(/.test(x.line) && !/^function sha256File/.test(x.line))
-    .filter((x) => !/sha256File\(planPath\)/.test(x.line));
+    .filter((x) => !/sha256File\(planPath\)/.test(x.line)));
   assert.deepStrictEqual(offenders, [], 'sha256File must be planPath-only; record by-path hashes found: ' + JSON.stringify(offenders));
 });
 
@@ -2624,23 +2662,22 @@ test('AUDIT-sha256File: sha256File is called ONLY on planPath (non-authoritative
 // occurrence outside this exact, hand-reviewed allowlist must fail this test until explicitly
 // added here.
 test('AUDIT-raw-reads: every raw fs.readFileSync/readArtifactBytes call site is fd-bound, a named non-authoritative caller input, or gated fault-injection test-seam code', () => {
-  const src = fs.readFileSync(IMPL, 'utf8');
   const ALLOWED_EXACT_LINES = new Set([
     'return sha256Buffer(fs.readFileSync(filePath));', // sha256File primitive (planPath-only, per AUDIT-sha256File)
     'return fs.readFileSync(artifactPath);', // readArtifactBytes primitive
     'const bytes = fs.readFileSync(planPath);', // materializePlanRef (PLAN.md itself, non-authoritative)
     'const bytes = readArtifactBytes(manifestPath);', // subject-bundle manifest (caller input, non-authoritative)
-    "else if (kind === 'rewrite') fs.writeFileSync(artifactPath, fs.readFileSync(artifactPath)); // same inode+size, new ctime/mtime", // injectReadMutationFault test seam
+    "else if (kind === 'rewrite') fs.writeFileSync(artifactPath, fs.readFileSync(artifactPath));", // injectReadMutationFault test seam (same inode+size, new ctime/mtime)
     'fs.writeFileSync(other, fs.readFileSync(artifactPath), { mode: 0o600 });', // injectReadMutationFault test seam
-    "return fs.readFileSync(path.join(__dirname, 'runtime-routing.json'));", // R2-C loadRoutingPolicyContent() canonical-fallback branch (absent/empty RUNTIME_CONSULTATION_TEST_ROUTING_POLICY_PATH): WP3: toolkit-owned fixed file (sibling of this module), never request/caller-controlled -- same category as planPath above, read once at module load, unchanged from the bare const this line replaces
+    "return fs.readFileSync(path.join(facadeDirname, 'runtime-routing.json'));", // R2-C loadRoutingPolicyContent() canonical-fallback branch (absent/empty RUNTIME_CONSULTATION_TEST_ROUTING_POLICY_PATH): WP3: toolkit-owned fixed file (sibling of the FACADE, never request/caller-controlled -- same category as planPath above, read once at module load. Sequence 14 moved this into routing-policy.cjs and __dirname became facadeDirname (an injected dep) because the module itself now lives one directory deeper than the facade whose sibling file this reads.
     'goBytes = fs.readFileSync(goPath);', // M7 section 10.1 / defect 12 testM7Rendezvous: gated (NODE_ENV=test + RUNTIME_CONSULTATION_TEST_CAPABILITY + exact RUNTIME_M7_TEST_STAGE + safely-scoped RUNTIME_M7_TEST_RENDEZVOUS_DIR) fault-injection/rendezvous test-only seam, now ALSO gated on a same-block fs.lstatSync(goPath) proving a genuine regular mode-0600 file (never a symlink) before this line is ever reached (M7 defect 12 / checklist item 17: a symlink pointing at correct bytes elsewhere must never be accepted as the real release signal) -- goPath's own bytes still carry no authority ("No sentinel is an authority artifact", contract section 10.1), same category as injectReadMutationFault above
   ]);
-  const offenders = src.split('\n')
-    .map((raw, i) => ({ line: raw.trim(), n: i + 1 }))
+  const offenders = runtimeConsultationSourceUnits().flatMap(({ label, source }) => source.split('\n')
+    .map((raw, i) => ({ file: label, line: raw.trim(), n: i + 1 }))
     .filter((x) => /fs\.readFileSync\(|readArtifactBytes\(/.test(x.line))
     .filter((x) => !/^function (sha256File|readArtifactBytes)\b/.test(x.line)) // definition headers, not calls
     .filter((x) => !/fs\.readFileSync\(fd\)/.test(x.line)) // fd-bound: already open+fstat+identity-verified
-    .filter((x) => !ALLOWED_EXACT_LINES.has(x.line));
+    .filter((x) => !ALLOWED_EXACT_LINES.has(x.line)));
   assert.deepStrictEqual(offenders, [], 'raw by-path read outside the hand-reviewed allowlist: ' + JSON.stringify(offenders));
 });
 
@@ -3167,10 +3204,33 @@ const R33_AUDIT_MUTATORS = Object.freeze([
   'acquireLock', 'releaseLock', 'withLock', 'writeAllSync', 'fsyncDir',
 ]);
 
+// Sequence 14 moved the R33 stage-1 surface out of the facade into 3 focused
+// `conformance/*.cjs` modules (each individually <=500 lines, so none could
+// hold the whole >500-line marked scope alone). The markers now bound a
+// scope that SPANS files; this concatenates every runtime-consultation
+// source unit in the order the FACADE itself pulls them in (its own
+// `require('./runtime-consultation/...')` call order -- not alphabetical,
+// which would reorder conformance/r33-tuple-digest.cjs before
+// conformance/scalar-primitives.cjs and invert BEGIN/END), so the
+// concatenation reflects the real composition order rather than a filename
+// coincidence. Any unit the facade does not require directly (none, today)
+// would sort after every directly-required one.
+function runtimeConsultationFacadeRequireOrder() {
+  const facadeSource = fs.readFileSync(IMPL, 'utf8');
+  const order = [...facadeSource.matchAll(/require\(['"](\.\/runtime-consultation\/[^'"]+\.cjs)['"]\)/g)]
+    .map((m) => path.resolve(path.dirname(IMPL), m[1]));
+  const rank = new Map(order.map((filePath, index) => [filePath, index]));
+  return (unit) => (rank.has(unit.filePath) ? rank.get(unit.filePath) : Number.MAX_SAFE_INTEGER);
+}
+
 // Returns { scope, lines } after enforcing BOTH preconditions. Every caller goes
 // through here, which is what makes the preconditions unskippable.
 function r33AuditScope() {
-  const src = fs.readFileSync(IMPL, 'utf8');
+  const rankOf = runtimeConsultationFacadeRequireOrder();
+  const units = runtimeConsultationSourceUnits()
+    .slice()
+    .sort((a, b) => (a.filePath === IMPL ? -1 : b.filePath === IMPL ? 1 : rankOf(a) - rankOf(b)));
+  const src = units.map(({ source }) => source).join('\n');
   const countOf = (needle) => src.split(needle).length - 1;
 
   const nBegin = countOf(R33_AUDIT_BEGIN);
@@ -3505,10 +3565,14 @@ test('R33-CORR-MUTATION: each of the 17 PRODUCTION correlation comparisons is ei
   assert.strictEqual(keys.length, 17, 'expected the 17-key derived correlation set');
 
   const ANCHOR = '  for (const key of R33_TUPLE_CORRELATION_KEYS) {\n    if (root[key] !== session[key]) {';
-  const originalSrc = fs.readFileSync(IMPL, 'utf8');
+  // Sequence 14 moved checkR33ProfileTupleConformance (and this exact loop)
+  // out of the facade into its own conformance/r33-tuple-digest.cjs module.
+  const { label: r33ModuleLabel } = runtimeConsultationFunctionBody('checkR33ProfileTupleConformance');
+  const r33ModulePath = path.resolve(path.dirname(IMPL), r33ModuleLabel);
+  const originalSrc = fs.readFileSync(r33ModulePath, 'utf8');
   assert.ok(
     originalSrc.includes(ANCHOR),
-    'correlation-loop anchor not found verbatim in the production module. This matrix injects a `continue` at that exact text; if the loop was refactored, update the anchor -- do NOT delete this test, or the 17 per-key regressions lose the only thing proving they are load-bearing',
+    'correlation-loop anchor not found verbatim in ' + r33ModuleLabel + '. This matrix injects a `continue` at that exact text; if the loop was refactored, update the anchor -- do NOT delete this test, or the 17 per-key regressions lose the only thing proving they are load-bearing',
   );
 
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rc-r33-mutation-'));
@@ -3599,13 +3663,21 @@ test('R33-CORR-MUTATION: each of the 17 PRODUCTION correlation comparisons is ei
       throw new Error('no alternate defined for correlation key ' + key + ' (value ' + String(v) + ')');
     };
 
+    const r33ModuleCopy = path.join(libCopy, r33ModuleLabel);
     const loadPatched = (disabledKey) => {
       const patched = originalSrc.replace(ANCHOR,
         '  for (const key of R33_TUPLE_CORRELATION_KEYS) {\n'
         + "    if (key === '" + disabledKey + "') continue;\n"
         + '    if (root[key] !== session[key]) {');
       assert.notStrictEqual(patched, originalSrc, 'injection produced no change for ' + disabledKey);
-      fs.writeFileSync(implCopy, patched);
+      fs.writeFileSync(r33ModuleCopy, patched);
+      // Both the facade copy AND the patched module copy must be evicted: the
+      // facade's own `require('./runtime-consultation/conformance/...')`
+      // resolves through Node's module cache too, so leaving the module copy
+      // cached from an earlier iteration (or the very first `rc = require(IMPL)`
+      // above) would silently keep serving yesterday's already-patched or
+      // wholly-unpatched body no matter what implCopy's own cache entry says.
+      delete require.cache[require.resolve(r33ModuleCopy)];
       delete require.cache[require.resolve(implCopy)];
       return require(implCopy);
     };
@@ -3911,9 +3983,18 @@ async function m7DriveCliRendezvousRace(cliArgv, stage, rendezvousDir, competing
   child.stdout.on('data', (d) => { stdout += d.toString('utf8'); });
   child.stderr.on('data', (d) => { stderr += d.toString('utf8'); });
 
+  // Windows registry locks prove their owner/DACL by invoking the native ACL
+  // observer. On elevated runners this intentionally takes several seconds;
+  // it is security work completed before the child can reach the rendezvous,
+  // not a stalled child. POSIX keeps the tighter bound because its mode/owner
+  // proof is entirely in-process.
+  const armTimeoutMs = process.platform === 'win32' ? 30000 : 5000;
   const readyStart = Date.now();
   while (!fs.existsSync(readyPath)) {
-    if (Date.now() - readyStart > 5000) {
+    if (child.exitCode !== null) {
+      throw new Error('m7 CLI race harness: child exited before ' + stage + '.ready: exit=' + child.exitCode + ' stderr=' + stderr);
+    }
+    if (Date.now() - readyStart > armTimeoutMs) {
       child.kill('SIGKILL');
       throw new Error('m7 CLI race harness: timed out waiting for ' + stage + '.ready (child never armed): stderr=' + stderr);
     }
@@ -4005,12 +4086,7 @@ test('M7-COMMAND-ADMISSION-RACE-15 (positive control, admission-first race): a f
 // without inventing a THIRD, artificial rendezvous stage the production code
 // does not yet have any concept of.
 test('M7-CONSUME-GRANT-ADMISSION-ABSENT (RED, structural): validateAndConsumeRoleCommandGrantForCommand must obtain a consume-grant admission capability (M7 section 7: "obtains and consumes a consume-grant capability immediately before its existing one-use grant marker") -- today its own source contains both race seams (testM7Rendezvous(\'command-before-admission\',...) and testM7Rendezvous(\'command-after-admission-before-consume\',...)) but ZERO call to admitClaudeAuthorityOperation anywhere in its body: it goes straight from validateRoleCommandGrantOrThrow to consumeValidatedRoleCommandGrantOrThrow with no capability obtained in between', () => {
-  const src = fs.readFileSync(path.resolve(__dirname, '../lib/runtime-consultation.cjs'), 'utf8');
-  const defIdx = src.indexOf('function validateAndConsumeRoleCommandGrantForCommand(');
-  assert.notStrictEqual(defIdx, -1, 'fixture sanity: validateAndConsumeRoleCommandGrantForCommand must still be found as a named function in the source');
-  const nextFunctionOffset = src.indexOf('\nfunction ', defIdx + 'function validateAndConsumeRoleCommandGrantForCommand('.length);
-  assert.notStrictEqual(nextFunctionOffset, -1, 'fixture sanity: a following top-level function declaration must exist to bound the extracted body');
-  const body = src.slice(defIdx, nextFunctionOffset);
+  const { body } = runtimeConsultationFunctionBody('validateAndConsumeRoleCommandGrantForCommand');
   assert.ok(
     body.includes("testM7Rendezvous('command-before-admission'"),
     'fixture sanity: the command-before-admission rendezvous seam must genuinely exist in this function\'s body -- if this fails, the extraction window itself is wrong, not the RED subject'
@@ -4441,7 +4517,7 @@ test('M7-CANCEL-CLAIM-HEARTBEAT-18 (positive control, admission-first race, leas
 // ════════════════════════════════════════════════════════════════════════════
 
 test('M7-DUPLICATE-LOCAL-REMOVAL-22 (RED): retireClaudeOneShotBindingLocal (and its former sole caller, cmdCancel\'s retirement-wiring branch) must be genuinely ABSENT from the source, per M7 section 11 point 5\'s own literal instruction to "delete local retirement writers/validators and every superseded caller" -- today it still exists and does its own I/O directly', () => {
-  const src = fs.readFileSync(IMPL, 'utf8');
+  const sources = runtimeConsultationSourceUnits();
   // Resolved with team-lead: the ORIGINAL framing of this RED (a "thin
   // delegation" matching validateRequesterBindingForLocal/
   // validateRootSourceBindingForLocal's own cited sibling shape) does not
@@ -4459,7 +4535,7 @@ test('M7-DUPLICATE-LOCAL-REMOVAL-22 (RED): retireClaudeOneShotBindingLocal (and 
   // AND every call site are gone in one pass -- if anything anywhere still
   // referenced this identifier by name, the string would still appear.
   assert.ok(
-    !src.includes('retireClaudeOneShotBindingLocal'),
+    sources.every(({ source }) => !source.includes('retireClaudeOneShotBindingLocal')),
     'M7 section 11 point 5 (literal): "delete local retirement writers/validators and every superseded caller" -- retireClaudeOneShotBindingLocal must be genuinely absent from the source (definition AND every caller, including cmdCancel\'s own retirement-wiring branch), never merely converted to a delegating wrapper -- today the identifier still appears in the source'
   );
 });
@@ -4478,12 +4554,7 @@ test('M7-DUPLICATE-LOCAL-REMOVAL-22 (RED): retireClaudeOneShotBindingLocal (and 
 // structural-isolation discipline as guard 27's RoleActorBinding check,
 // applied to the retained-supervisor surface instead.
 test('M7-CODEX-COPILOT-PORTABILITY-GUARD-29 (guard, preserve): createHostBridgeCapability never references the M7 Claude-actor-fence mechanism -- M7 section 12 is explicit that retained Codex HostBridge/disk-floor behavior is unchanged; this guard locks that structural isolation against silent regression (the Copilot-portability half of section 12 is a project-level property, not something checkable via a runtime assertion, and is not attempted here)', () => {
-  const src = fs.readFileSync(IMPL, 'utf8');
-  const defIdx = src.indexOf('function createHostBridgeCapability(');
-  assert.notStrictEqual(defIdx, -1, 'fixture sanity: createHostBridgeCapability must still be found as a named function in the source');
-  const window = src.slice(defIdx, defIdx + 2000);
-  const nextFunctionOffset = window.indexOf('\nfunction ', 'function createHostBridgeCapability('.length);
-  const body = nextFunctionOffset === -1 ? window : window.slice(0, nextFunctionOffset);
+  const { body } = runtimeConsultationFunctionBody('createHostBridgeCapability');
   assert.ok(!body.includes('authority-identity-fence'), 'M7 section 12 (existing behavior, guarded against regression): createHostBridgeCapability must never reference the M7 fence mechanism -- retained Codex HostBridge behavior is explicitly unchanged by M7');
   assert.ok(!body.includes('classifyClaudeAuthorityForIdentity'), 'M7 section 12 (existing behavior, guarded against regression): createHostBridgeCapability must never call the M7 classifier -- retained Codex HostBridge behavior is explicitly unchanged by M7');
 });
