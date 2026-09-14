@@ -13,7 +13,7 @@
 function createSupervisorStartupPreflight({
   createSessionRunReadViewAuthority, createIsolationProvider, strictConfigValidatorForSessionRun,
   createSupervisorOwnedChildRegistry, createCaptureRegistry, resolveSessionRunSpawnCommand,
-  shutdown, projectRoot, ledger,
+  shutdown, projectRoot, ledger, ensureSecureRegistryDir,
 }) {
   /** One-time, whole-batch startup context -- constructed once before the per-role loop. */
   function buildStartupContext(testBackend) {
@@ -86,10 +86,13 @@ function createSupervisorStartupPreflight({
     };
     ledger.set(roleInstanceId, ledgerEntry);
     const readViewRoot = path.join(rootHandle.intendedPath, 'role-read-view');
-    try {
-      fs.mkdirSync(readViewRoot, { mode: 0o700 });
-    } catch (err) {
-      shutdown('APP_SERVER_READ_VIEW_ROOT_FAILED');
+    // Secured via the same owner-confined-ACL primitive as the rest of the
+    // registry tree (POSIX 0700 + Windows ACL validated against the current
+    // user SID), not a bare fs.mkdirSync -- fixes elevated-Windows-runner
+    // ownership (Administrators SID) without changing POSIX behavior.
+    const readViewRootResult = ensureSecureRegistryDir(readViewRoot);
+    if (!readViewRootResult || !readViewRootResult.ok) {
+      shutdown('APP_SERVER_READ_VIEW_ROOT_FAILED:' + ((readViewRootResult && readViewRootResult.reason) || 'unknown'));
       return { ok: false };
     }
     const registeredReadView = readViewAuthority.register(roleReadCapability, {

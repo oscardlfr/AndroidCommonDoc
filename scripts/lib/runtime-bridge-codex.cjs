@@ -622,7 +622,7 @@ const {
   SESSION_RUN_KILL_CONFIRM_TIMEOUT_MS, SESSION_RUN_TERM_CONFIRM_TIMEOUT_MS, SUPERVISOR_BASE_INSTRUCTIONS, SUPERVISOR_BOOTSTRAP_DEVELOPER_INSTRUCTIONS, asyncSleep, canonicalJSONStringify,
   captureRegistryTailText, classifyStopReasonRc, collectPendingMixedReviewRequest, computeCoordinationRootId, createAppServerConnection, createCaptureRegistry,
   createIsolationProvider: (...args) => createIsolationProvider(...args), createSessionRunReadViewAuthority, createSupervisorEngineState, createSupervisorLedgerCleanup,
-  createSupervisorOwnedChildRegistry: (...args) => createSupervisorOwnedChildRegistry(...args), createSupervisorRetainedPolling, createSupervisorRoleBootstrap, createSupervisorStartupPreflight,
+  createSupervisorOwnedChildRegistry: (...args) => createSupervisorOwnedChildRegistry(...args), createSupervisorRetainedPolling, createSupervisorRoleBootstrap, ensureSecureRegistryDir, createSupervisorStartupPreflight,
   createSupervisorStopReceipt, createSupervisorStopRequest, createSupervisorStopTimeline, createSupervisorWorkerSpawn, crypto, deepFreeze, describeBornProvenanceFailure, describeInitializeFailure,
   describeOwnedChildExit, describeOwnedChildState, describeThreadStartFailure, executeP2RetainedArchitectReview, executeRetainedWorkerRequest, fs, isHexActionId, loadP2CompletedRootReviewContext,
   path, publishBridgeRegistryRecord, publishWorkerPresenceReady, raceAgainstBound, rc, readDurableRegistryRecordFd, readRoleBindingState, realpathOrSelf,

@@ -30,6 +30,7 @@ function createOwnedAppServerSupervisorEngine({
   createSupervisorRetainedPolling,
   createSupervisorRoleBootstrap,
   createSupervisorStartupPreflight,
+  ensureSecureRegistryDir,
   createSupervisorStopReceipt,
   createSupervisorStopRequest,
   createSupervisorStopTimeline,
@@ -143,7 +144,7 @@ function startOwnedAppServerSupervisorEngine(engine) {
   const startupPreflight = createSupervisorStartupPreflight({
     createSessionRunReadViewAuthority, createIsolationProvider, strictConfigValidatorForSessionRun,
     createSupervisorOwnedChildRegistry, createCaptureRegistry, resolveSessionRunSpawnCommand,
-    shutdown, projectRoot, ledger: engineState.ledger,
+    shutdown, projectRoot, ledger: engineState.ledger, ensureSecureRegistryDir,
   });
   const workerSpawn = createSupervisorWorkerSpawn({
     spawn, spawnWithIntent, signalOwnedAppServerChild, resolveSessionRunBornProvenance, realpathOrSelf,
