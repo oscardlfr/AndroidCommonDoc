@@ -52,7 +52,16 @@ SCRIPTS_SRC="$BATS_TEST_DIRNAME/.."
 REPO_ROOT_SRC="$BATS_TEST_DIRNAME/../.."
 
 setup() {
-  REPO="$(mktemp -d)"
+  if command -v wslpath >/dev/null 2>&1 \
+     && ! command -v cygpath >/dev/null 2>&1 \
+     && ! command -v pwsh >/dev/null 2>&1 \
+     && command -v powershell.exe >/dev/null 2>&1; then
+    local fixture_root="$REPO_ROOT_SRC/.androidcommondoc/bats-fixtures"
+    mkdir -p "$fixture_root"
+    REPO="$(mktemp -d "$fixture_root/emit-push-proof-XXXXXX")"
+  else
+    REPO="$(mktemp -d)"
+  fi
   git init "$REPO" --quiet
   git -C "$REPO" config user.email "test@test.com"
   git -C "$REPO" config user.name "Test"
@@ -392,14 +401,27 @@ PYEOF
 
   # Invoke ps1 emitter directly against the temp repo.
   # The ps1 gate is CWD-independent (passes explicit --templates-dir rooted at RepoRoot).
+  # $REPO is a mktemp -d path: under WSL that is a genuine Linux path no
+  # Windows process can resolve (this test's $ps_bin is genuine Windows
+  # PowerShell there too, reached via interop, since no Linux-native pwsh
+  # exists) -- convert to a Windows-visible form the same way the ps1-owning
+  # PATH-injection fixtures do, via whichever of cygpath/wslpath is present.
   run bash -c "
     cd '$REPO'
     SLUG='test-slug'
     PS1_EMITTER='$REPO/scripts/ps1/emit-push-proof.ps1'
+    REPO_ARG='$REPO'
+    if command -v cygpath >/dev/null 2>&1; then
+      PS1_EMITTER=\"\$(cygpath -w \"\$PS1_EMITTER\")\"
+      REPO_ARG=\"\$(cygpath -w \"\$REPO_ARG\")\"
+    elif command -v wslpath >/dev/null 2>&1; then
+      PS1_EMITTER=\"\$(wslpath -w \"\$PS1_EMITTER\")\"
+      REPO_ARG=\"\$(wslpath -w \"\$REPO_ARG\")\"
+    fi
     '$ps_bin' -NoProfile -File \"\$PS1_EMITTER\" \
       -Subcommand run-qg \
       -Slug \"\$SLUG\" \
-      -RepoRoot '$REPO'
+      -RepoRoot \"\$REPO_ARG\"
     "
 
   # Exit must be non-zero (Die exits with code 2)

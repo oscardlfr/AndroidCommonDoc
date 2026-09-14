@@ -170,9 +170,9 @@ function Invoke-Predicate([string]$predicate, [string]$repoRoot, [string[]]$diff
     }
 }
 
-# -- Subcommand: run-qg (DISABLED, Wave A Section A5a — see header) ----------
+# -- Subcommand: run-qg (DISABLED, Wave A Section A5a -- see header) ----------
 function Invoke-RunQg {
-    Write-Host "[emit-push-proof] run-qg is disabled in the PowerShell path pending evidence binding — use scripts/sh/emit-push-proof.sh" -ForegroundColor Red
+    Write-Host "[emit-push-proof] run-qg is disabled in the PowerShell path pending evidence binding -- use scripts/sh/emit-push-proof.sh" -ForegroundColor Red
     exit 2
 }
 
