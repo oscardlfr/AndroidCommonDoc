@@ -2898,14 +2898,14 @@
       "name": "toolkit-specialist",
       "type": "agent",
       "path": ".claude/agents/toolkit-specialist.md",
-      "description": "Owns mcp-server TypeScript source, .claude/hooks/*.js runtime code, and non-test shell tooling. Reports to arch-platform. Does NOT write test files (test-specialist's domain).",
+      "description": "Owns mcp-server TypeScript source, .claude/hooks/*.js runtime code, scripts/lib runtime facades and internal CommonJS modules, and non-test shell tooling. Reports to arch-platform. Does NOT write test files (test-specialist's domain).",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:90ae8d06b01270166d4560062eb7b9df482b194ad013e79420fd5db3938a7643",
+      "hash": "sha256:965da3d2e9d8335da41a9536c2fa98abf5dab02ac99958dab34eaf469f5f311c",
       "dependencies": [],
       "frontmatter": {
         "name": "toolkit-specialist",
-        "description": "Owns mcp-server TypeScript source, .claude/hooks/*.js runtime code, and non-test shell tooling. Reports to arch-platform. Does NOT write test files (test-specialist's domain).",
+        "description": "Owns mcp-server TypeScript source, .claude/hooks/*.js runtime code, scripts/lib runtime facades and internal CommonJS modules, and non-test shell tooling. Reports to arch-platform. Does NOT write test files (test-specialist's domain).",
         "tools": "Read, Write, Edit, Bash, SendMessage, mcp__androidcommondoc__code-metrics",
         "model": "sonnet",
         "domain": "development",
@@ -2920,7 +2920,7 @@
           "validator"
         ],
         "token_budget": 3000,
-        "template_version": "1.9.0"
+        "template_version": "1.10.0"
       }
     },
     {

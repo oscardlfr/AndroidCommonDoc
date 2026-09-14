@@ -1801,6 +1801,12 @@
       }
     },
     "toolkit-specialist": {
+      "1.10.0": {
+        "date": "2026-09-13",
+        "breaking": false,
+        "summary": "Declare ownership of scripts/lib runtime facades and internal CommonJS modules so modular runtime maintenance remains within the toolkit specialist boundary.",
+        "migration_hint": "Additive ownership clarification; re-sync the deployed template."
+      },
       "1.9.0": {
         "date": "2026-08-22",
         "breaking": false,

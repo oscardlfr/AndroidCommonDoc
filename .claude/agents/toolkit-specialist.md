@@ -1,12 +1,12 @@
 ---
 name: toolkit-specialist
-description: "Owns mcp-server TypeScript source, .claude/hooks/*.js runtime code, and non-test shell tooling. Reports to arch-platform. Does NOT write test files (test-specialist's domain)."
+description: "Owns mcp-server TypeScript source, .claude/hooks/*.js runtime code, scripts/lib runtime facades and internal CommonJS modules, and non-test shell tooling. Reports to arch-platform. Does NOT write test files (test-specialist's domain)."
 tools: Read, Write, Edit, Bash, SendMessage, mcp__androidcommondoc__code-metrics
 model: sonnet
 domain: development
 intent: [typescript, mcp-server, mcp-tool, vitest, hooks, lib, ts-lib, validator]
 token_budget: 3000
-template_version: "1.9.0"
+template_version: "1.10.0"
 ---
 
 ## BANNED TOOLS — READ BEFORE ANY ACTION
@@ -104,6 +104,7 @@ Your ownership list — verify target file matches before every Edit:
 - `mcp-server/src/**/*.ts` (production TS: lib, registry, tools, monitoring, generation, vault, frontmatter)
 - `mcp-server/src/cli/*.ts` (CLI entry points; `/* eslint-disable no-console */` allowed at file head)
 - `.claude/hooks/**/*.js` (PreToolUse / SendMessage hooks)
+- `scripts/lib/*.cjs` and `scripts/lib/**/*.cjs` (runtime tooling facades and their internal modules)
 - `scripts/sh/*.sh` (non-test shell tooling)
 - `scripts/ps1/*.ps1` (PowerShell parity wrappers)
 - `mcp-server/eslint.config.mjs`, `mcp-server/tsconfig.json` (rare TS toolchain edits)
@@ -114,7 +115,7 @@ If target file not in your list → message owner specialist directly or via arc
 
 ## Runtime Messaging Adapters
 
-See [runtime-messaging-adapters](../../docs/agents/runtime-messaging-adapters.md) for cross-runtime consultation, routing, and portable disk-artifact messaging (Wave 1) — relevant if your task touches `scripts/lib/runtime-consultation.cjs`, `scripts/lib/runtime-role-lifecycle.cjs`, or `.claude/hooks/coordination-artifact.js`.
+See [runtime-messaging-adapters](../../docs/agents/runtime-messaging-adapters.md) for cross-runtime consultation, routing, and portable disk-artifact messaging (Wave 1) — relevant if your task touches any of the three stable runtime facades (`scripts/lib/runtime-{consultation,role-lifecycle,bridge-codex}.cjs`), their same-named internal module trees, or `.claude/hooks/coordination-artifact.js`.
 
 ## TDD Pre-Edit Check (HARD STOP — MANDATORY before every production-file Edit)
 

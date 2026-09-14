@@ -510,11 +510,11 @@ agents:
   toolkit-specialist:
     canonical_name: toolkit-specialist
     subagent_type: toolkit-specialist
-    template_version: "1.9.0"
-    template_frontmatter_sha256: 8f48a0b8134e3369c008fbe2a2d657db1adf7e38f747abb65b7507d8249011b5
+    template_version: "1.10.0"
+    template_frontmatter_sha256: e50181ed54a28e268ba7b51cf89aa1b75f2ef947667e80dad43f334955659b95
     category: core-specialist
     lifecycle: ephemeral
-    description: "Owns mcp-server TypeScript source, .claude/hooks/*.js runtime code, and non-test shell tooling. Reports to arch-platform. Does NOT write test files (test-specialist's domain)."
+    description: "Owns mcp-server TypeScript source, .claude/hooks/*.js runtime code, scripts/lib runtime facades and internal CommonJS modules, and non-test shell tooling. Reports to arch-platform. Does NOT write test files (test-specialist's domain)."
     domain: development
     intent: [typescript, mcp-server, mcp-tool, vitest, hooks, lib, ts-lib, validator]
     runtime:
