@@ -4,7 +4,7 @@ bats_require_minimum_version 1.5.0
 # CI-parity tests: assert that .github/workflows/reusable-shell-tests.yml contains
 # the same completeness logic as scripts/sh/run-bats.sh.
 #
-# Coverage map (8 tests):
+# Coverage map (10 tests):
 #   #CP1  Workflow contains the plan-parse grep (^1\.[0-9]) — mirroring run-bats.sh LD1(c)
 #   #CP2  Workflow contains the total != expected mismatch fail branch — LD1(c)
 #   #CP3  Workflow contains the Executed-warning grep — LD1(d)
@@ -17,6 +17,9 @@ bats_require_minimum_version 1.5.0
 #         job (needs: bats), never inside the matrix job body
 #   #CP9  Failure-artifact upload is scoped to the shard's log + manifest,
 #         never the whole scripts/tests/ tree
+#   #CP10 The shard owning runtime-consultation-bridge.bats (by exact-line
+#         manifest match, never a hardcoded shard index) builds mcp-server
+#         (npm ci + npm run build) before Bats runs
 #
 # Rationale: the CI inline bats guard (reusable-shell-tests.yml) duplicates the
 # completeness logic from run-bats.sh by design (consumer-portability invariant —
@@ -189,4 +192,56 @@ README_WORKFLOW="$REPO_ROOT/.github/workflows/readme-audit.yml"
     grep -qF 'bats-output-shard-${{ matrix.shard }}.log' "$WORKFLOW"
     grep -qF 'bats-shard-manifest.txt' "$WORKFLOW"
     ! grep -qF 'path: scripts/tests/' "$WORKFLOW"
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# #CP10  Sequence 11: the shard owning runtime-consultation-bridge.bats
+#        builds mcp-server before Bats runs
+#
+# P2-OWNER-MATERIALIZATION-01 (inside runtime-consultation-bridge.bats) calls
+# materializeRootSkeleton, which needs a built mcp-server/build -- an
+# undeclared ambient prerequisite the old monolithic job satisfied only by
+# incidental step ordering with another suite file. Ownership must be
+# detected from the deterministic manifest (exact-line match), never a
+# hardcoded shard index, and the build must run before Bats, only in the
+# owning shard.
+# ─────────────────────────────────────────────────────────────────────────────
+@test "#CP10 PARITY: runtime-consultation-bridge.bats shard builds mcp-server (npm ci + npm run build) before Bats, via a manifest-derived ownership flag, never a hardcoded shard index" {
+    [ -f "$WORKFLOW" ] || {
+        echo "WORKFLOW not found: $WORKFLOW" >&2
+        return 1
+    }
+
+    # Exact-file manifest match: -x (whole line) + -F (literal), never a
+    # substring/prefix match that could false-positive on another file.
+    grep -qF "grep -qxF 'scripts/tests/runtime-consultation-bridge.bats'" "$WORKFLOW"
+
+    # Ownership env flag, set from the manifest match and read by the
+    # conditional build step.
+    grep -qF 'OWNS_RUNTIME_CONSULTATION_BRIDGE=true' "$WORKFLOW"
+    grep -qF 'OWNS_RUNTIME_CONSULTATION_BRIDGE=false' "$WORKFLOW"
+    grep -qF "if: env.OWNS_RUNTIME_CONSULTATION_BRIDGE == 'true'" "$WORKFLOW"
+
+    # Never a hardcoded shard index driving the decision.
+    ! grep -qE "matrix\.shard[[:space:]]*==[[:space:]]*'?0'?" "$WORKFLOW"
+
+    # Conditional MCP prerequisite: npm ci + npm run build, scoped to mcp-server.
+    grep -qF 'working-directory: mcp-server' "$WORKFLOW"
+    grep -qF 'npm ci' "$WORKFLOW"
+    grep -qF 'npm run build' "$WORKFLOW"
+
+    # Ordering: the build step must appear before "Run shell tests" in the
+    # matrix job body.
+    local build_line run_line
+    build_line="$(grep -n 'name: Build mcp-server' "$WORKFLOW" | head -1 | cut -d: -f1)"
+    run_line="$(grep -n 'name: Run shell tests' "$WORKFLOW" | head -1 | cut -d: -f1)"
+    [ -n "$build_line" ] || {
+        echo "Build mcp-server step not found in $WORKFLOW" >&2
+        return 1
+    }
+    [ -n "$run_line" ] || {
+        echo "Run shell tests step not found in $WORKFLOW" >&2
+        return 1
+    }
+    [ "$build_line" -lt "$run_line" ]
 }

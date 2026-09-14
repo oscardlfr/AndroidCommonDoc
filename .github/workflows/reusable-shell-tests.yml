@@ -88,6 +88,26 @@ jobs:
           # because the planner already rejects any newline-containing path
           # before this NUL-delimited file list is ever produced.
           tr '\0' '\n' < "$RUNNER_TEMP/bats-shard.nul" > "$RUNNER_TEMP/bats-shard-manifest.txt"
+          # Ownership of runtime-consultation-bridge.bats carries an
+          # undeclared prerequisite: its P2-OWNER-MATERIALIZATION-01 case
+          # calls materializeRootSkeleton, which needs a built mcp-server/build.
+          # The old monolithic job satisfied this only by incidental ordering
+          # with another suite file that happened to build it first. Detect
+          # ownership from the deterministic manifest itself (exact-line
+          # match) -- never a hardcoded shard index -- so this still tracks
+          # correctly if balancing ever reassigns the file to a different shard.
+          if grep -qxF 'scripts/tests/runtime-consultation-bridge.bats' "$RUNNER_TEMP/bats-shard-manifest.txt"; then
+            echo "OWNS_RUNTIME_CONSULTATION_BRIDGE=true" >> "$GITHUB_ENV"
+          else
+            echo "OWNS_RUNTIME_CONSULTATION_BRIDGE=false" >> "$GITHUB_ENV"
+          fi
+
+      - name: Build mcp-server (runtime-consultation-bridge.bats prerequisite)
+        if: env.OWNS_RUNTIME_CONSULTATION_BRIDGE == 'true'
+        working-directory: mcp-server
+        run: |
+          npm ci
+          npm run build
 
       - name: Run shell tests (shard ${{ matrix.shard }})
         run: |
