@@ -9,14 +9,14 @@ parent: agents-hub
 category: agents
 description: "Wave-1 consultation protocol: consult/v2, result/v2, inbox-ref/v1, cancel/v1, stop/v2 artifact shapes plus the 6-step runtime consultation loop and validate_result_for() contract"
 version: 1
-last_updated: "2026-08"
+last_updated: "2026-09"
 assumes_read: runtime-messaging-adapters
 token_budget: 1600
 ---
 
 # Runtime Messaging Protocol
 
-Ground truth for this doc is `BACKLOG.md` Wave 1 § Protocol evolution and § Runtime consultation loop. This is the first canonical documentation of `consult/v2`/`result/v2` outside `PLAN.md` (`PLAN.md:798-921`) and `scripts/lib/runtime-consultation.cjs` — it condenses that already-vetted prose rather than inventing new content.
+Ground truth for this doc is tracked `BACKLOG.md` Wave 1 § Protocol evolution and § Runtime consultation loop, the stable consultation facade, and its `protocol/` and `transaction/` modules under `scripts/lib/runtime-consultation/`. This page is the tracked canonical documentation of `consult/v2`/`result/v2`; it does not depend on ignored planning artifacts or volatile line numbers.
 
 ## Artifact Shapes
 

@@ -9,7 +9,7 @@ parent: agents-hub
 category: agents
 description: "Wave-1 transaction namespace, attempt_id+lease_epoch fencing, and the PUBLISHED->CLAIMED->ANSWERED->ACCEPTED (+BLOCKED/SUPERSEDED/EXPIRED/CANCELLED) state table"
 version: 1
-last_updated: "2026-08"
+last_updated: "2026-09"
 assumes_read: runtime-messaging-protocol
 token_budget: 1500
 ---
@@ -66,7 +66,7 @@ Role inboxes hold validated immutable `inbox-ref/v1` references, never copies wi
 
 ## Await-Result Liveness Codes (Additive)
 
-M6/M7 added four post-freeze liveness result codes to the requester's `await-result` poll loop (`assessAwaitResultLiveness` in `scripts/lib/runtime-consultation.cjs`), so a dead/unclaimed worker or an expired request is reported promptly instead of silently polling to a generic timeout:
+M6/M7 added four post-freeze liveness result codes to the requester's `await-result` poll loop (`assessAwaitResultLiveness` in `scripts/lib/runtime-consultation/transaction/await-result.cjs`), so a dead/unclaimed worker or an expired request is reported promptly instead of silently polling to a generic timeout:
 
 | Code | Meaning |
 |---|---|

@@ -59,8 +59,9 @@ For either mode, the consumer repository needs:
 - a git worktree (the worktree identity and `repo_id` come from it);
 - exactly one discoverable `.planning/wave-*/PLAN.md` — its bytes are the `plan_digest` that scopes
   every binding, so editing the PLAN mid-session invalidates the current generation's bindings;
-- an owner-confined `.planning/coordination` directory. The runtime creates and validates this ACL
-  itself; a coordination root readable by other principals is refused, not repaired silently;
+- an owner-confined `.planning/coordination` directory. `root-init` explicitly provisions or repairs
+  it through the runtime's `mode:'ensure'` primitive; `root-validate` and `session-run` only validate
+  and reject inherited or broadened ACLs rather than silently changing them;
 - `mcp-server/build/` built, if documentation consultations will be used. The retained
   `context-provider` answers them by running `mcp-server/build/runtime-search-stdio.js` with its cwd
   set to the project root under consultation, so a repository with no `docs/` tree can only answer

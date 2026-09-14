@@ -7,10 +7,10 @@ status: active
 layer: L0
 parent: agents-hub
 category: agents
-description: "Runtime-messaging-adapters hub: portable Wave-1 consultation system layering the disk-artifact floor, the adapter contract, and the orchestrator role — links to protocol/state-machine/drivers/bridges/cp-writer sub-docs"
+description: "Runtime-messaging-adapters hub: portable Wave-1 consultation system layering the disk-artifact floor, adapter contract, orchestrator role, and standalone/mixed operating modes"
 version: 1
-last_updated: "2026-08"
-token_budget: 800
+last_updated: "2026-09"
+token_budget: 1400
 ---
 
 # Runtime Messaging Adapters
@@ -24,6 +24,33 @@ Wave 1 (Portable Runtime Collaboration & Persistent Role Lifecycle, `BACKLOG.md`
 3. **Orchestrator role** — schedules, wakes, validates, and reports; it may not synthesize or impersonate an architect's or context-provider's answer.
 
 ADR-001 §1 separately draws a three-*concept* distinction (portable orchestrator role vs. the obsolete `TeamCreate` primitive vs. preservable capabilities like `SendMessage`/background peers) that this system's adapter layer builds on directly.
+
+## Architecture Map
+
+All three runtime facades are thin **composition/CLI roots**, not owners of domain logic: each requires its own internal modules, wires them together by dependency injection, and re-exports the composed surface unchanged. None retains residual orchestration — the module-boundaries suites enforce this identically for all three.
+
+| Facade (composition/CLI root) | Internal module directory, by responsibility | Physical LOC / max line | Modules | Public ABI |
+|---|---|---|---|---|
+| `scripts/lib/runtime-consultation.cjs` | `runtime-consultation/`: identity/argv/path primitives, durability, protocol, transactions, transition locks, host bridge, content publication, R33 conformance (deferred, see below), root lifecycle/ACL, grant registry and authority, routing/canonical-request construction, dispatch, CLI command controllers | 1,402 / 235 | 57 | 69 keys |
+| `scripts/lib/runtime-role-lifecycle.cjs` | `runtime-role-lifecycle/`: bindings, actions, policy, authority, grants, recovery, root-source contract/bootstrap history, and Claude lifecycle observations | 1,500 / 283 | 63 | 271 keys |
+| `scripts/lib/runtime-bridge-codex.cjs` | `runtime-bridge-codex/`: process admission, isolation, credentials and owned-child lifecycle, plus supervisor/connection engines, turn execution and read-view projection, internal-search/Context7 evidence retrieval, deterministic MCP loopback (test-only), and CLI command controllers | 1,010 / 282 | 83 | 50 keys (79 under test capability) |
+
+Counts above are recalculated from disk, not hand-maintained prose — `scripts/tests/runtime-messaging-docs-drift.test.js` re-derives every number in this table straight from the module-boundaries suites and this file's own source text, and fails if either drifts from the other. For per-module names, dependency edges and exact reference-identity guarantees, the **source of truth is the three `scripts/tests/runtime-{consultation,role-lifecycle,bridge-codex}-module-boundaries.test.js` suites**, never this page: they pin the exact discovered module set per tree, assert no upward/sibling-cycle imports, and verify every public export is the literal composed reference, not a copy. Runtime authority state is facade/provider-local; consultation's deterministic fixed-id/fixed-clock CLI seam is intentionally process-scoped because each production CLI invocation is a fresh process.
+
+## Compatibility Invariants
+
+Every internal module across all three trees, enforced by its tree's own module-boundaries suite:
+
+- **Frozen CommonJS ABI.** Each facade's public export set (`module.exports`) is closed and pinned by an exact key-count assertion (69 / 271 / 50 & 79 — see table above); an unreviewed export addition or removal fails that suite.
+- **Closed, frozen factories.** Every internal module exports exactly one `createXxx(deps)` factory whose returned surface is `Object.freeze`d — never a mutable object leaking internal state.
+- **Dependency injection only.** A module receives every collaborator it needs as an injected dependency from its facade; it never `require()`s a sibling module or the facade itself. The facade is the sole composition root per tree.
+- **Per-instance state.** Two instances constructed from the same factory never share mutable state (timers, caches, registries) — proven by dedicated isolation tests, not merely assumed.
+- **No upward imports, no cycles.** A module never imports its own facade, another tree's facade, or a sibling in a way that would create a cycle; dependency direction is strictly downward from the facade.
+- **Readability ceilings.** Every module is ≤500 physical lines, ≤320 characters per line, and no single function body exceeds 500 lines; each facade is ≤1,500 physical lines, ≤320 characters per line. These ceilings are enforced recursively (every nested module, not an allowlist) so a future large-file regression fails CI rather than accumulating silently.
+- **Cross-platform separation.** Module extraction itself is platform-neutral; only genuinely platform-specific concerns (Windows ACL checks, Windows process-birth observers) are explicitly scoped behind `process.platform` checks, never a whole module silently assuming one OS.
+- **Live-harness prohibition during offline maintenance.** Refactor/documentation/audit work never launches genuine-live certification, real agent workers, retained bridge sessions, or a real Codex app-server; verification uses injected fakes, temp fixtures and the accepted boundary/characterization suites.
+
+L1/L2 distribution is part of the contract: `runtime-project-context.cjs` and the TypeScript sync engine recursively enumerate all three trees, reject symlinks, sort paths and bind the same digest. Their parity tests prevent a new internal module from working only in L0.
 
 ## Sub-documents
 

@@ -1,15 +1,15 @@
 # AndroidCommonDoc Backlog
 
-> **Last updated**: 2026-07-14
+> **Last updated**: 2026-09-13
 > **Roadmap baseline**: `develop@0704ddf` (PR #244; PR #245 at `619d9a7` is its confirmed ancestor). **H1 and G0 — Reusable Workflow Input Boundary Hardening are SHIPPED.**
-> **Next executable wave**: **Wave 1 — Portable Runtime Collaboration & Persistent Role Lifecycle.**
+> **Current delivery**: **Wave 1 — IN REVIEW in PR #246.** Wave 2 remains blocked until Wave 1 merges and its mandatory post-wave qualification completes.
 > **Source of truth**: this file owns ordering and scope. `git log`, merged PRs, and `project_*shipped.md` memory entries own historical detail.
 
 ## Operating contract
 
 - The load-bearing portability floor is **validated disk artifacts**. Runtime messaging is an optional acceleration layer.
 - Adapter delivery, message text, an MCP return value, or a live peer saying “GO” is never evidence. Only a valid, correlated result artifact counts as a protocol-valid consultation answer; phase and push authorization still require their own contracts.
-- Execute Waves 1-7 in order; Wave 1 is next. The mandatory read-only qualification after Wave 1 is a promotion checkpoint, not an eighth wave. Do not split routine implementation details into extra micro-waves.
+- Execute Waves 1-7 in order. Wave 1 is in review; its mandatory read-only qualification is a promotion checkpoint, not an eighth wave. Do not promote Wave 2 before that checkpoint or split routine implementation details into extra micro-waves.
 - Re-audit observations and file counts at each wave's starting HEAD. Post-G0 counts below were recorded by PR #245 at `619d9a7`; they are a planning baseline, not permanent truth.
 - Each wave must have one frozen scope, explicit no-go boundaries, proportional tests, and a shipped memory entry before the backlog advances.
 - Rich runtimes may add `SendMessage`, persistent peers, MCP invocation, app-server threads, or wakeups; failure or absence of those capabilities must not invalidate the disk floor.
@@ -291,9 +291,9 @@ In the capability-proven persistent default profile, lifecycle acceptance additi
 - A tracked `runtime-collaboration-policy/v1` with modes `auto|persistent|ephemeral|disk-only`, exact support/wave/phase role classes, bounded readiness/respawn budgets, and a separate gitignored presence registry.
 - A shared role-lifecycle controller/provider seam for probe, ensure, discover, READY/WAITING/BUSY, notify, explicit draft→final same-process rebind, reuse, rotate, canonical respawn+bundle rehydration, and owned stop. Claude Agent Teams/native peers are the preferred rich connector when capability-proven, never the portable floor.
 - Deterministic transaction paths, role inbox references, acknowledgement/consumption, atomic artifact publication, attempt/lease fencing, strict request/result correlation, and a confined optional sibling-worktree coordination root.
-- The frozen six-file runtime-messaging documentation shape: `docs/agents/runtime-messaging-adapters.md` as the hub plus `runtime-messaging-{protocol,state-machine,drivers,bridges,cp-writer}.md`.
-- The exact schema/ADR/hook updates frozen in the PLAN, including `docs/agents/coordination-artifact-schema.md`, `docs/adr/ADR-001-runtime-adapter-contract.md`, and `.claude/hooks/coordination-artifact.js`; no “if required” escape from the 99-path manifest.
-- One shared portable core, `scripts/lib/runtime-consultation.cjs`, owning ids, validation, durable state, correlation, and bounded waits; both thin `scripts/sh/runtime-consultation.sh` and `scripts/ps1/runtime-consultation.ps1` argv-forwarding wrappers are mandatory, together with the real `windows-latest` job required to close SC-17.
+- The frozen seven-file runtime-messaging documentation shape: `docs/agents/runtime-messaging-adapters.md` as the hub plus `runtime-messaging-{protocol,state-machine,drivers,bridges,cp-writer,modes}.md`.
+- The original delivery PLAN froze a 99-path schema/ADR/hook manifest, including `docs/agents/coordination-artifact-schema.md`, `docs/adr/ADR-001-runtime-adapter-contract.md`, and `.claude/hooks/coordination-artifact.js`. The authorized maintenance refactor in PR #246 adds bounded internal modules without changing that historical delivery claim or the public runtime contracts.
+- Three stable CLI/API facades at `scripts/lib/runtime-{consultation,role-lifecycle,bridge-codex}.cjs` compose cohesive internal modules under their same-named directories. Internal modules own protocol, durability, transactions, lifecycle authority, process isolation, credentials and recovery; consumer inventories recursively include all three trees. Both thin `scripts/sh/runtime-consultation.sh` and `scripts/ps1/runtime-consultation.ps1` argv-forwarding wrappers remain mandatory, together with the real `windows-latest` job required to close SC-17.
 - Bats/Node tests under `scripts/tests/` for protocol, transport selection, lifecycle, and failures.
 - Planner, specialist, architect, context-provider, doc-updater, orchestrator, and quality-gater guidance/templates; regenerate registries/adapters only where canonical sources require it.
 - Exactly five blocking skills: `init-session`, `resume-work`, `work`, `ingest-content`, and `monitor-docs`. Keep their public outcomes distinct and share only the internal policy/lifecycle invocation path; do not migrate the full skill catalog.

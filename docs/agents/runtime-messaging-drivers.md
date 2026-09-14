@@ -9,14 +9,14 @@ parent: agents-hub
 category: agents
 description: "Wave-1 activation driver table, routing, fallback matrix, context7-preferred evidence policy, and the takeover-and-redispatch driver-fallback recovery mechanism"
 version: 1
-last_updated: "2026-08"
+last_updated: "2026-09"
 assumes_read: runtime-messaging-adapters
 token_budget: 2000
 ---
 
 # Runtime Messaging Drivers
 
-Ground truth for this doc is `BACKLOG.md` Wave 1 § Adapter drivers and routing and § Fallback matrix, plus this session's measured implementation in `scripts/lib/runtime-bridge-codex.cjs`, `scripts/lib/runtime-consultation.cjs`, and `scripts/lib/runtime-role-lifecycle.cjs`.
+Ground truth for this doc is `BACKLOG.md` Wave 1 § Adapter drivers and routing and § Fallback matrix, plus the three stable facades and their internal module trees: `scripts/lib/runtime-{consultation,role-lifecycle,bridge-codex}.cjs` and the corresponding same-named directories.
 
 ## Adapter Versioning
 
@@ -57,15 +57,15 @@ Context7 is an optional external dependency, never a base-protocol requirement. 
   - **AVAILABILITY-class failure** (HTTP 401/403/429/5xx, timeout, DNS/connection error) → the turn resumes and terminates `ANSWERED` with `pattern_evidence_dependency: null`, mechanically `DEGRADED_UNCITED`, never eligible for ingestion.
   - **INTEGRITY-class failure** (redirect, malformed/oversize content, library mismatch, a second gap attempt) → fails closed exactly like `context7-required`.
 
-  Normal operation and Matrix 3 use `context7-preferred`. Implemented in `scripts/lib/runtime-bridge-codex.cjs` (`classifyContext7Failure`, `HOST_PATTERN_EVIDENCE_UNAVAILABLE_TURN_INPUT`) and `scripts/lib/runtime-consultation.cjs` (`parsePreferredContext7Directive`, `resolveRootEvidenceAuthority`). Root-source's question-text directive is `PREFERRED_CONTEXT7_LIBRARY_ID: /owner/repo` (parallel to the existing `APPROVED_CONTEXT7_LIBRARY_ID`); root-consult sets the intent's `evidence_policy` field directly. Verified end-to-end — a real 503 from a fake Context7 server, real degrade-to-`ANSWERED`-null — by `WAVE1-E2E-03-CONTEXT7-DOWN` in `scripts/tests/runtime-consultation-e2e.bats`.
+  Normal operation and Matrix 3 use `context7-preferred`. Implemented in `scripts/lib/runtime-bridge-codex.cjs` (`classifyContext7Failure`, `HOST_PATTERN_EVIDENCE_UNAVAILABLE_TURN_INPUT`), `scripts/lib/runtime-consultation.cjs` (`parsePreferredContext7Directive`) and `scripts/lib/runtime-consultation/host-bridge/root-evidence.cjs` (`resolveRootEvidenceAuthority`). Root-source's question-text directive is `PREFERRED_CONTEXT7_LIBRARY_ID: /owner/repo` (parallel to the existing `APPROVED_CONTEXT7_LIBRARY_ID`); root-consult sets the intent's `evidence_policy` field directly. Verified end-to-end — a real 503 from a fake Context7 server, real degrade-to-`ANSWERED`-null — by `WAVE1-E2E-03-CONTEXT7-DOWN` in `scripts/tests/runtime-consultation-e2e.bats`.
 
 ## Driver Fallback (Takeover-and-Redispatch)
 
-On `WORKER_LEASE_EXPIRED`/`WORKER_LEASE_MISSING`/`WORKER_NOT_CLAIMED`, the root-source bootstrap (`ROOT_SOURCE_BOOTSTRAP_FINAL_LINE` in `scripts/lib/runtime-role-lifecycle.cjs`) instructs exactly one bounded takeover-and-redispatch recovery: run `takeover` once, then redispatch — which always excludes whichever driver the takeover just superseded, read from that attempt's own durable activation record with no new schema field — reporting `BLOCKED NO_SECOND_DRIVER_AVAILABLE` if the redispatch also finds no real driver.
+On `WORKER_LEASE_EXPIRED`/`WORKER_LEASE_MISSING`/`WORKER_NOT_CLAIMED`, the root-source bootstrap (`ROOT_SOURCE_BOOTSTRAP_FINAL_LINE`, composed by `runtime-role-lifecycle/root-source-contract.cjs` from the frozen history in `runtime-role-lifecycle/root-source-bootstrap-lines.cjs`) instructs exactly one bounded takeover-and-redispatch recovery: run `takeover` once, then redispatch — which always excludes whichever driver the takeover just superseded, read from that attempt's own durable activation record with no new schema field — reporting `BLOCKED NO_SECOND_DRIVER_AVAILABLE` if the redispatch also finds no real driver.
 
 A real production bug was found and fixed while verifying this: `dispatchCanonical`'s inbox-ref publish (`scripts/lib/runtime-consultation.cjs`) used to compute a fresh `created_at` on every call, so a legitimate post-takeover redispatch collided with the first dispatch's already-durable inbox-ref (no-clobber `AUTHORITY_INVALID`) — making the documented recovery unreachable in practice. Fixed by reusing any existing, request-correlated inbox-ref's `created_at` unconditionally, since an inbox-ref is a request-level fact, not an attempt-level one.
 
-Verified end-to-end by `WAVE1-E2E-02-DRIVER-FALLBACK` (real dispatch → real claim → forced lease expiry → real takeover → real redispatch, all succeeding) and at unit level by `WAVE1-DISPATCH-FALLBACK-01` in `scripts/tests/runtime-consultation-cli.test.js`. Historical bootstrap wordings remain decodable through a `ROOT_SOURCE_BOOTSTRAP_FINAL_LINE_HISTORY` array in the same file — not a two-constant special case — so durable actions minted under any prior wording never misclassify as malformed.
+Verified end-to-end by `WAVE1-E2E-02-DRIVER-FALLBACK` (real dispatch → real claim → forced lease expiry → real takeover → real redispatch, all succeeding) and at unit level by `WAVE1-DISPATCH-FALLBACK-01` in `scripts/tests/runtime-consultation-cli.test.js`. Historical bootstrap wordings remain decodable through `ROOT_SOURCE_BOOTSTRAP_FINAL_LINE_HISTORY` (defined in `runtime-role-lifecycle/root-source-bootstrap-lines.cjs`, re-exported unchanged by `root-source-contract.cjs`) — not a two-constant special case — so durable actions minted under any prior wording never misclassify as malformed.
 
 ## Related Docs
 
