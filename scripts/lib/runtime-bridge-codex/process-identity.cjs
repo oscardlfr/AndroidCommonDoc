@@ -364,9 +364,18 @@ function createProcessIdentity({
     // W07b must correlate the durable supervisor owner with the PID of the
     // independently-spawned bridge process. The literal is recognized only
     // inside this function's existing NODE_ENV + private-capability gate;
-    // normal numeric fixtures retain their exact prior behavior.
+    // normal numeric fixtures retain their exact prior behavior. "self"
+    // returns the COMPLETE defaultProcessIdentityProvider() result (real
+    // pid, real realpath-observed executable, real OS-observed birth) --
+    // never a real pid paired with fabricated executable/birth. A mixed
+    // identity fails its own later re-observation: classifyProcessIdentity
+    // Liveness re-derives the OS birth token for this exact pid and compares
+    // it against the STORED birth_observed_at field, so a fabricated birth
+    // string can never match the genuinely-observed one and the worker is
+    // correctly classified ABSENT, not LIVE -- self-defeating for a seam
+    // whose entire purpose is proving a genuinely live, owned identity.
     if (parsed.pid === 'self') {
-      return () => Object.assign({}, parsed, { pid: process.pid });
+      return defaultProcessIdentityProvider;
     }
     if (typeof parsed.pid !== 'number') return defaultProcessIdentityProvider;
     return () => parsed;

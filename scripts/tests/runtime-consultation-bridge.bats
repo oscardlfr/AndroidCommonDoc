@@ -1880,7 +1880,7 @@ _inject_action_scan_decoys() {
   kill -TERM "$BG_PID"; wait "$BG_PID" 2>/dev/null; BG_PID=""
 }
 
-@test "BRIDGE-PID-02 PASS: an injected fake ProcessIdentityProvider (double capability gate) is reflected byte-exact in the role-owner record, never the real process's own identity" {
+@test "BRIDGE-PID-02 PASS: the pid:\"self\" double-gated test seam resolves to the bridge's own complete, genuine, OS-observable identity -- LIVE and owned by BG_PID, never a real-pid/fabricated-field mismatch" {
   local action_json argv_json owner_file fake_pid
   action_json="$(_mint_ready_action verifier)"
   argv_json="$(_argv_from_action "$action_json")"
@@ -1888,19 +1888,23 @@ _inject_action_scan_decoys() {
   # pid:"self" (recognized only inside the double-gated test seam --
   # process-identity.cjs's own resolveProcessIdentityProvider, comment
   # "W07b must correlate the durable supervisor owner with the PID of the
-  # independently-spawned bridge process") substitutes the REAL bridge
-  # process's own pid while still faking executable/birth_observed_at.
-  # A literal dead pid (999999, the original fixture -- see BRIDGE-PID-03)
-  # or any OTHER live-but-different pid (a standalone decoy process, tried
-  # first here) both fail production's OWN post-READY HostBridgeCapability
-  # mint: capability.cjs requires live.worker.pid === process.pid as a
-  # SEPARATE self-consistency check from OS liveness, so an alive decoy
-  # with a different pid still triggers owned-shutdown and tombstones the
-  # owner record just as fast as a dead one (empirically confirmed: a
-  # decoy-based version of this test raced and lost 100% of the time
-  # locally, file already gone on the very first read). pid:"self" is the
-  # one seam that proves byte-exact reflection of an injected identity
-  # while never racing capability-mint at all.
+  # independently-spawned bridge process") now returns the COMPLETE
+  # defaultProcessIdentityProvider() result: real pid, real executable,
+  # real OS-observed birth. A prior version paired the real pid with
+  # fabricated executable/birth_observed_at; that mismatch fails its OWN
+  # later re-observation (classifyProcessIdentityLiveness re-derives the
+  # OS birth token for this pid and compares it against the fabricated
+  # stored value, so it can never match), so production's post-READY
+  # HostBridgeCapability mint correctly saw the worker as ABSENT and
+  # self-shut-down, tombstoning the owner record before a CI-loaded
+  # runner's 10s poller ever observed it (CI run 34894426500, shard 0: same
+  # "owned-shutdown"/"supervisor-process-not-live" signal). A literal dead
+  # pid (999999, BRIDGE-PID-03) or any live-but-different pid (a standalone
+  # decoy process, tried and empirically disproven in Sequence 14 -- raced
+  # and lost 100% of the time locally, file already gone on first read)
+  # both fail the SEPARATE live.worker.pid === process.pid self-consistency
+  # check capability.cjs also requires. pid:"self" with a complete, genuine
+  # identity is the one seam that satisfies every check with no race at all.
   fake_pid='{"pid":"self","executable":"/fake/node","birth_observed_at":"Mon Jan  1 00:00:00 2001"}'
   export NODE_ENV=test RUNTIME_BRIDGE_CODEX_TEST_CAPABILITY=x RUNTIME_BRIDGE_CODEX_FAKE_PROCESS_IDENTITY="$fake_pid"
   _start_bridge_bg "$argv_json" BG_OUT
@@ -1908,20 +1912,62 @@ _inject_action_scan_decoys() {
   owner_file="$(_wait_for_owner_file verifier)"
   [ -n "$owner_file" ]
 
+  # Phase 1 (one-shot, immediately after owner publication -- no polling):
+  # these fields are captured AT PUBLICATION and are stable/deterministic
+  # by construction (Sequence 16's in-process RED/GREEN diagnostic proved
+  # this has no timing dependency at all). No longer a byte-exact
+  # reflection of the fake executable/birth fixture (the whole point of
+  # the production fix is that those fields are DISCARDED, never durably
+  # recorded): proves the "self" sentinel resolves to the bridge's own
+  # genuine, OS-observable identity -- pid equals BG_PID, executable/birth
+  # are non-empty real values, and classifyProcessIdentityLiveness reports
+  # the process LIVE (not ABSENT).
   run node -e '
     const fs = require("fs");
+    const bridge = require(process.argv[2]);
     const obj = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
-    const expected = JSON.parse(process.argv[2]);
     const bgPid = Number(process.argv[3]);
-    // canonicalJSONStringify sorts keys on write -- compare field-by-field,
-    // not a raw JSON.stringify string (key-order-dependent).
     const actual = obj.pid_identity;
-    const ok = actual.pid === bgPid // "self" resolves to the real bridge pid
-      && actual.executable === expected.executable
-      && actual.birth_observed_at === expected.birth_observed_at;
-    process.exit(ok ? 0 : 1);
-  ' "$owner_file" "$fake_pid" "$BG_PID"
-  [ "$status" -eq 0 ]
+    if (actual.pid !== bgPid) { console.error("pid mismatch:", actual.pid, bgPid); process.exit(1); }
+    if (typeof actual.executable !== "string" || actual.executable.length === 0) { console.error("executable empty/invalid"); process.exit(1); }
+    if (typeof actual.birth_observed_at !== "string" || actual.birth_observed_at.length === 0) { console.error("birth_observed_at empty/invalid"); process.exit(1); }
+    const liveness = bridge.classifyProcessIdentityLiveness(actual);
+    if (!liveness.ok || liveness.status !== "LIVE") { console.error("liveness:", JSON.stringify(liveness)); process.exit(1); }
+    process.exit(0);
+  ' "$owner_file" "$PROJ_BRIDGE" "$BG_PID"
+  [ "$status" -eq 0 ] || { printf '# BRIDGE-PID-02 identity DIAG output=%s\n' "$output" >&3; false; }
+
+  # Phase 2 (separate, bounded condition poll -- never a fixed delay):
+  # owner publication legitimately precedes full worker-presence/binding
+  # availability (readSupervisorLifecycleOwnerState/role-binding/worker-
+  # presence are corroborated independently, after the owner file already
+  # exists), so resolveLiveCodexAppServerWorker can be transiently
+  # unavailable for a short window right after the owner file first
+  # appears. Same bound as _wait_for_owner_file (100 x 0.1s = 10s, no
+  # broader); the exact condition is checked on the FIRST attempt, before
+  # ever sleeping.
+  local live_status=1 live_output=""
+  for _ in $(seq 1 100); do
+    run node -e '
+      const bridge = require(process.argv[1]);
+      const rll = require(process.argv[2]);
+      const projectRoot = process.argv[3];
+      const bgPid = Number(process.argv[4]);
+      const digest = rll.roleProfileDigestFor("verifier");
+      const live = bridge.resolveLiveCodexAppServerWorker(projectRoot, "verifier", digest);
+      process.stdout.write(JSON.stringify(live));
+      process.exit((live.ok === true && live.available === true && live.worker && live.worker.pid === bgPid) ? 0 : 1);
+    ' "$PROJ_BRIDGE" "$RLL" "$PROJ" "$BG_PID"
+    live_status="$status"
+    live_output="$output"
+    [ "$live_status" -eq 0 ] && break
+    sleep 0.1
+  done
+  [ "$live_status" -eq 0 ] || {
+    printf '# BRIDGE-PID-02 resolveLiveCodexAppServerWorker DIAG last=%s\n' "$live_output" >&3
+    if [ -f "$BG_OUT" ]; then sed 's/^/# bridge: /' "$BG_OUT" >&3; fi
+    false
+  }
 
   kill -TERM "$BG_PID"; wait "$BG_PID" 2>/dev/null; BG_PID=""
 }
