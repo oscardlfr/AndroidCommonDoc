@@ -1884,7 +1884,24 @@ _inject_action_scan_decoys() {
   local action_json argv_json owner_file fake_pid
   action_json="$(_mint_ready_action verifier)"
   argv_json="$(_argv_from_action "$action_json")"
-  fake_pid='{"pid":999999,"executable":"/fake/node","birth_observed_at":"Mon Jan  1 00:00:00 2001"}'
+
+  # pid:"self" (recognized only inside the double-gated test seam --
+  # process-identity.cjs's own resolveProcessIdentityProvider, comment
+  # "W07b must correlate the durable supervisor owner with the PID of the
+  # independently-spawned bridge process") substitutes the REAL bridge
+  # process's own pid while still faking executable/birth_observed_at.
+  # A literal dead pid (999999, the original fixture -- see BRIDGE-PID-03)
+  # or any OTHER live-but-different pid (a standalone decoy process, tried
+  # first here) both fail production's OWN post-READY HostBridgeCapability
+  # mint: capability.cjs requires live.worker.pid === process.pid as a
+  # SEPARATE self-consistency check from OS liveness, so an alive decoy
+  # with a different pid still triggers owned-shutdown and tombstones the
+  # owner record just as fast as a dead one (empirically confirmed: a
+  # decoy-based version of this test raced and lost 100% of the time
+  # locally, file already gone on the very first read). pid:"self" is the
+  # one seam that proves byte-exact reflection of an injected identity
+  # while never racing capability-mint at all.
+  fake_pid='{"pid":"self","executable":"/fake/node","birth_observed_at":"Mon Jan  1 00:00:00 2001"}'
   export NODE_ENV=test RUNTIME_BRIDGE_CODEX_TEST_CAPABILITY=x RUNTIME_BRIDGE_CODEX_FAKE_PROCESS_IDENTITY="$fake_pid"
   _start_bridge_bg "$argv_json" BG_OUT
   unset RUNTIME_BRIDGE_CODEX_TEST_CAPABILITY RUNTIME_BRIDGE_CODEX_FAKE_PROCESS_IDENTITY
@@ -1895,15 +1912,57 @@ _inject_action_scan_decoys() {
     const fs = require("fs");
     const obj = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
     const expected = JSON.parse(process.argv[2]);
+    const bgPid = Number(process.argv[3]);
     // canonicalJSONStringify sorts keys on write -- compare field-by-field,
     // not a raw JSON.stringify string (key-order-dependent).
     const actual = obj.pid_identity;
-    const ok = actual.pid === expected.pid && actual.executable === expected.executable && actual.birth_observed_at === expected.birth_observed_at;
+    const ok = actual.pid === bgPid // "self" resolves to the real bridge pid
+      && actual.executable === expected.executable
+      && actual.birth_observed_at === expected.birth_observed_at;
     process.exit(ok ? 0 : 1);
-  ' "$owner_file" "$fake_pid"
+  ' "$owner_file" "$fake_pid" "$BG_PID"
   [ "$status" -eq 0 ]
 
   kill -TERM "$BG_PID"; wait "$BG_PID" 2>/dev/null; BG_PID=""
+}
+
+# BRIDGE-PID-03 pins the mechanism BRIDGE-PID-02 used to race under CI load
+# before the pid:"self" fix above: an injected identity that is NOT OS-
+# observably live (a dead literal pid, never a real process) must cause the
+# engine to self-shut-down via the SAME post-READY HostBridgeCapability
+# liveness re-check, and the owner record must not survive that shutdown.
+# Deterministic (no timing assertion): waits for the bridge process to fully
+# EXIT before checking anything, rather than polling a transient file.
+@test "BRIDGE-PID-03 PASS: a dead (non-OS-observable) injected process identity causes owned-shutdown and leaves no live owner record, never a stale live owner" {
+  local action_json argv_json dead_pid
+  action_json="$(_mint_ready_action verifier)"
+  argv_json="$(_argv_from_action "$action_json")"
+  dead_pid='{"pid":999999,"executable":"/fake/node","birth_observed_at":"Mon Jan  1 00:00:00 2001"}'
+  export NODE_ENV=test RUNTIME_BRIDGE_CODEX_TEST_CAPABILITY=x RUNTIME_BRIDGE_CODEX_FAKE_PROCESS_IDENTITY="$dead_pid"
+  _start_bridge_bg "$argv_json" BG_OUT
+  unset RUNTIME_BRIDGE_CODEX_TEST_CAPABILITY RUNTIME_BRIDGE_CODEX_FAKE_PROCESS_IDENTITY
+
+  # Deterministic completion signal: wait for the process to exit on its
+  # own (owned-shutdown), never a poll racing a transient file. Bounded via
+  # the existing _wait_for_pid_exit helper first -- never a bare `wait`,
+  # which could hang forever if the expected owned-shutdown ever regresses
+  # -- so a failure here aborts the test (bats' bare-command semantics)
+  # with BG_PID left set, letting teardown's own bounded kill+poll+SIGKILL
+  # still clean it up. `wait` below only reaps the already-exited child and
+  # captures its status; it never blocks.
+  _wait_for_pid_exit "$BG_PID"
+  wait "$BG_PID"
+  local exit_code=$?
+  BG_PID=""
+
+  grep -q '"reason":"owned-shutdown"' "$BG_OUT"
+  grep -q '"signal":"APP_SERVER_HOST_CAPABILITY_FAILED:host-bridge-worker-not-live:supervisor-process-not-live"' "$BG_OUT"
+  # classifyStopReasonRc (session-run-timer-scheduling.cjs): once batchReady
+  # is true (this shutdown fires post-READY, per BG_OUT's own "phase":
+  # "READY"), every shutdown reason classifies as RC.OK -- rc0 here reflects
+  # "shut down gracefully", never "the trigger reason was fine".
+  [ "$exit_code" -eq 0 ]
+  [ -z "$(_owner_file verifier)" ]
 }
 
 # ══════════════════════════════════════════════════════════════════════════

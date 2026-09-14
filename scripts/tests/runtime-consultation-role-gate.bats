@@ -3488,6 +3488,16 @@ readline.createInterface({ input: process.stdin }).on('line', (line) => {
       record({ event: 'turn-completed', thread_id: frame.params.threadId, turn_id: turnId, expected_result_kind: expectedKind, pid: process.pid });
       send({ method: 'turn/completed', params: { threadId: frame.params.threadId, turn: completedTurn } });
     };
+    // hold-non-bootstrap (S16-ROOT-INGRESS-TARGET-LOST-01): role-bootstrap
+    // still completes normally so every role reaches READY, but any OTHER
+    // turn (a real root-consult dispatch) is deliberately left inProgress
+    // forever -- turn-start above already recorded proof it was dispatched;
+    // no turn-completed event, ever, for this thread. Makes "the target
+    // cannot complete the turn before the plane is stopped" a fixture
+    // property, never a race against a cooperative fake that might finish
+    // first (CI run 34886292666 shard 1: captured output showed a fully
+    // completed READY with every ref populated, not WAITING).
+    if (mode === 'hold-non-bootstrap' && expectedKind !== 'role-bootstrap') return;
     setImmediate(completeTurn);
     return;
   }
@@ -5463,7 +5473,17 @@ _s16e2e_poll_consult_root_request_published() {
 @test "S16-ROOT-INGRESS-TARGET-LOST-01: loss of the retained source+target after WAL publish returns BLOCKED, never a fabricated completion" {
   local session_id="s16e2e-ri-lost-session"
   S16E2E_BG_PID=""
+  # Deterministic precondition, not a race: hold every non-bootstrap turn
+  # open (role-bootstrap still completes, so all five roles reach READY).
+  # Without this, a cooperative fake can dispatch AND complete the
+  # root-consult turn before the plane is stopped -- proven on CI run
+  # 34886292666 shard 1, where the captured consult-root-status output was
+  # a fully completed READY (every ref/digest populated), not WAITING.
+  local previous_fake_mode="${S16E2E_FAKE_MODE:-}"
+  S16E2E_FAKE_MODE="hold-non-bootstrap"
   _s16e2e_start_retained_plane "$session_id"
+  S16E2E_FAKE_MODE="$previous_fake_mode"
+
   _s16e2e_consult_root_publish "$session_id" "ROOT-INGRESS-TARGET-LOST-01"
   local intent_id="$S16E2E_CR_INTENT_ID"
 
@@ -5477,6 +5497,34 @@ _s16e2e_poll_consult_root_request_published() {
     [ -f "$S16E2E_TIMING_LOG" ] && cat "$S16E2E_TIMING_LOG" >&2
     false
   fi
+
+  # Prove the intended cut, not a race merely won: the target's non-bootstrap
+  # turn genuinely started (bounded wait for the retained poll loop to
+  # dispatch it) and -- by construction of hold-non-bootstrap -- can never
+  # complete.
+  local tries=0 saw_turn_start="false"
+  while [ "$tries" -lt 100 ]; do
+    saw_turn_start="$(node -e '
+      const fs = require("fs");
+      let lines = [];
+      try { lines = fs.readFileSync(process.argv[1], "utf8").split("\n").map((l) => l.trim()).filter(Boolean); } catch (err) { lines = []; }
+      const found = lines.some((l) => { try { const e = JSON.parse(l); return e.event === "turn-start" && e.expected_result_kind !== "role-bootstrap"; } catch (err) { return false; } });
+      process.stdout.write(String(found));
+    ' "$S16E2E_FAKE_APP_SERVER_EVENTS")"
+    [ "$saw_turn_start" = "true" ] && break
+    tries=$((tries + 1))
+    sleep 0.1
+  done
+  [ "$saw_turn_start" = "true" ]
+  local saw_turn_completed
+  saw_turn_completed="$(node -e '
+    const fs = require("fs");
+    let lines = [];
+    try { lines = fs.readFileSync(process.argv[1], "utf8").split("\n").map((l) => l.trim()).filter(Boolean); } catch (err) { lines = []; }
+    const found = lines.some((l) => { try { const e = JSON.parse(l); return e.event === "turn-completed" && e.expected_result_kind !== "role-bootstrap"; } catch (err) { return false; } });
+    process.stdout.write(String(found));
+  ' "$S16E2E_FAKE_APP_SERVER_EVENTS")"
+  [ "$saw_turn_completed" = "false" ]
 
   _s16e2e_stop_retained_plane
 
