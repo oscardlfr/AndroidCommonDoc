@@ -11,7 +11,143 @@ on:
 
 jobs:
   bats:
-    name: bats shell tests
+    name: bats shell tests (shard ${{ matrix.shard }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3]
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+
+      - name: Checkout AndroidCommonDoc (for scripts)
+        if: inputs.androidcommondoc_path == ''
+        uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+          repository: ${{ github.repository_owner }}/AndroidCommonDoc
+          path: .androidcommondoc-toolkit
+          sparse-checkout: |
+            scripts/sh/install-git-hooks.sh
+            scripts/sh/verify-git-hooks.sh
+            scripts/sh/pre-commit-hook.sh
+            scripts/sh/lib/wave-slug.sh
+            scripts/sh/commit-msg-hook.sh
+            scripts/sh/pre-push-hook.sh
+            scripts/tools/plan-bats-shards.cjs
+
+      - name: Resolve script paths
+        env:
+          ACD_ANDROIDCOMMONDOC_PATH: ${{ inputs.androidcommondoc_path }}
+        run: |
+          if [ -n "$ACD_ANDROIDCOMMONDOC_PATH" ]; then
+            ROOT="$ACD_ANDROIDCOMMONDOC_PATH"
+          else
+            ROOT=".androidcommondoc-toolkit"
+          fi
+          case "$ROOT" in
+            *$'\n'*) echo "::error::androidcommondoc_path must not contain a newline" >&2; exit 1 ;;
+          esac
+          # Planner: prefer the TARGET checkout's own copy (true for AndroidCommonDoc's
+          # own CI, and for any L1/L2 consumer that has already synced this L0 tool via
+          # the normal sync-l0 path); fall back to the toolkit checkout/clone above --
+          # mirrors INSTALL_SCRIPT/VERIFY_SCRIPT's existing resolution below.
+          if [ -f "scripts/tools/plan-bats-shards.cjs" ]; then
+            PLANNER="scripts/tools/plan-bats-shards.cjs"
+          else
+            PLANNER="${ROOT}/scripts/tools/plan-bats-shards.cjs"
+          fi
+          {
+            echo "INSTALL_SCRIPT=${ROOT}/scripts/sh/install-git-hooks.sh"
+            echo "VERIFY_SCRIPT=${ROOT}/scripts/sh/verify-git-hooks.sh"
+            echo "PLANNER_SCRIPT=${PLANNER}"
+          } >> "$GITHUB_ENV"
+
+      - name: Install bats
+        run: |
+          npm install bats
+          npx bats --version
+
+      - name: Install kmp-test-runner
+        run: npm install -g kmp-test-runner@0.14.0
+
+      - name: Plan this shard's file list
+        run: |
+          if [ ! -f "$PLANNER_SCRIPT" ]; then
+            echo "::error::planner script not found at $PLANNER_SCRIPT (neither target checkout nor toolkit fallback has it)"
+            exit 1
+          fi
+          node "$PLANNER_SCRIPT" --suite-root scripts/tests \
+            --shard-index "${{ matrix.shard }}" --shard-count 4 \
+            > "$RUNNER_TEMP/bats-shard.nul"
+          file_count=$(tr -cd '\0' < "$RUNNER_TEMP/bats-shard.nul" | wc -c)
+          echo "shard ${{ matrix.shard }}: $file_count files"
+          # Newline manifest for the failure-artifact upload only -- safe
+          # because the planner already rejects any newline-containing path
+          # before this NUL-delimited file list is ever produced.
+          tr '\0' '\n' < "$RUNNER_TEMP/bats-shard.nul" > "$RUNNER_TEMP/bats-shard-manifest.txt"
+
+      - name: Run shell tests (shard ${{ matrix.shard }})
+        run: |
+          mapfile -d '' -t FILES < "$RUNNER_TEMP/bats-shard.nul"
+          if [ "${#FILES[@]}" -eq 0 ]; then
+            echo "::error::shard ${{ matrix.shard }} received zero files from the planner"
+            exit 1
+          fi
+          # Authoritative bats result: count "^not ok" lines (npx bats can exit 0 even
+          # with failures in some edge cases). Inlined here (not the run-bats wrapper) so
+          # this reusable stays portable for consumer repos that have shell tests
+          # but lack the L0 toolkit scripts — see the session-coverage.bats invariant
+          # "reusable workflows ... all have L0 clone fallback". The wrapper is the
+          # local-dev/quality-gater equivalent; here the same check is self-contained.
+          #
+          # CI-PARITY: keep this completeness logic identical to
+          #   scripts/sh/run-bats.sh — pinned by scripts/tests/ci-bats-parity.bats
+          npx bats "${FILES[@]}" | tee "$RUNNER_TEMP/bats-output-shard-${{ matrix.shard }}.log" || true
+          # Strip \r before all greps (CRLF safety on Windows-produced logs)
+          clean_log=$(tr -d '\r' < "$RUNNER_TEMP/bats-output-shard-${{ matrix.shard }}.log")
+          not_ok=$(echo "$clean_log" | grep -c "^not ok" || true)
+          ok_ct=$(echo "$clean_log" | grep -c "^ok " || true)
+          echo "bats: ${ok_ct:-0} ok, ${not_ok:-0} not-ok"
+          if [ "${not_ok:-0}" -gt 0 ] || [ "${ok_ct:-0}" -eq 0 ]; then
+            echo "::error::bats failures (${not_ok:-0} not-ok) or no run evidence (${ok_ct:-0} ok)"
+            exit 1
+          fi
+          # Completeness assertion: total must equal the plan line 1..N
+          # Leading ^ anchor required; trailing $ omitted (CRLF safety).
+          plan_count=$(echo "$clean_log" | grep -c "^1\.\.[0-9]" || true)
+          if [ "${plan_count:-0}" -ne 1 ]; then
+            echo "::error::expected exactly one ^1..N plan line, found ${plan_count:-0}"
+            exit 1
+          fi
+          expected=$(echo "$clean_log" | grep "^1\.\.[0-9]" | sed 's/^1\.\.\([0-9][0-9]*\).*/\1/')
+          total=$(( ${ok_ct:-0} + ${not_ok:-0} ))
+          if [ "$total" -ne "${expected:-0}" ]; then
+            echo "::error::completeness check failed — ran $total / expected ${expected:-0} (partial or truncated run)"
+            exit 1
+          fi
+          # bats warning: Executed X instead of expected Y tests (teardown race or over-count)
+          if echo "$clean_log" | grep -q "bats warning: Executed"; then
+            echo "::error::bats emitted 'Executed instead of expected' warning — test count mismatch"
+            exit 1
+          fi
+          echo "bats completeness OK: $total / $expected (complete)"
+
+      - name: Upload test results on failure
+        if: failure()
+        uses: actions/upload-artifact@v5
+        with:
+          name: bats-results-shard-${{ matrix.shard }}
+          path: |
+            ${{ runner.temp }}/bats-output-shard-${{ matrix.shard }}.log
+            ${{ runner.temp }}/bats-shard-manifest.txt
+          retention-days: 7
+
+  bats-post:
+    name: bats post-shard checks (hooks, once)
+    needs: bats
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -50,56 +186,6 @@ jobs:
             echo "VERIFY_SCRIPT=${ROOT}/scripts/sh/verify-git-hooks.sh"
           } >> "$GITHUB_ENV"
 
-      - name: Install bats
-        run: |
-          npm install bats
-          npx bats --version
-
-      - name: Install kmp-test-runner
-        run: npm install -g kmp-test-runner@0.14.0
-
-      - name: Run shell tests
-        run: |
-          # Authoritative bats result: count "^not ok" lines (npx bats can exit 0 even
-          # with failures in some edge cases). Inlined here (not the run-bats wrapper) so
-          # this reusable stays portable for consumer repos that have shell tests
-          # but lack the L0 toolkit scripts — see the session-coverage.bats invariant
-          # "reusable workflows ... all have L0 clone fallback". The wrapper is the
-          # local-dev/quality-gater equivalent; here the same check is self-contained.
-          #
-          # Target directory: scripts/tests — identical to run-bats.sh default targets.
-          # CI-PARITY: keep this completeness logic identical to
-          #   scripts/sh/run-bats.sh — pinned by scripts/tests/ci-bats-parity.bats
-          npx bats scripts/tests | tee scripts/tests/bats-output.log || true
-          # Strip \r before all greps (CRLF safety on Windows-produced logs)
-          clean_log=$(tr -d '\r' < scripts/tests/bats-output.log)
-          not_ok=$(echo "$clean_log" | grep -c "^not ok" || true)
-          ok_ct=$(echo "$clean_log" | grep -c "^ok " || true)
-          echo "bats: ${ok_ct:-0} ok, ${not_ok:-0} not-ok"
-          if [ "${not_ok:-0}" -gt 0 ] || [ "${ok_ct:-0}" -eq 0 ]; then
-            echo "::error::bats failures (${not_ok:-0} not-ok) or no run evidence (${ok_ct:-0} ok)"
-            exit 1
-          fi
-          # Completeness assertion: total must equal the plan line 1..N
-          # Leading ^ anchor required; trailing $ omitted (CRLF safety).
-          plan_count=$(echo "$clean_log" | grep -c "^1\.\.[0-9]" || true)
-          if [ "${plan_count:-0}" -ne 1 ]; then
-            echo "::error::expected exactly one ^1..N plan line, found ${plan_count:-0}"
-            exit 1
-          fi
-          expected=$(echo "$clean_log" | grep "^1\.\.[0-9]" | sed 's/^1\.\.\([0-9][0-9]*\).*/\1/')
-          total=$(( ${ok_ct:-0} + ${not_ok:-0} ))
-          if [ "$total" -ne "${expected:-0}" ]; then
-            echo "::error::completeness check failed — ran $total / expected ${expected:-0} (partial or truncated run)"
-            exit 1
-          fi
-          # bats warning: Executed X instead of expected Y tests (teardown race or over-count)
-          if echo "$clean_log" | grep -q "bats warning: Executed"; then
-            echo "::error::bats emitted 'Executed instead of expected' warning — test count mismatch"
-            exit 1
-          fi
-          echo "bats completeness OK: $total / $expected (complete)"
-
       - name: Install and verify git hooks (bootstrap smoke)
         run: |
           # verify-git-hooks.sh resolves its canonical source relative to
@@ -132,11 +218,3 @@ jobs:
             echo "Running $f..."
             node "$f"
           done
-
-      - name: Upload test results on failure
-        if: failure()
-        uses: actions/upload-artifact@v5
-        with:
-          name: bats-results
-          path: scripts/tests/
-          retention-days: 7
