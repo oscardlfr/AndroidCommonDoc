@@ -220,14 +220,22 @@ jobs:
           bash "$INSTALL_SCRIPT" .
           bash "$VERIFY_SCRIPT"
 
-      - name: Install mcp-server production dependencies (hook tests resolve mcp-server/node_modules/yaml)
+      - name: Install and build mcp-server (hook tests resolve mcp-server/node_modules/yaml and mcp-server/build/)
         # This isolated job never shares node_modules with the bats matrix shards
-        # (CI run 34914706283) -- production-only, no build: .claude/hooks/
-        # hook-control-plane-utils.js's loadYaml() just needs the installed
-        # package, not mcp-server/build/. Skipped for consumers without mcp-server.
+        # (CI run 34914706283) -- production-only install alone (--omit=dev, no
+        # build) was sufficient for hook-control-plane-utils.js's loadYaml(),
+        # but runtime-project-context.test.js's computeRuntimeToolkitInventory
+        # also walks mcp-server/build/ (a real L1/L2 consumer's content-integrity
+        # pin must cover the actually-distributed compiled server, never the raw
+        # TypeScript source) -- gitignored, so a fresh checkout never has it
+        # without this build step. Full npm ci (typescript is dev-only) + build,
+        # unconditionally, since bats-post always runs the whole roster, never a
+        # per-file subset. Skipped for consumers without mcp-server.
         if: hashFiles('mcp-server/package-lock.json') != ''
         working-directory: mcp-server
-        run: npm ci --omit=dev
+        run: |
+          npm ci
+          npm run build
 
       - name: Run Node.js hook tests
         run: |
