@@ -1568,7 +1568,7 @@ test('ADV-cross-session-1: a ready grant backed by a RoleActorBinding minted und
 // independently valid, genuinely-authorized grant, race the SAME pending
 // action -- exactly ONE wins (transitions STARTING->READY), the other
 // loses via AMBIGUOUS_OWNER, never both winning and never both losing.
-test('ADV-ambiguous-owner-1: two concurrent ready calls, each genuinely authorized, racing the SAME pending action -- exactly ONE wins (READY), the other loses as AMBIGUOUS_OWNER, never both', async () => {
+test('ADV-ambiguous-owner-1: concurrent ready calls produce one winner and one fail-closed loser', async () => {
   const dir = makeGitProject();
   try {
     writePlanFixture(dir, 'adv-ambiguous-owner');
@@ -1584,9 +1584,15 @@ test('ADV-ambiguous-owner-1: two concurrent ready calls, each genuinely authoriz
     ]);
     const results = [ra, rb];
     const winners = results.filter((r) => r.result.status === 'READY');
-    const losers = results.filter((r) => r.result.status === 'INVALID' && r.result.detail_code === 'AMBIGUOUS_OWNER');
+    // Both are genuine, fail-closed, same-race outcomes (never a defect): the
+    // loser reading state before the winner's write loses the atomic CAS
+    // (AMBIGUOUS_OWNER); the loser reading state after the winner's write sees
+    // that the pending action was already consumed (ACTION_REPLAY). Process
+    // scheduling decides which valid rejection is observed.
+    const losers = results.filter((r) => r.result.status === 'INVALID'
+      && (r.result.detail_code === 'AMBIGUOUS_OWNER' || r.result.detail_code === 'ACTION_REPLAY'));
     assert.strictEqual(winners.length, 1, 'exactly one racing call wins: ' + JSON.stringify(results.map((r) => r.result)));
-    assert.strictEqual(losers.length, 1, 'exactly one racing call loses as AMBIGUOUS_OWNER: ' + JSON.stringify(results.map((r) => r.result)));
+    assert.strictEqual(losers.length, 1, 'exactly one racing call loses fail-closed as AMBIGUOUS_OWNER or ACTION_REPLAY: ' + JSON.stringify(results.map((r) => r.result)));
 
     const profileDigest = rll.roleProfileDigestFor(LIVE_ROLE);
     const finalState = rll.readRoleBindingState(dir, rll.computeWorktreeId(dir), rll.discoverPlan(dir).planDigest, profileDigest, spawnAction.session_generation_id, LIVE_ROLE);
