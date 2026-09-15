@@ -220,6 +220,15 @@ jobs:
           bash "$INSTALL_SCRIPT" .
           bash "$VERIFY_SCRIPT"
 
+      - name: Install mcp-server production dependencies (hook tests resolve mcp-server/node_modules/yaml)
+        # This isolated job never shares node_modules with the bats matrix shards
+        # (CI run 34914706283) -- production-only, no build: .claude/hooks/
+        # hook-control-plane-utils.js's loadYaml() just needs the installed
+        # package, not mcp-server/build/. Skipped for consumers without mcp-server.
+        if: hashFiles('mcp-server/package-lock.json') != ''
+        working-directory: mcp-server
+        run: npm ci --omit=dev
+
       - name: Run Node.js hook tests
         run: |
           set -e
