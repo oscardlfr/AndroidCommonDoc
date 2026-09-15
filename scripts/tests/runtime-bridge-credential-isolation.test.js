@@ -856,11 +856,12 @@ function observeCurrentProcessBirthForTest() {
   if (process.platform === 'linux') {
     // Linux birth observation is procfs-based (linux-proc-starttime:<ticks>,
     // process-identity.cjs:observeLinuxProcessBirth), not `ps -o lstart=` --
-    // mirror the win32 branch above and call the same real primitive again,
-    // rather than an independent `ps` invocation that speaks a stale format.
-    const observed = rbc.observeLinuxProcessBirth(process.pid);
-    assert.strictEqual(observed && observed.status, 'PRESENT', 'Linux must provide a real process birth token: ' + JSON.stringify(observed));
-    return observed.birthToken;
+    // reuse the already-exported defaultProcessIdentityProvider() (same real
+    // procfs observer, for this current pid) rather than an independent `ps`
+    // invocation that speaks a stale format, without expanding the facade ABI.
+    const identity = rbc.defaultProcessIdentityProvider();
+    assert.strictEqual(typeof identity.birth_observed_at === 'string' && identity.birth_observed_at.length > 0, true, 'Linux must provide a real process birth token: ' + JSON.stringify(identity));
+    return identity.birth_observed_at;
   }
   return execFileSync('ps', ['-o', 'lstart=', '-p', String(process.pid)], { encoding: 'utf8' }).trim();
 }

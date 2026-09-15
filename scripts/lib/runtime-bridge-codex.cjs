@@ -856,10 +856,6 @@ module.exports = {
   defaultProcessIdentityProvider,
   resolvedWindowsPowerShellPath,
   observeWindowsProcessBirth,
-  // Symmetric with observeWindowsProcessBirth above: a pure, non-overridable,
-  // always-real /proc read for an arbitrary pid (no test-only seam), needed
-  // by tests that independently re-observe a real Linux child's birth token.
-  observeLinuxProcessBirth,
   requireProvenProcessIdentity,
   classifyProcessIdentityLiveness,
   findExistingRoleOwner,
