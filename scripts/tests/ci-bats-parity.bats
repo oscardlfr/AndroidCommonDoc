@@ -4,7 +4,7 @@ bats_require_minimum_version 1.5.0
 # CI-parity tests: assert that .github/workflows/reusable-shell-tests.yml contains
 # the same completeness logic as scripts/sh/run-bats.sh.
 #
-# Coverage map (10 tests):
+# Coverage map (11 tests):
 #   #CP1  Workflow contains the plan-parse grep (^1\.[0-9]) — mirroring run-bats.sh LD1(c)
 #   #CP2  Workflow contains the total != expected mismatch fail branch — LD1(c)
 #   #CP3  Workflow contains the Executed-warning grep — LD1(d)
@@ -20,6 +20,10 @@ bats_require_minimum_version 1.5.0
 #   #CP10 Any shard whose files need mcp-server (per the planner's own
 #         content-based needsMcpServer classification, never a hardcoded
 #         filename/shard index) builds it (npm ci + npm run build) before Bats runs
+#   #CP11 bats-post's Node-hook skip roster is exactly the eight PLAN §13 R33
+#         sentinels -- no fewer (accidental re-inclusion of a suite that still
+#         needs the absent native provider) and no more/no wildcard (overbroad
+#         exclusion silently hiding an unrelated functional suite)
 #
 # Rationale: the CI inline bats guard (reusable-shell-tests.yml) duplicates the
 # completeness logic from run-bats.sh by design (consumer-portability invariant —
@@ -256,4 +260,44 @@ README_WORKFLOW="$REPO_ROOT/.github/workflows/readme-audit.yml"
         return 1
     }
     [ "$build_line" -lt "$run_line" ]
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# #CP11  Sequence C26 (CI run 34916418722): bats-post's Node-hook SKIP_PATTERNS
+#        must be exactly PLAN.md §13/L2064-2070's eight named R33 sentinels
+#
+# The native r33-provider is intentionally absent; PLAN §13 requires functional
+# CI to skip precisely these eight scripts/tests/r33-*.test.js files by exact
+# name (never a r33-* wildcard) and never claim their conformance passed. This
+# closed-set comparison fails if the roster shrinks (silently re-running a
+# suite that still can't pass) or grows/widens (silently hiding an unrelated
+# functional suite behind the same skip).
+# ─────────────────────────────────────────────────────────────────────────────
+@test "#CP11 PARITY: bats-post Node-hook skip roster is exactly the eight PLAN §13 R33 sentinels (no more, no fewer, no wildcard)" {
+    [ -f "$WORKFLOW" ] || {
+        echo "WORKFLOW not found: $WORKFLOW" >&2
+        return 1
+    }
+
+    local expected actual
+    expected="$(cat <<'NAMES'
+r33-authority-positive.test.js
+r33-clock-containment.test.js
+r33-golden-vectors.test.js
+r33-native-abi.test.js
+r33-native-ci-contract.test.js
+r33-native-loader.test.js
+r33-provider-child.test.js
+r33-wire-protocol.test.js
+NAMES
+)"
+    actual="$(awk '/SKIP_PATTERNS=\(/{f=1;next} f&&/^[[:space:]]*\)/{exit} f' "$WORKFLOW" \
+        | sed -e "s/[',]//g" -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' \
+        | grep -v '^$' | sort)"
+
+    [ "$actual" = "$expected" ] || {
+        echo "expected exactly the 8 sealed PLAN §13 R33 sentinel names, got:" >&2
+        echo "$actual" >&2
+        return 1
+    }
 }

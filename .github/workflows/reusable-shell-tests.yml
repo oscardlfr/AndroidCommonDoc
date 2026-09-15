@@ -235,13 +235,28 @@ jobs:
           # SKIP_PATTERNS: keep empty unless a test ships drifted and needs a temporary skip.
           # BL-W37 PR4 (BL-W34-E) re-enabled context-provider-consulted/gate tests after
           # observability fix landed; both pass clean.
-          SKIP_PATTERNS=()
+          # PLAN.md §13/L2064-2070 (run 34916418722): the native r33-provider is
+          # intentionally absent -- exactly these eight sentinels are DEFERRED
+          # with their own separate CI gate; functional CI must not claim their
+          # conformance passed. Exact filenames only, never a r33-* wildcard, so
+          # a future unrelated r33 suite is never silently skipped alongside them.
+          # Pinned by ci-bats-parity.bats #CP11.
+          SKIP_PATTERNS=(
+            'r33-authority-positive.test.js'
+            'r33-clock-containment.test.js'
+            'r33-golden-vectors.test.js'
+            'r33-native-abi.test.js'
+            'r33-native-ci-contract.test.js'
+            'r33-native-loader.test.js'
+            'r33-provider-child.test.js'
+            'r33-wire-protocol.test.js'
+          )
           for f in scripts/tests/*.test.js; do
             skip=0
             for pat in "${SKIP_PATTERNS[@]}"; do
               if [[ "$f" == *"$pat"* ]]; then skip=1; break; fi
             done
-            if [[ $skip -eq 1 ]]; then echo "SKIP $f"; continue; fi
+            if [[ $skip -eq 1 ]]; then echo "SKIP $f (PLAN §13 DEFERRED)"; continue; fi
             echo "Running $f..."
             node "$f"
           done
