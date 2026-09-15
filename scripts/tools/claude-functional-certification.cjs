@@ -2737,7 +2737,16 @@ function finalizeHostContractProbe() {
     && index > aStartRow.index
     && index < wake.index);
   if (!initialStop) return fail('HOST_UNSUPPORTED_NO_STOP', 'Actor A did not stop before its native wake.');
-  const resumeStarts = agentStarts.filter(({ index }) => index > wakePost.index && index < bPre.index);
+  if (!wakePost) return fail('HOST_UNSUPPORTED_NO_STABLE_RESUME', 'The native wake never completed successfully.');
+  // The resume is caused by the wake REQUEST, not by its completion event: a
+  // host may start the resumed actor while the wake tool call is still in
+  // flight, so SubagentStart can legitimately precede PostToolUse(SendMessage).
+  // Observed live on darwin. The window therefore opens at the wake itself.
+  // This does not weaken anything: actor A is already required to have stopped
+  // before `wake.index`, exactly one start may fall in the window, that start
+  // must carry the unchanged actor id, and the overall A / resumed-A / B order
+  // is still asserted below.
+  const resumeStarts = agentStarts.filter(({ index }) => index > wake.index && index < bPre.index);
   if (resumeStarts.length !== 1) {
     return fail('HOST_UNSUPPORTED_NO_STABLE_RESUME', 'The successful native wake did not emit exactly one resumed SubagentStart.');
   }

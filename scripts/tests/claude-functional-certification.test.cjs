@@ -659,6 +659,35 @@ test('MACOS-TURN-01 probe spans turns instead of finalizing on the first result'
   assert.equal(run.state.evidence_mode, 'fake-fixture');
 });
 
+// --- Wave 1 macOS stabilization: wake/resume ordering (defect B, live finding) ---
+//
+// The resumed actor is started while the wake tool call is still in flight, so
+// SubagentStart legitimately precedes the wake's own PostToolUse. The driver
+// searched for the resumed start strictly AFTER PostToolUse(SendMessage), so a
+// correct host was reported HOST_UNSUPPORTED_NO_STABLE_RESUME. Observed live on
+// darwin: SubagentStart(agent 6602a4e4, unchanged) landed one row BEFORE
+// PostToolUse(SendMessage), with the full A / resumed-A / B order otherwise
+// exactly as required.
+test('MACOS-WAKE-01 a resumed start that precedes the wake PostToolUse still counts', async () => {
+  const run = await runProbeScenario('hcp-wake-interleaved');
+  assert.notEqual(
+    run.state.status, 'HOST_UNSUPPORTED_NO_STABLE_RESUME',
+    'the resume window must start at the wake request, not at its completion event',
+  );
+  assert.equal(run.state.status, 'HOST_CONTRACT_PROBE_COMPLETED', run.stderr);
+  assert.equal(run.state.stable_actor_resume, true);
+  assert.equal(run.state.distinct_same_type_peers, true);
+  assert.equal(run.code, 0, run.stderr);
+});
+
+// Widening the window must not accept a REPLACEMENT actor: the resumed start
+// still has to carry the original actor's id.
+test('MACOS-WAKE-02 an interleaved start from a replacement actor is still rejected', async () => {
+  const run = await runProbeScenario('hcp-resume-id-drift');
+  assert.notEqual(run.code, 0, 'a replacement actor must not be accepted as a resume');
+  assert.equal(run.state.status, 'HOST_REPLACEMENT_CHILD');
+});
+
 // Confinement must NOT be relaxed to buy the fix above: canonicalizing both ends
 // is the fix; accepting anything that merely normalizes to a similar string is not.
 test('MACOS-CANON-02 a child cwd outside the run root is still rejected after canonicalization', async () => {

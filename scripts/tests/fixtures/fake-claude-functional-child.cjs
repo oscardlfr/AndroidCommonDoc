@@ -381,7 +381,11 @@ function writeHostProbeObservations({ phase = 'all' } = {}) {
   if (scenario !== 'hcp-missing-wake') {
     const wakeRecipient = scenario === 'hcp-wrong-wake-id' ? 'probe-peer-foreign' : 'probe-peer-a';
     add({ ...base, hook_event_name: 'PreToolUse', tool_use_id: 'toolu-wake-a', tool_name: 'SendMessage', tool_input: { to: wakeRecipient, summary: 'Resume probe actor with retained context', message: 'resume probe' } });
-    add({
+    // A real host starts the resumed actor while the wake tool call is still in
+    // flight, so SubagentStart can legitimately precede the wake's own
+    // PostToolUse. 'hcp-wake-interleaved' reproduces that observed ordering;
+    // every other scenario keeps the historical post-then-start ordering.
+    const emitWakePost = () => add({
       ...base,
       hook_event_name: 'PostToolUse',
       tool_use_id: 'toolu-wake-a',
@@ -391,6 +395,8 @@ function writeHostProbeObservations({ phase = 'all' } = {}) {
         ? { success: false, message: 'delivery rejected' }
         : { success: true, message: 'delivery accepted' },
     });
+    const wakeInterleaved = scenario === 'hcp-wake-interleaved';
+    if (!wakeInterleaved) emitWakePost();
     if (!['hcp-rejected-wake', 'hcp-rejected-wake-then-peer-b'].includes(scenario)) {
       add({
         ...base,
@@ -400,6 +406,7 @@ function writeHostProbeObservations({ phase = 'all' } = {}) {
         prompt_id: 'prompt-probe-a',
       });
     }
+    if (wakeInterleaved) emitWakePost();
   }
   add({
     ...base,
