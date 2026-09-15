@@ -1013,23 +1013,65 @@ Invoke-Case -Name 'W09 wrapper: root/registry owner-confined ACL contains only t
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Racer helper for W11/W12 -- launches TWO REAL node processes (per this task's
-# own dispatch wording: "two Node processes"), back-to-back with no
-# intervening work as the "barrier", waits for both, returns both results.
+# Racer helper for W11/W12. -RendezvousName/-RendezvousDir (W11a only)
+# sequence the starts through production's acquireLock() rendezvous seam:
+# its ready-file path is keyed by a hardcoded call-site name, not
+# caller-suppliable, so confirming racer 1's pid before racer 2 starts,
+# then confirming the file changes to a DIFFERENT pid, proves both
+# independently arrived without a last-writer race to misread.
 # ─────────────────────────────────────────────────────────────────────────────
 
+function Wait-RendezvousPid {
+  param([string]$Path, [int]$TimeoutMs, [string]$ExcludePid)
+  $sw = [System.Diagnostics.Stopwatch]::StartNew()
+  while ($sw.ElapsedMilliseconds -lt $TimeoutMs) {
+    if (Test-Path -LiteralPath $Path) {
+      $v = (Get-Content -Raw -LiteralPath $Path -ErrorAction SilentlyContinue)
+      if ($v) { $v = $v.Trim() }
+      if ($v -and $v -ne $ExcludePid) { return $v }
+    }
+    Start-Sleep -Milliseconds 15
+  }
+  return $null
+}
+
 function Invoke-TwoRacerNodeProcesses {
-  param([Parameter(Mandatory)][string[]]$CliArgs, [hashtable]$EnvVars = @{})
+  param(
+    [Parameter(Mandatory)][string[]]$CliArgs, [hashtable]$EnvVars = @{},
+    [string]$RendezvousName = $null, [string]$RendezvousDir = $null
+  )
   $script:InvocationCounter++
   $tag = $script:InvocationCounter
   $out1 = Join-Path $WorkRoot ("racer-{0}-1.out" -f $tag); $err1 = Join-Path $WorkRoot ("racer-{0}-1.err" -f $tag)
   $out2 = Join-Path $WorkRoot ("racer-{0}-2.out" -f $tag); $err2 = Join-Path $WorkRoot ("racer-{0}-2.err" -f $tag)
-  $args1 = Add-OneShotGrant -CliArgs $CliArgs -EnvVars $EnvVars
-  $args2 = Add-OneShotGrant -CliArgs $CliArgs -EnvVars $EnvVars
-  $run1 = Start-CapturedProcess -FilePath 'node' -ArgumentList (@($ImplPath) + $args1) -EnvVars $EnvVars
-  $run2 = Start-CapturedProcess -FilePath 'node' -ArgumentList (@($ImplPath) + $args2) -EnvVars $EnvVars
-  $run1.Process.WaitForExit()
-  $run2.Process.WaitForExit()
+  $racerEnv = $EnvVars
+  if ($RendezvousName) {
+    $racerEnv = @{}; foreach ($k in $EnvVars.Keys) { $racerEnv[$k] = $EnvVars[$k] }
+    $racerEnv['RUNTIME_CONSULTATION_TEST_RENDEZVOUS'] = $RendezvousName
+  }
+  $args1 = Add-OneShotGrant -CliArgs $CliArgs -EnvVars $racerEnv
+  $args2 = Add-OneShotGrant -CliArgs $CliArgs -EnvVars $racerEnv
+  $run1 = $null; $run2 = $null
+  try {
+    $run1 = Start-CapturedProcess -FilePath 'node' -ArgumentList (@($ImplPath) + $args1) -EnvVars $racerEnv
+    if ($RendezvousName) {
+      $readyPath = Join-Path $RendezvousDir (".rendezvous-$RendezvousName-ready")
+      $goPath = Join-Path $RendezvousDir (".rendezvous-$RendezvousName-go")
+      $p1 = Wait-RendezvousPid $readyPath 15000 $null
+      Assert-True ($null -ne $p1) 'racer 1 never reached the rendezvous checkpoint'
+      $run2 = Start-CapturedProcess -FilePath 'node' -ArgumentList (@($ImplPath) + $args2) -EnvVars $racerEnv
+      $p2 = Wait-RendezvousPid $readyPath 4500 $p1
+      if (-not $p2) { [IO.File]::WriteAllText($goPath, 'go'); throw "racer 2 never reached the rendezvous checkpoint (only saw pid $p1) -- process-start-order fault" }
+      [IO.File]::WriteAllText($goPath, 'go')
+    } else {
+      $run2 = Start-CapturedProcess -FilePath 'node' -ArgumentList (@($ImplPath) + $args2) -EnvVars $racerEnv
+    }
+    $run1.Process.WaitForExit(); $run2.Process.WaitForExit()
+  } finally {
+    foreach ($p in @($run1, $run2)) {
+      if ($p -and -not $p.Process.HasExited) { try { $p.Process.Kill(); $p.Process.WaitForExit(2000) } catch {} }
+    }
+  }
   $stdout1 = $run1.Stdout.GetAwaiter().GetResult(); $stderr1 = $run1.Stderr.GetAwaiter().GetResult()
   $stdout2 = $run2.Stdout.GetAwaiter().GetResult(); $stderr2 = $run2.Stderr.GetAwaiter().GetResult()
   [IO.File]::WriteAllText($out1, $stdout1); [IO.File]::WriteAllText($err1, $stderr1)
@@ -1047,28 +1089,41 @@ function Invoke-TwoRacerNodeProcesses {
 # sub-case (bounded timeout+STOP, never age-reclaim).
 # ══════════════════════════════════════════════════════════════════════════
 
-Invoke-Case -Name 'W11a two node processes race the same fresh .lock/: exactly one publishes cancel.json, the other observes it already cancelled' -Body {
+Invoke-Case -Name 'W11a two node processes race the same fresh .lock/: exactly one durable cancel.json, the loser fails closed against the live holder' -Body {
   $fixture = New-PublishedRequestFixture -Suffix 'w11a' -Question 'W11 live-holder race'
   $reqPath = $fixture.RequestPath
   $reqDir = Split-Path -Parent $reqPath
   $coordRoot = $fixture.CoordinationRoot
   $capEnv = $fixture.CapabilityEnv
   $cliArgs = @('cancel', '--coordination-root', $coordRoot, '--request', $reqPath, '--reason', 'explicit')
-  $racers = Invoke-TwoRacerNodeProcesses -CliArgs $cliArgs -EnvVars $capEnv
+  $racers = Invoke-TwoRacerNodeProcesses -CliArgs $cliArgs -EnvVars $capEnv -RendezvousName 'acquire-lock-before-mkdir-loop' -RendezvousDir $reqDir
+
+  # PLAN-R131 ~L6708/~L7289 (SC-9; CI run 34907457678) requires one acquirer
+  # + live-holder non-reclaim, never a specific loser status -- TIMEOUT
+  # against a still-live holder is as authorized as CANCELLED (W11b proves
+  # the identical contract for orphans).
+  Assert-True (Test-Path (Join-Path $reqDir '.lock-contention-observed')) 'no genuine mkdir contention observed'
 
   $winners = @($racers | Where-Object { $_.ExitCode -eq 0 })
   $losers = @($racers | Where-Object { $_.ExitCode -ne 0 })
-  Assert-True ($winners.Count -eq 1) "expected exactly one winner (rc0), got $($winners.Count) of 2. r1=$($racers[0].ExitCode)/$($racers[0].Stdout) r2=$($racers[1].ExitCode)/$($racers[1].Stdout)"
+  Assert-True ($winners.Count -eq 1) "expected exactly one winner (rc0), got $($winners.Count) of 2"
   Assert-True ($losers.Count -eq 1) "expected exactly one loser (nonzero rc), got $($losers.Count) of 2"
-  Assert-CliResult -Stdout $winners[0].Stdout -ExpectedStatus 'SUCCESS' -ExpectedDetail 'NONE' | Out-Null
-  # The loser enters its OWN critical section only after the winner released
-  # the lock, observes cancel.json already published, and is rejected as an
-  # already-cancelled transaction -- never a silent second success, never a
-  # corrupted/merged write.
-  Assert-CliResult -Stdout $losers[0].Stdout -ExpectedStatus 'CANCELLED' -ExpectedDetail 'TRANSACTION_CANCELLED' | Out-Null
+  $winnerResult = Assert-CliResult -Stdout $winners[0].Stdout -ExpectedStatus 'SUCCESS' -ExpectedDetail 'NONE'
 
-  $lockDir = Join-Path $reqDir '.lock'
-  Assert-True (-not (Test-Path $lockDir)) "the .lock/ directory was not cleaned up after both racers completed: $lockDir"
+  $cancelledErr = $null
+  try { Assert-CliResult -Stdout $losers[0].Stdout -ExpectedStatus 'CANCELLED' -ExpectedDetail 'TRANSACTION_CANCELLED' | Out-Null } catch {
+    $cancelledErr = $_.Exception.Message
+    try { Assert-CliResult -Stdout $losers[0].Stdout -ExpectedStatus 'TIMEOUT' -ExpectedDetail 'DEADLINE_EXCEEDED' | Out-Null } catch {
+      throw "loser must be CANCELLED or TIMEOUT -- neither matched. CANCELLED: $cancelledErr. TIMEOUT: $($_.Exception.Message)"
+    }
+  }
+
+  $cancelPath = Join-Path $reqDir 'cancel.json'
+  Assert-True (Test-Path -LiteralPath $cancelPath) 'expected a durable cancel.json'
+  $cancelObj = Get-Content -Raw -LiteralPath $cancelPath | ConvertFrom-Json
+  Assert-True ($cancelObj.schema -eq 'coordination/cancel/v1' -and $cancelObj.request_id -eq $winnerResult.request_id) 'cancel.json is corrupt or uncorrelated with the winner'
+
+  Assert-True (-not (Test-Path (Join-Path $reqDir '.lock'))) 'the .lock/ directory was not cleaned up after both racers completed'
 }
 
 Invoke-Case -Name 'W11b node: an orphan .lock/ (pre-created, never released) causes a bounded TIMEOUT/STOP, never an age-based reclaim' -Body {
