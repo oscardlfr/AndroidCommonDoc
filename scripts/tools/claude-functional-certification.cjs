@@ -205,8 +205,29 @@ const P4_SUPPORT_ROLES = ['arch-platform', 'arch-testing', 'arch-integration', '
 const P4_NATIVE_AGENT_ROLES = [...P4_SUPPORT_ROLES, 'toolkit-specialist'];
 const parentRoot = path.join(os.tmpdir(), 'androidcommondoc-p4-live-cert-v1');
 fs.mkdirSync(parentRoot, { recursive: true });
-const runRoot = evidenceRootArg ? path.resolve(evidenceRootArg) : fs.mkdtempSync(path.join(parentRoot, 'run-'));
-fs.mkdirSync(runRoot, { recursive: true });
+// The run root is one end of a trust boundary: the child is spawned with it as
+// cwd and then reports that cwd back realpath-resolved by the OS. Comparing a
+// symlink-blind path.resolve() against that reply can never succeed on a platform
+// whose temp roots are symlinks (darwin: /tmp -> /private/tmp,
+// /var/folders -> /private/var/folders). Canonicalize here, once, so both ends of
+// every later comparison are real paths -- never normalized strings.
+const requestedRunRoot = evidenceRootArg
+  ? path.resolve(evidenceRootArg)
+  : fs.mkdtempSync(path.join(parentRoot, 'run-'));
+if (evidenceRootArg && !fs.existsSync(requestedRunRoot)) {
+  // Fail closed: a root that does not exist cannot be canonicalized, and
+  // creating it implicitly would let a typo silently become a fresh trust root.
+  process.stderr.write(`evidence root does not exist: ${requestedRunRoot}\n`);
+  process.exit(66);
+}
+fs.mkdirSync(requestedRunRoot, { recursive: true });
+let runRoot;
+try {
+  runRoot = fs.realpathSync(requestedRunRoot);
+} catch {
+  process.stderr.write(`evidence root could not be canonicalized: ${requestedRunRoot}\n`);
+  process.exit(66);
+}
 const p5SubjectPath = p5Scenario ? path.join(runRoot, 'p5-reviewed-subject.md') : null;
 if (p5Scenario) fs.copyFileSync(path.resolve(p5SubjectSourceArg), p5SubjectPath, fs.constants.COPYFILE_EXCL);
 const offlineSessionId = process.env.P4_CERT_OFFLINE_TEST === '1'
@@ -2687,7 +2708,7 @@ function finalizeHostContractProbe() {
   const canonicalFirstRead = path.join(runRoot, 'probe-a-one.txt');
   if (!aPost) {
     const firstPath = aReads[0] && aReads[0].event.tool_input && aReads[0].event.tool_input.file_path;
-    if (!aStart || firstPath !== canonicalFirstRead) {
+    if (!aStart || !sameCanonicalFile(firstPath, canonicalFirstRead)) {
       return fail('HOST_UNSUPPORTED_NO_EXECUTED_INPUT', 'Neither executed-input observation rung was available.');
     }
     state.evidence_method = 'START_PLUS_FIRST_OBSERVED_COMMAND';
@@ -3509,11 +3530,38 @@ function handleEntrypointEnvelope(envelope) {
   advanceP4Stage(envelope);
 }
 
+// Realpath BOTH ends of the boundary. This is not a string-normalization
+// relaxation: a directory outside the run root still canonicalizes to a
+// different real path and is still rejected (MACOS-CANON-02), and an
+// unresolvable path yields null and fails closed rather than comparing equal.
+function canonicalDirOrNull(candidate) {
+  if (typeof candidate !== 'string' || candidate.length === 0) return null;
+  try { return fs.realpathSync(path.resolve(candidate)); } catch { return null; }
+}
+
+function sameCanonicalDir(actual, expected) {
+  const canonicalActual = canonicalDirOrNull(actual);
+  const canonicalExpected = canonicalDirOrNull(expected);
+  return canonicalActual !== null && canonicalExpected !== null && canonicalActual === canonicalExpected;
+}
+
+// Same boundary rule for a FILE both sides name: canonicalize the containing
+// directory and require an exact basename match. The directory is canonicalized
+// rather than the file itself so a not-yet-created file fails closed on the
+// basename instead of throwing, and an unresolvable directory yields null and
+// still fails closed.
+function sameCanonicalFile(actual, expected) {
+  if (typeof actual !== 'string' || typeof expected !== 'string') return false;
+  if (actual === expected) return true;
+  if (path.basename(actual) !== path.basename(expected)) return false;
+  return sameCanonicalDir(path.dirname(actual), path.dirname(expected));
+}
+
 function validateInit(event) {
   const tools = Array.isArray(event.tools) ? event.tools : [];
   const expectedCwd = transportProfile === 'native-claude-cli' && operation === 'host-contract-probe' ? runRoot : projectRoot;
   return event.session_id === sessionId
-    && path.resolve(event.cwd || '') === expectedCwd
+    && sameCanonicalDir(event.cwd, expectedCwd)
     && typeof event.model === 'string' && event.model.length > 0
     && tools.includes('Bash') && tools.includes('SendMessage')
     && (tools.includes('Agent') || tools.includes('Task'))

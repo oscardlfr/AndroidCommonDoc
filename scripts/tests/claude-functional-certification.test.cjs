@@ -584,6 +584,78 @@ test('HCP-POSITIVE proves the complete authority-free host contract with extra t
   assert.match(bPrompt, new RegExp(path.join(run.evidenceRoot, 'probe-b-one.txt').replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
 });
 
+// --- Wave 1 macOS stabilization: boundary canonicalization (defect C) ---
+//
+// The native host-contract probe is the only path that sets childCwd/expectedCwd
+// to runRoot. The child reports its cwd the way the OS does -- realpath-resolved --
+// while the driver compared it against a symlink-blind path.resolve(runRoot).
+// On darwin EVERY candidate root is symlinked (/tmp -> /private/tmp,
+// /var/folders -> /private/var/folders), so validateInit could never succeed
+// against the real binary. Proven live before this fence existed: two independent
+// genuine-pinned runs returned INVALID_SYSTEM_INIT_EVIDENCE with init:null while a
+// real system/init frame sat in the captured stream.
+//
+// The symlink here is explicit so this fences on every symlink-capable platform,
+// not only on darwin.
+test('MACOS-CANON-01 native host-contract probe accepts a symlinked evidence root', async () => {
+  const canonicalRoot = fs.realpathSync(fs.mkdtempSync(path.join(privateRoot, 'canon-')));
+  const linkParent = fs.realpathSync(fs.mkdtempSync(path.join(privateRoot, 'link-')));
+  const symlinkedRoot = path.join(linkParent, 'evidence-via-symlink');
+  fs.symlinkSync(canonicalRoot, symlinkedRoot, 'dir');
+  assert.notEqual(symlinkedRoot, fs.realpathSync(symlinkedRoot), 'fixture must actually be a symlink');
+
+  const run = await runProbeScenario('hcp-success', {
+    transportProfile: 'native-claude-cli',
+    nativeFixture: true,
+    evidenceRoot: symlinkedRoot,
+  });
+  // Scope: this fences the cwd boundary only. A fake child legitimately cannot
+  // reach HOST_CONTRACT_PROBE_COMPLETED on the native profile, because the
+  // evidence-mode guard refuses fake-fixture rows where genuine-pinned is
+  // required -- that guard is correct and is deliberately NOT relaxed here.
+  // The driver records a rejection in state.status, not state.verdict.
+  assert.notEqual(
+    run.state.status, 'INVALID_SYSTEM_INIT_EVIDENCE',
+    'a realpath-resolved child cwd must not be read as a foreign cwd',
+  );
+  assert.notEqual(run.state.init, null, 'the system/init frame must be accepted and recorded');
+  assert.equal(run.state.host_identity_observation, 'system-init-stream');
+});
+
+// Confinement must NOT be relaxed to buy the fix above: canonicalizing both ends
+// is the fix; accepting anything that merely normalizes to a similar string is not.
+test('MACOS-CANON-02 a child cwd outside the run root is still rejected after canonicalization', async () => {
+  const canonicalRoot = fs.realpathSync(fs.mkdtempSync(path.join(privateRoot, 'canon-out-')));
+  const foreignRoot = fs.realpathSync(fs.mkdtempSync(path.join(privateRoot, 'foreign-')));
+  const run = await runProbeScenario('hcp-success', {
+    transportProfile: 'native-claude-cli',
+    nativeFixture: true,
+    evidenceRoot: canonicalRoot,
+    extraEnv: { P4_CERT_TEST_FORCE_CHILD_CWD: foreignRoot },
+  });
+  assert.equal(
+    run.state.status, 'INVALID_SYSTEM_INIT_EVIDENCE',
+    'an out-of-root cwd must fail closed even once both ends are canonicalized',
+  );
+  assert.notEqual(run.code, 0, 'an out-of-root cwd must exit non-zero');
+});
+
+// A root that does not exist must be refused outright rather than silently
+// realpath-ing to something else.
+test('MACOS-CANON-03 a non-existent evidence root is refused, not silently resolved', async () => {
+  const parent = fs.realpathSync(fs.mkdtempSync(path.join(privateRoot, 'absent-')));
+  const missingRoot = path.join(parent, 'does-not-exist');
+  await assert.rejects(
+    () => runProbeScenario('hcp-success', {
+      transportProfile: 'native-claude-cli',
+      nativeFixture: true,
+      evidenceRoot: missingRoot,
+    }),
+    'a missing run root must not produce a usable probe state',
+  );
+  assert.equal(fs.existsSync(missingRoot), false, 'the driver must not create the missing root');
+});
+
 test('HCP-IDENTITY rejects wrong wake identity, replacement actors, and peer ID collision distinctly', async () => {
   const wrongWake = await runProbeScenario('hcp-wrong-wake-id');
   const replacement = await runProbeScenario('hcp-replacement-child');

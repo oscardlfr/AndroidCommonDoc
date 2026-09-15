@@ -15,7 +15,11 @@ const operation = argValue('--operation') || process.env.P4_CERT_FAKE_OPERATION 
 const probeNonce = argValue('--probe-nonce') || process.env.P4_CERT_FAKE_PROBE_NONCE;
 const scenario = process.env.P4_CERT_FAKE_SCENARIO || 'success';
 const directRole = argValue('--agent');
-const projectRoot = process.cwd();
+// process.cwd() is realpath-resolved by the OS, exactly like the real CLI's
+// reported cwd -- that fidelity is what makes the canonicalization fence real.
+// The override exists only so a negative test can present a genuinely foreign
+// cwd; it is never used to make a positive case pass.
+const projectRoot = process.env.P4_CERT_TEST_FORCE_CHILD_CWD || process.cwd();
 let turn = 0;
 let awaitingActionInterrupt = false;
 let deferredInterruptedResult = null;
