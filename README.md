@@ -138,7 +138,7 @@ AndroidCommonDoc is designed as an **L0 (generic layer)** in a multi-tier ecosys
 ### How it works
 
 - **L0 defines** canonical skills (`skills/*/SKILL.md`), agents (`.claude/agents/`), and pattern docs (`docs/`)
-- **L1/L2 consume** L0 via materialized copies synced by the `/sync-l0` skill
+- **L1/L2 consume** L0 assets through `/sync-l0`; the optional collaboration runtime remains source-referenced to one frozen local L0 toolkit
 - **L2 extends** with domain-specific skills and agents not present in L0
 - **Absence = opt-out**: Exclude entries in `l0-manifest.json` to skip specific skills
 
@@ -217,7 +217,12 @@ Downstream projects maintain local copies of L0 skills via the **registry + mani
 
 # Preview what would change without writing
 /sync-l0 --dry-run
+
+# Install/verify the source-referenced collaboration runtime in an L1/L2 consumer
+/sync-l0 --runtime
 ```
+
+Runtime mode requires an existing manifest with exactly one local `L0` source whose role is `tooling`. It pins the toolkit commit and executable-content digest, installs the ten canonical runtime role definitions, and registers the closed hook matrix by absolute L0 path. Runtime code is not copied into the application. The operation is idempotent; use `--runtime --dry-run` for a write-free preflight. Runtime mode rejects remote/ambiguous sources, local runtime-role or owned-hook conflicts, and all prune/force/migration flags.
 
 ---
 
@@ -1336,6 +1341,7 @@ See [layer-topology.md](docs/architecture/layer-topology.md#auto-sync) for the f
 /sync-l0              # additive sync (pulls new/updated, never removes)
 /sync-l0 --prune      # also removes orphaned files
 /sync-l0 --dry-run    # preview changes without writing
+/sync-l0 --runtime    # install/verify source-referenced runtime (no prune/force)
 ```
 
 The sync engine compares SHA-256 hashes and only updates changed files. Works identically for flat and chain topologies — chain mode syncs from all sources in manifest order (L0 → L1). User selections (`exclude_skills`, `exclude_categories`, `l2_specific`) are never overwritten.

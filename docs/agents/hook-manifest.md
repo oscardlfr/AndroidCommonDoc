@@ -2,9 +2,9 @@
 scope: [agents, hooks, workflow]
 sources: [androidcommondoc]
 targets: [all]
-version: 3
-last_updated: "2026-07-11"
-description: "Consumer hook manifest: classifies all 34 L0 hook files as consumer-required / consumer-optional / l0-internal"
+version: 5
+last_updated: "2026-08"
+description: "Consumer hook manifest: classifies all 39 L0 hook files as consumer-required / consumer-optional / l0-internal"
 slug: hook-manifest
 status: active
 layer: L0
@@ -14,7 +14,7 @@ category: agents
 
 # L0 Hook Manifest
 
-Reference classification for all 34 hook files in `.claude/hooks/`. Consumers use this to reconcile their `settings.json` against the full L0 hook set.
+Reference classification for all 39 hook files in `.claude/hooks/`. Consumers use this to reconcile their `settings.json` against the full L0 hook set.
 
 > **CI-enforced** — the `hook-manifest-coverage` job in `.github/workflows/drift-audit.yml` fails the build if the hook table below drifts from `.claude/hooks/` (a missing, phantom, or duplicated hook). The table is the source of truth for coverage.
 
@@ -43,16 +43,32 @@ These are two separate steps — both must be completed for a hook to be active.
 
 This is the gap the manifest addresses: files landing on disk is not the same as registration. The L2 consumer project currently registers 5 of 12 consumer-required hooks; 7 are missing.
 
+### Runtime Activation (Registered ≠ Executed)
+
+Propagation and registration are still not proof of execution — **registration on disk is not proof that a hook actually ran at runtime**. Confirming real activation requires:
+
+- **Safe-mode disables hooks.** Claude Code 2.1.219 `--safe-mode` disables hooks entirely and sets `CLAUDE_CODE_SAFE_MODE=1` in the process environment. Any enforcement probe must statically reject both the flag and an inherited `CLAUDE_CODE_SAFE_MODE`, and run with an isolated/sealed configuration: explicit `--settings` plus empty `--setting-sources`.
+- **Runtime compatibility check** against the pinned Claude Code version: registry matcher name, actual dispatched payload name, the firing hook event, the hook's exit code, and the resulting host denial must all be verified together — none alone is sufficient.
+- **Manual invocation and a derived summary are each insufficient alone.** Treat a hook as proven-active only when an automatic (non-manual) triggering event is corroborated by independent owner-stream evidence, with confirmed absence of any native task/child/result/handle/survivor for the blocked call.
+- Full probe methodology: [hook-authoring-conventions.md#safe-mode-and-hook-enforcement-probes](hook-authoring-conventions.md#safe-mode-and-hook-enforcement-probes).
+
+This subsection documents verification methodology only; it does not assert that any specific in-flight enforcement attempt (I-BIND) has been accepted.
+
 ## Hook Table
 
-### JavaScript Hooks (30)
+### JavaScript Hooks (35)
 
 | Hook | Status | Rationale |
 |------|--------|-----------|
 | `architect-bash-write-gate.js` | consumer-required | Topology: arch-* cannot bypass dispatch via Bash writes |
 | `architect-self-edit-gate.js` | consumer-required | Topology: arch-* cannot Write/Edit project files directly |
-| `context-provider-gate.js` | consumer-required | Gating: CP consult required before search ops — see [context-provider-adoption-hooks](context-provider-adoption-hooks.md) |
+| `context-provider-gate.js` | consumer-required | Gating: CP consult required before search ops; post-PLAN, a deeper branch (T-BUG-015/BL-W35-06) additionally requires a genuine `consult/v2`→`result/v2`→`accepted-result.json` transaction correlated to the caller's own `{role,agent_id,session_id}` before Read on `docs/agents/**`/`docs/adr/**` — specialists take a lighter "reporting-architect-has-a-current-accepted-result" branch instead of their own transaction — see [context-provider-adoption-hooks](context-provider-adoption-hooks.md) and [runtime-messaging-protocol](runtime-messaging-protocol.md) |
 | `context-provider-consulted.js` | consumer-required | Gating: sets the session flag the gate checks (pair with context-provider-gate) — see [context-provider-adoption-hooks](context-provider-adoption-hooks.md) |
+| `context-provider-write-gate.js` | consumer-required | Gating: confines context-provider's sole write capability (publishing its own nested-consultation `result/v2` via `write-bundle.sh`) — CP's read-only boundary otherwise stays intact — see [runtime-messaging-cp-writer](runtime-messaging-cp-writer.md) |
+| `runtime-consultation-target-gate.js` | consumer-required | Gating: resolves target lifecycle-ready state plus every native target claim/lease/result/stop-ack grant for the Wave-1 consultation protocol — see [runtime-messaging-state-machine](runtime-messaging-state-machine.md) |
+| `runtime-host-boundary.js` | consumer-required | Gating: enforces the retained-host identity and lifecycle boundary for runtime collaboration tool calls |
+| `runtime-host-session-start.js` | consumer-required | Session startup: captures the host session identity required by the retained-host boundary before runtime collaboration begins |
+| `agent-spawn-execution-gate.js` | consumer-required | Topology: PreToolUse gate on the `Agent` tool, main-orchestrator context only. Before a real `Agent()` call executes for a genuine role-lifecycle action ("owning" call — some pending action truly exists for the exact `subagent_type` named), atomically reserves that action via a no-clobber execution-claim record, revalidating binding/PLAN/session/role/expiry fresh. Every other `Agent()` call ("non-owning" — the overwhelming majority of ordinary ad-hoc specialist/architect dispatch) is silent pass-through with zero side effects, governed only by other hooks (`agent-spawn-validator.js` etc.) — see [runtime-messaging-drivers](runtime-messaging-drivers.md) |
 | `hook-control-plane-utils.js` | l0-internal | Shared CommonJS runtime dependency for propagated hooks; copy with importing hooks, never register in `settings.json` |
 | `coordination-artifact.js` | l0-internal | Shared CommonJS runtime dependency for propagated hooks (read/validate coordination artifacts — consult/result/request/approval/stop/message; writes are owned by `write-coordination-artifact.sh`, not this module); copy with importing hooks, never register in `settings.json` — see [coordination-artifact-schema](coordination-artifact-schema.md) |
 | `premature-execution-gate.js` | consumer-required | Gating: blocks specialist Write/Edit/Bash before APPROVED-PREP verdict |
@@ -76,7 +92,7 @@ This is the gap the manifest addresses: files landing on disk is not the same as
 
 | `kmp-test-runner-gate.js` | l0-internal | Blocks all Gradle test task variants; agents must use kmp-test-runner CLI |
 | `specialist-task-completion-gate.js` | l0-internal | Blocks specialists from marking tasks completed directly |
-| `bash-cli-spawn-gate.js` | l0-internal | Blocks Bash attempts to spawn Claude agents via --agent-id/--team-name CLI flags |
+| `bash-cli-spawn-gate.js` | l0-internal | Blocks Bash attempts to spawn Claude agents via --agent-id/--team-name CLI flags; covered by `scripts/tests/bash-cli-spawn-gate.bats` (closes a prior zero-coverage gap — proves canonical render/parse round-trip for spaces/apostrophes/metacharacters plus exact pending `session-run --action`, while non-canonical quoting/operators/near-matches/raw-spawn/background variants fail) |
 | `agent-spawn-validator.js` | l0-internal | Validates subagent_type against agents.manifest.yaml + SHA-256 drift |
 | `registry-rehash-reminder.js` | l0-internal | Emits reminder to run --update-manifest-hash after agent template edits |
 | `kickoff-scope-validator.js` | l0-internal | WARN-only: checks commitlint scopes on *-kickoff.md file writes |
@@ -118,6 +134,7 @@ The `hook-manifest-coverage` CI guard (prep-22) counts only `.claude/hooks/` ent
 - Branch protection hook: [branch-guard](branch-guard.md)
 - Knowledge currency gate: [knowledge-currency-gate](knowledge-currency-gate.md)
 - Commit-scope + git-layer hooks: [pre-commit-hooks](../guides/pre-commit-hooks.md)
+- Runtime-messaging consultation/state-machine/CP-writer/drivers hooks: [runtime-messaging-adapters](runtime-messaging-adapters.md)
 - Hub: [agents-hub](agents-hub.md)
 
 **Note**: `docs/agents/branch-guard.md`'s propagation section was corrected to match this manifest (it previously claimed `.claude/hooks/` is NOT in `/sync-l0` scope — stale since BL-W47-prep-8).

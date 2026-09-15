@@ -48,10 +48,10 @@
     Print assembled kmp-test command to stdout, exit 0. No runner invocation.
 
 .PARAMETER FreshDaemon
-    Available since v0.14.0 — adds ~5s cold-start overhead. Forwards --fresh-daemon to kmp-test-runner.
+    Available since v0.14.0 -- adds ~5s cold-start overhead. Forwards --fresh-daemon to kmp-test-runner.
 
 .PARAMETER ExcludeCoverage
-    DEPRECATED — use ExcludeModules. Translates to --exclude-modules.
+    DEPRECATED -- use ExcludeModules. Translates to --exclude-modules.
 
 .PARAMETER ExcludeModules
     Comma-separated modules to exclude.
@@ -80,7 +80,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-# --- AUTO_EXCLUDE_COVERAGE_PATTERNS (A3 — inline, never a config file) ------- #
+# --- AUTO_EXCLUDE_COVERAGE_PATTERNS (A3 -- inline, never a config file) ------- #
 $autoExcludePatterns = @(
     "*:testing",
     "*:test-fakes",
@@ -95,7 +95,7 @@ $autoExcludePatterns = @(
 
 # --- Deprecation warnings ---------------------------------------------------- #
 if ($ExcludeCoverage -ne "") {
-    Write-Warning "WARNING: -ExcludeCoverage deprecated — degraded to --exclude-modules; tests will be skipped instead of just excluded from coverage. See GAP-05."
+    Write-Warning "WARNING: -ExcludeCoverage deprecated -- degraded to --exclude-modules; tests will be skipped instead of just excluded from coverage. See GAP-05."
 }
 
 # --- Detection cascade ------------------------------------------------------- #
@@ -134,7 +134,7 @@ if ($Timeout -ne 600)         { $cmdArgs += @("--timeout", "$Timeout") }
 if ($excludeModulesArg -ne "") { $cmdArgs += @("--exclude-modules", $excludeModulesArg) }
 if ($FreshDaemon)              { $cmdArgs += "--fresh-daemon" }
 
-# --- Wrapper -DryRun (Strategy A — arch-testing addendum) -------------------- #
+# --- Wrapper -DryRun (Strategy A -- arch-testing addendum) -------------------- #
 # Echo assembled command to stdout, exit 0, NO runner invocation.
 if ($DryRun) {
     Write-Host "DRY-RUN: $kmpTestCmd $($cmdArgs -join ' ')"

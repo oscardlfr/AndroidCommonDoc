@@ -265,12 +265,11 @@ LIB_DIR="$SH_DIR/lib"
 # Bug 20: local keyword used outside function in main script body
 # ---------------------------------------------------------------------------
 
-@test "regression: no 'local' outside functions in any SH script" {
-    FAIL=0
-    for script in scripts/sh/*.sh scripts/sh/lib/*.sh; do
-        [ -f "$script" ] || continue
-        # Use python to detect local outside function scope
-        result=$(python3 -c "
+_scan_local_outside_function() {
+    # Narrow-purpose scanner shared by the real regression test below and its
+    # regression-control fixtures. Not a general shell parser.
+    local script="$1"
+    python3 -c "
 import re, sys
 with open('$script', encoding='utf-8', errors='replace') as f:
     lines = f.readlines()
@@ -279,6 +278,7 @@ depth = 0
 violations = []
 for i, line in enumerate(lines, 1):
     s = line.strip()
+    if not s or s.startswith('#'): continue
     if re.match(r'^[a-zA-Z_]\w*\s*\(\)', s): in_func = True
     depth += s.count('{') - s.count('}')
     if depth <= 0 and in_func:
@@ -290,9 +290,48 @@ if violations:
     print(f'$(basename "$script"):')
     for v in violations: print(f'  {v}')
     sys.exit(1)
-" 2>&1) || { echo "$result"; FAIL=1; }
+"
+}
+
+@test "regression: no 'local' outside functions in any SH script" {
+    FAIL=0
+    for script in scripts/sh/*.sh scripts/sh/lib/*.sh; do
+        [ -f "$script" ] || continue
+        result=$(_scan_local_outside_function "$script" 2>&1) || { echo "$result"; FAIL=1; }
     done
     [ "$FAIL" -eq 0 ]
+}
+
+@test "regression: local-outside-function scanner ignores full-line comment braces but still catches real top-level local" {
+    local tmpdir; tmpdir="$(mktemp -d)"
+
+    # Fixture A: a full-line comment with an unmatched literal closing brace,
+    # followed by a valid `local` still inside the function -- must be ACCEPTED.
+    local accept_fixture="$tmpdir/accept.sh"
+    cat > "$accept_fixture" <<'FIXTURE_EOF'
+#!/usr/bin/env bash
+json_field() {
+    # Note: BSD sed needs an explicit semicolon before the closing brace `}`.
+    local json="$1" key="$2"
+    echo "$json" | grep "$key"
+}
+FIXTURE_EOF
+
+    # Fixture B: a genuine top-level `local` outside any function -- must
+    # still be REJECTED by the scanner.
+    local reject_fixture="$tmpdir/reject.sh"
+    cat > "$reject_fixture" <<'FIXTURE_EOF'
+#!/usr/bin/env bash
+local leaked="top-level"
+FIXTURE_EOF
+
+    run _scan_local_outside_function "$accept_fixture"
+    [ "$status" -eq 0 ]
+
+    run _scan_local_outside_function "$reject_fixture"
+    [ "$status" -eq 1 ]
+
+    rm -rf "$tmpdir"
 }
 
 # ---------------------------------------------------------------------------

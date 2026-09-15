@@ -226,6 +226,80 @@ describe("mergeHookRegistrations()", () => {
     );
   });
 
+  // M7/WP4 (dispatch arch-testing-20260808T142647Z, Section 6): four additive L0
+  // hook registrations gain exact entries in L0_REQUIRED_HOOK_REGISTRATIONS --
+  // context-provider-gate.js (requester gate, re-registered under its own
+  // existing matcher), runtime-consultation-target-gate.js (target gate),
+  // context-provider-write-gate.js (CP bundle grammar gate), and
+  // subagent-start-context-bundle.js (existing SubagentStart capture hook).
+  // Total required registrations: 10 (6 pre-existing + 4 new).
+
+  it("M7/WP4: recognizes the ALREADY-PRESENT context-provider-gate.js under Grep|Glob|Bash|Read as satisfied — reports it in skipped, never duplicates its command (proves the merge actually looked at this entry, not merely that the block happened not to change)", async () => {
+    await writeSettings(fixtureDir, FULL_L1_SETTINGS);
+
+    const result = await mergeHookRegistrations(fixtureDir);
+
+    const matchedSkip = result.skipped.filter(
+      (s) => s.matcher === "Grep|Glob|Bash|Read" && s.file === "context-provider-gate.js",
+    );
+    expect(matchedSkip).toHaveLength(1);
+    expect(result.added.some((a) => a.file === "context-provider-gate.js")).toBe(false);
+
+    const settings = await readSettings(fixtureDir);
+    const preToolUse = (settings.hooks as Record<string, MatcherBlock[]>)["PreToolUse"];
+    const cpBlock = preToolUse.find((b) => b.matcher === "Grep|Glob|Bash|Read");
+    const cpCmds = cpBlock!.hooks.map((h) => h.command);
+    expect(cpCmds.filter((c) => c.includes("context-provider-gate.js"))).toHaveLength(1);
+  });
+
+  it("M7/WP4: appends runtime-consultation-target-gate.js AND context-provider-write-gate.js to the existing Bash block, alongside branch-guard/push-authorization/commit-scope, without disturbing detekt-pre-commit.sh or creating a second Bash block", async () => {
+    await writeSettings(fixtureDir, FULL_L1_SETTINGS);
+
+    await mergeHookRegistrations(fixtureDir);
+
+    const settings = await readSettings(fixtureDir);
+    const preToolUse = (settings.hooks as Record<string, MatcherBlock[]>)["PreToolUse"];
+    const bashBlocks = preToolUse.filter((b) => b.matcher === "Bash");
+    expect(bashBlocks).toHaveLength(1);
+    const cmds = bashBlocks[0].hooks.map((h) => h.command);
+
+    expect(cmds.some((c) => c.includes("detekt-pre-commit.sh"))).toBe(true);
+    expect(cmds.some((c) => c.includes("runtime-consultation-target-gate.js"))).toBe(true);
+    expect(cmds.some((c) => c.includes("context-provider-write-gate.js"))).toBe(true);
+    expect(cmds.length).toBe(new Set(cmds).size);
+  });
+
+  it("M7/WP4: creates a SubagentStart block with matcher '.*' registering subagent-start-context-bundle.js (no SubagentStart key exists in the fixture at all)", async () => {
+    await writeSettings(fixtureDir, FULL_L1_SETTINGS);
+    expect((FULL_L1_SETTINGS.hooks as Record<string, unknown>)["SubagentStart"]).toBeUndefined();
+
+    await mergeHookRegistrations(fixtureDir);
+
+    const settings = await readSettings(fixtureDir);
+    const subagentStart = (settings.hooks as Record<string, MatcherBlock[]>)["SubagentStart"];
+    expect(subagentStart).toBeDefined();
+    const block = subagentStart.find((b) => b.matcher === ".*");
+    expect(block).toBeDefined();
+    expect(block!.hooks.some((h) => h.command.includes("subagent-start-context-bundle.js"))).toBe(true);
+  });
+
+  it("M7/WP4: second call after all four new entries already exist adds zero of them again (per-entry idempotency check, not just an aggregate count)", async () => {
+    await writeSettings(fixtureDir, FULL_L1_SETTINGS);
+    await mergeHookRegistrations(fixtureDir);
+    const result2 = await mergeHookRegistrations(fixtureDir);
+
+    const newFiles = [
+      "context-provider-gate.js",
+      "runtime-consultation-target-gate.js",
+      "context-provider-write-gate.js",
+      "subagent-start-context-bundle.js",
+    ];
+    for (const file of newFiles) {
+      expect(result2.added.some((a) => a.file === file)).toBe(false);
+      expect(result2.skipped.some((s) => s.file === file)).toBe(true);
+    }
+  });
+
   // Assertion 7: idempotency
   it("second call adds nothing and produces no duplicate entries", async () => {
     await writeSettings(fixtureDir, FULL_L1_SETTINGS);
@@ -234,7 +308,13 @@ describe("mergeHookRegistrations()", () => {
     const result2 = await mergeHookRegistrations(fixtureDir);
 
     expect(result2.added).toHaveLength(0);
-    expect(result2.skipped).toHaveLength(6); // 6 gates after Commits 10a/10b retirement
+    // 11 gates: 6 pre-existing + 4 M7/WP4 (context-provider-gate.js,
+    // runtime-consultation-target-gate.js, context-provider-write-gate.js,
+    // subagent-start-context-bundle.js under SubagentStart) + 1 Part C
+    // retirement-trigger (the same subagent-start-context-bundle.js, ALSO
+    // registered under SubagentStop) — see dispatch Section 6 and
+    // m7-completeness-verdict-2026-08-09.md Block 4 point 1.
+    expect(result2.skipped).toHaveLength(11);
 
     // Verify no duplicates in any PreToolUse block
     const settings = await readSettings(fixtureDir);
@@ -246,7 +326,7 @@ describe("mergeHookRegistrations()", () => {
   });
 
   // Assertion 8: malformed JSON fail-open
-  it("fails open on malformed JSON — warns, seeds empty structure, adds 6 entries", async () => {
+  it("fails open on malformed JSON — warns, seeds empty structure, adds 10 entries", async () => {
     const claudeDir = join(fixtureDir, ".claude");
     await mkdir(claudeDir, { recursive: true });
     await writeFile(join(claudeDir, "settings.json"), "{ this is not valid json }", "utf-8");
@@ -254,7 +334,10 @@ describe("mergeHookRegistrations()", () => {
     // Should not throw
     const result = await mergeHookRegistrations(fixtureDir);
 
-    expect(result.added).toHaveLength(6); // 6 gates after Commits 10a/10b retirement
+    // 11 gates: 6 pre-existing + 4 M7/WP4 + 1 Part C retirement-trigger
+    // (SubagentStop) — see dispatch Section 6. A blank seed has none of them
+    // pre-satisfied, unlike the FULL_L1_SETTINGS fixture.
+    expect(result.added).toHaveLength(11);
     expect(result.skipped).toHaveLength(0);
 
     // Output must be valid JSON
@@ -268,7 +351,7 @@ describe("mergeHookRegistrations()", () => {
 
     const result = await mergeHookRegistrations(fixtureDir);
 
-    expect(result.added).toHaveLength(6); // 6 gates after Commits 10a/10b retirement
+    expect(result.added).toHaveLength(11); // 6 pre-existing + 4 M7/WP4 + 1 SubagentStop
     expect(existsSync(join(fixtureDir, ".claude", "settings.json"))).toBe(true);
 
     const settings = await readSettings(fixtureDir);
@@ -282,7 +365,7 @@ describe("mergeHookRegistrations()", () => {
     const result = await mergeHookRegistrations(fixtureDir, true);
 
     expect(result.dryRun).toBe(true);
-    expect(result.added).toHaveLength(6); // 6 gates after Commits 10a/10b retirement
+    expect(result.added).toHaveLength(11); // 6 pre-existing + 4 M7/WP4 + 1 SubagentStop
 
     // File must still be the empty object we wrote
     const settings = await readSettings(fixtureDir);

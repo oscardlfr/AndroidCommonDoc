@@ -890,3 +890,104 @@ PLANEOF
     CLAUDE_PROJECT_DIR='$CLAUDE_PROJECT_DIR' node '$HOOK'"
   [ "$status" -eq 0 ]
 }
+
+# R131 live-bootstrap repair: the lifecycle target gate is the sole authority
+# owner for a spawned role's first `ready --action` call. This earlier PREP
+# gate must defer only the exact canonical argv that target gate recognizes;
+# every near miss remains subject to ordinary PREP/dispatch enforcement.
+_canonical_ready_command() {
+  node - "$HOOK" "$1" <<'NODE'
+const path = require('path');
+const hookPath = process.argv[2];
+const actionId = process.argv[3];
+const rll = require(path.resolve(path.dirname(hookPath), '../../scripts/lib/runtime-role-lifecycle.cjs'));
+process.stdout.write(rll.renderPosixDirect([
+  rll.resolvedNodePath(),
+  path.resolve(path.dirname(hookPath), '../../scripts/lib/runtime-role-lifecycle.cjs'),
+  'ready', '--action', actionId,
+]));
+NODE
+}
+
+@test "R131-TARGET-READY-1: exact resolved-node lifecycle ready defers to the target authority gate before PREP" {
+  local action_id="0123456789abcdef0123456789abcdef"
+  local command
+  command="$(_canonical_ready_command "$action_id")"
+  make_input Bash "$command" doc-updater
+
+  run_hook
+
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision":"block"'* ]]
+}
+
+@test "R131-TARGET-READY-2: bare node, invalid action, extra argv, wrong script and chaining do not receive the narrow deferral" {
+  local action_id="0123456789abcdef0123456789abcdef"
+  local canonical command
+  canonical="$(_canonical_ready_command "$action_id")"
+
+  for command in \
+    "node '$CLAUDE_PROJECT_DIR/scripts/lib/runtime-role-lifecycle.cjs' ready --action '$action_id'" \
+    "${canonical%$action_id}deadbeef" \
+    "$canonical --extra nope" \
+    "${canonical/runtime-role-lifecycle.cjs/runtime-consultation.cjs}" \
+    "$canonical && echo bypass"
+  do
+    make_input Bash "$command" doc-updater
+    run_hook
+    [ "$status" -eq 2 ]
+    [[ "$output" == *"no CURRENT PREP verdict"* ]]
+  done
+}
+
+# P4 live root-source lifecycle: the PREP gate owns neither the requester grant
+# nor the transaction. It must defer each closed runtime-consultation command to
+# context-provider-gate, which remains responsible for identity, transaction,
+# order and one-use grant validation. The genuine live run proved that
+# record-delivery was the sole missing member of this already-established set.
+_canonical_root_source_command() {
+  node - "$HOOK" "$1" <<'NODE'
+const path = require('path');
+const hookPath = process.argv[2];
+const subcommand = process.argv[3];
+const rll = require(path.resolve(path.dirname(hookPath), '../../scripts/lib/runtime-role-lifecycle.cjs'));
+process.stdout.write(rll.renderPosixDirect([
+  rll.resolvedNodePath(),
+  path.resolve(path.dirname(hookPath), '../../scripts/lib/runtime-consultation.cjs'),
+  subcommand,
+  '--coordination-root', path.resolve(path.dirname(hookPath), '../../.planning/coordination'),
+  '--request', path.resolve(path.dirname(hookPath), '../../.planning/coordination/request.json'),
+]));
+NODE
+}
+
+@test "P4-ROOT-DELIVERY-1: exact record-delivery defers to requester authority before PREP" {
+  local command
+  command="$(_canonical_root_source_command record-delivery)"
+  make_input Bash "$command" toolkit-specialist
+
+  run_hook
+
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'"decision":"block"'* ]]
+}
+
+@test "P4-ROOT-DELIVERY-2: wrong role, script, subcommand and chaining do not receive record-delivery deferral" {
+  local canonical command
+  canonical="$(_canonical_root_source_command record-delivery)"
+
+  make_input Bash "$canonical" test-specialist
+  run_hook
+  [ "$status" -eq 2 ]
+
+  for command in \
+    "${canonical/runtime-consultation.cjs/runtime-role-lifecycle.cjs}" \
+    "${canonical/record-delivery/record-delivery-extra}" \
+    "$canonical && echo bypass"
+  do
+    make_input Bash "$command" toolkit-specialist
+    run_hook
+    [ "$status" -eq 2 ]
+    [[ "$output" == *"no CURRENT PREP verdict"* ]]
+  done
+}

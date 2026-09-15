@@ -13,7 +13,7 @@ description: >
   into a downstream project with version tracking. / Ejecutar /sync-l0 o el
   CLI para materializar habilidades, agentes y comandos L0 en un proyecto
   descendente con seguimiento de versión.
-last_updated: "2026-03-18"
+last_updated: "2026-09-05"
 ---
 
 # Step 4 — Sync skills
@@ -71,6 +71,17 @@ Manifest updated: l0-manifest.json
 > set in every shell session (and in CI). If it is missing, skills fail with
 > an explicit `ANDROID_COMMON_DOC is not set` error. See
 > [Step 1](01-install-l0.md) for how to persist it in your shell profile.
+
+### Optional collaboration runtime
+
+To enable the Claude/Codex collaboration runtime in an L1 or L2 consumer, first keep an explicit local `L0`/`tooling` entry in `l0-manifest.json`, then run:
+
+```bash
+/sync-l0 --runtime --dry-run
+/sync-l0 --runtime
+```
+
+Runtime mode does not copy runtime code. It pins the toolkit commit and executable-content digest, installs ten canonical role definitions, and registers hooks by absolute path to the declared L0 source. It never uses `ANDROID_COMMON_DOC` as an authority fallback. Missing, remote, ambiguous, or drifted sources and customized owned runtime files fail closed without overwrite. Do not combine runtime mode with prune, force, or migration flags. An explicit start also requires one unambiguous PLAN in the consumer; the read-only dashboard never creates one.
 
 ### Version-tracking headers
 
@@ -162,6 +173,17 @@ Manifest updated: l0-manifest.json
 > debe estar definida en cada sesión de shell (y en CI). Si falta, las skills fallan
 > con un error explícito `ANDROID_COMMON_DOC is not set`. Ver
 > [Paso 1](01-install-l0.md) para persistirla en el perfil de shell.
+
+### Runtime de colaboración opcional
+
+Para habilitar el runtime Claude/Codex en un consumidor L1 o L2, declara una única fuente local `L0`/`tooling` en `l0-manifest.json` y ejecuta:
+
+```bash
+/sync-l0 --runtime --dry-run
+/sync-l0 --runtime
+```
+
+Este modo no copia el código del runtime. Fija el commit y el digest del contenido ejecutable del toolkit, instala diez roles canónicos y registra los hooks mediante rutas absolutas a la fuente L0 declarada. No usa `ANDROID_COMMON_DOC` como autoridad alternativa. Fuentes ausentes, remotas, ambiguas o con deriva y archivos runtime personalizados fallan de forma cerrada sin sobrescritura. No combines este modo con prune, force o migraciones. El inicio explícito requiere además un único PLAN inequívoco en el consumidor; el dashboard de solo lectura nunca fabrica uno.
 
 ### Cabeceras de seguimiento de versión
 

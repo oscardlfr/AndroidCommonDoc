@@ -26,6 +26,18 @@ Additional skill-specific arguments (not in params.json):
 - A URL as the first positional argument (optional). If provided, the tool attempts to fetch the content.
 - If no URL is provided, the user is prompted to paste the content directly.
 
+## Canonical Runtime Entrypoint
+
+After explicit user approval, the write request enters the shared product flow:
+
+```bash
+"<resolved-node>" "<toolkit-root>/scripts/lib/runtime-collaboration-entrypoints.cjs" execute --entrypoint ingest-content --project-root <consumer-root> --intent <base64url canonical JSON>
+```
+
+The Bash call must be one standalone direct Node command. For L0, both roots are the current repository. For a runtime consumer, derive `toolkit-root` only from the single local `layer=L0, role=tooling` manifest source and keep `consumer-root` as the literal absolute application repository. Use the resolved Node executable; do not use environment fallbacks, command substitution, wrappers, pipes, redirects, or command separators.
+
+The decoded intent is exactly `{"request_ref":"request:<sha256>","approval_ref":"approval:<sha256>"}`. An empty approval is `BLOCKED`; only a correlated `COMPLETED` result with canonical result, acceptance, and acknowledgement evidence confirms ingestion. Exact repeats deduplicate.
+
 ## Behavior
 
 1. **URL provided:**
@@ -45,14 +57,15 @@ Additional skill-specific arguments (not in params.json):
    - Extracted patterns and recommendations.
    - Recommended action: `update` (modify existing doc), `review` (manual review needed), or `new_doc` (suggest creating a new pattern doc).
 5. For each suggestion the user can:
-   - **Accept** -- Open the target pattern doc for editing with the extracted patterns as guidance.
+   - **Accept** -- Confirm the extracted patterns as guidance for the target pattern doc.
    - **Skip** -- Move to the next suggestion.
 6. Handle images and diagrams in pasted content by describing their visual content and referencing them in the pattern doc update.
 7. Content ingestion NEVER auto-applies changes. All suggestions require explicit user review and approval.
+8. Once the user has approved one or more suggestions, apply them: if the invoking agent IS `doc-updater`, use `Read`/`Write`/`Edit` directly. Otherwise, route the approved update through the shared role-lifecycle manager — ensure/reuse `doc-updater` (and `context-provider` if pattern validation is needed), publish a durable `request/v1 kind:"ingestion"` carrying the target doc, extracted patterns, and the user's approval, and wait for `doc-updater`'s correlated `result/v1` (disposition `written|deduplicated|blocked`). A live message may accelerate the wake, but the correlated disk result is what confirms completion.
 
 ## Implementation
 
-This skill is an orchestration workflow using the AI agent's built-in tools.
+This skill is an orchestration workflow using the AI agent's built-in tools, plus the shared role-lifecycle manager for the actual document write when the invoking agent isn't `doc-updater`.
 
 The agent performs the following steps:
 1. If URL provided: call the `ingest-content` MCP tool with the `url` parameter.
@@ -61,9 +74,8 @@ The agent performs the following steps:
 4. Parse the structured JSON response with suggestions.
 5. Display suggestions grouped by target pattern doc.
 6. For each accepted suggestion:
-   - Use `Read` to load the target pattern doc.
-   - Present the extracted patterns as recommendations for the user to incorporate.
-   - Use `Write` or `Edit` to apply user-approved updates.
+   - If the invoking agent is `doc-updater`: `Read` the target pattern doc, then `Write`/`Edit` the user-approved update directly.
+   - Otherwise: `ensureRoles`/`notify` to wake or reuse `doc-updater` through the shared lifecycle manager, publish the durable ingestion request with the user's approval already captured, and await the correlated result — never call `Write`/`Edit` on a pattern doc from a non-`doc-updater` agent.
 
 ## Expected Output
 
@@ -121,5 +133,6 @@ Waiting for pasted content...
 - MCP tool: `ingest-content` (content analysis and pattern extraction)
 - Registry: `mcp-server/src/registry/scanner.ts` (pattern doc metadata for matching)
 - Pattern docs: `docs/*.md` (target docs for content routing)
+- Related: `docs/agents/runtime-messaging-cp-writer.md` (the PATTERN-GAP -> approval -> doc-updater loop this skill's non-doc-updater path reuses)
 - Related: `/monitor-docs` (automated upstream monitoring vs. manual content ingestion)
 - Related: `/validate-patterns` (validates code against patterns that ingestion helps maintain)

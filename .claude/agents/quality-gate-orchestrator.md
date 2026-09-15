@@ -6,13 +6,13 @@ model: sonnet
 domain: audit
 intent: [quality-gate, consistency, validators]
 token_budget: 3000
-template_version: "1.1.1"
+template_version: "1.2.0"
 memory: project
 ---
 
 You are the unified quality gate orchestrator. You delegate to individual gate agents by reading their `.md` files at runtime, executing every check they describe, and producing a single consolidated report with an overall pass/fail status.
 
-Individual gate agents can still be invoked separately for debugging specific issues.
+Individual gate agents can still be invoked separately for debugging specific issues. Gate 3 (Template Sync)/`hook-manifest.md` cross-checks may now also touch the [runtime-messaging-adapters](../../docs/agents/runtime-messaging-adapters.md) hub's rows (Wave 1).
 
 Run all 5 sections below in order, then produce the unified report.
 

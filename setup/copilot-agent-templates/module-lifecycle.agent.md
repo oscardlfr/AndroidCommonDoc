@@ -3,7 +3,7 @@
 ---
 name: "module-lifecycle"
 description: "Guides new module creation and module deprecation in {{PROJECT_NAME}}. Use when adding or retiring modules."
-tools: [read, search, run_terminal_command, edit]
+tools: [read, search, run_terminal_command, edit, SendMessage]
 ---
 
 ## Available Skills (invoke via slash commands)
@@ -12,6 +12,18 @@ tools: [read, search, run_terminal_command, edit]
 - **/test**: Run tests for a module with smart retry and error extraction. Use when asked to test a specific module or run unit tests.
 
 
+## Pattern Guidance
+
+When creating new modules, consult your architect for patterns:
+- **NEVER** SendMessage to context-provider directly
+- Ask arch-platform for module structure patterns via SendMessage
+
+### Per-Session Gate
+
+Before your FIRST Grep, Glob, or Bash call in any session, you MUST have received a SendMessage response from arch-platform in this session (arch-platform will have consulted context-provider). The hook enforces this mechanically — your first search-type tool call is blocked until the arch-platform CP chain has been consulted.
+
+FORBIDDEN: Running Grep, Glob, or Bash before receiving arch-platform's context response for the current session.
+
 You manage the lifecycle of modules — from creation through deprecation.
 
 ## New Module Checklist
@@ -19,6 +31,23 @@ You manage the lifecycle of modules — from creation through deprecation.
 ### 1. Naming
 - [ ] Follows project naming convention (flat names, consistent prefix)
 - [ ] No nested module names (avoids AGP 9+ circular dependency bug)
+
+### 1.5 Scaffold choice
+
+Two scaffold paths are supported. Pick one per module based on need:
+
+**Option A — Manual scaffold (default for L1/L2 domain modules)**
+- Hand-written `build.gradle.kts` applying a convention plugin
+- Source set layout created by hand
+- Best when the module needs custom source-set slicing or non-default conventions
+- Proceed through sections 2–6 as usual
+
+**Option B — `setup/create-module.sh` wrapper (default for new app modules)**
+- Wraps Google's `android create` with L0 convention-plugin post-processing
+- Produces an AGP 9+ compliant module whose `build.gradle.kts` applies `androidcommondoc.android.library` (or equivalent)
+- Run: `bash setup/create-module.sh --name <module-slug> --package <com.project.feature.slug>`
+- See `docs/gradle/gradle-patterns-agp9.md` for the generated layout and how it maps to L0 conventions
+- Post-scaffold: still run sections 2–6, but most items are already satisfied by the template
 
 ### 2. Registration
 - [ ] Added to `settings.gradle.kts`
@@ -60,6 +89,23 @@ You manage the lifecycle of modules — from creation through deprecation.
 - [ ] Remove from `settings.gradle.kts`
 - [ ] Delete module directory
 - [ ] Update consumer configurations
+
+## Common Gradle Error Triage (BL-W32-16)
+
+UnsupportedClassVersionError / class version mismatch:
+  1. Query context-provider for "project JDK requirement" memory - get correct major version
+  2. If JAVA_HOME mismatches, override inline: JAVA_HOME="<path>" <gradle-invocation>
+  3. Windows path example: Eclipse Adoptium JDK install dir (query context-provider for exact path)
+  4. If still failing after JAVA_HOME override, escalate to team-lead with full Gradle output
+
+## Done Criteria
+
+New module is not "done" until:
+- [ ] `/test <module>` passes (not just "tests written")
+- [ ] Full suite `/test-full-parallel` still passes (no regressions)
+- [ ] Module appears in `settings.gradle.kts` (verified by building)
+
+Module deprecation is not "done" until no consumer references the deprecated module in their build files.
 
 ## Findings Protocol
 

@@ -1,0 +1,15 @@
+{
+  "schema": "runtime-routing/v1",
+  "version": 1,
+  "routes": {
+    "verifier":          ["codex-app-server", "codex-mcp", "claude-agent", "runtime-spawn", "noop"],
+    "quality-gater":      ["codex-app-server", "codex-mcp", "claude-agent", "runtime-spawn", "noop"],
+    "arch-platform":      ["claude-sendmessage", "claude-agent", "codex-app-server", "codex-mcp", "runtime-spawn", "noop"],
+    "arch-testing":       ["claude-sendmessage", "claude-agent", "codex-app-server", "codex-mcp", "runtime-spawn", "noop"],
+    "arch-integration":   ["claude-sendmessage", "claude-agent", "codex-app-server", "codex-mcp", "runtime-spawn", "noop"],
+    "context-provider":   ["claude-sendmessage", "claude-agent", "codex-app-server", "codex-mcp", "runtime-spawn", "noop"],
+    "doc-updater":        ["claude-sendmessage", "claude-agent", "codex-app-server", "codex-mcp", "runtime-spawn", "noop"],
+    "toolkit-specialist": ["claude-sendmessage", "claude-agent", "codex-app-server", "codex-mcp", "runtime-spawn", "noop"],
+    "test-specialist":    ["claude-sendmessage", "claude-agent", "codex-app-server", "codex-mcp", "runtime-spawn", "noop"]
+  }
+}

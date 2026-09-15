@@ -68,28 +68,36 @@ teardown() {
 @test "--format json outputs valid JSON parseable by jq" {
     run bash "$SCRIPT" --project-root "$WORK_DIR" --format json
     [ "$status" -eq 0 ]
-    echo "$output" | jq empty
+    echo "$output" | node -e 'JSON.parse(require("fs").readFileSync(0, "utf8"))'
 }
 
 @test "--format json includes valid_types array with 'feat' element" {
     run bash "$SCRIPT" --project-root "$WORK_DIR" --format json
     [ "$status" -eq 0 ]
-    result=$(echo "$output" | jq -r '.valid_types[]' | grep -c "^feat$")
+    result=$(echo "$output" | node -e '
+      const value=JSON.parse(require("fs").readFileSync(0,"utf8"));
+      process.stdout.write(value.valid_types.join("\n"));
+    ' | grep -c "^feat$")
     [ "$result" -eq 1 ]
 }
 
 @test "--format json includes valid_scopes array with 'core' element" {
     run bash "$SCRIPT" --project-root "$WORK_DIR" --format json
     [ "$status" -eq 0 ]
-    result=$(echo "$output" | jq -r '.valid_scopes[]' | grep -c "^core$")
+    result=$(echo "$output" | node -e '
+      const value=JSON.parse(require("fs").readFileSync(0,"utf8"));
+      process.stdout.write(value.valid_scopes.join("\n"));
+    ' | grep -c "^core$")
     [ "$result" -eq 1 ]
 }
 
 @test "--format json includes types_source and scopes_source fields" {
     run bash "$SCRIPT" --project-root "$WORK_DIR" --format json
     [ "$status" -eq 0 ]
-    echo "$output" | jq -e '.types_source' > /dev/null
-    echo "$output" | jq -e '.scopes_source' > /dev/null
+    echo "$output" | node -e '
+      const value=JSON.parse(require("fs").readFileSync(0,"utf8"));
+      if (!value.types_source || !value.scopes_source) process.exit(1);
+    '
 }
 
 # --- Fail modes ---

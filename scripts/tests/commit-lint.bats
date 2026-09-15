@@ -9,7 +9,11 @@
 
 setup() {
   REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/../.." && pwd)"
-  VALID_SCOPES=$(jq -r '.valid_scopes | join(",")' "$REPO_ROOT/.commitlintrc.json")
+  VALID_SCOPES=$(node -e '
+    const fs = require("fs");
+    const value = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+    process.stdout.write(value.valid_scopes.join(","));
+  ' "$REPO_ROOT/.commitlintrc.json")
   SCOPE_LIST=$(echo "$VALID_SCOPES" | tr ',' '|')
   VALID_TYPES="feat,fix,docs,style,refactor,perf,test,build,ci,chore,revert"
   TYPE_PATTERN=$(echo "$VALID_TYPES" | tr ',' '|')

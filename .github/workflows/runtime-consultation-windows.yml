@@ -1,0 +1,37 @@
+name: Runtime Consultation Windows
+
+# ──────────────────────────────────────────────────────────────────────────────
+# AndroidCommonDoc L0 reusable workflow — Windows PowerShell CLI conformance
+#
+# Runs scripts/tests/runtime-consultation-windows.ps1 on a real windows-latest
+# runner. scripts/ps1/runtime-consultation.ps1 is a thin argv->node wrapper
+# with zero protocol/state/security logic of its own (PS1 / SC-17, Option 2);
+# this job is the only mechanical proof that the Windows PowerShell path
+# actually works, rather than a static/script-parity review claiming so.
+#
+# Invoked from .github/workflows/l0-ci.yml as an unconditional, required
+# ci-gate dependency — informational-only status is insufficient (SC-17).
+# ──────────────────────────────────────────────────────────────────────────────
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  runtime-consultation-windows:
+    name: Runtime Consultation Windows
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "24"
+
+      - name: Run runtime consultation Windows tests
+        shell: pwsh
+        run: pwsh -NoLogo -NoProfile -NonInteractive -File scripts/tests/runtime-consultation-windows.ps1

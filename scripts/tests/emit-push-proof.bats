@@ -1341,3 +1341,105 @@ PYEOF
   [ "$status" -ne 0 ]
   [[ "$output" == *"hook-binding-drifted"* ]]
 }
+
+# ═════════════════════════════════════════════════════════════════════════════
+# Sequence 66/67/69 RED correction — Defect 2: over-broad verdict-HEAD-binding
+# glob (scripts/sh/emit-push-proof.sh ~L614, byte-confirmed by this
+# test-specialist's own independent read before writing anything below):
+#
+#   verdict_files = [f for f in os.listdir(wave_dir) if re.match(r'arch-.*-verdict\.md$', f)]
+#   ...
+#   for fname in verdict_files:
+#       ... die() if APPROVED-VERIFY-FINAL missing or **HEAD** != final_head ...
+#
+# This loop globs EVERY arch-*-verdict.md file in the wave dir and requires
+# ALL of them (not just the CLASS's own required_roles) to carry
+# APPROVED-VERIFY-FINAL + a HEAD matching the final HEAD -- so a historical/
+# legacy-named verdict file left over from an earlier phase of the same wave
+# (a role not in the current required_roles set) causes FALSE REJECTION. The
+# fix must derive the exact expected filename PER REQUIRED ROLE and validate
+# only those, never glob-scan every matching filename in the directory. Per
+# the dispatch: do NOT test for or expect any untracked-file exemption in the
+# clean-tree check (unrelated to this defect).
+#
+# CORRECTED after first-attempt RED evidence review (this test-specialist,
+# same session): the first draft of these five tests called write_plan
+# "test-slug" before write_quality_gate_report -- mirroring the #WP-series
+# convention -- but that combination sets wave_plan_present=TRUE while
+# write_quality_gate_report's default path-manifest-audit step is
+# SKIP+reason with no env_attested marker, which independently fires
+# inconsistent-skip (exit 2) BEFORE the verdict-HEAD-binding section this
+# suite exists to exercise is ever reached -- masking the intended check
+# entirely (confirmed empirically: all five failed with `[ "$status" -eq 0 ]`
+# outcomes that did not match verdict-HEAD-binding's own die-code substrings
+# at all). This exact gotcha is already independently documented in this
+# same file by #EP-HEADMISMATCH/#EP-HEADABSENT/#EP-HEADMATCH/#EP-HEADORDER's
+# own "No write_plan here deliberately" comments -- these five now follow
+# that identical, established convention instead.
+# ═════════════════════════════════════════════════════════════════════════════
+
+@test "#EP-VHB-HISTORICAL-STALE BLOCK(RED): a stale-HEAD non-required arch-*-verdict.md file coexisting with valid canonical verdicts must NOT cause false rejection" {
+  # No write_plan (mirrors #EP-HEADMISMATCH's own established convention):
+  # wave_plan_present would default TRUE and the default report's
+  # path-manifest-audit SKIP would then be an unrelated inconsistent-skip,
+  # firing before the verdict-HEAD-binding check this test exists to exercise.
+  write_arch_verdicts "test-slug"
+  write_quality_gate_report
+  # A historical verdict file for a role that is NOT in required_roles (arch-testing,
+  # arch-platform, arch-integration) -- e.g. left over from an earlier, since-retired
+  # role in this same wave directory. Its HEAD is deliberately stale/foreign.
+  printf '# arch-legacy verdict (historical, non-required)\n\n**HEAD**: deadbeefdeadbeefdeadbeefdeadbeefdeadbeef\n**Status**: APPROVED-VERIFY-FINAL\n' \
+    > "$REPO/.planning/wave-test-slug/arch-legacy-verdict.md"
+  run bash -c "CLAUDE_WAVE_SLUG='test-slug' bash '$EMITTER' --subcommand run-qg --repo-root '$REPO'"
+  # Correct/fixed behavior: the emitter derives the expected filename per REQUIRED
+  # role only and never validates a non-required historical file -- exit 0, proof minted.
+  [ "$status" -eq 0 ]
+  [ -f "$ACDOC/push-proof.json" ]
+}
+
+@test "#EP-VHB-HISTORICAL-NOFINAL BLOCK(RED): a non-required arch-*-verdict.md file missing APPROVED-VERIFY-FINAL entirely must NOT cause false rejection" {
+  # No write_plan -- see #EP-VHB-HISTORICAL-STALE's own comment above.
+  write_arch_verdicts "test-slug"
+  write_quality_gate_report
+  # A historical, PREP-only (never finalized) verdict for a non-required role.
+  printf '# arch-legacy verdict (historical, non-required, PREP only)\n\n**Status**: APPROVED-PREP\n' \
+    > "$REPO/.planning/wave-test-slug/arch-legacy-verdict.md"
+  run bash -c "CLAUDE_WAVE_SLUG='test-slug' bash '$EMITTER' --subcommand run-qg --repo-root '$REPO'"
+  [ "$status" -eq 0 ]
+  [ -f "$ACDOC/push-proof.json" ]
+}
+
+@test "#EP-VHB-CANONICAL-MISSING BLOCK: one of the three REQUIRED canonical verdict files absent entirely still fails (regression guard for the narrowed per-role check)" {
+  # No write_plan -- see #EP-VHB-HISTORICAL-STALE's own comment above.
+  write_arch_verdicts "test-slug"
+  write_quality_gate_report
+  rm -f "$REPO/.planning/wave-test-slug/arch-integration-verdict.md"
+  run bash -c "CLAUDE_WAVE_SLUG='test-slug' bash '$EMITTER' --subcommand run-qg --repo-root '$REPO'"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"arch-integration-verdict.md"* ]] || [[ "$output" == *"deliberation-role-incomplete"* ]] || [[ "$output" == *"verdict-head-binding"* ]]
+  [ ! -f "$ACDOC/push-proof.json" ]
+}
+
+@test "#EP-VHB-CANONICAL-MALFORMED BLOCK: a REQUIRED canonical verdict file missing APPROVED-VERIFY-FINAL still fails (regression guard)" {
+  # No write_plan -- see #EP-VHB-HISTORICAL-STALE's own comment above.
+  write_arch_verdicts "test-slug"
+  write_quality_gate_report
+  printf '# arch-integration verdict\n\n**Status**: APPROVED-PREP\n' \
+    > "$REPO/.planning/wave-test-slug/arch-integration-verdict.md"
+  run bash -c "CLAUDE_WAVE_SLUG='test-slug' bash '$EMITTER' --subcommand run-qg --repo-root '$REPO'"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"verdict-head-binding"* ]]
+  [ ! -f "$ACDOC/push-proof.json" ]
+}
+
+@test "#EP-VHB-CANONICAL-STALE BLOCK: a REQUIRED canonical verdict file with a stale/foreign HEAD still fails (regression guard)" {
+  # No write_plan -- see #EP-VHB-HISTORICAL-STALE's own comment above.
+  write_arch_verdicts "test-slug"
+  write_quality_gate_report
+  printf '# arch-integration verdict\n\n**Status**: APPROVED-PREP\n\n**HEAD**: deadbeefdeadbeefdeadbeefdeadbeefdeadbeef\n**Status**: APPROVED-VERIFY-FINAL\n' \
+    > "$REPO/.planning/wave-test-slug/arch-integration-verdict.md"
+  run bash -c "CLAUDE_WAVE_SLUG='test-slug' bash '$EMITTER' --subcommand run-qg --repo-root '$REPO'"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"verdict-head-binding"* ]]
+  [ ! -f "$ACDOC/push-proof.json" ]
+}

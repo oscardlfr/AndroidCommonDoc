@@ -5,6 +5,25 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 
 ## [Unreleased]
 
+### Changed (portable-runtime-messaging-adapters — bounded runtime internals)
+
+- Split the three stable runtime compatibility facades (`runtime-consultation.cjs`, `runtime-role-lifecycle.cjs`, `runtime-bridge-codex.cjs`) into 203 cohesive internal CommonJS modules (57 + 63 + 83) covering consultation protocol/durability/transactions, lifecycle authority/grants/root-source contract, and Codex process isolation/credentials/recovery/app-server connection/supervisor-engine/turn-execution/Context7 evidence. Public CLI/CommonJS ABIs remain closed (69 / 271 / 50 & 79-under-test-capability keys); every internal module is capped at 500 lines and 320 chars/line, no function body exceeds 500 lines, none imports upward, and all three trees are recursively included in L1/L2 consumer inventories with symlink rejection and deterministic digests. See [runtime-messaging-adapters § Architecture Map](docs/agents/runtime-messaging-adapters.md#architecture-map) for the current per-tree breakdown.
+
+### Fixed (portable-runtime-messaging-adapters — Windows drive-letter path confinement gaps)
+
+- **`_shell_physical_resolve()` confinement-guard fallback-tier false-negative** (`scripts/sh/write-verdict.sh`, `scripts/sh/write-specialist-dispatch.sh`): a Windows drive-letter path (`C:/Users/...`, no leading slash — what `git rev-parse --show-toplevel` returns under Git-Bash/MSYS) wasn't recognized as absolute, so it fell to the relative-path arm and got `$PWD` prepended, silently defeating the confinement check's pure-shell fallback tier (the tier used when neither `realpath` nor `python3` is available). Fixed with a `[A-Za-z]:/*)` case arm alongside the existing `/*)` one, applied independently in each file's own confinement block.
+- **`_file_in_repo()` Windows drive-letter absolute-path containment bypass** (`scripts/sh/write-specialist-dispatch.sh`): identical classification gap, but a genuine live bypass — any absolute drive-letter `--file` argument was accepted regardless of where it actually pointed, because prepending `REPO_ROOT` to an already-absolute path lexically nests it underneath by construction. Bounded in the gated dispatch path by the JS hook's independent Node `path.resolve()`+`path.relative()` re-validation, but a real gap for standalone callers of the script. Same fix pattern; new coverage: `WSD-16` end-to-end behavioral case + 3 isolated CONFINEMENT IDIOM unit tests (`scripts/tests/write-specialist-dispatch.bats`).
+- **Deferred to a future wave**: `scripts/sh/write-coordination-artifact.sh` — the original source both scripts above ported this pattern from — still has both gap classes unpatched (currently accidentally-safe via two independently-cancelling bugs, not correct code; see `.planning/wave-portable-runtime-messaging-adapters/P7-CLOSEOUT.md` §4 for the full sequencing warning before anyone ports the R131 normalization fix there in isolation).
+
+### Added (portable-runtime-messaging-adapters — Codex worker opt-in)
+
+- **`codex_worker_opt_in_roles`** (`runtime-collaboration-policy/v2`'s `selection` object): optionally routes an exact canonical role set to `codex-app-server`; absent/empty retains prior routing, malformed values fail closed, and opted-in roles cannot silently fall back to `claude-sendmessage`. The mixed path is now genuine-live qualified: P5 N15 completed with exact Agent calls, unchanged source, correlated request/result/accepted-result/ack digests and clean teardown. Tracked unit, Bats, PowerShell and runtime-messaging docs define the maintained contract; ignored closeout artifacts are historical evidence, not clone-time dependencies.
+
+### Fixed (portable-runtime-messaging-adapters — npx PATH-resolution failures)
+
+- **`run-bats.sh` bats-resolvability probe**: `npx --no-install bats ...` failed with a locale-dependent "not recognized" error on Windows/Git-Bash even when `bats` was genuinely installed and directly invocable — `_bats_resolvable()` now falls back to `command -v bats` when the npx probe fails, and a new `_bats_invoke()` helper mirrors the same try-npx-then-direct-node fallback at both call sites.
+- **`qg-doc-validators.sh`'s `doc_structure_vitest` subcheck**: identical npx PATH-resolution failure class — `run_doc_structure_vitest()` now captures npx's real exit code, detects failure via absence of vitest's own "Test Files" output marker, and falls back to `node node_modules/vitest/vitest.mjs run tests/integration/doc-structure.test.ts`.
+
 ### Added (qg-artifact-binding — QG required-step artifact binding)
 
 - **`emit-push-proof.sh` generic artifact-binding loop** (W1): binds one HEAD/freshness/status-checked receipt per qualifying `required_steps[]` entry (today: `secret-scan`, `doc-validator-parity` — the two required steps with a declared `artifact`, no `evidence` sub-object, and not marked `mint_rederived`). Four fail-closed die-codes: `artifact-binding-absent`, `artifact-binding-head`, `artifact-binding-stale`, `artifact-binding-status`. Digests recorded into `push-proof.json`'s `artifact_digests`.

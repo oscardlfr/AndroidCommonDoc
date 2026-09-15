@@ -6,7 +6,7 @@ Follow these patterns when writing Kotlin/KMP code in this project.
 
 ## Context Rotation Guide
 
-- Key insight: Peers are expensive (context grows). Sub-agents are cheap (context is temporary). Use sub-agents for workers, peers only for coordinators.
+- Key insight: Background peers are expensive (context grows). Single-use subagents are cheap (context is temporary). Use single-use subagents for workers; background peers only for long-lived coordinators that need cross-wave context.
 
 ## KMP Module Structure
 

@@ -62,14 +62,27 @@ fi
 
 # --- Parse valid_types from YAML default: field ---
 # Matches: `        default: "feat,fix,docs,..."` (the valid_types input default)
+# POSIX-only extraction (no gawk 3-arg match(string,regexp,array) extension --
+# macOS's default /usr/bin/awk is BWK/one-true-awk, which only supports the
+# 2-argument match(string,regexp) form; the 3-arg capture-array form previously
+# silently failed to populate the value, exiting 1 with "Could not parse
+# valid_types default" on that platform). Preserves the original's two-path
+# fallback: try a quoted value first, then an unquoted (whitespace-delimited)
+# value, exactly as before.
 TYPES_RAW=$(awk '
     /valid_types:/ { found_types=1 }
     found_types && /default:/ {
-        match($0, /default:[[:space:]]*"([^"]+)"/, arr)
-        if (arr[1] != "") { print arr[1]; exit }
-        # fallback: unquoted default
-        match($0, /default:[[:space:]]*([^[:space:]]+)/, arr2)
-        if (arr2[1] != "") { print arr2[1]; exit }
+        line = $0
+        sub(/^.*default:[[:space:]]*/, "", line)
+        if (line ~ /^"[^"]*"/) {
+            val = line
+            sub(/^"/, "", val)
+            sub(/".*$/, "", val)
+            if (val != "") { print val; exit }
+        }
+        val2 = line
+        sub(/[[:space:]].*$/, "", val2)
+        if (val2 != "") { print val2; exit }
     }
 ' "$TYPES_FILE")
 
@@ -79,12 +92,21 @@ if [[ -z "$TYPES_RAW" ]]; then
 fi
 
 # --- Parse valid_scopes from .commitlintrc.json ---
-if ! command -v jq &>/dev/null; then
-    echo -e "${RED}ERROR: jq is required but not found in PATH${RESET}" >&2
+if command -v jq &>/dev/null; then
+    SCOPES_RAW=$(jq -r '.valid_scopes | join(",")' "$SCOPES_FILE" 2>/dev/null || true)
+elif command -v node &>/dev/null; then
+    # Node is already a toolkit prerequisite and is a deterministic fallback
+    # for minimal WSL environments that do not include a Linux jq binary.
+    SCOPES_RAW=$(node -e '
+      const fs = require("fs");
+      const value = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+      if (!Array.isArray(value.valid_scopes)) process.exit(1);
+      process.stdout.write(value.valid_scopes.join(","));
+    ' "$SCOPES_FILE" 2>/dev/null || true)
+else
+    echo -e "${RED}ERROR: jq or node is required but neither was found in PATH${RESET}" >&2
     exit 1
 fi
-
-SCOPES_RAW=$(jq -r '.valid_scopes | join(",")' "$SCOPES_FILE" 2>/dev/null || true)
 
 if [[ -z "$SCOPES_RAW" ]]; then
     echo -e "${RED}ERROR: Could not parse valid_scopes from: ${SCOPES_FILE}${RESET}" >&2

@@ -495,3 +495,5 @@ The QG bats run picks them up automatically as part of the `scripts/tests` direc
 
 BL-W48's deferred "deeper team-lead refs in specialist bodies" are RESOLVED as correct-as-is:
 `context-provider.md` + the 5 dev specialists have 0 named-team-framing hits — `SendMessage(to="team-lead", …)` = portable orchestrator role + adapter `send` op (reframe shipped BL-W48 @ `604487b`; guard C2 protects). Genuine targets = the 9 `docs/agents/*` docs in the Phase-3 manifest, not templates.
+
+**2026-08 addendum**: Wave 1 adds a `context7-preferred` evidence policy and a bounded takeover-and-redispatch driver-fallback to ops 1–2 — see [runtime-messaging-drivers](../agents/runtime-messaging-drivers.md).

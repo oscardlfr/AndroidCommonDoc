@@ -55,6 +55,16 @@ const L2SpecificSchema = z.object({
   skills: z.array(z.string()).default([]),
 });
 
+export const RuntimeConsumerSchema = z.object({
+  schema: z.literal("runtime-consumer/v1"),
+  enabled: z.literal(true),
+  consumer_layer: z.enum(["L1", "L2"]),
+  toolkit_commit: z.string().regex(/^[0-9a-f]{40}$/),
+  toolkit_content_sha256: z.string().regex(/^[0-9a-f]{64}$/),
+}).strict();
+
+export type RuntimeConsumer = z.infer<typeof RuntimeConsumerSchema>;
+
 // ---------------------------------------------------------------------------
 // v1 schema (original — single l0_source)
 // ---------------------------------------------------------------------------
@@ -86,6 +96,8 @@ export const ManifestSchemaV2 = z.object({
   l2_specific: L2SpecificSchema,
   /** Migration IDs that have been applied to this manifest */
   migrations_applied: z.array(z.string()).optional().default([]),
+  /** Explicit opt-in and immutable compatibility pin for the L0 runtime. */
+  runtime: RuntimeConsumerSchema.optional(),
 });
 
 export type ManifestV2 = z.infer<typeof ManifestSchemaV2>;
@@ -114,6 +126,7 @@ export function migrateV1toV2(v1: ManifestV1): ManifestV2 {
     checksums: v1.checksums,
     l2_specific: v1.l2_specific,
     migrations_applied: [],
+    runtime: undefined,
   };
 }
 
@@ -153,6 +166,7 @@ export function createDefaultManifest(l0Source: string): Manifest {
     checksums: {},
     l2_specific: { commands: [], agents: [], skills: [] },
     migrations_applied: [],
+    runtime: undefined,
   };
 }
 

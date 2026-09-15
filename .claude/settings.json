@@ -46,6 +46,18 @@
     ]
   },
   "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/runtime-host-session-start.js",
+            "timeout": 20
+          }
+        ]
+      }
+    ],
     "PostToolUse": [
       {
         "matcher": "Write|Edit",
@@ -118,6 +130,16 @@
           {
             "type": "command",
             "command": "node \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/context-provider-consulted.js",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "Bash|Task|Agent|SendMessage",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/runtime-host-boundary.js",
             "timeout": 5
           }
         ]
@@ -223,6 +245,16 @@
           },
           {
             "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/runtime-consultation-target-gate.js",
+            "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/context-provider-write-gate.js",
+            "timeout": 5
+          },
+          {
+            "type": "command",
             "command": "bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/compile-fail-pre-commit.sh"
           }
         ]
@@ -233,7 +265,7 @@
           {
             "type": "command",
             "command": "node \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/context-provider-gate.js",
-            "timeout": 5
+            "timeout": 30
           }
         ]
       },
@@ -244,7 +276,12 @@
             "type": "command",
             "command": "node \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/agent-spawn-validator.js",
             "timeout": 5
-          }
+          },
+      {
+        "type": "command",
+        "command": "node \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/agent-spawn-execution-gate.js",
+        "timeout": 30
+      }
         ]
       },
       {
@@ -276,6 +313,16 @@
             "timeout": 5
           }
         ]
+      },
+      {
+        "matcher": "Bash|Task|Agent|SendMessage",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/runtime-host-boundary.js",
+            "timeout": 5
+          }
+        ]
       }
     ],
     "SubagentStart": [
@@ -286,6 +333,40 @@
             "type": "command",
             "command": "node \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/subagent-start-context-bundle.js",
             "timeout": 10
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "matcher": ".*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/subagent-start-context-bundle.js",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "PostToolUseFailure": [
+      {
+        "matcher": "Agent|SendMessage",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/tool-use-logger.js",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "Bash|Task|Agent|SendMessage",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/runtime-host-boundary.js",
+            "timeout": 5
           }
         ]
       }

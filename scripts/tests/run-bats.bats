@@ -387,16 +387,24 @@ EOF
 # fallback) does not transfer as-is because that script needs fewer external
 # tools before reaching its own check.
 #
-# Fix: PATH="/usr/bin:/bin" — these are fixed, well-known system directories
-# that provide dirname/mkdir/date/mv/git/etc. (confirmed via `command -v` on
-# this box) while NEVER containing npx/node, which resolve only via
-# /opt/homebrew/bin here. This still avoids the Wave B mistake (deriving the
-# "isolated" dir FROM bash's own location via `dirname "$(command -v bash)"`,
-# which on a Homebrew install is /opt/homebrew/bin and would leak npx back in)
-# — it just uses a different, verified-safe construction to get there.
+# Fix: build a private PATH containing only the exact system commands the
+# wrapper needs before/after its resolvability probe. This remains valid when
+# /usr/bin itself contains npx (for example WSL), and deliberately omits both
+# npx and bats without depending on any host-specific package-manager layout.
 # ─────────────────────────────────────────────────────────────────────────────
 @test "#RB18 bats unresolvable (no npx in PATH) → exit 2 + honest no-evidence handoff, no install attempted" {
-    run env PATH="/usr/bin:/bin" bash "$SCRIPT" --project-root "$WORK_DIR" --log "$LOG"
+    local isolated_bin="$WORK_DIR/no-bats-bin"
+    local bash_path="$(command -v bash)"
+    [ -n "$bash_path" ]
+    mkdir -p "$isolated_bin"
+    local command_name command_path
+    for command_name in dirname date mkdir sort git uname mv; do
+        command_path="$(command -v "$command_name")"
+        [ -n "$command_path" ]
+        ln -s "$command_path" "$isolated_bin/$command_name"
+    done
+
+    run env PATH="$isolated_bin" "$bash_path" "$SCRIPT" --project-root "$WORK_DIR" --log "$LOG"
     [ "$status" -eq 2 ]
     [[ "$output" == *"bats not resolvable"* ]]
     [[ "$output" == *"no install attempted"* ]]

@@ -5,7 +5,7 @@
     Replaces 274-line script that delegated to run-parallel-coverage-suite.ps1.
     Git change detection, module-to-path mapping, and test dispatch are now
     inside kmp-test-runner internals. L0 retains: -IncludeShared glue,
-    -ShowModulesOnly → --dry-run translation, wrapper -DryRun echo,
+    -ShowModulesOnly -> --dry-run translation, wrapper -DryRun echo,
     -ExcludeCoverage deprecation warning.
 
 .PARAMETER ProjectRoot
@@ -30,7 +30,7 @@
     Coverage tool: jacoco | kover | auto | none.
 
 .PARAMETER ExcludeCoverage
-    DEPRECATED — translates to --exclude-modules.
+    DEPRECATED -- translates to --exclude-modules.
 
 .PARAMETER DryRun
     Print assembled kmp-test command to stdout, exit 0. No runner invocation.
@@ -56,7 +56,7 @@ $sharedRoot = "C:\Users\34645\AndroidStudioProjects\shared-kmp-libs"
 
 # --- Deprecation warning ----------------------------------------------------- #
 if ($ExcludeCoverage -ne "") {
-    Write-Warning "WARNING: -ExcludeCoverage deprecated — degraded to --exclude-modules; tests will be skipped instead of just excluded from coverage. See GAP-05."
+    Write-Warning "WARNING: -ExcludeCoverage deprecated -- degraded to --exclude-modules; tests will be skipped instead of just excluded from coverage. See GAP-05."
 }
 
 # --- Detection cascade ------------------------------------------------------- #
@@ -84,7 +84,7 @@ if ($IncludeShared) {
     $cmdArgs += @("--project-root", $sharedRoot)
 }
 
-# --- Wrapper -DryRun (Strategy A — arch-testing addendum) -------------------- #
+# --- Wrapper -DryRun (Strategy A -- arch-testing addendum) -------------------- #
 # Echo assembled command to stdout, exit 0, NO runner invocation.
 if ($DryRun) {
     Write-Host "DRY-RUN: $kmpTestCmd $($cmdArgs -join ' ')"

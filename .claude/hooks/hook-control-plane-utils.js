@@ -84,7 +84,7 @@ function getWaveSlug(projectRoot, options = {}) {
 
 function loadYaml(projectRoot) {
   try {
-    return require(path.join(projectRoot, 'mcp-server', 'node_modules', 'yaml'));
+    return require(path.resolve(__dirname, '..', '..', 'mcp-server', 'node_modules', 'yaml'));
   } catch {
     return null;
   }

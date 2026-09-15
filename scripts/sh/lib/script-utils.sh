@@ -244,7 +244,12 @@ safe_rg() {
             rg_args+=("--glob" "$inc")
         done
         for exc in "${excludes[@]}"; do
-            rg_args+=("--glob" "!${exc}/**")
+            # `!${exc}/**` (no leading `**/`) is anchored to the search root and
+            # only excludes DIR when it sits at the top level of that root. With
+            # an absolute search root this anchoring silently fails to exclude
+            # DIR at all -- confirmed empirically (real ripgrep 15.2.0). `!**/DIR/**`
+            # excludes DIR at any depth, root-level or nested, absolute or relative.
+            rg_args+=("--glob" "!**/${exc}/**")
         done
         if $list_only; then rg_args+=("-l"); fi
         if $count_mode; then rg_args+=("-c"); fi

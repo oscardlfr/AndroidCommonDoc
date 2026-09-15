@@ -1,6 +1,6 @@
 ---
 name: sync-l0
-description: "Synchronize L0 skills, agents, and commands from AndroidCommonDoc registry to the current project. Reads l0-manifest.json, resolves against skills/registry.json, materializes copies with version tracking."
+description: "Synchronize L0 assets, and optionally install the source-referenced collaboration runtime in an L1/L2 consumer."
 intent: [sync, l0, registry, manifest, propagate, distribute]
 allowed-tools: [Bash, Read, Write, Glob, Grep]
 copilot: true
@@ -13,12 +13,15 @@ copilot-template-type: behavioral
 /sync-l0
 /sync-l0 --project-root /path/to/my-project
 /sync-l0 --l0-root /path/to/AndroidCommonDoc
+/sync-l0 --runtime --project-root /path/to/consumer
 ```
 
 ## Parameters
 
 - `--project-root` -- Path to the downstream project root (default: current working directory)
-- `--l0-root` -- Path to the L0 source (AndroidCommonDoc). If omitted, resolved from manifest's `l0_source` field relative to project root.
+- `--l0-root` -- Optional ordinary-sync override. If omitted, resolve the manifest `sources[]` entry whose layer is `L0`. In runtime mode an override must equal that declared local source.
+- `--runtime` -- Install or verify the source-referenced collaboration runtime. Requires an existing manifest with exactly one local `L0`/`tooling` source.
+- `--dry-run` -- Validate and preview without changing consumer files.
 
 ## Behavior
 
@@ -29,6 +32,15 @@ copilot-template-type: behavioral
    - Skills and agents: `l0_source`, `l0_hash`, `l0_synced` injected into YAML frontmatter
    - Commands: HTML comment header with source, hash, synced date
 5. **Updates** manifest checksums and `last_synced` timestamp
+
+With `--runtime`, the CLI additionally installs the closed runtime consumer contract:
+
+- Pins the exact toolkit commit and executable-content digest in `manifest.runtime`.
+- Registers the required hooks by absolute path to the L0 source; runtime code is not copied into the consumer.
+- Installs the ten canonical runtime role templates byte-for-byte and records their checksums.
+- Preserves unrelated settings and local files, rejects customized runtime-role or hook conflicts, and is idempotent.
+- Rejects missing/remote/ambiguous L0 sources and never falls back to `ANDROID_COMMON_DOC`.
+- Rejects `--prune`, `--force`, `--force-l0-managed`, and `--auto-migrate` in runtime mode.
 
 ## First-Time Setup
 
@@ -53,6 +65,7 @@ The sync CLI can be invoked two ways:
 ```bash
 cd <androidcommondoc>/mcp-server && npm run build
 node build/sync/sync-l0-cli.js --project-root <target-project>
+node build/sync/sync-l0-cli.js --project-root <consumer-project> --runtime
 ```
 
 **TypeScript source (requires tsx):**
@@ -139,7 +152,7 @@ When editing a template:
 
 ## Hook Propagation (F7 — BL-W47-prep-8)
 
-`/sync-l0` also propagates `.claude/hooks/*.js` files from L0 to the destination project.
+Ordinary `/sync-l0` propagates `.claude/hooks/*.js` files from L0 to the destination project. Runtime installation uses source references instead: it registers the closed runtime hook set by absolute L0 path and does not copy runtime hooks.
 
 **Behavior**:
 - All `*.js` files in L0's `.claude/hooks/` are copied to the destination `.claude/hooks/`
@@ -214,3 +227,5 @@ Future direction: `<!-- L1-LOCAL -->` marker in agent files will designate proje
 - Orphaned files (in checksums but not in registry) are only removed if they have L0 version headers
 - Each materialized file includes its source hash for audit trail
 - Hook propagation is additive — project-local hooks are never removed
+- `--runtime --dry-run` performs no writes, including when validation fails
+- Runtime consumers require their own unambiguous PLAN before an explicit start; a read-only dashboard may report that prerequisite but never manufactures a PLAN

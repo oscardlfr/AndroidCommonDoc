@@ -821,7 +821,12 @@ describe("T-BUG-023: planner structural prose invariants", () => {
 
   it("planner.md has Per-Session Gate FORBIDDEN language for pre-CP Bash", () => {
     const c = fs.readFileSync(PLANNER, "utf-8");
-    expect(c).toMatch(/FORBIDDEN.*Running Bash/i);
+    // Word-adjacency, not exact-phrase: planner.md's current wording is
+    // "FORBIDDEN: Running discovery Bash commands..." -- behavior is intact,
+    // the prior exact "Running Bash" substring match was too brittle for a
+    // legitimate wording improvement (added the word "discovery"). Requires
+    // FORBIDDEN, then Running, then Bash in order on the same relevant text.
+    expect(c).toMatch(/FORBIDDEN.*Running.*Bash/i);
   });
 
   it("planner.md Search Dispatch Protocol blocks Grep/Glob/Read at planning time", () => {

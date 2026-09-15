@@ -123,29 +123,32 @@ describe('Wave 1 BUG 6 (BL-W48 migration): post-wave closure documented in orche
 // 8. Wave 1: template_version bumped in architects
 // ---------------------------------------------------------------------------
 describe('Wave 1: template_version bumped in architects', () => {
-  it('arch-testing.md template_version is "1.39.0"', () => {
+  it('arch-testing.md template_version is "1.40.0"', () => {
     // BL-W47-prep-14 C2: bumped from 1.35.0 → 1.36.0 (kmp-test-runner v0.10.1 bump)
     // wave cancellation-detekt: bumped from 1.36.0 → 1.37.0 (kmp-test-runner v0.14.0 bump)
     // BL-W47-hook-surgery P13: bumped from 1.37.0 → 1.38.0 (hook-surgery ceremony)
     // BL-W48 team-model migration: bumped from 1.38.0 → 1.39.0
+    // Wave 1 WP5: bumped from 1.39.0 → 1.40.0 (runtime-messaging-adapters pointer)
     const content = fs.readFileSync(path.join(TEMPLATES_DIR, 'arch-testing.md'), 'utf-8');
-    expect(content).toMatch(/template_version:\s*"1.39.0"/);
+    expect(content).toMatch(/template_version:\s*"1.40.0"/);
   });
 
-  it('arch-platform.md template_version is "1.34.0"', () => {
+  it('arch-platform.md template_version is "1.35.0"', () => {
     // BL-W47-prep-10 F1b: bumped from 1.31.0 → 1.32.0 (Task Completion Protocol reference)
     // BL-W47-hook-surgery P13: bumped from 1.32.0 → 1.33.0 (hook-surgery ceremony)
     // BL-W48 team-model migration: bumped from 1.33.0 → 1.34.0
+    // Wave 1 WP5: bumped from 1.34.0 → 1.35.0 (runtime-messaging-adapters pointer)
     const content = fs.readFileSync(path.join(TEMPLATES_DIR, 'arch-platform.md'), 'utf-8');
-    expect(content).toMatch(/template_version:\s*"1.34.0"/);
+    expect(content).toMatch(/template_version:\s*"1.35.0"/);
   });
 
-  it('arch-integration.md template_version is "1.30.0"', () => {
+  it('arch-integration.md template_version is "1.31.0"', () => {
     // BL-W47-prep-10 F1b: bumped from 1.27.0 → 1.28.0 (Task Completion Protocol reference)
     // BL-W47-hook-surgery P13: bumped from 1.28.0 → 1.29.0 (hook-surgery ceremony)
     // BL-W48 team-model migration: bumped from 1.29.0 → 1.30.0
+    // Wave 1 WP5: bumped from 1.30.0 → 1.31.0 (runtime-messaging-adapters pointer)
     const content = fs.readFileSync(path.join(TEMPLATES_DIR, 'arch-integration.md'), 'utf-8');
-    expect(content).toMatch(/template_version:\s*"1.30.0"/);
+    expect(content).toMatch(/template_version:\s*"1.31.0"/);
   });
 
   it('MIGRATIONS.json has W31.6 RETIRED entry for team-lead (W31.6: retired)', () => {

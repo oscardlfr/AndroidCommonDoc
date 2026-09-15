@@ -8,10 +8,10 @@ layer: L0
 parent: agents-hub
 category: agents
 description: "External-source → L0 docs ingestion loop: context-provider flags gap → team-lead gates with user approval → doc-updater runs ingest-content. Closes T-BUG-005 (half-landed prior to Wave 25)."
-version: 2
-last_updated: "2026-07-09"
+version: 3
+last_updated: "2026-08"
 assumes_read: team-topology, context-rotation-guide
-token_budget: 1400
+token_budget: 1500
 ---
 
 # Ingestion Loop (External → L0)
@@ -96,6 +96,8 @@ The **orchestrator** — the portable `team-lead` logical ROLE (the main agent, 
 
 **Floor vs accelerator**: the load-bearing contract for this loop is the 4 disk artifacts below, mapped onto the already-shipped [coordination-artifact-schema](coordination-artifact-schema.md) `request/v1`/`approval/v1`/`result/v1` schemas — the SendMessage flow in the Protocol section above is an optional accelerator over that floor; in portable/single-use mode, context-provider/orchestrator/doc-updater read and write these artifacts directly and the same gate holds.
 
+**Waking doc-updater**: once the `approval/v1` (`decision:"authorized"`) artifact is durable, the orchestrator wakes or reuses `doc-updater` through the shared role-lifecycle manager (`ensureRoles`/`notify` — see [runtime-messaging-adapters](runtime-messaging-adapters.md)) rather than an ad-hoc dispatch. If `doc-updater` is already part of the READY persistent support plane, `notify` alone is sufficient; otherwise `ensureRoles` spawns or respawns+rehydrates it first. `SendMessage` remains the Claude-rich-mode accelerator for the same wake.
+
 | Ingestion artifact | Schema | On-disk path | Key body fields |
 |---|---|---|---|
 | request payload | `request/v1`, `kind:"ingestion"` | `requests/ingestion/<from>-<ts>-<uniq>.json` | `source_type`, `library`/`url`, `date`, `topic`, `proposed_slug`, `proposed_category`, `content` (full raw text, recommended) OR `content_ref`+`content_sha256` (documented alternative) — self-contained, never a truncated snippet |
@@ -137,3 +139,4 @@ See the canonical templates in `setup/agent-templates/` for the full `tools:` li
 - [Context Rotation Guide](context-rotation-guide.md) — why the loop is stateless per-query (Context7 is stateless)
 - [team-lead Quality Doc Pipeline](tl-quality-doc-pipeline.md) — doc-updater mandate (non-ingestion path)
 - [coordination-artifact-schema](coordination-artifact-schema.md) — the request/v1, approval/v1, result/v1 schemas the load-bearing Portable disk-artifact path above maps onto
+- [runtime-messaging-adapters](runtime-messaging-adapters.md) — the shared role-lifecycle manager that wakes/reuses doc-updater once approval is durable

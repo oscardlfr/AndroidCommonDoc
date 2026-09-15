@@ -1,13 +1,13 @@
 ---
 name: work
-description: "Smart task routing — analyzes freeform text and delegates to the right agent or skill."
+description: "Smart task routing through the canonical runtime collaboration entrypoint."
 copilot: false
 intent: [route, delegate, orchestrate, debug, research, verify, audit, implement, review]
 ---
 
 # Work Skill
 
-Smart task routing — analyzes freeform text and delegates to the right agent or skill.
+Route one validated task through the shared runtime collaboration owner. This skill does not select a provider API or create a second lifecycle path.
 
 ## Usage
 
@@ -15,171 +15,63 @@ Smart task routing — analyzes freeform text and delegates to the right agent o
 /work <task description>
 ```
 
-## Level 0.5 — Named Skill Override (checked before keyword routing)
+## Canonical Runtime Entrypoint
 
-If `$ARGUMENTS` starts with or contains a known skill name, route directly to that skill — bypasses Level 1 keyword scan entirely:
+1. Resolve one role supported by the production work router. Repository task execution uses `toolkit-specialist`; support-plane consultations use one of the five persistent support roles.
+2. For a read-only repository task, use the core-authored empty-scope manifest bytes `{"schema":"coordination/subject-bundle-manifest/v1","entries":[]}` and their exact reference `subject:090b9779a46f94e328cb61bf5e78d5a64a15337a6e9279090837647a87f2ff7a`. The runtime core materializes this manifest; do not search for or hand-write a bundle file.
+3. Encode a canonical JSON object with exactly `role`, `subject_ref`, and `task`. The `task` value is the complete, non-empty text supplied after `/work`, preserved verbatim; never replace it with an example or a fixed sentence.
+4. Invoke:
 
-| Skill name match | Invokes | Use when |
-|-----------------|---------|----------|
-| `material-3` / `material 3` | `skills/material-3-skill/SKILL.md` | MD3 component, theme, scaffold, audit |
-| `sync-vault` | `skills/sync-vault/SKILL.md` | Obsidian vault sync |
-| `pre-pr` | `skills/pre-pr/SKILL.md` | Pre-merge validation |
-| `debug` | `skills/debug/SKILL.md` | Bug investigation |
-| `research` | `skills/research/SKILL.md` | Domain research |
-
-Add entries here when promoting a skill to named-route status (conscious promotion step — staleness is intentional).
-
-> **HARD GATE — Core subagents must be dispatched before any implementation work.**
-> If routing to team-lead/orchestrator (implement/feature/build/plan/wave keywords): verify core subagents are dispatched FIRST.
-> Required roles: context-provider, doc-updater, arch-testing, arch-platform, arch-integration, quality-gater
-> If NOT dispatched → dispatch all 6 as concurrent Agent subagents (background peers optional) + run pre-flight checklist BEFORE routing any task.
-> DO NOT plan. DO NOT dispatch work agents. DO NOT respond to user task until core setup is done.
-> If ANY pre-flight checkbox fails → fix it first, then re-verify ALL from top.
-
-## Routing Logic
-
-### Level 0 — Multi-Department Detection (before keyword routing)
-
-Check if `$ARGUMENTS` contains cross-department signals:
-
-| Pattern | Action |
-|---------|--------|
-| Contains "dev + marketing" or "parallel" with department names | Multi-department parallel mode |
-| Contains "status of" or "how is.*implemented" from non-dev context | Cross-department query |
-| Contains "release notes" or "blog post about feature" | Sequential: dev brief → marketing |
-
-**Multi-department parallel mode:**
-1. Parse task into per-department sub-tasks
-2. Show routing plan and ask confirmation
-3. Spawn both Agent() calls in same message (parallel)
-4. Collect outputs and present unified summary
-
-**Sequential cross-department mode:**
-1. Identify source dept (has the info) and consumer dept (needs it)
-2. Spawn source agent: "Provide a Cross-Department Brief about {topic}"
-3. Extract brief from output
-4. Spawn consumer agent with brief injected as context
-5. Present unified summary
-
-If no cross-department signal detected, fall through to Level 1.
-
-## Peer-Aware Routing
-
-Before routing to a peer-eligible agent, check if a background peer is alive:
-
-If a background peer named `{target}` is known to be alive (was dispatched in this session with `run_in_background=true` and has ACKed):
-  → `SendMessage(to="{target}", ...)`
-Else:
-  → `Agent(subagent_type="{target}", name="{target}", ...)` — fresh single-use subagent (no `team_name` needed)
-
-The wave slug (e.g., `bl-w42-pr1`) is the artifact directory key — set via `CLAUDE_WAVE_SLUG` env or derived from the git branch last segment. It determines `.planning/wave-{slug}/` where verdicts and context bundles live.
-
-### Level 1 — Deterministic Keyword Rules (instant, 0 tokens)
-
-Match `$ARGUMENTS` against these patterns in order. First match wins:
-
-| Pattern | Route |
-|---------|-------|
-| `\b(bug\|error\|fix\|broken\|crash)\b` | `/debug` |
-| `\b(test\|coverage\|benchmark)\b` | Peer-aware delegate to `test-specialist` ** |
-| `\b(review\|PR\|pull request)\b` | `/review-pr` |
-| `\b(research\|investigate\|explore)\b` | `/research` |
-| `\b(decide\|choose\|compare\|tradeoff)\b` | `/decide` |
-| `\b(verify\|check spec\|meets criteria)\b` | `/verify` |
-| `\b(map\|architecture\|modules\|inventory)\b` | `/map-codebase` |
-| `\b(pre-pr\|validate\|ready to merge)\b` | `/pre-pr` |
-| `\b(note\|idea\|remember)\b` | `/note` |
-| `\b(ui\|compose\|screen\|component)\b` | Peer-aware delegate to `ui-specialist` ** |
-| `\b(audit\|quality)\b` | `/audit` |
-| `\b(doc\|documentation\|update docs)\b` | Peer-aware delegate to `doc-updater` ** |
-| `\b(context\|pattern\|lookup\|what exists)\b` | Peer-aware delegate to `context-provider` ** |
-| `\b(domain\|model\|sealed\|data class)\b` | Peer-aware delegate to `domain-model-specialist` ** |
-| `\b(data layer\|repository\|encoding)\b` | Peer-aware delegate to `data-layer-specialist` ** |
-| `\b(prioritize\|roadmap\|features\|backlog)\b` | Agent(`product-strategist`) * |
-| `\b(post\|blog\|social\|marketing\|content)\b` | Agent(`content-creator`) * |
-| `\b(landing\|page\|conversion\|copy\|seo)\b` | Agent(`landing-page-strategist`) * |
-| `\b(implement\|feature\|build\|scope\|plan\|execute\|wave)\b` | Act as main-context orchestrator (in-process per W31.6) *** |
-
-\* Business agents are opt-in. If the agent doesn't exist in `.claude/agents/`, fall through to Level 2.
-\** **Standalone tasks only (outside a wave).** Direct specialist routing (the rows above marked \**) applies when `/work` handles a one-off task. Inside an active wave/EXECUTE (`.planning/wave-<slug>/PLAN.md` present with an APPROVED arch PREP verdict, or `CLAUDE_WAVE_SLUG` set), do NOT route directly to the specialist by keyword — the specialist is dispatched and owned by its **reporting architect** (the architect owns the task spec + validation; the orchestrator only does the mechanical `Agent()` spawn). Route to the architect (arch-platform/arch-testing/arch-integration), or surface the need for the planner's Spawn Table. When routing directly (standalone only): use the Peer-Aware Routing block above — `SendMessage` if the peer is alive, else `Agent` peer-spawn (no `team_name`).
-\*** T-BUG-010: orchestrator MUST run in-process (main conversation), NEVER via `Agent()`. Sub-agents cannot spawn reliably at depth (Claude Code bug #31977). Per W31.6 canonical pattern, the main agent IS the team-lead. Steps: (1) Dispatch 6 core subagents as concurrent Agent calls (subagent_type=X, name=X — no TeamCreate, no team_name required), (2) Run pre-flight checklist, (3) Dispatch work with scope_doc_path. Load-bearing contract: disk artifacts (`arch-*-verdict.md`, `quality-gate-report.json`, `push-proof.json`).
-
-### Level 2 — Frontmatter Discovery (if no Level 1 match)
-
-1. Scan `.claude/agents/*.md` for `intent:` frontmatter
-2. Match keywords in user description against intent arrays
-3. If match found → suggest that agent
-4. If no match → act as main-context orchestrator (in-process per W31.6 — see footnote ***)
-
-## Dev Spawn First-Action Protocol
-
-When team-lead spawns a dev specialist, the dev's FIRST action must be:
-```
-SendMessage(to="context-provider", summary="gate ack")
+```bash
+"<resolved-node>" "<toolkit-root>/scripts/lib/runtime-collaboration-entrypoints.cjs" execute --entrypoint work --project-root <consumer-root> --intent <base64url canonical JSON>
 ```
 
-This satisfies the per-session CP gate (Bug #7 fixed: session-scoped, one consult unblocks all peers).
-Include this instruction in every dev dispatch message from team-lead.
+The Bash call must be one standalone direct Node command. For L0, both roots are the current repository. For a runtime consumer, derive `toolkit-root` only from the single local `layer=L0, role=tooling` manifest source and keep `consumer-root` as the literal absolute application repository. Use the resolved Node executable; do not use environment fallbacks, command substitution, wrappers, pipes, redirects, or command separators.
 
-## 3-Phase Execution Model
+The decoded intent must contain `role:"toolkit-specialist"`, the exact fixed `subject_ref` above, and `task` byte-for-byte equal to the current `/work` task description. A repeated task resumes its existing transaction; a genuinely different task creates a distinct intent and must not reuse a prior terminal action.
 
-When routing to team-lead (implement/wave keywords):
-1. **Planning phase**: team-lead reads plan file, writes `.planning/PLAN.md` via Write tool (not SendMessage)
-2. **Execution phase**: Architects dispatch devs wave by wave; each wave gated by architect APPROVE
-3. **Quality Gate phase**: quality-gater runs all validators; session closes only on full PASS
+## Status Handling
 
-quality-gater activation requires CP consultation first (same session gate as devs).
+- `ACTION_REQUIRED`: execute only the returned canonical action references through the runtime adapter, then resume the same operation.
+- `COMPLETED`: accept only when the result carries correlated canonical result, accepted-result, and acknowledgement references plus their exact SHA-256 digests.
+- `READY`: the requested runtime state is proven; do not reinterpret it as task completion.
+- `BLOCKED`, `UNAVAILABLE`, or `FAILED`: report the exact status and detail; never fall back silently or infer success from message text.
 
-> WARNING (T-BUG-010): MUST run in main context only. Spawning as subagent causes Agent() tool loss (#31977). Execute team-lead playbook inline — do NOT use Agent() with team-lead as subagent_type.
+## Deterministic Role Routing
 
-## Steps
+Use first-match routing without changing authority:
 
-1. Parse task description from `$ARGUMENTS`
-2. Run Level 0 multi-department detection
-3. Run Level 1 keyword matching against the routing table above
-4. If no Level 1 match, run Level 2 frontmatter discovery:
-   - Read each `.claude/agents/*.md` file
-   - Extract `intent:` array from YAML frontmatter
-   - Score keyword overlap with `$ARGUMENTS`
-   - Select highest-scoring agent (if any scores > 0)
-5. Display the routing decision:
+| Signal | Canonical role or skill |
+|---|---|
+| bug, error, fix, broken, crash | `debugger` via `/debug` |
+| repository test execution requested through `/work` | `toolkit-specialist` |
+| review, pull request | `/review-pr` |
+| research, investigate, explore | `/research` |
+| decide, choose, compare | `/decide` |
+| verify, check spec explicitly requested through `/work` | `toolkit-specialist` |
+| map, architecture, modules | `/map-codebase` |
+| pre-pr, validate | `/pre-pr` |
+| UI, Compose, screen | `ui-specialist` |
+| docs, documentation | `doc-updater` |
+| context, pattern, lookup | `context-provider` |
+| domain, model | `domain-model-specialist` |
+| data layer, repository | `data-layer-specialist` |
+| repository implementation, feature, build | `toolkit-specialist` |
 
-```
-Routing: "{task}" -> {target skill or agent}
-Reason: {matched keyword or intent}
+Named skill overrides still take precedence when the user explicitly names a registered skill. Multi-domain work is represented as separate validated work intents while preserving the same shared entrypoint and evidence rules.
 
-Proceed? (y/n)
-```
+Business classifiers remain opt-in discovery hints: roadmap/prioritization may name `product-strategist`, marketing/content may name `content-creator`, and landing/conversion work may name `landing-page-strategist`. Verify the named agent exists and has an accredited runtime route; otherwise fall through to the canonical repository route. These hints never authorize a direct native spawn or bypass this entrypoint.
 
-6. Wait for user confirmation before executing
-7. On confirmation, invoke the matched skill or spawn the matched agent
+For multi-domain implementation, the main conversation acts as `team-lead` and submits the required validated intents in dependency order. `team-lead` is an orchestration responsibility here, not a persistent role, alternate provider API, or authority inferred from prose.
 
-## Notes
+### Level 2 — Frontmatter Discovery
 
-- Session naming: the wave slug names the wave artifact directory (`.planning/wave-<slug>/`); use the same slug across `/init-session` and `/work` in a session.
-- Level 1 is checked first — it is instant and deterministic
-- Level 2 only runs when Level 1 has no match
-- **Before routing to any agent, verify it exists** in `.claude/agents/` — if not, fall through
-- Business agents (product-strategist, content-creator, landing-page-strategist) are opt-in templates; they only exist if the project activated them via `/setup`
-- `dev-lead` is a legacy template — only exists if the project copied it from `setup/agent-templates/`
-- Always show the routing decision and ask for confirmation before executing
-- If the user disagrees with routing, ask them to clarify or pick a target manually
+When no deterministic row matches, frontmatter discovery may identify a registered intent-compatible agent, but availability and authority must still be proven by the shared runtime entrypoint before execution.
 
-## WARNING — T-BUG-010: Main Context Only
+## Invariants
 
-**MUST run in main context only. Spawning /work as a subagent causes Agent() tool loss (Claude Code bug #31977).**
-
-- Do NOT invoke `/work` as a subagent — the orchestrator must run in the main conversation; nested subagents lose reliable Agent()/dispatch (Claude Code bug #31977)
-- /work acts in-process as main-context orchestrator (W31.6 pattern) — team-lead.md was retired in W31.6
-- If you find yourself wanting to spawn /work as an Agent(), you are in the wrong process layer
-
-## Orchestrator Safety Rule
-
-**NEVER** spawn the orchestrator role itself via `Agent()`. The orchestrator needs the `Agent` tool which only works at the top-level process.
-
-When routing to an orchestrator:
-1. Act in-process as the main-context orchestrator (W31.6 canonical pattern — main agent IS the team-lead; no separate team-lead template to read)
-2. Follow the inline steps from footnote ***: dispatch 6 core subagents (no `TeamCreate` or `team_name` needed), run pre-flight checklist, dispatch work
-3. The orchestrator role executes **in-process**, not as a sub-agent (T-BUG-010 / Claude Code bug #31977)
-
-`quality-gater` and `planner` are dispatched by the orchestrator as single-use Agent subagents — they DO NOT need `TeamCreate` or `team_name`.
+- The persistent support plane is exactly `arch-platform`, `arch-testing`, `arch-integration`, `context-provider`, and `doc-updater`; `quality-gater` remains phase-scoped.
+- Lifecycle reuse, recovery, action execution, and completion evidence are owned by the shared runtime modules.
+- No direct host-native dispatch exists in this skill.
+- No message or action-success text is completion evidence.
+- Do not invent phases, authority identifiers, provider branches, or alternate schemas.

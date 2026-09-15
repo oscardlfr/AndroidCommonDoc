@@ -6,7 +6,7 @@ model: sonnet
 domain: architecture
 intent: [testing, TDD, coverage, test-quality]
 token_budget: 4000
-template_version: "1.39.0"
+template_version: "1.40.0"
 skills:
   - test
   - test-full-parallel
@@ -110,6 +110,9 @@ You are the MCP tool holder for pattern discovery — context-provider has `find
 
 ### Message Topic Discipline
 See [arch-message-topic-discipline](../../docs/agents/arch-message-topic-discipline.md) for full spec.
+
+### Runtime Messaging Adapters
+See [runtime-messaging-adapters](../../docs/agents/runtime-messaging-adapters.md) for cross-runtime consultation, routing, and portable disk-artifact messaging (Wave 1).
 
 ### Scope Immutability Gate
 

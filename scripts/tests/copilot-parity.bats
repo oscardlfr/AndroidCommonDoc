@@ -14,6 +14,23 @@ teardown() {
     rm -rf "$WORK_DIR"
 }
 
+# Portable in-place sed substitution shared by every write_* fixture helper
+# below. BSD sed (macOS /usr/bin/sed) requires an explicit (possibly empty)
+# backup-extension argument after -i; GNU sed accepts the bare form. A
+# same-directory temp file + atomic mv avoids both dialects, propagates a
+# sed failure, and leaves no temp file behind on failure.
+portable_sed_inplace() {
+    local expr="$1" file="$2"
+    local tmp
+    tmp="$(mktemp "${file}.XXXXXX")"
+    if sed "$expr" "$file" > "$tmp"; then
+        mv "$tmp" "$file"
+    else
+        rm -f "$tmp"
+        return 1
+    fi
+}
+
 write_params_file() {
     echo '{"parameters":{}}' > "$WORK_DIR/skills/params.json"
 }
@@ -47,7 +64,7 @@ echo "hello from SKILL_NAME"
 Write-Host "hello from SKILL_NAME"
 ```
 HEREDOC
-    sed -i "s/SKILL_NAME/$name/g" "$WORK_DIR/skills/$name/SKILL.md"
+    portable_sed_inplace "s/SKILL_NAME/$name/g" "$WORK_DIR/skills/$name/SKILL.md"
 }
 
 # Helper: write a skill with copilot: true and behavioral type
@@ -68,7 +85,7 @@ copilot-template-type: behavioral
 2. Do the second thing
 3. Report results
 HEREDOC
-    sed -i "s/SKILL_NAME/$name/g" "$WORK_DIR/skills/$name/SKILL.md"
+    portable_sed_inplace "s/SKILL_NAME/$name/g" "$WORK_DIR/skills/$name/SKILL.md"
 }
 
 # Helper: write a skill with copilot: false
@@ -86,7 +103,7 @@ copilot: false
 
 Claude-only orchestration skill.
 HEREDOC
-    sed -i "s/SKILL_NAME/$name/g" "$WORK_DIR/skills/$name/SKILL.md"
+    portable_sed_inplace "s/SKILL_NAME/$name/g" "$WORK_DIR/skills/$name/SKILL.md"
 }
 
 # Helper: write a skill missing the copilot field
@@ -101,7 +118,7 @@ description: "Test skill without copilot field"
 
 Some content.
 HEREDOC
-    sed -i "s/SKILL_NAME/$name/g" "$WORK_DIR/skills/$name/SKILL.md"
+    portable_sed_inplace "s/SKILL_NAME/$name/g" "$WORK_DIR/skills/$name/SKILL.md"
 }
 
 # Helper: write a scripted copilot template
@@ -128,7 +145,7 @@ echo "hello"
 Write-Host "hello"
 ```
 HEREDOC
-    sed -i "s/SKILL_NAME/$name/g" "$WORK_DIR/setup/copilot-templates/$name.prompt.md"
+    portable_sed_inplace "s/SKILL_NAME/$name/g" "$WORK_DIR/setup/copilot-templates/$name.prompt.md"
 }
 
 # Helper: write a behavioral copilot template
@@ -150,7 +167,7 @@ Test behavioral skill SKILL_NAME
 1. Do the first thing
 2. Do the second thing
 HEREDOC
-    sed -i "s/SKILL_NAME/$name/g" "$WORK_DIR/setup/copilot-templates/$name.prompt.md"
+    portable_sed_inplace "s/SKILL_NAME/$name/g" "$WORK_DIR/setup/copilot-templates/$name.prompt.md"
 }
 
 # Helper: write an empty template (broken)

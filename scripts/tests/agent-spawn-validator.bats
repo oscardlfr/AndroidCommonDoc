@@ -227,7 +227,14 @@ run_hook() {
 
 @test "blocks frontmatter drift (template SHA-256 ≠ manifest baseline)" {
   cp "$PROJECT_ROOT/setup/agent-templates/advisor.md" "$BATS_TEST_TMPDIR/advisor-original.md"
-  sed -i 's/^domain: development/domain: testing/' "$PROJECT_ROOT/setup/agent-templates/advisor.md"
+  # Portable in-place edit: BSD sed (macOS /usr/bin/sed) requires an explicit
+  # (possibly empty) backup-extension argument after -i; GNU sed accepts the
+  # bare form. A same-directory temp file + atomic mv avoids both dialects
+  # and their backup-file side effects.
+  advisor_md="$PROJECT_ROOT/setup/agent-templates/advisor.md"
+  advisor_md_tmp="$(mktemp "${advisor_md}.XXXXXX")"
+  sed 's/^domain: development/domain: testing/' "$advisor_md" > "$advisor_md_tmp"
+  mv "$advisor_md_tmp" "$advisor_md"
 
   make_input "Task" "advisor"
   run_hook

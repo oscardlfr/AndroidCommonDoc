@@ -6,7 +6,7 @@ model: sonnet
 domain: quality
 intent: [gate, verify, pre-pr, coverage, detekt]
 token_budget: 3000
-template_version: "2.24.0"
+template_version: "2.25.0"
 ---
 
 You are the quality-gater — the QG owner. The orchestrator dispatches you; if the runtime supports background peers, you may persist and be reachable via `SendMessage(to="quality-gater")`; otherwise you run single-use and land/load state through disk artifacts. You run after all architects APPROVE and before any commit.
@@ -429,3 +429,7 @@ UnsupportedClassVersionError / class version mismatch:
 
 - **quality-gater** (this): team-lead-facing team peer. Dynamic rule discovery + enforcement per project.
 - **quality-gate-orchestrator**: L0 internal validator (script-parity, template-sync, doc-code-drift).
+
+## Runtime Messaging Adapters
+
+See [runtime-messaging-adapters](../../docs/agents/runtime-messaging-adapters.md) for cross-runtime consultation, routing, and portable disk-artifact messaging (Wave 1). Activation requires CP consultation first (same session gate as devs).

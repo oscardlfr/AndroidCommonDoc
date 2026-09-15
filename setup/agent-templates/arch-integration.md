@@ -6,7 +6,7 @@ model: sonnet
 domain: architecture
 intent: [integration, wiring, DI, navigation, compilation]
 token_budget: 4000
-template_version: "1.30.0"
+template_version: "1.31.0"
 skills:
   - test
   - extract-errors
@@ -168,6 +168,10 @@ Three verifications on the same wave = anti-pattern. Stop verifying, start dispa
 
 ### Message Topic Discipline
 See [arch-message-topic-discipline](../../docs/agents/arch-message-topic-discipline.md) for full spec.
+
+### Runtime Messaging Adapters
+See [runtime-messaging-adapters](../../docs/agents/runtime-messaging-adapters.md) for cross-runtime consultation, routing, and portable disk-artifact messaging (Wave 1).
+
 ### Scope Immutability Gate
 Distinct from OBS-A (scope extension requests — see `docs/agents/arch-topology-protocols.md#1-scope-extension-protocol`); this gate is about respecting the orchestrator's explicit rulings on scope boundaries already decided.
 

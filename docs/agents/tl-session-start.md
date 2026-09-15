@@ -6,7 +6,7 @@ sources: ['docs/agents/main-agent-orchestration-guide.md']
 targets: ['L0', 'L1', 'L2']
 status: active
 layer: L0
-description: "READ FIRST at every session start: T-BUG-010 critical block, session gates, FORBIDDEN/ALLOWED operating mode, Phase 0 spawn blocks, pre-flight checklist, planning phase gate."
+description: "READ FIRST at every session start: T-BUG-010 critical block, session gates, FORBIDDEN/ALLOWED operating mode, Phase 0 spawn blocks, pre-flight checklist, two-pass planner bootstrap, planning phase gate."
 ---
 
 # Session Start — Operating Mode + Phase 0
@@ -30,9 +30,9 @@ The main agent (when orchestrating a session) orchestrates the project: plan sco
 > Why: the orchestrator role executes in-process (main conversation). Sub-agents carry `agent_type` for gate keying; only the main agent has full tool access for Agent() fan-out.
 
 > **⛔ HARD GATE — Session setup blocks ALL work.**
-> If you receive a user task before completing session setup: RESPOND ONLY with "Setting up session — dispatching core subagents first."
+> If you receive a user task before completing session setup: RESPOND ONLY with "Setting up session — bootstrapping first."
 > DO NOT plan. DO NOT spawn agents. DO NOT respond to the user task.
-> Dispatch the subagents the wave CLASS floor requires — selectively, skipping roles with no work (see [tl-session-setup](tl-session-setup.md)) — + run the pre-flight checklist FIRST.
+> Session setup is non-lifecycle repo/session setup (see Phase 0 below) plus, for non-trivial tasks, the two-pass planner bootstrap (see Planning Phase below) — which is what actually ensures the persistent support plane, through the shared role-lifecycle manager (`probe`→`ensureRoles`→`waitReady`), never a hard-coded eager dispatch of a fixed roster and never including `quality-gater` (phase-scoped, never part of the persistent set).
 > If a role the CLASS floor requires is missing → same response, same restriction, fix it before anything else.
 
 > ⛔ SESSION CLOSURE GATE — Acceptance criteria block session end.
@@ -41,7 +41,7 @@ The main agent (when orchestrating a session) orchestrates the project: plan sco
 > NEVER defer sprint scope without explicit user approval.
 > If ANY sprint objective is not met: ESCALATE to user with exact failures and ask whether to continue or stop.
 
-> **FIRST POST-SETUP ACTION**: Once core subagents are dispatched and pre-flight passes, immediately consult context-provider: `Agent(subagent_type="context-provider", prompt="Read MEMORY.md and report all known bugs, open items, and current project state.")` — or `SendMessage(to="context-provider", ...)` if context-provider is a live background peer. DO NOT start planning until context-provider responds.
+> **FIRST POST-SETUP ACTION**: For non-trivial tasks, session setup's actual output is a READY persistent support plane with an accepted CP consultation behind it — obtained through the two-pass planner bootstrap (Planner Pass A → ensure support plane → Planner Pass B, see Planning Phase below), not a standalone "dispatch and wait for context-provider" step. DO NOT start planning-adjacent work until Pass B's accepted CP result lands (or, for genuinely trivial work under `CLAUDE_SKIP_PLANNER=1`, until the alternative light consult you choose to run completes).
 
 ### Per-Session Gate
 
@@ -125,33 +125,22 @@ Why: An L2 consumer session (2026-04-18) — the main agent dispatched grep work
 ### FORBIDDEN Agent Launches (non-negotiable)
 - **FORBIDDEN**: Spawning specialists eagerly or as a fixed roster — specialists are dispatched selectively per the wave's CLASS floor when execution begins, not a fixed set spawned upfront
 - **FORBIDDEN**: Spawning extra specialists without a preceding architect SendMessage to team-lead explicitly requesting it. "I think this needs a specialist" is not sufficient — the architect must ask.
-- **The ONLY agents team-lead launches directly**: planner (Phase 1), the session-start setup agents (context-provider, doc-updater), the specialists the wave's CLASS floor requires (dispatched selectively when execution begins), quality-gater (Phase 3). Extra specialists require an architect SendMessage request.
+- **The ONLY agents team-lead launches directly**: planner (two-pass bootstrap, see Planning Phase below), the specialists the wave's CLASS floor requires (dispatched selectively when execution begins), quality-gater (Phase 3). The persistent support plane (context-provider, doc-updater, the 3 architects) is *ensured* through the shared role-lifecycle manager as part of planner bootstrap — never a separate eager team-lead dispatch. Extra specialists require an architect SendMessage request.
 - **FORBIDDEN**: Writing or editing `.planning/wave-*/PLAN.md` directly — spawn planner and wait for `PLAN-WRITTEN`. See `feedback_planner_owns_plan_md`.
 
 ## Phase 0 — Session start
 
 **Project slug**: derive from the project root directory name, lowercased with hyphens. Examples: `my-app`, `my-kmp-libs`, `androidcommondoc`. The slug determines the wave artifact directory (`.planning/wave-{slug}/`).
 
-### Session Start: Core Subagent Dispatch
+### Session Start: Non-Lifecycle Setup Only
 
-**FIRST thing when session starts** — before ANY planning or unrelated Agent():
+**FIRST thing when session starts** — before ANY planning or Agent() call that claims lifecycle state:
 
-Dispatch the core roles the wave's CLASS floor requires (HARNESS: 3 architects + specialists + QG; DOC: declared architects + QG; FAST-PATH: QG only — see [main-agent-orchestration-guide](main-agent-orchestration-guide.md)). Spawn selectively — skip roles with no work (see [tl-session-setup](tl-session-setup.md)). In **Claude-rich mode** you MAY pre-spawn the standing core team upfront as an accelerator (the block below); in **portable/single-use mode** each role is dispatched per task. Either way the **load-bearing contract** is disk artifacts: each role writes its result to `.planning/wave-{slug}/` and the orchestrator reads from there. Background peers additionally communicate via SendMessage; single-use subagents return their result directly.
+Phase 0 is deliberately narrow: repo/session setup only (derive the project slug above; read `l0-manifest.json`/`MODULE_MAP.md`/business docs if the session needs a dashboard, per [init-session](../../skills/init-session/SKILL.md)). It does **not** call the PLAN-bound lifecycle CLI and does **not** claim any support role READY — that happens only inside the two-pass planner bootstrap below, after a draft PLAN exists. This is the fix for a historical anti-pattern: eagerly dispatching a fixed 6-role roster (5 support-plane roles plus `quality-gater` bundled in) as the literal first action of every session, before any plan or task existed to justify it, and before `quality-gater` — which is phase-scoped and never persistent — had any reason to be alive.
 
-```
-# Foreground single-use dispatch (default — works in any runtime):
-Agent(subagent_type="context-provider", prompt="FIRST: read your bundle at .planning/wave-{slug}/context-bundles/context-provider.md (absent or stale wave_slug → report 'no valid bundle' and proceed). Read docs/agents/agent-core-rules.md. Answer the project state query: read MEMORY.md and report known bugs, open items, and current project state.")
+If this session is **resuming** an existing wave rather than starting one, do not re-ensure the support plane blindly: `probe` first (via [resume-work](../../skills/resume-work/SKILL.md)'s discovery step) and reuse any healthy binding. If this session was launched via `/init-session --orchestrate <slug>`, the support plane may already be READY from that path — `probe` before assuming it needs (re-)ensuring either way. `ensureRoles` itself is idempotent, so a redundant call is safe but wasteful.
 
-# Background peer dispatch (optional accelerator — when runtime supports it):
-Agent(name="context-provider", subagent_type="context-provider", run_in_background=true, prompt="FIRST: read your bundle at .planning/wave-{slug}/context-bundles/context-provider.md (absent or stale wave_slug → report 'no valid bundle' and proceed). Read docs/agents/agent-core-rules.md. Answer pattern/doc/rule queries on demand. NEVER write files (sole carve-out: the write_bundle script protocol in your template, on orchestrator dispatch only). NEVER self-assign tasks. NEVER execute CI.")
-Agent(name="doc-updater", subagent_type="doc-updater", run_in_background=true, prompt="FIRST: read your bundle at .planning/wave-{slug}/context-bundles/doc-updater.md (absent or stale wave_slug → report 'no valid bundle' and proceed). THEN: SendMessage(to='context-provider', summary='gate ack'). Read docs/agents/agent-core-rules.md. Update docs ONLY when orchestrator explicitly dispatches you. NEVER self-assign tasks.")
-Agent(name="arch-testing", subagent_type="arch-testing", run_in_background=true, prompt="FIRST: read your bundle at .planning/wave-{slug}/context-bundles/arch-testing.md (absent or stale wave_slug → report 'no valid bundle' and proceed). THEN: SendMessage(to='context-provider', summary='gate ack'). Read docs/agents/agent-core-rules.md. Verify test quality, TDD, coverage. Write arch-testing-verdict.md to disk.")
-Agent(name="arch-platform", subagent_type="arch-platform", run_in_background=true, prompt="FIRST: read your bundle at .planning/wave-{slug}/context-bundles/arch-platform.md (absent or stale wave_slug → report 'no valid bundle' and proceed). THEN: SendMessage(to='context-provider', summary='gate ack'). Read docs/agents/agent-core-rules.md. Verify KMP patterns, source sets. Write arch-platform-verdict.md to disk.")
-Agent(name="arch-integration", subagent_type="arch-integration", run_in_background=true, prompt="FIRST: read your bundle at .planning/wave-{slug}/context-bundles/arch-integration.md (absent or stale wave_slug → report 'no valid bundle' and proceed). THEN: SendMessage(to='context-provider', summary='gate ack'). Read docs/agents/agent-core-rules.md. Verify DI, navigation, wiring. Write arch-integration-verdict.md to disk.")
-Agent(name="quality-gater", subagent_type="quality-gater", run_in_background=true, prompt="FIRST: read your bundle at .planning/wave-{slug}/context-bundles/quality-gater.md (absent or stale wave_slug → report 'no valid bundle' and proceed). THEN: SendMessage(to='context-provider', summary='gate ack'). Read docs/agents/agent-core-rules.md. DORMANT until orchestrator activates for Phase 3.")
-```
-
-These roles are the session's core agents (dispatch the ones the wave CLASS floor requires). When run as background peers they are reachable via SendMessage; when run as single-use subagents the orchestrator dispatches a fresh instance per task and reads results from disk.
+For non-trivial new work, continue directly to the Planning Phase below — Planner Pass A is the next action, not a separate eager support-plane dispatch.
 
 ### Phase 2 Core Specialists (dispatched when Phase 2 starts, NOT at session start)
 
@@ -175,7 +164,7 @@ See [tl-dispatch-topology](tl-dispatch-topology.md) for pre-dispatch gate (5 che
 See [tl-verification-gates](tl-verification-gates.md) for architect verdicts, post-verdict broadcast protocol, and post-wave team integrity check.
 
 ### 3-Phase Execution Model
-**Phase 1 (Plan)**: `EnterPlanMode()` → planner writes plan → user approves → `ExitPlanMode()`
+**Phase 1 (Plan)**: `EnterPlanMode()` → two-pass planner bootstrap (Pass A draft → ensure support plane → Pass B accepted CP result → finalize) → user approves → `ExitPlanMode()`
 **Phase 2 (Execute)**: SendMessage architects → specialist waves → collect APPROVE/ESCALATE
 **Phase 3 (Quality Gate)**: quality-gater validates → PASS → commit
 
@@ -195,43 +184,43 @@ At the end of every wave, team-lead MUST: (1) estimate token spend as `dispatche
 
 ### Pre-Flight Checklist (MUST verify before dispatching architects)
 
-> Verify the roles the wave's CLASS floor requires. HARNESS needs 3 architects + specialists + QG; DOC needs declared architects + QG; FAST-PATH needs QG only (see [main-agent-orchestration-guide](main-agent-orchestration-guide.md)). Roles with no work are **SKIP**, not STOP (selective spawning). Treat each checkbox below as "YES, or SKIP if the CLASS floor does not require it."
+> Verify the roles the wave's CLASS floor requires. HARNESS needs 3 architects + specialists + QG; DOC needs declared architects + QG; FAST-PATH needs QG only (see [main-agent-orchestration-guide](main-agent-orchestration-guide.md)). Roles with no work are **SKIP**, not STOP (selective spawning). `quality-gater` is always dispatched fresh for Phase 3, never part of the persistent support plane ensured during planner bootstrap. Treat each checkbox below as "YES, or SKIP if the CLASS floor does not require it."
 
 ```
-□ 1. context-provider dispatched (subagent or background peer)?    → YES or STOP
-□ 2. doc-updater dispatched?                                        → YES or STOP
-□ 3. arch-testing dispatched?                                       → YES or STOP
-□ 4. arch-platform dispatched?                                      → YES or STOP
-□ 5. arch-integration dispatched?                                   → YES or STOP
-□ 6. quality-gater dispatched?                                      → YES or STOP
-□ 7. context-provider consulted (project state response received)?  → YES or STOP
-□ 8. Agent(planner) called for non-trivial tasks?                   → YES or STOP (ENFORCED by .claude/hooks/plan-mode-spawn-planner.js)
-□ 9. test-specialist dispatched?         → YES or SKIP (Phase 2 not started)
-□ 10. ui-specialist dispatched?          → YES or SKIP (Phase 2 not started)
-□ 11. domain-model-specialist?           → YES or SKIP (Phase 2 not started)
-□ 12. data-layer-specialist?             → YES or SKIP (Phase 2 not started)
-□ 13. toolkit-specialist?                → YES or SKIP (Phase 2 not started)
+□ 1. Persistent support plane READY (context-provider, doc-updater, arch-testing, arch-platform, arch-integration — via ensureRoles, not raw Agent())?  → YES or STOP
+□ 2. Pass B accepted CP result present for the current PLAN digest?                 → YES or STOP
+□ 3. quality-gater dispatched fresh for THIS phase (never reused from a prior persistent binding)? → YES or SKIP (Phase 3 not started)
+□ 4. Agent(planner) Pass A + Pass B both completed for non-trivial tasks?            → YES or STOP (ENFORCED by .claude/hooks/plan-mode-spawn-planner.js)
+□ 5. test-specialist dispatched?         → YES or SKIP (Phase 2 not started)
+□ 6. ui-specialist dispatched?           → YES or SKIP (Phase 2 not started)
+□ 7. domain-model-specialist?            → YES or SKIP (Phase 2 not started)
+□ 8. data-layer-specialist?              → YES or SKIP (Phase 2 not started)
+□ 9. toolkit-specialist?                 → YES or SKIP (Phase 2 not started)
 ```
 
-**If a role the CLASS floor requires — plus #1 (context-provider oracle), #6 (quality-gater), #7 (context-provider consult), and #8 (planner, for non-trivial tasks) — is NO → STOP. Do not respond to user tasks. Do not plan. Fix it first, then re-verify from the top. Roles marked SKIP for lack of work are fine.**
+**If a role the CLASS floor requires — plus #1 (support plane READY), #2 (accepted CP result), and #4 (planner two-pass, for non-trivial tasks) — is NO → STOP. Do not respond to user tasks. Do not plan. Fix it first, then re-verify from the top. Roles marked SKIP for lack of work are fine.**
 
 ### Planning Phase (EnterPlanMode gate)
-For non-trivial tasks:
+
+For non-trivial tasks, planner bootstrap is a bounded **two-pass** sequence — never a single spawn, and never a raw eager dispatch of the support plane before a draft exists:
+
 1. **`EnterPlanMode()`** — plan-context.js injects MODULE_MAP.md + agents + skills as additional context. Note: the hook does NOT block team-lead writes — the no-self-write rule below is discipline-enforced, not hook-enforced.
-2. **Spawn planner**: `Agent(subagent_type="planner", prompt="...")` — `subagent_type` MUST be `"planner"` (lowercase, custom L0 agent with Read+Write+Bash+SendMessage), NOT `"Plan"` (capital-P built-in; read-only and cannot write plan files). No `team_name` required.
-
-**Hook enforcement (BL-W31.7-12)**: The hook `.claude/hooks/plan-mode-spawn-planner.js` mechanically blocks `ExitPlanMode` if planner has not been spawned via `Agent(subagent_type="planner")` during the current plan-mode session. Sentinel: `.planning/.plan-mode-planner-required`. Escape hatch: `CLAUDE_SKIP_PLANNER=1` env var (set BEFORE `EnterPlanMode`) for genuinely trivial work.
-
-3. Planner writes `.planning/wave-<slug>/PLAN.md` (planner is a subagent — outside plan mode scope, can write files normally)
-4. Present plan summary to user as text output (team-lead needs no file writes during planning)
-5. **On user approval**: call `ExitPlanMode()`
-6. **⛔ MANDATORY Phase 2 Topology Activation Gate (Bug #8 — Wave 26 regression fix)**: AFTER `ExitPlanMode()` and BEFORE any architect EXECUTE dispatch:
+2. **Pass A — draft PLAN, no lifecycle claim**: `Agent(subagent_type="planner", prompt="...")` — `subagent_type` MUST be `"planner"` (lowercase, custom L0 agent with Read+Write+Bash+SendMessage), NOT `"Plan"` (capital-P built-in; read-only and cannot write plan files). No `team_name` required. Pass A writes `.planning/wave-<slug>/PLAN.md` with a `STATUS: DRAFT-CONTEXT-PENDING` marker, using Write only, then returns — it authorizes nothing through its prose. It does NOT call the PLAN-bound lifecycle CLI and claims no support role READY. `consult/v1` remains the unchanged TTL contact marker throughout this step, never reinterpreted as a response.
+3. **Top-level revalidates the draft**: read the draft bytes from disk and confirm the `STATUS: DRAFT-CONTEXT-PENDING` marker is present before proceeding.
+4. **Ensure the persistent support plane** through the shared role-lifecycle manager — `probe(profile)` → `ensureRoles(profile, roles)` over exactly `arch-platform`, `arch-testing`, `arch-integration`, `context-provider`, `doc-updater` (never `quality-gater`) → `waitReady`. In `auto|persistent`, this is one multi-role `ensure` over the complete configured support-plane array, so a retained Codex supervisor is launched once with its final role set. In `ephemeral|disk-only`, this step instead requires an already-registered non-recursive CP consumer/binding and never grows a supervisor. Bootstrap routing admits retained Claude (`claude-sendmessage`), retained Codex (`codex-app-server`), or registered disk consumer (`noop`), and excludes recursive `claude-agent` plus requester-launched `codex-mcp`/`runtime-spawn`.
+5. **Pass B — rehydrate + real CP transaction**: re-invoke the canonical planner from the same brief+draft (same `Agent(subagent_type="planner", ...)` shape as Pass A). Its first Bash surface begins the exact branch-aware CP-targeted `consult/v2` transaction. A valid accepted CP disk result — optionally accelerated by SendMessage now that CP is READY from step 4 — is required before Pass B removes the `DRAFT-CONTEXT-PENDING` marker and finalizes PLAN. **No result means STOP.** Architects/verdicts can bind only the marker-free final bytes; draft-bound consultation is planning input only and cannot satisfy a final PREP verdict, EXECUTE, or QG gate.
+6. **Final-digest role-rebind**: the same multi-role `ensure` then emits ordered `role-rebind` actions for every healthy draft-bound support peer/child and requires all of them READY without respawn before proceeding. Failure quarantines and STOPs — it never silently reuses a draft binding.
+7. Present plan summary to user as text output (team-lead needs no file writes during planning)
+8. **On user approval**: call `ExitPlanMode()`
+9. **⛔ MANDATORY Phase 2 Topology Activation Gate (Bug #8 — Wave 26 regression fix)**: AFTER `ExitPlanMode()` and BEFORE any architect EXECUTE dispatch:
    - **Dispatch the roles listed in the PLAN.md Spawn Table**, satisfying the wave class artifact floor (HARNESS requires 3 arch-*-verdict.md + QG artifacts; DOC requires declared-arch verdicts + QG artifacts; FAST-PATH requires QG artifacts only). See `docs/agents/main-agent-orchestration-guide.md` for the class floor table.
    - **Architect EXECUTE dispatches MUST include the mandate**: `"Your EXECUTE output is SendMessage-to-specialist with edit spec. You MUST NOT use Write or Edit on source/template/test files yourself. If you self-edit, the wave is rolled back."`
    - **Verification after architect APPROVE**: The main agent runs `rtk git log --format='%an' <commit-range>` and confirms commits are authored by the specialist layer (per SendMessage ownership trail), not exclusively by the architect layer. If architects self-edited: STOP, reset, re-dispatch through specialists, update `feedback_plan_mode_exit_topology.md` memory with the violation details.
    - Why this gate exists: Wave 26 BL-W26-01a shipped with 100% architect-authored edits and 0 specialists dispatched. User flagged: "no devs are working and all work has been done by the architects" (literal quote preserved — "devs" was the user's term at the time). Architects hold `Read` + mediation tools only; they do NOT self-implement.
-7. **Only then** SendMessage architects to start Phase 2 (PREP → EXECUTE → APPROVE cycles).
+10. **Only then** SendMessage architects to start Phase 2 (PREP → EXECUTE → APPROVE cycles).
 
-Exception: simple tasks (< 5K tokens, clear path) → plan inline without EnterPlanMode. Step 6 still applies if ANY file edit is needed.
+**Hook enforcement (BL-W31.7-12)**: The hook `.claude/hooks/plan-mode-spawn-planner.js` mechanically blocks `ExitPlanMode` if planner has not been spawned via `Agent(subagent_type="planner")` during the current plan-mode session (Pass A satisfies this; Pass B is the same subagent_type, spawned again). Sentinel: `.planning/.plan-mode-planner-required`. Escape hatch: `CLAUDE_SKIP_PLANNER=1` env var (set BEFORE `EnterPlanMode`) for genuinely trivial work.
+
+Exception: simple tasks (< 5K tokens, clear path) → plan inline without EnterPlanMode. Step 9 still applies if ANY file edit is needed.
 
 **Spawn Prompt Hygiene**: lean standby language only in spawn prompts — no wave/round forecasts. See `docs/agents/agent-core-rules.md#spawn-prompt-hygiene`.

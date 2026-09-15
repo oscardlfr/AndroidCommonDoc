@@ -91,7 +91,7 @@ fi
 # --- Extract frontmatter fields from a .claude/agents/*.md file ---
 extract_field() {
     local file="$1" field="$2"
-    sed -n '/^---$/,/^---$/{/^'"$field"':/p}' "$file" | head -1 | sed 's/^'"$field"': *//' | sed 's/^["'"'"']//' | sed 's/["'"'"']$//'
+    sed -n '/^---$/,/^---$/{/^'"$field"':/p; }' "$file" | head -1 | sed 's/^'"$field"': *//' | sed 's/^["'"'"']//' | sed 's/["'"'"']$//'
 }
 
 # --- Extract body (everything after second ---) ---

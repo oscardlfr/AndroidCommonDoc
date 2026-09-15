@@ -8,10 +8,10 @@ layer: L0
 parent: agents-hub
 category: agents
 description: "team-lead dispatch topology: pre-dispatch gate, pattern chain, dynamic scaling, autonomy rules, mandatory team workflow, kill order for dev agents."
-version: 2
-last_updated: "2026-04-19"
+version: 3
+last_updated: "2026-08"
 assumes_read: team-topology, tl-session-setup
-token_budget: 1300
+token_budget: 1500
 ---
 
 # team-lead Dispatch Topology
@@ -42,6 +42,10 @@ Full protocol, team-lead workflow, and anti-patterns: `docs/agents/arch-dispatch
 Dispatch is **disk-first**: the orchestrator materializes a dispatch artifact (`.planning/wave-<slug>/specialist-dispatches/<specialist>/`) bound to current HEAD + PLAN content before a specialist executes `Write`/`Edit`/`Bash`. `TaskList` is tracking-only — it never authorizes execution. `SendMessage` is an optional adapter — never harness authority. Full protocol: [specialist-dispatch-protocol.md](specialist-dispatch-protocol.md).
 
 The same disk-first floor covers the rest of the coordination loop: a specialist's completion lands at `results/<role>/` (`result/v1`), instruction delivery falls back to `inbox/<role>/` (`message/v1`) when `SendMessage` is absent or unreliable, and a graceful-shutdown request falls back to `stop-<role>.flag` (`stop/v1`) — full schema: [coordination-artifact-schema](coordination-artifact-schema.md).
+
+### Runtime Messaging Adapters
+
+The SendMessage/Agent() calls throughout this doc are the Claude-rich-mode realization of the engine-agnostic `RuntimeAdapter` facade (`spawn`/`send`/`ensureRoles`/etc.) — the same Pattern Validation Chain (specialist → architect → context-provider → architect → specialist, below) runs portably over disk artifacts (`consult/v2`/`result/v2`) when a live SendMessage channel is unavailable. See [runtime-messaging-adapters](runtime-messaging-adapters.md) for the full protocol, and [runtime-messaging-drivers](runtime-messaging-drivers.md) for how Claude's own `SendMessage`/`Agent()` map onto the closed activation-driver set. The persistent 5-role support plane (`arch-platform`, `arch-testing`, `arch-integration`, `context-provider`, `doc-updater`) is ensured once via the shared role-lifecycle manager (`probe`/`ensureRoles`/`waitReady`, per [tl-session-start](tl-session-start.md)) — never a hard-coded roster or a second lifecycle implementation. This section's own Dynamic Scaling / Kill Order rules remain team-lead's direct wave-scoped `Agent()`/`SendMessage()` dispatch, unchanged.
 
 ## Pre-Dispatch Topology Gate (MANDATORY before ANY Agent() dispatch)
 

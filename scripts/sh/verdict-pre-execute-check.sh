@@ -151,8 +151,11 @@ check_cap_escalation() {
   fi
 
   # Extract post_edit_estimate value
+  # POSIX [[:space:]] used (not GNU/PCRE \s) -- BSD sed's -E (extended) mode
+  # does not support \s, so this previously failed to extract a numeric value
+  # on macOS, silently breaking the >=391 threshold check below.
   local post_est
-  post_est="$(echo "$content" | grep -E 'post_edit_estimate:' | head -1 | sed -E 's/.*post_edit_estimate:\s*([0-9]+).*/\1/')"
+  post_est="$(echo "$content" | grep -E 'post_edit_estimate:' | head -1 | sed -E 's/.*post_edit_estimate:[[:space:]]*([0-9]+).*/\1/')"
 
   if [[ -z "$post_est" || ! "$post_est" =~ ^[0-9]+$ ]]; then
     echo "check_cap_escalation: PASS (post_edit_estimate value not a plain integer — skipping threshold check)"
@@ -160,7 +163,7 @@ check_cap_escalation() {
   fi
 
   if [[ $post_est -ge 391 ]]; then
-    if ! echo "$content" | grep -qE 'requires_extraction:\s*true'; then
+    if ! echo "$content" | grep -qE 'requires_extraction:[[:space:]]*true'; then
       echo "check_cap_escalation: FAIL: post_edit_estimate=$post_est (>=391) but 'requires_extraction: true' is absent" >&2
       violations=$((violations + 1))
       return
