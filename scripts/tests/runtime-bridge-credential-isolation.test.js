@@ -885,45 +885,51 @@ function injectPathReadFailureForTest(t, targetPath, posixPermissionTarget, rest
   };
 }
 
+// C31 (Cluster C): chmod-based injection here is ineffective on every
+// platform, not just Windows -- publishCredentialAbsenceCheckpoint's own
+// ensureSecureRegistryDir(targetDir) call (byte-identical pre-refactor)
+// restores the directory to a writable mode BEFORE the write it guards, so
+// the chmod never survives to the moment that matters. The one-shot
+// fs.writeFileSync intercept (previously win32-only) never depended on real
+// filesystem permissions, so it is deterministic everywhere; used
+// unconditionally now.
 function injectDirectoryWriteFailureForTest(directoryPath) {
-  if (process.platform === 'win32') {
-    const realWriteFileSync = fs.writeFileSync;
-    const root = path.resolve(directoryPath);
-    fs.writeFileSync = function writeFileSyncWithSyntheticDenial(candidate, ...args) {
-      if (typeof candidate === 'string') {
-        const resolved = path.resolve(candidate);
-        const relative = path.relative(root, resolved);
-        if (relative === '' || (!relative.startsWith('..' + path.sep) && relative !== '..' && !path.isAbsolute(relative))) {
-          fs.writeFileSync = realWriteFileSync;
-          const err = new Error('synthetic Windows directory write denial');
-          err.code = 'EACCES';
-          throw err;
-        }
-      }
-      return realWriteFileSync.call(fs, candidate, ...args);
-    };
-    return () => { fs.writeFileSync = realWriteFileSync; };
-  }
-  fs.chmodSync(directoryPath, 0o500);
-  return () => { try { fs.chmodSync(directoryPath, 0o700); } catch (err) { /* best-effort restore */ } };
-}
-
-function injectDirectoryBarrierFailureForTest(directoryPath) {
-  if (process.platform === 'win32') {
-    const realOpenSync = fs.openSync;
-    const expected = path.resolve(directoryPath);
-    fs.openSync = function openSyncWithSyntheticDirectoryDenial(candidate, ...args) {
-      if (typeof candidate === 'string' && path.resolve(candidate) === expected) {
-        const err = new Error('synthetic Windows directory barrier denial');
+  const realWriteFileSync = fs.writeFileSync;
+  const root = path.resolve(directoryPath);
+  fs.writeFileSync = function writeFileSyncWithSyntheticDenial(candidate, ...args) {
+    if (typeof candidate === 'string') {
+      const resolved = path.resolve(candidate);
+      const relative = path.relative(root, resolved);
+      if (relative === '' || (!relative.startsWith('..' + path.sep) && relative !== '..' && !path.isAbsolute(relative))) {
+        fs.writeFileSync = realWriteFileSync;
+        const err = new Error('synthetic directory write denial');
         err.code = 'EACCES';
         throw err;
       }
-      return realOpenSync.call(fs, candidate, ...args);
-    };
-    return () => { fs.openSync = realOpenSync; };
-  }
-  fs.chmodSync(directoryPath, 0o300);
-  return () => { try { fs.chmodSync(directoryPath, 0o700); } catch (err) { /* best-effort restore */ } };
+    }
+    return realWriteFileSync.call(fs, candidate, ...args);
+  };
+  return () => { fs.writeFileSync = realWriteFileSync; };
+}
+
+// Same rationale as injectDirectoryWriteFailureForTest above: the persistent
+// fs.openSync intercept (previously win32-only) does not depend on real
+// filesystem permissions, so it is deterministic everywhere; used
+// unconditionally now. Persistent (never self-restores) until the caller
+// invokes the returned restore function -- some callers need it to survive
+// multiple internal fs.openSync calls within one production call.
+function injectDirectoryBarrierFailureForTest(directoryPath) {
+  const realOpenSync = fs.openSync;
+  const expected = path.resolve(directoryPath);
+  fs.openSync = function openSyncWithSyntheticDirectoryDenial(candidate, ...args) {
+    if (typeof candidate === 'string' && path.resolve(candidate) === expected) {
+      const err = new Error('synthetic directory barrier denial');
+      err.code = 'EACCES';
+      throw err;
+    }
+    return realOpenSync.call(fs, candidate, ...args);
+  };
+  return () => { fs.openSync = realOpenSync; };
 }
 
 function injectDirectoryOpenFailureForTest(directoryPath) {
