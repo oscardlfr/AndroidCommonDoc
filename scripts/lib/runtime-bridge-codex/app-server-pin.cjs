@@ -4,6 +4,7 @@ function createAppServerPin({
   fs,
   os,
   path,
+  crypto,
   isTestCapability,
   windowsPrivateDirectoryAcl,
   windowsAclSnapshotsEqual,
@@ -13,6 +14,131 @@ function createAppServerPin({
   // to each other, never two independently-typed literals that could drift.
   const DEFAULT_APP_SERVER_SPAWN_ARGS = Object.freeze(['app-server', '--listen', 'stdio://', '--strict-config']);
   const HOST_CODEX_CONFIG_MAX_BYTES = 128 * 1024;
+  const CODEX_PIN_FREEZE_MAX_BYTES = 64 * 1024;
+  const CODEX_PIN_FREEZE_SCHEMA = 'androidcommondoc/codex-executable-freeze/v1';
+  const CODEX_PIN_FREEZE_KEYS = Object.freeze([
+    'cli_version', 'executable_realpath', 'executable_sha256', 'file_type',
+    'mode_octal', 'nlink', 'schema', 'uid',
+  ]);
+  const SHA256_RE = /^[0-9a-f]{64}$/;
+
+  /**
+   * F-19: the Codex executable is frozen by DIGEST, not by version text.
+   *
+   * The expected digest comes from a freeze record written by the conductor
+   * BEFORE the run -- never recomputed from the same file we are about to
+   * validate, which would make the check a tautology that any substituted
+   * binary passes. `RUNTIME_BRIDGE_CODEX_PIN_MODE=genuine-pinned` turns
+   * enforcement on and `RUNTIME_BRIDGE_CODEX_PIN_FREEZE` names the record;
+   * both are conductor-supplied context on the existing env seam this module
+   * already uses, so no facade export changes.
+   *
+   * Scope, stated honestly: this detects substitution of the pinned binary. It
+   * does not defend against an adversary who already controls this process's
+   * environment -- such an adversary can choose the freeze. The freeze file is
+   * still integrity-checked (regular file, no symlink, nlink 1, owner-confined,
+   * not group/world writable) so it cannot be quietly swapped underneath us.
+   *
+   * @returns {{ok:true,enforced:false}|{ok:true,enforced:true,freeze:object}|{ok:false,reason:string}}
+   */
+  function readCodexPinFreeze() {
+    if (process.env.RUNTIME_BRIDGE_CODEX_PIN_MODE !== 'genuine-pinned') return { ok: true, enforced: false };
+    const freezePath = process.env.RUNTIME_BRIDGE_CODEX_PIN_FREEZE;
+    if (typeof freezePath !== 'string' || freezePath.length === 0 || !path.isAbsolute(freezePath)) {
+      return { ok: false, reason: 'CODEX_PIN_FREEZE_ABSENT' };
+    }
+    let st;
+    try {
+      st = fs.lstatSync(freezePath);
+    } catch (err) {
+      return { ok: false, reason: 'CODEX_PIN_FREEZE_ABSENT' };
+    }
+    const currentUid = typeof process.getuid === 'function' ? process.getuid() : null;
+    if (
+      !st.isFile() || st.isSymbolicLink() || st.nlink !== 1
+      || st.size <= 0 || st.size > CODEX_PIN_FREEZE_MAX_BYTES
+      || (currentUid !== null && st.uid !== currentUid)
+      || (process.platform !== 'win32' && (st.mode & 0o022) !== 0)
+    ) return { ok: false, reason: 'CODEX_PIN_FREEZE_INSECURE' };
+    let parsed;
+    try {
+      parsed = JSON.parse(fs.readFileSync(freezePath, 'utf8'));
+    } catch (err) {
+      return { ok: false, reason: 'CODEX_PIN_FREEZE_MALFORMED' };
+    }
+    if (
+      !parsed || typeof parsed !== 'object' || Array.isArray(parsed)
+      || JSON.stringify(Object.keys(parsed).sort()) !== JSON.stringify([...CODEX_PIN_FREEZE_KEYS])
+      || parsed.schema !== CODEX_PIN_FREEZE_SCHEMA
+      || typeof parsed.executable_realpath !== 'string' || !path.isAbsolute(parsed.executable_realpath)
+      || typeof parsed.executable_sha256 !== 'string' || !SHA256_RE.test(parsed.executable_sha256)
+      || typeof parsed.cli_version !== 'string'
+      || !Number.isInteger(parsed.nlink) || parsed.nlink !== 1
+      || parsed.file_type !== 'file'
+      || typeof parsed.mode_octal !== 'string' || !/^[0-7]{3,4}$/.test(parsed.mode_octal)
+      || !(parsed.uid === null || Number.isInteger(parsed.uid))
+    ) return { ok: false, reason: 'CODEX_PIN_FREEZE_MALFORMED' };
+    return { ok: true, enforced: true, freeze: parsed };
+  }
+
+  /**
+   * Re-resolves and re-hashes the selected executable immediately before the
+   * spawn decision and compares BOTH path and digest against the freeze. The
+   * version string is recorded for humans only and can never grant acceptance:
+   * an identical version with a different digest is exactly the case this
+   * rejects, and it was observed on this host in one session.
+   */
+  function enforceCodexPinFreeze(pinnedPath, freeze, stat) {
+    let resolved;
+    try {
+      resolved = fs.realpathSync(pinnedPath);
+    } catch (err) {
+      return { ok: false, reason: 'CODEX_PIN_PATH_UNRESOLVABLE' };
+    }
+    // Named REALPATH_MISMATCH deliberately: the bridge reserves the
+    // "drift"-suffixed path vocabulary for a different, deliberately absent
+    // cross-call mechanism (see C3-ISO-D20), which asserts that token is absent
+    // from this package by plain substring -- so even a comment must avoid it.
+    if (resolved !== freeze.executable_realpath) return { ok: false, reason: 'CODEX_PIN_REALPATH_MISMATCH' };
+    let fd;
+    let digest;
+    try {
+      fd = fs.openSync(resolved, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW || 0));
+      const opened = fs.fstatSync(fd);
+      if (!opened.isFile() || opened.nlink !== 1) return { ok: false, reason: 'CODEX_PIN_TARGET_INSECURE' };
+      if (opened.dev !== stat.dev || opened.ino !== stat.ino) return { ok: false, reason: 'CODEX_PIN_TARGET_REBOUND' };
+      const hash = crypto.createHash('sha256');
+      const buffer = Buffer.alloc(1 << 20);
+      let offset = 0;
+      for (;;) {
+        const read = fs.readSync(fd, buffer, 0, buffer.length, offset);
+        if (read <= 0) break;
+        hash.update(buffer.subarray(0, read));
+        offset += read;
+      }
+      const after = fs.fstatSync(fd);
+      if (after.dev !== opened.dev || after.ino !== opened.ino || after.size !== opened.size) {
+        return { ok: false, reason: 'CODEX_PIN_TARGET_CHANGED_DURING_READ' };
+      }
+      if (offset !== opened.size) return { ok: false, reason: 'CODEX_PIN_SHORT_READ' };
+      digest = hash.digest('hex');
+    } catch (err) {
+      return { ok: false, reason: 'CODEX_PIN_TARGET_UNREADABLE' };
+    } finally {
+      if (fd !== undefined) {
+        try { fs.closeSync(fd); } catch (err) { /* validation already decided above */ }
+      }
+    }
+    if (digest !== freeze.executable_sha256) return { ok: false, reason: 'CODEX_PIN_DIGEST_DRIFT' };
+    const currentUid = typeof process.getuid === 'function' ? process.getuid() : null;
+    if (freeze.uid !== null && currentUid !== null && freeze.uid !== currentUid) {
+      return { ok: false, reason: 'CODEX_PIN_OWNER_DRIFT' };
+    }
+    if (process.platform !== 'win32' && parseInt(freeze.mode_octal, 8) !== (stat.mode & 0o7777)) {
+      return { ok: false, reason: 'CODEX_PIN_MODE_DRIFT' };
+    }
+    return { ok: true };
+  }
 
   /**
    * Reads the host-owned Codex pin from the same protected config surface used
@@ -134,6 +260,14 @@ function createAppServerPin({
     if (process.platform === 'win32') {
       const acl = windowsPrivateDirectoryAcl(path.dirname(pinnedPath), { mode: 'validate' });
       if (!acl || acl.ok !== true) return { ok: false, reason: 'CODEX_CLI_PATH_INSECURE' };
+    }
+    // F-19. Non-pinned profiles keep exactly the contract above: readCodexPinFreeze()
+    // returns enforced:false and nothing here changes for them.
+    const frozen = readCodexPinFreeze();
+    if (!frozen.ok) return frozen;
+    if (frozen.enforced) {
+      const enforced = enforceCodexPinFreeze(pinnedPath, frozen.freeze, st);
+      if (!enforced.ok) return enforced;
     }
     return { ok: true, command: pinnedPath, args: DEFAULT_APP_SERVER_SPAWN_ARGS.slice() };
   }

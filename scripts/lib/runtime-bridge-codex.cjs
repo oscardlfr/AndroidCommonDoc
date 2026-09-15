@@ -280,7 +280,7 @@ const { runBoundedOwnedObserverProcess, observeOwnedChildBornProvenance } = crea
   getIsolatedPathPosix: () => ISOLATED_PATH_POSIX,
 });
 const { readProtectedHostCodexPin, validatePinnedCodexExecutable, resolveAppServerSpawnCommand } =
-  createAppServerPin({ fs, os, path, isTestCapability, windowsPrivateDirectoryAcl, windowsAclSnapshotsEqual });
+  createAppServerPin({ fs, os, path, crypto, isTestCapability, windowsPrivateDirectoryAcl, windowsAclSnapshotsEqual });
 const { resolveSessionRunSpawnCommand, resolveSessionRunCredentialSource, resolveSessionRunBornProvenance } =
   createSessionRunTestBackend({
     isTestCapability, resolvedNodePath, resolveAppServerSpawnCommand, createCredentialSourceProvider,
