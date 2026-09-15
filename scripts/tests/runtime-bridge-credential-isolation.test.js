@@ -799,6 +799,40 @@ function cleanupDir(dir) {
   fs.rmSync(dir, { recursive: true, force: true });
 }
 
+// Some fixtures (e.g. a published TurnReadProjection/v1 read view) are
+// deliberately chmod'd read-only by production on success; cleanupDir's plain
+// recursive rmSync cannot descend into a directory it has no write bit on.
+// Best-effort restore before removal, never a correctness check.
+function restoreTreeWritable(dir) {
+  try { fs.chmodSync(dir, 0o700); } catch (err) { /* best-effort */ }
+  let entries;
+  try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch (err) { return; }
+  for (const entry of entries) {
+    const childPath = path.join(dir, entry.name);
+    if (entry.isDirectory()) restoreTreeWritable(childPath);
+    else { try { fs.chmodSync(childPath, 0o600); } catch (err) { /* best-effort */ } }
+  }
+}
+
+// Deleting and immediately recreating a directory at the SAME path does not
+// reliably yield a different inode -- ext4 can and does reuse a just-freed
+// inode on an otherwise-quiet filesystem. This instead pre-creates the
+// replacement at a SIBLING path while the original still exists, proves the
+// two identities already differ, then removes the original and renames the
+// proven-distinct replacement into targetPath.
+function swapDirectoryWithProvenFreshInode(targetPath, { mode = 0o700, populate } = {}) {
+  const originalStat = fs.statSync(targetPath, { bigint: true });
+  const siblingPath = targetPath + '.swap-' + crypto.randomBytes(8).toString('hex');
+  fs.mkdirSync(siblingPath, { recursive: true, mode });
+  if (typeof populate === 'function') populate(siblingPath);
+  const siblingStat = fs.statSync(siblingPath, { bigint: true });
+  const sameIdentity = siblingStat.dev === originalStat.dev && siblingStat.ino === originalStat.ino;
+  assert.strictEqual(sameIdentity, false, 'swap helper precondition: the pre-created replacement must already carry a genuinely different identity than the original, proven before either path is touched');
+  fs.rmSync(targetPath, { recursive: true, force: true });
+  fs.renameSync(siblingPath, targetPath);
+  return { originalIdentity: { dev: originalStat.dev, ino: originalStat.ino }, newIdentity: { dev: siblingStat.dev, ino: siblingStat.ino } };
+}
+
 function ensurePrivateFixtureDir(dir) {
   fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
   if (process.platform === 'win32') {
@@ -817,6 +851,15 @@ function observeCurrentProcessBirthForTest() {
   if (process.platform === 'win32') {
     const observed = rbc.observeWindowsProcessBirth(process.pid);
     assert.strictEqual(observed && observed.status, 'PRESENT', 'Windows must provide a real process birth token: ' + JSON.stringify(observed));
+    return observed.birthToken;
+  }
+  if (process.platform === 'linux') {
+    // Linux birth observation is procfs-based (linux-proc-starttime:<ticks>,
+    // process-identity.cjs:observeLinuxProcessBirth), not `ps -o lstart=` --
+    // mirror the win32 branch above and call the same real primitive again,
+    // rather than an independent `ps` invocation that speaks a stale format.
+    const observed = rbc.observeLinuxProcessBirth(process.pid);
+    assert.strictEqual(observed && observed.status, 'PRESENT', 'Linux must provide a real process birth token: ' + JSON.stringify(observed));
     return observed.birthToken;
   }
   return execFileSync('ps', ['-o', 'lstart=', '-p', String(process.pid)], { encoding: 'utf8' }).trim();
@@ -4146,15 +4189,9 @@ describe('Cleanup durable records and barriers (IsolationProvider.cleanupRoot)',
     const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'c3-cleanup-identity-drift-'));
     const fixture = makeSealedIsolationFixture(tmp);
     try {
-      // Genuine REBIND: delete the sealed root directory and recreate a
-      // FRESH one at the exact same path -- the SAME technique this file's
-      // own "genuine REBIND of a child-writable topology layer" CONFIRMATION
-      // test uses (and the same technique the internal
-      // isToctouSwapFaultActive('cleanup-pre-rename') seam performs), giving
-      // the identical path a genuinely DIFFERENT inode than what
-      // finalizeRunRoot sealed into finalIdentitySnapshot.
-      fs.rmSync(fixture.sealHandle.intendedPath, { recursive: true, force: true });
-      fs.mkdirSync(fixture.sealHandle.intendedPath, { recursive: true, mode: 0o700 });
+      // Genuine REBIND: swap in a directory with a PROVEN different inode at
+      // the exact same path finalizeRunRoot sealed into finalIdentitySnapshot.
+      swapDirectoryWithProvenFreshInode(fixture.sealHandle.intendedPath, { mode: 0o700 });
 
       const result = fixture.isolationProvider.cleanupRoot(fixture.sealHandle, minimalValidCleanupAuthorization(fixture.sealHandle, fixture.ownerToken));
       assert.strictEqual(result.ok, false, 'cleanupRoot must detect that the root directory has drifted from the identity finalizeRunRoot originally sealed at READY time, never proceed to rename a substitute: ' + JSON.stringify(result));
@@ -5617,7 +5654,8 @@ describe('CORRECTION ROUND (REWORKED) -- Section F.5: real C2-connection overflo
       );
       assert.deepStrictEqual(JSON.parse(fs.readFileSync(path.join(built.current, 'intent', 'request.json'), 'utf8')), intentRecord);
     } finally {
-      fs.rmSync(root, { recursive: true, force: true });
+      restoreTreeWritable(root);
+      cleanupDir(root);
     }
   });
 
@@ -8381,14 +8419,15 @@ describe('THIRD HARD NO-GO RESPONSE -- Block D: spawn identity, late-spawn autho
     assert.strictEqual(result.state, 'BORN', 'test precondition: ' + JSON.stringify(result));
 
     // Independently observe the SAME real pid's REAL, host-reported birth
-    // time via the identical `ps -o lstart=` mechanism
-    // defaultProcessIdentityProvider already uses for the supervisor's own
-    // identity (cjs:188-206). lstart= reports a process's fixed start time,
-    // so calling it a second time here, moments after BORN, for the SAME
-    // still-alive pid, yields the identical string deterministically --
-    // never flaky, never a race against real time.
+    // time via the identical platform mechanism defaultProcessIdentityProvider
+    // already uses for the supervisor's own identity (win32: PowerShell
+    // StartTime; linux: /proc/<pid>/stat field 22, process-identity.cjs). Both
+    // report a process's fixed start time, so calling either a second time
+    // here, moments after BORN, for the SAME still-alive pid, yields the
+    // identical value deterministically -- never flaky, never a race against
+    // real time.
     const independentlyObservedBirth = observeCurrentProcessBirthForTest();
-    assert.ok(independentlyObservedBirth.length > 0, 'test precondition: ps must be able to observe this test process\'s own real birth time');
+    assert.ok(independentlyObservedBirth.length > 0, 'test precondition: the platform observer must be able to observe this test process\'s own real birth time');
 
     assert.strictEqual(result.childIdentity.birthObservedAt, independentlyObservedBirth, 'birthObservedAt must be the child\'s REAL, host-observed process birth time (the same ps -o lstart= mechanism already used for the supervisor\'s own identity), never a bare JS-side new Date().toISOString() -- currently it is always a fresh ISO-8601 timestamp regardless of the pid\'s actual OS-reported birth: ' + JSON.stringify(result.childIdentity));
   });
@@ -11962,13 +12001,11 @@ describe('CORRECTION PASS ROUND 5 -- Finding 3: reapTombstonedRoot is missing 3 
       const cleaned = fixture.isolationProvider.cleanupRoot(fixture.sealHandle, minimalValidCleanupAuthorization(fixture.sealHandle, fixture.ownerToken));
       assert.strictEqual(cleaned.ok, true, 'test precondition: ' + JSON.stringify(cleaned));
       const finalPath = cleaned.finalPath;
-      const originalStat = fs.statSync(finalPath);
 
-      fs.rmSync(finalPath, { recursive: true, force: true });
-      fs.mkdirSync(finalPath, { recursive: true, mode: 0o700 });
-      fs.writeFileSync(path.join(finalPath, 'substituted-marker.txt'), 'not the original root', { mode: 0o600 });
-      const substitutedStat = fs.statSync(finalPath);
-      assert.notStrictEqual(String(substitutedStat.ino), String(originalStat.ino), 'test precondition: the substitute must genuinely carry a DIFFERENT inode at the SAME path');
+      swapDirectoryWithProvenFreshInode(finalPath, {
+        mode: 0o700,
+        populate: (dir) => fs.writeFileSync(path.join(dir, 'substituted-marker.txt'), 'not the original root', { mode: 0o600 }),
+      });
 
       const result = rbc.reapTombstonedRoot({ repoId: fixture.repoId, instanceId: fixture.instanceId });
       assert.strictEqual(result.ok, false, 'reapTombstonedRoot must fail closed (never delete) when the tombstoned directory\'s CURRENT inode does not match the identity expected for it -- today it trusts the path string alone (no fresh fstat-based identity re-check immediately before fs.rmSync) and deletes the SUBSTITUTE without complaint: ' + JSON.stringify(result));

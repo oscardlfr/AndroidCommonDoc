@@ -3,6 +3,7 @@
 function createCredentialRunSupport({
   fs,
   path,
+  crypto,
   isTestCapability,
 }) {
   /**
@@ -154,7 +155,35 @@ function createCredentialRunSupport({
     return isTestCapability() && process.env.RUNTIME_BRIDGE_CODEX_FAULT_CLEANUP_CRASH === phase;
   }
 
-  return Object.freeze({ createBroker, listFilesRecursiveSafe, createRecorder, isToctouSwapFaultActive, isCleanupCrashFaultActive });
+  /**
+   * Shared by every isToctouSwapFaultActive call site: deleting and
+   * immediately recreating at the SAME path does not reliably yield a
+   * different inode -- ext4 can and does reuse a just-freed inode on an
+   * otherwise-quiet filesystem, which would silently defeat the simulated
+   * attack (not the identity recheck the simulation exists to exercise).
+   * Instead pre-creates the replacement at a SIBLING path via the caller's
+   * `write(siblingPath)` (a file or a directory, whichever the call site
+   * needs) while targetPath still exists, proves the two identities already
+   * differ, then removes the original and renames the proven-distinct
+   * replacement into targetPath. Only ever invoked from inside an
+   * isToctouSwapFaultActive branch -- never reachable outside test capability.
+   */
+  function swapPathWithProvenFreshInode(targetPath, write) {
+    const originalStat = fs.statSync(targetPath, { bigint: true });
+    const siblingPath = targetPath + '.toctou-swap-' + crypto.randomBytes(8).toString('hex');
+    write(siblingPath);
+    const siblingStat = fs.statSync(siblingPath, { bigint: true });
+    if (siblingStat.dev === originalStat.dev && siblingStat.ino === originalStat.ino) {
+      throw new Error('toctou-swap-seam-same-inode');
+    }
+    fs.rmSync(targetPath, { recursive: true, force: true });
+    fs.renameSync(siblingPath, targetPath);
+  }
+
+  return Object.freeze({
+    createBroker, listFilesRecursiveSafe, createRecorder,
+    isToctouSwapFaultActive, isCleanupCrashFaultActive, swapPathWithProvenFreshInode,
+  });
 }
 
 module.exports = Object.freeze({ createCredentialRunSupport });

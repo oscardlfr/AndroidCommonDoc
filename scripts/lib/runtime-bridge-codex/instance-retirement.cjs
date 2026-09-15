@@ -13,6 +13,7 @@ function createInstanceRetirement({
   isToctouSwapFaultActive,
   publishBridgeRegistryRecord,
   fsyncDirSync,
+  swapPathWithProvenFreshInode,
 }) {
 
   function retireInstanceRecord({ repoId, instanceId }, testHooks) {
@@ -219,8 +220,7 @@ function createInstanceRetirement({
     // fd-bound pre-unlink re-check.
     if (isToctouSwapFaultActive('retirement-pre-unlink')) {
       try {
-        fs.unlinkSync(sourcePath);
-        fs.writeFileSync(sourcePath, sourceBytes, { mode: 0o600 }); // same bytes, a FRESH inode.
+        swapPathWithProvenFreshInode(sourcePath, (siblingPath) => fs.writeFileSync(siblingPath, sourceBytes, { mode: 0o600 })); // same bytes, a PROVEN fresh inode.
       } catch (err) { /* best-effort test seam */ }
     }
 

@@ -8,6 +8,7 @@ function createIsolationRootCleanup({
   rootIdentityKeyFor, liveChildRootIdentityKeys, livenessProbe,
   publishBridgeRegistryRecord, canonicalJSONStringify, isToctouSwapFaultActive,
   fsyncDirSync, isCleanupCrashFaultActive, retireInstanceRecord,
+  swapPathWithProvenFreshInode,
 }) {
   function isValidCleanupAuthorization(authorization, handle, snapshot, allowSpawnedOutcomes) {
     if (!authorization || typeof authorization !== 'object') return false;
@@ -161,8 +162,7 @@ function createIsolationRootCleanup({
 
     if (isToctouSwapFaultActive('cleanup-pre-rename')) {
       try {
-        fs.rmSync(handle.intendedPath, { recursive: true, force: true });
-        fs.mkdirSync(handle.intendedPath, { recursive: true, mode: 0o700 });
+        swapPathWithProvenFreshInode(handle.intendedPath, (siblingPath) => fs.mkdirSync(siblingPath, { recursive: true, mode: 0o700 }));
       } catch (err) { /* best-effort test seam */ }
     }
 
@@ -202,8 +202,7 @@ function createIsolationRootCleanup({
 
     if (isToctouSwapFaultActive('cleanup-post-rename')) {
       try {
-        fs.rmSync(destinationPath, { recursive: true, force: true });
-        fs.mkdirSync(destinationPath, { recursive: true, mode: 0o700 });
+        swapPathWithProvenFreshInode(destinationPath, (siblingPath) => fs.mkdirSync(siblingPath, { recursive: true, mode: 0o700 }));
       } catch (err) { /* best-effort test seam */ }
     }
 

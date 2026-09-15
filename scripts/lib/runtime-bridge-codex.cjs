@@ -262,8 +262,8 @@ const { usageError, authError, arraysEqual, isTestCapability, isP2ConformanceTim
   createIdentifiers({ RC });
 const {
   createBroker, listFilesRecursiveSafe, createRecorder,
-  isToctouSwapFaultActive, isCleanupCrashFaultActive,
-} = createCredentialRunSupport({ fs, path, isTestCapability });
+  isToctouSwapFaultActive, isCleanupCrashFaultActive, swapPathWithProvenFreshInode,
+} = createCredentialRunSupport({ fs, path, crypto, isTestCapability });
 const processIdentity = createProcessIdentity({
   fs, execFileSync, resolveWindowsPowerShellPath: () => rc.resolvedWindowsPowerShellPath(),
   isTestCapability, hasExactKeys,
@@ -720,7 +720,7 @@ const createIsolationProvider = createIsolationProviderFactory({
     CLEANUP_AUTHORIZATION_OUTCOME_ENUM, fdBoundRecordExists,
     classifyGenuineNeverSpawnedAbsence, isTestCapability, rootIdentityKeyFor,
     liveChildRootIdentityKeys, isToctouSwapFaultActive, fsyncDirSync,
-    isCleanupCrashFaultActive, retireInstanceRecord,
+    isCleanupCrashFaultActive, retireInstanceRecord, swapPathWithProvenFreshInode,
   }),
 });
 const { createCheckpointAuthority } = createCredentialCheckpointAuthority({
@@ -809,6 +809,7 @@ const { retireInstanceRecord, validateRetiredInstanceRecord } = createInstanceRe
   fs, path, registryRepoDir, withRegistryLock, isCoreGeneratedIdentifier,
   readDurableRegistryRecordFd, REGISTRY_RECORD_MAX_BYTES, isCanonicalIsoUtcTimestamp,
   isTestCapability, isToctouSwapFaultActive, publishBridgeRegistryRecord, fsyncDirSync,
+  swapPathWithProvenFreshInode,
 });
 const { reapTombstonedRoot } = createTombstoneReaper({
   fs, path, registryRepoDir, isCoreGeneratedIdentifier, fdBoundRecordExists,
@@ -855,6 +856,10 @@ module.exports = {
   defaultProcessIdentityProvider,
   resolvedWindowsPowerShellPath,
   observeWindowsProcessBirth,
+  // Symmetric with observeWindowsProcessBirth above: a pure, non-overridable,
+  // always-real /proc read for an arbitrary pid (no test-only seam), needed
+  // by tests that independently re-observe a real Linux child's birth token.
+  observeLinuxProcessBirth,
   requireProvenProcessIdentity,
   classifyProcessIdentityLiveness,
   findExistingRoleOwner,
