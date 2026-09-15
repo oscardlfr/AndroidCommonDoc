@@ -85,7 +85,11 @@ test('private-registry-tmpdir-preload: cleans up its private root on normal proc
 test('private-registry-tmpdir-preload: platform-aware mode guard remains fail-closed (hash-bound mutation proof)', () => {
   const original = fs.readFileSync(PRELOAD_PATH, 'utf8');
   const originalHash = crypto.createHash('sha256').update(original).digest('hex');
-  const target = "if (process.platform !== 'win32' && (rootStat.mode & 0o777) !== 0o700) {";
+  // Includes the ANDROID_COMMON_DOC_TEST_ALLOW_INSECURE_PRIVATE_REGISTRY_ROOT
+  // opt-in term (R2-C RED 12's narrow, inherited-root-only escape hatch) --
+  // the WHOLE condition is replaced below, so this proof still exercises the
+  // fatal branch's own behavior regardless of that added term.
+  const target = "if (process.platform !== 'win32' && (rootStat.mode & 0o777) !== 0o700 && !allowInsecureInheritedRoot) {";
   // Enter this exact fatal branch unconditionally on every platform. A
   // comparison against the observed Windows mode is not deterministic: NTFS
   // can surface 0700 here, which would let the mutation test pass without
@@ -101,8 +105,16 @@ test('private-registry-tmpdir-preload: platform-aware mode guard remains fail-cl
   const tmpCopy = path.join(os.tmpdir(), 'preload-mutation-test-' + crypto.randomBytes(8).toString('hex') + '.cjs');
   fs.writeFileSync(tmpCopy, mutated);
   try {
-    const r = spawnSync('node', ['-e', `require(${JSON.stringify(tmpCopy)});`], { encoding: 'utf8' });
-    assert.strictEqual(r.status, 1, 'a mutated (broken) mode-check guard must exit 1, never silently succeed: ' + JSON.stringify(r));
+    // Explicitly absent, not merely assumed absent from ambient environment:
+    // proves this fatal-branch proof cannot be defeated by the new opt-in
+    // term, whether or not some other process in this shell happens to have
+    // set it (a real production child never receives it either way -- both
+    // vars are private-registry-tmpdir-preload's own test-only seam).
+    const cleanEnv = Object.assign({}, process.env);
+    delete cleanEnv.ANDROID_COMMON_DOC_TEST_ALLOW_INSECURE_PRIVATE_REGISTRY_ROOT;
+    delete cleanEnv.ANDROID_COMMON_DOC_TEST_PRIVATE_REGISTRY_ROOT;
+    const r = spawnSync('node', ['-e', `require(${JSON.stringify(tmpCopy)});`], { encoding: 'utf8', env: cleanEnv });
+    assert.strictEqual(r.status, 1, 'a mutated (broken) mode-check guard must exit 1, never silently succeed, and never bypassable via the insecure-root opt-in: ' + JSON.stringify(r));
     assert.match(r.stderr, /FATAL: private root has the wrong mode/, 'must fail via the mode-check guard specifically, not some other unrelated error: ' + r.stderr);
   } finally {
     fs.rmSync(tmpCopy, { force: true });

@@ -48,6 +48,17 @@ const WINDOWS_COMMON_APP_DATA = process.platform === 'win32'
 const SHARED_PRIVATE_ROOT_ENV = 'ANDROID_COMMON_DOC_TEST_PRIVATE_REGISTRY_ROOT';
 const inheritedPrivateRoot = process.env[SHARED_PRIVATE_ROOT_ENV];
 const ownsPrivateRoot = !(typeof inheritedPrivateRoot === 'string' && path.isAbsolute(inheritedPrivateRoot));
+// Narrow, explicit opt-out of the mode check ONLY (never symlink/type/owner
+// below) for a test that deliberately inherits an insecure root to prove a
+// DIFFERENT, production-level rejection downstream -- e.g.
+// runtime-consultation-cli.test.js's R2-C RED 12, which needs its child's
+// os.tmpdir() to genuinely BE the insecure directory it constructed, and
+// asserts on production's own RUNTIME_TEST_ROUTING_OVERRIDE_INVALID:
+// tmpdir-not-secure signature, never on this preload's generic FATAL abort.
+// Only takes effect on an INHERITED root; a root this process itself creates
+// is still always force-chmod'd 0700 below regardless.
+const ALLOW_INSECURE_INHERITED_ROOT_ENV = 'ANDROID_COMMON_DOC_TEST_ALLOW_INSECURE_PRIVATE_REGISTRY_ROOT';
+const allowInsecureInheritedRoot = !ownsPrivateRoot && process.env[ALLOW_INSECURE_INHERITED_ROOT_ENV] === '1';
 const privateRoot = ownsPrivateRoot
   ? fs.mkdtempSync(path.join(WINDOWS_COMMON_APP_DATA || REAL_SYSTEM_TMPDIR, 'acd-private-registry-'))
   : fs.realpathSync(inheritedPrivateRoot);
@@ -99,7 +110,7 @@ if (os.tmpdir() !== privateRoot) {
 const rootStat = fs.lstatSync(privateRoot);
 if (rootStat.isSymbolicLink()) fatal('private root is a symlink -- refusing to trust it as an isolation boundary.');
 if (!rootStat.isDirectory()) fatal('private root is not a directory.');
-if (process.platform !== 'win32' && (rootStat.mode & 0o777) !== 0o700) {
+if (process.platform !== 'win32' && (rootStat.mode & 0o777) !== 0o700 && !allowInsecureInheritedRoot) {
   fatal('private root has the wrong mode: ' + (rootStat.mode & 0o777).toString(8));
 }
 if (typeof process.getuid === 'function' && rootStat.uid !== process.getuid()) fatal('private root has the wrong owner.');

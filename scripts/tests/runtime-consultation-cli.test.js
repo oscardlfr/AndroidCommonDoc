@@ -1917,6 +1917,12 @@ test('R2-C RED 12: a child whose own TMPDIR resolves to a directory with mode 07
     RUNTIME_CONSULTATION_TEST_CAPABILITY: TEST_CAPABILITY,
     [R2C_ROUTING_OVERRIDE_ENV]: overridePath,
     TMPDIR: insecureTmpdir,
+    // This test deliberately makes the inherited root insecure to prove
+    // PRODUCTION's own tmpdir-not-secure rejection, never the shared preload's
+    // own generic FATAL abort on the same condition (see that file's matching
+    // comment) -- every other check in the preload (symlink/type/owner) still
+    // applies unconditionally.
+    ANDROID_COMMON_DOC_TEST_ALLOW_INSECURE_PRIVATE_REGISTRY_ROOT: '1',
   });
   r2cAssertOverrideRejected(result, 'tmpdir-not-secure');
   assert.deepStrictEqual(snapshotDirDigests(insecureTmpdir), before, 'zero writes to the fixture scope on a rejected override');
