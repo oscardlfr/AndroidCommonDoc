@@ -889,22 +889,99 @@ function queryWindowsParentChain(powerShellPath, startingPid, timeoutMs) {
   return rows;
 }
 
+// Darwin counterpart of the Windows parent-chain walk. One `ps` snapshot is
+// taken and the ppid chain is followed from the starting process, so every row
+// comes from a single consistent view of the process table rather than from a
+// sequence of races. `comm` on darwin is the executable path of the running
+// image, which is the only thing this observation is allowed to trust: never a
+// version string, never PATH, never configuration, never a SessionStart claim.
+// Proven necessary on this host -- the executing binary was
+// .../Claude/claude-code/2.1.260/claude.app/Contents/MacOS/claude while the
+// `claude` on PATH was an entirely different 2.1.272 image.
+const DARWIN_PS_ROW_RE = /^\s*(\d+)\s+(\d+)\s+(\S{3}\s+\S{3}\s+\d{1,2}\s+\d{2}:\d{2}:\d{2}\s+\d{4})\s+(\S.*?)\s*$/;
+
+function queryDarwinParentChain(startingPid, timeoutMs) {
+  const result = spawnSync('/bin/ps', ['-Awwo', 'pid=,ppid=,lstart=,comm='], {
+    encoding: 'utf8', timeout: timeoutMs, maxBuffer: 1 << 24,
+  });
+  if (result.status !== 0 || result.error || typeof result.stdout !== 'string' || result.stdout.trim().length === 0) return null;
+  const byPid = new Map();
+  for (const line of result.stdout.split('\n')) {
+    const match = DARWIN_PS_ROW_RE.exec(line);
+    if (!match) continue;
+    const processId = Number(match[1]);
+    const creationTime = match[3];
+    if (!Number.isInteger(processId) || processId <= 0 || !Number.isFinite(Date.parse(creationTime))) continue;
+    byPid.set(processId, {
+      process_id: processId,
+      parent_process_id: Number(match[2]),
+      creation_time: creationTime,
+      executable_path: match[4],
+    });
+  }
+  const rows = [];
+  const seen = new Set();
+  let current = startingPid;
+  // Same bound as the Windows walk: at most 8 ancestors, and a cycle stops it.
+  while (Number.isInteger(current) && current > 0 && byPid.has(current) && !seen.has(current) && rows.length < 8) {
+    seen.add(current);
+    const row = byPid.get(current);
+    rows.push(row);
+    current = row.parent_process_id;
+  }
+  if (rows.length === 0) return null;
+  for (const row of rows) {
+    if (typeof row.executable_path !== 'string' || row.executable_path.length === 0) return null;
+  }
+  return rows;
+}
+
+// The observation source is bound to the platform that produced it, so a record
+// can never claim a chain it did not walk.
+const PIN_OBSERVATION_SOURCES = Object.freeze({
+  win32: 'interactive-windows-parent-chain',
+  darwin: 'interactive-darwin-parent-chain',
+});
+
+function pinObservationSourceFor(platform) {
+  return Object.prototype.hasOwnProperty.call(PIN_OBSERVATION_SOURCES, platform)
+    ? PIN_OBSERVATION_SOURCES[platform]
+    : null;
+}
+
+function queryHostParentChain(startingPid, timeoutMs) {
+  if (process.platform === 'win32') {
+    let powerShellPath;
+    try { powerShellPath = require('./runtime-bridge-codex.cjs').resolvedWindowsPowerShellPath(); } catch { powerShellPath = null; }
+    if (!powerShellPath) return null;
+    return queryWindowsParentChain(powerShellPath, startingPid, timeoutMs);
+  }
+  if (process.platform === 'darwin') return queryDarwinParentChain(startingPid, timeoutMs);
+  return null;
+}
+
 function observeClaudeExecutablePin(options) {
   const projectRoot = options && options.projectRoot;
   const startingPid = options && options.startingPid !== undefined ? options.startingPid : process.pid;
-  if (process.platform !== 'win32' || !isUsableRoot(projectRoot) || !Number.isInteger(startingPid) || startingPid <= 0) {
+  const observationSource = pinObservationSourceFor(process.platform);
+  if (observationSource === null || !isUsableRoot(projectRoot) || !Number.isInteger(startingPid) || startingPid <= 0) {
     return { ok: false, reason: 'HOST_PIN_UNPROVEN' };
   }
   const startedMs = Date.now();
   const contract = readVerifiedHostContractPackage(projectRoot);
-  if (!contract.ok || contract.certificate.os !== 'win32') return { ok: false, reason: 'HOST_PIN_UNPROVEN' };
-  let powerShellPath;
-  try { powerShellPath = require('./runtime-bridge-codex.cjs').resolvedWindowsPowerShellPath(); } catch { powerShellPath = null; }
-  if (!powerShellPath) return { ok: false, reason: 'HOST_PIN_UNPROVEN' };
-  const before = queryWindowsParentChain(powerShellPath, startingPid, 10000);
+  // The certificate must have been issued for the platform doing the observing.
+  // A Windows-issued certificate can never be discharged by a darwin chain, and
+  // vice versa.
+  if (!contract.ok || contract.certificate.os !== process.platform) return { ok: false, reason: 'HOST_PIN_UNPROVEN' };
+  const before = queryHostParentChain(startingPid, 10000);
   if (!before || Date.now() - startedMs >= 15000) return { ok: false, reason: 'HOST_PIN_UNPROVEN' };
   const matches = [];
   for (const row of before) {
+    // A non-absolute image name (darwin `comm` reports a bare name for a process
+    // launched through a PATH lookup) identifies nothing: resolving it would be
+    // resolved against the CURRENT working directory and could match an
+    // unrelated file of the same name. Such an ancestor is never provable.
+    if (!path.isAbsolute(row.executable_path)) continue;
     try {
       const resolved = fs.realpathSync(row.executable_path);
       const stat = fs.statSync(resolved);
@@ -917,14 +994,26 @@ function observeClaudeExecutablePin(options) {
   if (matches.length !== 1) return { ok: false, reason: 'HOST_PIN_UNPROVEN' };
   const remainingMs = 15000 - (Date.now() - startedMs);
   if (remainingMs <= 0) return { ok: false, reason: 'HOST_PIN_UNPROVEN' };
-  const after = queryWindowsParentChain(powerShellPath, startingPid, Math.min(10000, remainingMs));
+  const after = queryHostParentChain(startingPid, Math.min(10000, remainingMs));
   if (!after || Date.now() - startedMs > 15000) return { ok: false, reason: 'HOST_PIN_UNPROVEN' };
   const match = matches[0];
+  // Same identity test on both platforms: the pid, its birth time, and the image
+  // path must all still agree. Windows keeps its case-insensitive comparison;
+  // darwin compares canonical paths exactly rather than lowercasing, which would
+  // be a weakening rather than a portability fix.
+  const samePath = (candidate) => {
+    let resolvedCandidate;
+    try { resolvedCandidate = fs.realpathSync(candidate); } catch { return false; }
+    const left = path.resolve(resolvedCandidate);
+    const right = path.resolve(match.resolved);
+    return process.platform === 'win32' ? left.toLowerCase() === right.toLowerCase() : left === right;
+  };
   const stable = after.filter((row) => row.process_id === match.row.process_id &&
-    row.creation_time === match.row.creation_time && path.resolve(row.executable_path).toLowerCase() === path.resolve(match.resolved).toLowerCase());
+    row.creation_time === match.row.creation_time && samePath(row.executable_path));
   if (stable.length !== 1) return { ok: false, reason: 'HOST_PIN_UNPROVEN' };
   return {
     ok: true,
+    observationSource,
     processId: match.row.process_id,
     processBirth: match.row.creation_time,
     executablePath: match.resolved,
@@ -950,7 +1039,7 @@ function verifyInteractivePinEvidence(projectRoot, record, sessionId) {
       !DIGEST_RE.test(record.pin_digest) || !DIGEST_RE.test(record.host_contract_digest) ||
       !DIGEST_RE.test(record.executable_digest) || !DIGEST_RE.test(record.process_birth_digest) ||
       !Number.isInteger(record.process_id) || record.process_id <= 0 ||
-      record.observation_source !== 'interactive-windows-parent-chain' ||
+      record.observation_source !== pinObservationSourceFor(process.platform) ||
       !boundedLiteral(record.observed_at, 128) || !boundedLiteral(record.expires_at, 128) ||
       !DIGEST_RE.test(record.key_id) || typeof record.signature_ed25519_base64 !== 'string') return false;
   const observed = Date.parse(record.observed_at);
@@ -988,7 +1077,7 @@ function recordInteractiveSessionPin(options) {
     pin_digest: observed.pinDigest, host_contract_digest: observed.hostContractDigest,
     executable_digest: observed.executableDigest, process_id: observed.processId,
     process_birth_digest: digest(observed.processBirth),
-    observation_source: 'interactive-windows-parent-chain', observed_at: now.toISOString(),
+    observation_source: observed.observationSource, observed_at: now.toISOString(),
     expires_at: new Date(now.getTime() + SESSION_EVIDENCE_TTL_SECONDS * 1000).toISOString(), key_id: keys.keyId,
   };
   record.signature_ed25519_base64 = crypto.sign(null, interactivePinEvidencePayload(record), keys.privateKey).toString('base64');
@@ -1728,6 +1817,8 @@ module.exports = {
   findCurrentProductionAdmission,
   operationForAction,
   COMPOSITION_OPERATIONS,
+  __TEST_ONLY__queryHostParentChain: queryHostParentChain,
+  __TEST_ONLY__pinObservationSourceFor: pinObservationSourceFor,
   __TEST_ONLY__mintHostAdapterBrand: mintHostAdapterBrand,
   __TEST_ONLY__admitIbindEvidence: admitIbindEvidence,
 };

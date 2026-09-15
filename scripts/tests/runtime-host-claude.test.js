@@ -1728,3 +1728,82 @@ test('DRH-04 RED: direct-role admission consumes the existing claim once and cre
     fs.rmSync(rll.registryRepoDir(projectRoot), { recursive: true, force: true });
   }
 });
+
+// --- Wave 1 macOS stabilization: host executable pin on darwin (defect A) ---
+//
+// The only pin observation was a Windows PowerShell parent-chain walk, hard
+// gated by `process.platform !== 'win32'` and by a certificate whose `os` had
+// to be literally 'win32'. On darwin it returned HOST_PIN_UNPROVEN before doing
+// any work, so the SessionStart hook was inert and no macOS host identity could
+// ever be established. These fences pin the darwin counterpart.
+
+test('MACOS-PIN-01 the host parent chain is observable on this platform', () => {
+  const chain = hostClaude.__TEST_ONLY__queryHostParentChain(process.pid, 10_000);
+  assert.ok(Array.isArray(chain) && chain.length > 0, 'a parent chain must be observable');
+  const self = chain[0];
+  assert.equal(self.process_id, process.pid, 'the chain must start at the observed process');
+  assert.ok(Number.isInteger(self.parent_process_id), 'each row needs a parent pid');
+  assert.ok(Number.isFinite(Date.parse(self.creation_time)), 'each row needs a parsable birth time');
+  assert.ok(chain.length <= 8, 'the walk stays bounded');
+});
+
+test('MACOS-PIN-02 the observation source is bound to the platform that produced it', () => {
+  const sourceFor = hostClaude.__TEST_ONLY__pinObservationSourceFor;
+  assert.equal(sourceFor('win32'), 'interactive-windows-parent-chain');
+  assert.equal(sourceFor('darwin'), 'interactive-darwin-parent-chain');
+  // An unsupported platform yields no source at all, so it cannot be observed.
+  assert.equal(sourceFor('linux'), null);
+  assert.equal(sourceFor('sunos'), null);
+  assert.notEqual(
+    sourceFor('darwin'), sourceFor('win32'),
+    'a darwin record must never be able to claim the windows chain',
+  );
+});
+
+// The pin must come from the OBSERVED image, never from a version string, PATH,
+// configuration or a SessionStart claim. Proven necessary on this very host: the
+// executing binary was .../claude-code/2.1.260/claude.app/Contents/MacOS/claude
+// while `claude` on PATH was a different 2.1.272 image, so a PATH- or
+// version-derived pin would have pinned the wrong binary outright.
+test('MACOS-PIN-03 a PATH-launched ancestor reports a bare name and stays unprovable', () => {
+  // The hazard is concrete: a process launched through a PATH lookup reports a
+  // BARE image name, and resolving that against the current working directory
+  // can match an unrelated file of the same name. Here a decoy file literally
+  // named after the runtime sits in the child's cwd; the child reports its own
+  // chain row, and that row must be non-absolute so the production matcher
+  // excludes it instead of resolving the decoy.
+  const decoyDir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'rhc-decoy-')));
+  const runtimeName = path.basename(process.execPath);
+  const decoyPath = path.join(decoyDir, runtimeName);
+  fs.writeFileSync(decoyPath, 'not the real runtime\n');
+
+  const probe = `const h=require(${JSON.stringify(IMPL)});`
+    + 'const c=h.__TEST_ONLY__queryHostParentChain(process.pid,10000);'
+    + 'process.stdout.write(JSON.stringify(c&&c[0]||null));';
+  const run = spawnSync(runtimeName, ['-e', probe], {
+    cwd: decoyDir, encoding: 'utf8', env: process.env, timeout: 20_000,
+  });
+  if (run.error || run.status !== 0) return; // PATH lookup unavailable here; nothing to prove
+  const self = JSON.parse(run.stdout);
+  assert.ok(self, 'the child must observe its own chain row');
+  assert.equal(
+    path.isAbsolute(self.executable_path), false,
+    'a PATH-launched process reports a bare image name -- this is the hazard the guard exists for',
+  );
+  // And the decoy really was resolvable from that cwd, so the guard is what
+  // prevents it being proven, not mere absence of a file.
+  assert.equal(fs.existsSync(path.resolve(decoyDir, self.executable_path)), true,
+    'the decoy is resolvable from the cwd, so only the absolute-path guard prevents a false match');
+});
+
+test('MACOS-PIN-04 observation fails closed without a platform-matched host contract', () => {
+  const observed = hostClaude.observeClaudeExecutablePin({
+    projectRoot: process.cwd(), startingPid: process.pid,
+  });
+  // No contract package is published for this root, so the answer must be a
+  // refusal -- never a pin synthesised from the ambient environment.
+  assert.equal(observed.ok, false);
+  assert.equal(observed.reason, 'HOST_PIN_UNPROVEN');
+  assert.equal(observed.executablePath, undefined, 'a refusal must not leak an executable path');
+  assert.equal(observed.pinDigest, undefined, 'a refusal must not leak a pin digest');
+});
