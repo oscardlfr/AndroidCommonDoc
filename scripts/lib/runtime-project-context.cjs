@@ -83,8 +83,14 @@ function resolveRuntimeProjectContext(consumerRoot) {
   const l0Sources = manifest.sources.filter((source) => source && source.layer === 'L0' && source.role === 'tooling');
   if (l0Sources.length !== 1 || typeof l0Sources[0].path !== 'string' || l0Sources[0].path.length === 0 ||
       Object.prototype.hasOwnProperty.call(l0Sources[0], 'remote')) return fail('runtime-l0-source-invalid');
+  // The manifest's L0 path is authored LEXICALLY relative to the consumer root
+  // AS GIVEN. Resolving it against the canonicalised root changes the segment
+  // count -- on macOS `/var` -> `/private/var` adds one -- so the relative `..`
+  // traversal lands one level too high and yields `/private/Users/...` paths
+  // that never exist. Resolve lexically against the root as given; realpath is
+  // valid only on the final target. Never build a path by prepending `/private`.
   let canonicalSource;
-  try { canonicalSource = fs.realpathSync(path.resolve(canonicalConsumer, l0Sources[0].path)); }
+  try { canonicalSource = fs.realpathSync(path.resolve(consumerRoot, l0Sources[0].path)); }
   catch { return fail('runtime-l0-source-unresolved'); }
   if (canonicalSource !== TOOLKIT_ROOT) return fail('runtime-toolkit-source-mismatch');
 

@@ -867,6 +867,30 @@ export interface RuntimeConsumerInstallResult {
   registrations?: number;
 }
 
+/**
+ * The manifest's L0 `path` is authored LEXICALLY relative to the consumer root
+ * as GIVEN. Resolving it against a canonicalised root changes the segment count
+ * -- on macOS `/var` -> `/private/var` adds one -- so the relative `..`
+ * traversal lands one level too high and yields paths like `/private/Users/...`
+ * that never exist. Resolve lexically against the root as given, then use
+ * realpath only on the final target, which is the one place it is valid. No
+ * path is ever built by prepending `/private`.
+ *
+ * An unresolvable source is an invalid source: it fails closed here rather than
+ * escaping as an uncaught ENOENT from the preflight.
+ */
+async function l0SourceResolvesToToolkit(
+  rootAsGiven: string,
+  sourcePath: string,
+  canonicalToolkit: string,
+): Promise<boolean> {
+  try {
+    return await realpath(path.resolve(rootAsGiven, sourcePath)) === canonicalToolkit;
+  } catch {
+    return false;
+  }
+}
+
 export async function installRuntimeConsumer(
   projectRoot: string,
   toolkitRoot: string,
@@ -881,7 +905,7 @@ export async function installRuntimeConsumer(
     const manifest = await readManifest(manifestPath);
     const l0Sources = manifest.sources.filter((source) => source.layer === "L0" && source.role === "tooling");
     if (l0Sources.length !== 1 || l0Sources[0].remote !== undefined ||
-        await realpath(path.resolve(consumer, l0Sources[0].path)) !== toolkit) {
+        !(await l0SourceResolvesToToolkit(projectRoot, l0Sources[0].path, toolkit))) {
       return { ok: false, reason: "runtime-l0-source-invalid", dryRun };
     }
     const consumerLayer: "L1" | "L2" = await access(path.join(consumer, "skills", "registry.json"))
