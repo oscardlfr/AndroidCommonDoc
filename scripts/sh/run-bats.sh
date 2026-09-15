@@ -155,14 +155,79 @@ _bats_resolvable() {
         || command -v bats >/dev/null 2>&1
 }
 
+# ── GNU mktemp preflight (F-22c; run mode only) ───────────────────────────────
+# BSD `mktemp` IGNORES $TMPDIR; GNU coreutils' honours it. Suites here export
+# TMPDIR to bats' own per-test tmpdir and then call `mktemp -d`, so under BSD
+# mktemp the project root escapes the sandbox and every test in such a file dies
+# in shared setup(). Observed on darwin: 368 failures from exactly that, plus a
+# truncated run. Running 3304 tests on a silently-BSD mktemp is never acceptable.
+#
+# No package is installed and the global PATH is never modified: when only
+# `gmktemp` is GNU, a run-scoped private shim directory is prepended to the PATH
+# of the bats child alone.
+GNU_MKTEMP_SHIM_DIR=""
+
+_is_gnu_mktemp() {
+    # GNU coreutils answers --version; BSD mktemp rejects it. Name proves nothing.
+    "$1" --version 2>/dev/null | head -n 1 | grep -q "GNU coreutils"
+}
+
+_cleanup_gnu_mktemp_shim() {
+    if [[ -n "${GNU_MKTEMP_SHIM_DIR:-}" && -d "$GNU_MKTEMP_SHIM_DIR" ]]; then
+        rm -rf -- "$GNU_MKTEMP_SHIM_DIR"
+    fi
+}
+
+_gnu_mktemp_preflight() {
+    if _is_gnu_mktemp mktemp; then
+        return 0   # native mktemp is GNU (Linux, Windows/MSYS): nothing to do
+    fi
+    local gnu_path
+    gnu_path="$(command -v gmktemp 2>/dev/null || true)"
+    if [[ -z "$gnu_path" ]] || ! _is_gnu_mktemp "$gnu_path"; then
+        echo "[run-bats] ERROR: GNU coreutils mktemp required, none found (exit 2)." >&2
+        echo "[run-bats]   The effective 'mktemp' is not GNU and no GNU 'gmktemp' is on PATH." >&2
+        echo "[run-bats]   BSD mktemp ignores \$TMPDIR, which breaks this suite's per-test sandbox" >&2
+        echo "[run-bats]   and silently corrupts results. Install GNU coreutils, e.g.:" >&2
+        echo "[run-bats]     brew install coreutils    # provides 'gmktemp'" >&2
+        echo "[run-bats]   then re-run. No package was installed and PATH was not modified." >&2
+        exit 2
+    fi
+    # Exported so the shim resolves it at run time instead of embedding path text.
+    RUN_BATS_GNU_MKTEMP="$gnu_path"
+    export RUN_BATS_GNU_MKTEMP
+    GNU_MKTEMP_SHIM_DIR="${TMPDIR:-/tmp}/run-bats-gnushim-${BATS_RUN_ID}"
+    mkdir -p -m 0700 -- "$GNU_MKTEMP_SHIM_DIR" || {
+        echo "[run-bats] ERROR: could not create the GNU mktemp shim directory (exit 2)." >&2
+        exit 2
+    }
+    # Arm cleanup IMMEDIATELY after the directory exists: anything that fails
+    # between here and the shim being written must still leave nothing behind.
+    trap '_cleanup_gnu_mktemp_shim' EXIT INT TERM HUP
+    # NOTE: no `--` here; BSD chmod (macOS) treats it as a filename.
+    chmod 0700 "$GNU_MKTEMP_SHIM_DIR"
+    cat > "$GNU_MKTEMP_SHIM_DIR/mktemp" <<'GNU_MKTEMP_SHIM'
+#!/usr/bin/env bash
+# Run-scoped shim: forwards to the GNU mktemp this run proved, read from the
+# environment so no path text is embedded and spaces survive quoting.
+exec "$RUN_BATS_GNU_MKTEMP" "$@"
+GNU_MKTEMP_SHIM
+    chmod 0700 "$GNU_MKTEMP_SHIM_DIR/mktemp"
+}
+
 # _bats_invoke <args...> — runs bats via whichever method _bats_resolvable found,
 # mirroring its exact priority order (npx --no-install first, plain PATH `bats` as
 # fallback). Callers must have already confirmed _bats_resolvable before calling this.
 _bats_invoke() {
+    # Only the bats child gets the shim; the ambient PATH is left untouched.
+    local _invoke_path="$PATH"
+    if [[ -n "${GNU_MKTEMP_SHIM_DIR:-}" ]]; then
+        _invoke_path="$GNU_MKTEMP_SHIM_DIR:$PATH"
+    fi
     if command -v npx >/dev/null 2>&1 && npx --no-install bats --version >/dev/null 2>&1; then
-        npx --no-install bats "$@"
+        PATH="$_invoke_path" npx --no-install bats "$@"
     else
-        bats "$@"
+        PATH="$_invoke_path" bats "$@"
     fi
 }
 
@@ -194,6 +259,7 @@ FACT_EXECUTED_WARNING=false
 # ── Run bats (unless --eval-only) ─────────────────────────────────────────────
 # No silent install: probe resolvability first; absent bats sets a fact, never installs.
 if [[ "$EVAL_ONLY" == "false" ]]; then
+    _gnu_mktemp_preflight
     mkdir -p "$(dirname "$LOG")"
     if _bats_resolvable; then
         bats_rc=0
