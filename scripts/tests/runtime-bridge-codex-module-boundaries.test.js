@@ -642,6 +642,65 @@ test('a second createSupervisorEngineState() instance never shares mutable state
   assert.notEqual(a.readyPromise, b.readyPromise, 'each engine state instance must own a distinct readyPromise');
 });
 
+test('retained polling treats a DURABILITY_UNPROVEN root-consult advance as transient (skip/retry), never a poll-killing rejection, while still rejecting on an unrelated CliError and leaving DRIVER_UNAVAILABLE tolerance unchanged', async () => {
+  const { createSupervisorRetainedPolling } = require(path.join(moduleDir, 'app-server-supervisor-retained-polling.cjs'));
+  const { CliError } = require(path.join(repoRoot, 'scripts', 'lib', 'runtime-consultation', 'primitives.cjs'));
+
+  function buildPolling(advanceImpl) {
+    let pollInFlight = false;
+    const polling = createSupervisorRetainedPolling({
+      sessionExpiryMs: Date.now() + 60000,
+      action: {},
+      retainedSessionGenerationStatus: () => ({ due: false }),
+      shutdown: async (reason) => { throw new Error('SHUTDOWN_CALLED:' + reason); },
+      isShuttingDown: () => false,
+      getEngineStopRequested: () => false,
+      getPollInFlight: () => pollInFlight,
+      setPollInFlight: (v) => { pollInFlight = v; },
+      pendingRawMcpPromises: new Set(),
+      retainedWorkers: [{
+        connection: { isStopped: () => false },
+        lastPresenceHeartbeatMs: Date.now(),
+        role: 'verifier',
+        capability: {},
+        activePromise: null,
+        knownRequests: new Set(),
+      }],
+      repoDescriptor: {},
+      coordinationRootReal: '/fake',
+      rc: {
+        hostBridgeListRootConsultIntents: () => [{ intentPath: '/fake/intent.json' }],
+        hostBridgeAdvanceRootConsult: advanceImpl,
+        hostBridgeObserveAndCompleteRootConsult: () => { throw new Error('must not reach observe'); },
+      },
+      loadP2CompletedRootReviewContext: () => ({ eligible: false }),
+      executeP2RetainedArchitectReview: async () => {},
+      collectPendingMixedReviewRequest: () => null,
+      executeRetainedWorkerRequest: async () => {},
+      replaceOwnedWorkerPresence: () => ({ ok: true }),
+      retainedWorkerHeartbeatIntervalMs: Number.MAX_SAFE_INTEGER,
+      asyncSleep: () => Promise.resolve(),
+    });
+    return { polling, getPollInFlight: () => pollInFlight };
+  }
+
+  const { polling: durabilityUnprovenPolling, getPollInFlight: durabilityFlag } = buildPolling(() => {
+    throw new CliError('INVALID', 'DURABILITY_UNPROVEN', 'root-consult WAL lock/advance failed');
+  });
+  await assert.doesNotReject(durabilityUnprovenPolling.pollRetainedWorkers(), 'a transient DURABILITY_UNPROVEN advance must be skipped for this tick, never reject the whole poll (which the caller\'s own setInterval handler turns into a full engine shutdown)');
+  assert.equal(durabilityFlag(), false, 'pollInFlight must still be released after tolerating DURABILITY_UNPROVEN');
+
+  const { polling: unrelatedErrorPolling } = buildPolling(() => {
+    throw new CliError('INVALID', 'SCHEMA_INVALID', 'unrelated genuine defect');
+  });
+  await assert.rejects(unrelatedErrorPolling.pollRetainedWorkers(), /SCHEMA_INVALID|unrelated genuine defect/, 'an unrelated CliError must still reject the poll -- only DRIVER_UNAVAILABLE and DURABILITY_UNPROVEN are transient-tolerated');
+
+  const { polling: driverUnavailablePolling } = buildPolling(() => {
+    throw new CliError('INVALID', 'DRIVER_UNAVAILABLE', 'no live target');
+  });
+  await assert.doesNotReject(driverUnavailablePolling.pollRetainedWorkers(), 'pre-existing DRIVER_UNAVAILABLE tolerance must remain unchanged');
+});
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Sequence 16: whole-tree readability gate. Walks the module directory itself
 // (not just the `expectedModules` allowlist) so a future nested module is

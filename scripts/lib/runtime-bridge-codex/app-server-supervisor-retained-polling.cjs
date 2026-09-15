@@ -124,8 +124,12 @@ function createSupervisorRetainedPolling({
             // Post-intent loss of the required live target is one
             // ordinary, bounded BLOCKED operation -- never terminate the
             // healthy requester worker or invent a marker/completion/
-            // delivery/evidence/result/noop activation.
-            if (error && error.detailCode === 'DRIVER_UNAVAILABLE') continue;
+            // delivery/evidence/result/noop activation. DURABILITY_UNPROVEN
+            // means exactly that -- not yet provably durable, never a
+            // permanent defect -- so it is retried on the next tick the same
+            // way, rather than rejecting this poll (which the caller's own
+            // setInterval handler would turn into a full engine shutdown).
+            if (error && (error.detailCode === 'DRIVER_UNAVAILABLE' || error.detailCode === 'DURABILITY_UNPROVEN')) continue;
             throw error;
           }
           if (!advanced || advanced.ok !== true) throw new Error('root-consult-advance-invalid');
