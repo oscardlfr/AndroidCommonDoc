@@ -41,6 +41,7 @@ FAKE
   : > "$WITNESS"
   export FAKE_BATS_MKTEMP_WITNESS="$WITNESS"
   LOG="$BATS_TEST_TMPDIR/out.log"
+  SHIMS_BEFORE="$(_shim_snapshot)"
 }
 
 _make_gnu() {  # $1 = tool name to create as a GNU-shaped mktemp
@@ -52,6 +53,20 @@ FAKE
   chmod 0755 "$FAKEBIN/$1"
 }
 
+# The shim prefix is shared by every run-bats invocation, including an OUTER one
+# that may be running this very file. Asserting "no shim dirs exist" would then
+# observe the parent's shim. Snapshot before/after instead and assert the inner
+# run added none of its own.
+_shim_snapshot() {
+  ls -d "${TMPDIR:-/tmp}"/run-bats-gnushim-* 2>/dev/null | sort || true
+}
+
+_assert_no_new_shim() {  # $1 = snapshot taken before the inner run
+  local after; after="$(_shim_snapshot)"
+  local added; added="$(comm -13 <(printf '%s\n' "$1") <(printf '%s\n' "$after") || true)"
+  [ -z "$added" ]
+}
+
 _run_runbats() {
   PATH="$FAKEBIN:/usr/bin:/bin" run bash "$RUNBATS" --project-root "$PROJ" --log "$LOG" "$@"
 }
@@ -61,9 +76,8 @@ _run_runbats() {
   _run_runbats "$PROJ/x.bats"
   [ "$status" -eq 0 ]
   grep -q "GNU coreutils" "$WITNESS"
-  # No shim needed, so nothing may be left behind under the run-scoped prefix.
-  run bash -c 'ls -d "${TMPDIR:-/tmp}"/run-bats-gnushim-* 2>/dev/null | wc -l'
-  [ "$output" -eq 0 ]
+  # No shim needed, so this run must add nothing under the run-scoped prefix.
+  _assert_no_new_shim "$SHIMS_BEFORE"
 }
 
 @test "GNU-MKTEMP-02 BSD mktemp plus GNU gmktemp shims the child PATH" {
@@ -99,8 +113,7 @@ FAKE
   _make_gnu gmktemp
   _run_runbats "$PROJ/x.bats"
   [ "$status" -eq 0 ]
-  run bash -c 'ls -d "${TMPDIR:-/tmp}"/run-bats-gnushim-* 2>/dev/null | wc -l'
-  [ "$output" -eq 0 ]
+  _assert_no_new_shim "$SHIMS_BEFORE"
 
   # Failure path: make the fake bats exit non-zero; the shim must still go.
   cat > "$FAKEBIN/bats" <<'FAKE'
@@ -111,8 +124,7 @@ echo "1..1"; echo "not ok 1 fake"; exit 1
 FAKE
   chmod 0755 "$FAKEBIN/bats"
   _run_runbats "$PROJ/x.bats"
-  run bash -c 'ls -d "${TMPDIR:-/tmp}"/run-bats-gnushim-* 2>/dev/null | wc -l'
-  [ "$output" -eq 0 ]
+  _assert_no_new_shim "$SHIMS_BEFORE"
 }
 
 @test "GNU-MKTEMP-06 --eval-only needs no GNU mktemp and builds no shim" {
@@ -121,6 +133,5 @@ FAKE
   PATH="$FAKEBIN:/usr/bin:/bin" run bash "$RUNBATS" --project-root "$PROJ" --log "$LOG" --eval-only
   [ "$status" -eq 0 ]
   [[ "$output" != *"GNU coreutils required"* ]]
-  run bash -c 'ls -d "${TMPDIR:-/tmp}"/run-bats-gnushim-* 2>/dev/null | wc -l'
-  [ "$output" -eq 0 ]
+  _assert_no_new_shim "$SHIMS_BEFORE"
 }
