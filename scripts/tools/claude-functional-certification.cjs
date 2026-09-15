@@ -2781,7 +2781,10 @@ function finalizeHostContractProbe() {
     && event.agent_id === aStart.agent_id
     && index > resumeStarts[0].index
     && index < bPre.index
-    && (!aStart.prompt_id || event.prompt_id === aStart.prompt_id));
+    // A resumed turn is a NEW prompt for the SAME actor, so the resumed stop
+    // correlates to the RESUMED start's prompt, never the original one.
+    // Same-actor continuity is still enforced above by agent_id.
+    && (!resumedAStart.prompt_id || event.prompt_id === resumedAStart.prompt_id));
   if (!resumedStop) return fail('HOST_UNSUPPORTED_NO_STOP', 'Resumed actor A did not emit a correlated SubagentStop.');
   if (!thirdRead || thirdRead.agent_id !== aStart.agent_id) {
     return fail('HOST_REPLACEMENT_CHILD', 'The post-wake event came from a replacement actor.');

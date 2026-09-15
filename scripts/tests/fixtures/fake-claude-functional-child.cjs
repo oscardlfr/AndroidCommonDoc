@@ -378,6 +378,9 @@ function writeHostProbeObservations({ phase = 'all' } = {}) {
       ...(transientTranscripts ? { agent_transcript_path: transientTranscripts.actor } : {}),
     });
   }
+  // 'hcp-resumed-prompt-rotation' models the real host: the resumed actor keeps
+  // its agent id but receives a new prompt id for the resumed turn.
+  const resumedPromptId = scenario === 'hcp-resumed-prompt-rotation' ? 'prompt-probe-a-resumed' : 'prompt-probe-a';
   if (scenario !== 'hcp-missing-wake') {
     const wakeRecipient = scenario === 'hcp-wrong-wake-id' ? 'probe-peer-foreign' : 'probe-peer-a';
     add({ ...base, hook_event_name: 'PreToolUse', tool_use_id: 'toolu-wake-a', tool_name: 'SendMessage', tool_input: { to: wakeRecipient, summary: 'Resume probe actor with retained context', message: 'resume probe' } });
@@ -403,7 +406,9 @@ function writeHostProbeObservations({ phase = 'all' } = {}) {
         hook_event_name: 'SubagentStart',
         agent_id: scenario === 'hcp-resume-id-drift' ? 'agent-probe-a-replacement' : 'agent-probe-a',
         agent_type: 'probe-peer-a',
-        prompt_id: 'prompt-probe-a',
+        // A resumed turn is a NEW prompt for the SAME actor, which is what a
+        // real host emits. Only the actor id is required to stay stable.
+        prompt_id: resumedPromptId,
       });
     }
     if (wakeInterleaved) emitWakePost();
@@ -424,7 +429,7 @@ function writeHostProbeObservations({ phase = 'all' } = {}) {
       hook_event_name: 'SubagentStop',
       agent_id: scenario === 'hcp-resume-id-drift' ? 'agent-probe-a-replacement' : 'agent-probe-a',
       agent_type: 'probe-peer-a',
-      prompt_id: 'prompt-probe-a',
+      prompt_id: resumedPromptId,
       ...(transientTranscripts ? { agent_transcript_path: transientTranscripts.actor } : {}),
     });
   }

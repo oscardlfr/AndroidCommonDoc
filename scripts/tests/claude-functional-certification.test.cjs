@@ -688,6 +688,22 @@ test('MACOS-WAKE-02 an interleaved start from a replacement actor is still rejec
   assert.equal(run.state.status, 'HOST_REPLACEMENT_CHILD');
 });
 
+// A resumed turn is a NEW prompt for the SAME actor. The driver correlated the
+// resumed SubagentStop against the ORIGINAL start's prompt id, so a correct host
+// was reported HOST_UNSUPPORTED_NO_STOP. Observed live on darwin: actor be1ad4d2
+// started under prompt 1b6aac62, stopped, was woken, restarted as the SAME actor
+// under prompt 0c129e32, and stopped again under 0c129e32.
+test('MACOS-WAKE-03 the resumed stop correlates to the resumed prompt, not the original', async () => {
+  const run = await runProbeScenario('hcp-resumed-prompt-rotation');
+  assert.notEqual(
+    run.state.status, 'HOST_UNSUPPORTED_NO_STOP',
+    'a resumed turn legitimately carries a new prompt id for the same actor',
+  );
+  assert.equal(run.state.status, 'HOST_CONTRACT_PROBE_COMPLETED', run.stderr);
+  assert.equal(run.state.stable_actor_resume, true, 'the actor id is what must stay stable');
+  assert.equal(run.code, 0, run.stderr);
+});
+
 // Confinement must NOT be relaxed to buy the fix above: canonicalizing both ends
 // is the fix; accepting anything that merely normalizes to a similar string is not.
 test('MACOS-CANON-02 a child cwd outside the run root is still rejected after canonicalization', async () => {
