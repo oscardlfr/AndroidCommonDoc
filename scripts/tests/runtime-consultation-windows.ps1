@@ -1390,11 +1390,16 @@ Invoke-Case -Name 'W07b deterministic backend/frontend attach reuses one supervi
         # the Sequence 16 "closeTurnReadProjection durably retires..."
         # characterization test) -- a legitimate, expected lifecycle
         # transition this snapshot-then-verify loop can race against, never a
-        # missing-dependency or premature-cleanup defect. Only that exact,
-        # understood leaf name is tolerated; any other directory vanishing
-        # here still fails loudly, and the tolerated one is independently
-        # re-confirmed gone (not a transient Get-Acl glitch) before skipping.
-        Assert-True ($registryDir.Name -eq 'current') "an unexpected registry directory vanished before its ACL could be verified: $($registryDir.FullName)"
+        # missing-dependency or premature-cleanup defect. -Recurse snapshots
+        # current's OWN children (e.g. current\plan) as separate entries
+        # BEFORE that retirement, so the same race can just as easily surface
+        # under a child's leaf name once its parent's whole subtree is gone
+        # (CI run 34936292479: ...\current\plan) -- tolerate current itself
+        # OR anything path-confined under it, never a bare leaf-name match.
+        # Any OTHER directory vanishing here still fails loudly, and the
+        # tolerated one is independently re-confirmed gone (not a transient
+        # Get-Acl glitch) before skipping.
+        Assert-True ($registryDir.FullName -match '\\role-read-view\\current(\\|$)') "an unexpected registry directory vanished before its ACL could be verified: $($registryDir.FullName)"
         Assert-True (-not (Test-Path -LiteralPath $registryDir.FullName)) "Get-Acl reported missing but Test-Path still finds: $($registryDir.FullName)"
         continue
       }

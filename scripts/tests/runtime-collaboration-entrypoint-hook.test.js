@@ -278,10 +278,24 @@ function assertNoInjection(command, cwd, label) {
   passed += 1;
 }
 
+// context-provider-gate.js's own ENTRYPOINT_WINDOWS_TOKEN_RE (and its
+// docblock: "Claude emits that command with a double-quoted native
+// project-root on Windows") only matches a quoted token that begins with a
+// Windows drive letter ([A-Za-z]:[\\/]) -- a documented, deliberately
+// Windows-only recognition path, not a guess from this case's name. A POSIX
+// absolute path never has a drive letter, so the identical double-quoted
+// construction can never be recognized on any other platform; asserting that
+// is a positive cross-platform boundary proof, not a skip.
 {
-  assertAdmittedAndConsume('case-7-claude-windows-double-quoted-project-root', (ctx) =>
-    'node ' + RELATIVE_ENTRYPOINT_CLI_PATH + ' execute --entrypoint monitor-docs --project-root "'
-      + ctx.worktreeRoot + '" --intent ' + monitorDocsIntent());
+  if (process.platform === 'win32') {
+    assertAdmittedAndConsume('case-7-claude-windows-double-quoted-project-root', (ctx) =>
+      'node ' + RELATIVE_ENTRYPOINT_CLI_PATH + ' execute --entrypoint monitor-docs --project-root "'
+        + ctx.worktreeRoot + '" --intent ' + monitorDocsIntent());
+  } else {
+    const command = 'node ' + RELATIVE_ENTRYPOINT_CLI_PATH + ' execute --entrypoint monitor-docs --project-root "'
+      + REPO_ROOT + '" --intent ' + monitorDocsIntent();
+    assertNoInjection(command, REPO_ROOT, 'case-7-posix-double-quoted-project-root-not-windows-shape');
+  }
   passed += 1;
 }
 
