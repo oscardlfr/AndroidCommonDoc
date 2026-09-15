@@ -2575,10 +2575,61 @@ function settleP5OwnedSupervisor() {
   };
 }
 
+// How many terminal `result` frames the probe will consume before giving up, and
+// how long it will wait for a further turn after an incomplete one. A real host
+// ends its turn as soon as it has spawned the background peer, so the resume and
+// the second peer necessarily arrive in LATER turns.
+const HOST_PROBE_MAX_TERMINAL_RESULTS = 8;
+const HOST_PROBE_CONTINUATION_MS = Number.parseInt(
+  process.env.P4_CERT_HOST_PROBE_CONTINUATION_MS || '120000', 10,
+);
+let hostProbeContinuationTimer = null;
+let hostProbeFinalized = false;
+
+// The probe's own completion predicate, stated once: two peer spawns and the
+// three SubagentStarts (A, resumed A, B). Anything less means the sequence is
+// still outstanding and finalizing now would judge an unfinished run.
+function hostProbeSequenceObservable() {
+  const rows = readObserverRows();
+  const named = rows.map((row) => row.raw_event || row);
+  const agentPre = named.filter((event) => event.hook_event_name === 'PreToolUse' && event.tool_name === 'Agent');
+  const starts = named.filter((event) => event.hook_event_name === 'SubagentStart');
+  return agentPre.length >= 2 && starts.length >= 3;
+}
+
+function armHostProbeContinuation() {
+  if (hostProbeContinuationTimer !== null) return;
+  hostProbeContinuationTimer = setTimeout(() => {
+    hostProbeContinuationTimer = null;
+    // Deadline reached with the sequence still outstanding: finalize and let the
+    // contract report the truth. This must never be turned into a pass.
+    finalizeHostContractProbe();
+    writeState();
+  }, HOST_PROBE_CONTINUATION_MS);
+  if (typeof hostProbeContinuationTimer.unref === 'function') hostProbeContinuationTimer.unref();
+}
+
 function finalizeHostContractProbe() {
+  if (hostProbeFinalized) return;
+  hostProbeFinalized = true;
+  if (hostProbeContinuationTimer !== null) {
+    clearTimeout(hostProbeContinuationTimer);
+    hostProbeContinuationTimer = null;
+  }
   const rows = readObserverRows();
   const expectedEvidenceMode = transportProfile === 'native-claude-cli' ? 'genuine-pinned' : 'fake-fixture';
   state.observations_digest = digestObject(rows);
+  // Recorded before ANY verdict, so it stays truthful no matter which guard the
+  // run stops at: how much of the sequence actually existed at the moment
+  // finalization ran. Finalizing on the first terminal result pins this at one
+  // spawn and one start; a correctly spanned probe reaches two and three.
+  {
+    const observed = rows.map((row) => row.raw_event || row);
+    state.probe_observed_agent_spawns = observed
+      .filter((event) => event.hook_event_name === 'PreToolUse' && event.tool_name === 'Agent').length;
+    state.probe_observed_subagent_starts = observed
+      .filter((event) => event.hook_event_name === 'SubagentStart').length;
+  }
   if (rows.length === 0) return fail('HOST_PIN_UNPROVEN', 'The host observer produced no evidence.');
   if (rows.some((row) => row.producer !== 'claude-host-contract-probe')) {
     return fail('HOST_PIN_UNPROVEN', 'Observer evidence came from an untrusted producer.');
@@ -3637,7 +3688,20 @@ function handleFrame(event) {
     return;
   }
   if (operation === 'host-contract-probe') {
-    if (nativeClaudeExecutable && event.type === 'result') finalizeHostContractProbe();
+    // Turn semantics belong to the PROFILE, not to whether the binary happens to
+    // be the real one -- otherwise this path is unreachable offline and ships
+    // unverified, which is exactly how the first-result defect survived.
+    if (transportProfile === 'native-claude-cli' && event.type === 'result') {
+      state.probe_terminal_results = (state.probe_terminal_results || 0) + 1;
+      if (hostProbeSequenceObservable() || state.probe_terminal_results >= HOST_PROBE_MAX_TERMINAL_RESULTS) {
+        finalizeHostContractProbe();
+      } else {
+        // The resume and the second peer are still outstanding. Keep stdin and
+        // the session open so later turns can still be observed, bounded by a
+        // deadline -- never finalize an unfinished sequence here.
+        armHostProbeContinuation();
+      }
+    }
     writeState();
     return;
   }

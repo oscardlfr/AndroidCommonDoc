@@ -307,7 +307,13 @@ function appendObserverRow(row) {
   fs.appendFileSync(path.join(observerRoot, 'events.jsonl'), `${JSON.stringify(row)}\n`);
 }
 
-function writeHostProbeObservations() {
+// `phase` splits the observation stream the way a real host splits it across
+// turns: 'first-turn' stops right after the background peer's SubagentStart
+// (the point at which a real model's turn genuinely ends, because it cannot
+// block inside one inference call waiting for that peer), and 'rest' appends
+// everything the later turns produce. Omitting `phase` writes the whole stream
+// in one turn, which is the historical single-turn behaviour.
+function writeHostProbeObservations({ phase = 'all' } = {}) {
   const evidenceRoot = process.env.P4_CERT_EVIDENCE_ROOT;
   const manifest = JSON.parse(fs.readFileSync(path.join(evidenceRoot, 'probe-manifest.json'), 'utf8'));
   const a = manifest.actions['probe-peer-a'];
@@ -435,7 +441,16 @@ function writeHostProbeObservations() {
   });
   const observerRoot = path.join(evidenceRoot, 'observer');
   fs.mkdirSync(observerRoot, { recursive: true });
-  fs.writeFileSync(path.join(observerRoot, 'events.jsonl'), `${rows.map((row) => JSON.stringify(row)).join('\n')}\n`, { flag: 'wx' });
+  const firstStart = rows.findIndex((row) => row.hook_event_name === 'SubagentStart');
+  const splitAt = firstStart === -1 ? rows.length : firstStart + 1;
+  const selected = phase === 'first-turn' ? rows.slice(0, splitAt)
+    : phase === 'rest' ? rows.slice(splitAt)
+      : rows;
+  if (selected.length === 0) return;
+  const payload = `${selected.map((row) => JSON.stringify(row)).join('\n')}\n`;
+  const eventsPath = path.join(observerRoot, 'events.jsonl');
+  if (phase === 'rest') fs.appendFileSync(eventsPath, payload);
+  else fs.writeFileSync(eventsPath, payload, { flag: 'wx' });
 }
 
 function emitRaw(value) {
@@ -1069,6 +1084,20 @@ input.on('line', (line) => {
   }
 
   if (hostProbe) {
+    if (scenario === 'hcp-split-turn') {
+      // Model a real host: turn 1 ends immediately after the background peer is
+      // spawned, emitting a terminal `result` while the resume and the second
+      // peer are still outstanding. The remaining turns arrive only if the
+      // driver keeps stdin and the session open instead of finalizing here.
+      writeHostProbeObservations({ phase: 'first-turn' });
+      emit({ type: 'result', subtype: 'success', session_id: sessionId });
+      setTimeout(() => {
+        writeHostProbeObservations({ phase: 'rest' });
+        emit({ type: 'system', subtype: 'fake_host_probe_complete', session_id: sessionId });
+        emit({ type: 'result', subtype: 'success', session_id: sessionId });
+      }, 250);
+      return;
+    }
     writeHostProbeObservations();
     emit({ type: 'system', subtype: 'fake_host_probe_complete', session_id: sessionId });
     emit({ type: 'result', subtype: 'success', session_id: sessionId });

@@ -622,6 +622,43 @@ test('MACOS-CANON-01 native host-contract probe accepts a symlinked evidence roo
   assert.equal(run.state.host_identity_observation, 'system-init-stream');
 });
 
+// --- Wave 1 macOS stabilization: multi-turn probe sequence (defect B) ---
+//
+// A real host ends its turn right after spawning the background peer -- the
+// architecture says so explicitly ("language models are not expected to block
+// forever inside one inference call"). The driver finalized the probe on the
+// FIRST `result` frame, so the pending SendMessage resume and the second peer
+// could never be observed and `agentPre.length === 2` was unreachable: a check
+// that cannot pass. Proven live: a genuine-pinned run recorded exactly one
+// Agent spawn, `post_turn_summary` = "waiting for completion", and only
+// sequence-0-input.jsonl was ever written.
+test('MACOS-TURN-01 probe spans turns instead of finalizing on the first result', async () => {
+  const run = await runProbeScenario('hcp-split-turn', {
+    transportProfile: 'native-claude-cli',
+    nativeFixture: true,
+  });
+  // Directly measured discriminator: how much of the sequence existed when
+  // finalization ran. Finalizing on the first terminal result pins this at 1
+  // (and 1 SubagentStart); spanning the turns reaches the full 2 spawns and the
+  // three starts A / resumed-A / B.
+  assert.equal(
+    run.state.probe_observed_agent_spawns, 2,
+    'both peer spawns must exist before the probe is judged',
+  );
+  assert.equal(
+    run.state.probe_observed_subagent_starts, 3,
+    'A, resumed A and B must all be observed before the probe is judged',
+  );
+  assert.notEqual(
+    run.state.status, 'HOST_PIN_UNPROVEN',
+    'the sequence must not be judged incomplete after only the first turn',
+  );
+  // A fake child still cannot buy a genuine verdict: the evidence-mode guard is
+  // the correct next stop, and is deliberately not relaxed.
+  assert.equal(run.state.status, 'INVALID_EVIDENCE_MODE');
+  assert.equal(run.state.evidence_mode, 'fake-fixture');
+});
+
 // Confinement must NOT be relaxed to buy the fix above: canonicalizing both ends
 // is the fix; accepting anything that merely normalizes to a similar string is not.
 test('MACOS-CANON-02 a child cwd outside the run root is still rejected after canonicalization', async () => {
