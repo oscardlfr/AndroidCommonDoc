@@ -47,6 +47,27 @@ function runHook(event) {
   return result;
 }
 
+function runHookAt(event, hookPath, cwd) {
+  return spawnSync(process.execPath, [hookPath], { input: JSON.stringify(event), encoding: 'utf8', cwd });
+}
+
+// One minted fixture's worktreeRoot, consistently, for every path an admitted
+// case needs: the hook script itself, cwd/event, the command's --project-root
+// and script-token, planEntrypointStep and consumeProductionHostComposition.
+// Never REPO_ROOT for these -- recordManagedSystemInit mints identity against
+// the isolated worktree, so a hook subprocess or plan/consume call still
+// pointed at REPO_ROOT would look in the wrong registry entry entirely.
+function buildWorktreeContext(worktreeRoot) {
+  const canonicalEntrypointPath = path.resolve(worktreeRoot, 'scripts/lib/runtime-collaboration-entrypoints.cjs');
+  return {
+    worktreeRoot,
+    hookPath: path.join(worktreeRoot, '.claude/hooks/context-provider-gate.js'),
+    canonicalEntrypointPath,
+    portableWorktreeRoot: worktreeRoot.replace(/\\/g, '/'),
+    portableCanonicalEntrypointPath: canonicalEntrypointPath.replace(/\\/g, '/'),
+  };
+}
+
 function baseEvent(command, cwd, sessionId) {
   return {
     hook_event_name: 'PreToolUse',
@@ -58,42 +79,29 @@ function baseEvent(command, cwd, sessionId) {
   };
 }
 
-function recordManagedSystemInit(sessionId, cwd) {
-  const qualification = require('../../.planning/wave-portable-runtime-messaging-adapters/closeout-20260905/p1-native-probe-attempt-05-qualification.json');
-  const executableCandidates = [
-    qualification.cli.executable_realpath,
-    path.join(os.homedir(), '.local', 'share', 'claude', 'versions', qualification.cli.version),
-  ];
-  const qualifiedExecutable = executableCandidates.find((candidate) => {
-    try {
-      return fs.statSync(candidate).isFile()
-        && crypto.createHash('sha256').update(fs.readFileSync(candidate)).digest('hex') === qualification.cli.executable_sha256;
-    } catch {
-      return false;
-    }
-  });
-  assert.ok(qualifiedExecutable, 'the exact digest-pinned qualified Claude executable must remain available');
+const { mintIsolatedHostContractSession } = require('./lib/host-contract-fixture.cjs');
+const runtimeConsultation = require('../lib/runtime-consultation.cjs');
+
+process.on('exit', () => {
+  for (const fixture of hostContractFixtures) {
+    try { fixture.cleanup(); } catch { /* best-effort */ }
+  }
+});
+const hostContractFixtures = [];
+
+function recordManagedSystemInit(sessionId) {
   const event = {
     type: 'system',
     subtype: 'init',
     session_id: sessionId,
     model: 'claude-sonnet-5',
-    cwd: cwd || REPO_ROOT,
     tools: ['Agent', 'Bash', 'SendMessage', 'Read'],
     mcp_servers: [],
   };
-  const result = runtimeHostClaude.recordProductionSessionIdentity({
-    projectRoot: REPO_ROOT,
-    event,
-    hostPin: {
-      executablePath: qualifiedExecutable,
-      cliVersion: qualification.cli.version,
-      observerPath: path.join(REPO_ROOT, 'scripts/tests/fixtures/claude-host-contract-probe.cjs'),
-      transportProfile: qualification.transport_profile,
-      os: process.platform,
-    },
-  });
-  assert.strictEqual(result.ok, true, 'managed system/init fixture must be admitted: ' + JSON.stringify(result));
+  const minted = mintIsolatedHostContractSession(REPO_ROOT, { rc: runtimeConsultation, runtimeHostClaude, event });
+  hostContractFixtures.push(minted); // process-exit safety net, on top of each case's own deterministic finally cleanup.
+  assert.strictEqual(minted.result.ok, true, 'managed system/init fixture must be admitted: ' + JSON.stringify(minted.result));
+  return minted;
 }
 
 function monitorDocsIntent() {
@@ -114,34 +122,44 @@ function extractFlag(tokens, flag) {
   return idx === -1 ? undefined : tokens[idx + 1];
 }
 
-function assertAdmittedAndConsume(command, cwd, label) {
+// buildCommand(ctx) receives the ONE minted worktree's paths and returns the
+// exact command string for this case's shape (relative/absolute/quoted/
+// renderPosixDirect/realpath-alias) -- one mint+hook+plan+consume flow shared
+// by every admitted case, never duplicated per shape.
+function assertAdmittedAndConsume(label, buildCommand) {
   const sessionId = uniqueSessionId();
-  recordManagedSystemInit(sessionId, cwd);
-  const event = baseEvent(command, cwd, sessionId);
-  const result = runHook(event);
-  assert.strictEqual(result.status, 0, label + ': hook exit code');
-  assert.notStrictEqual(result.stdout.trim(), '', label + ': expected non-empty stdout (injection)');
-  const rewritten = extractRewrittenCommand(result.stdout);
+  const minted = recordManagedSystemInit(sessionId);
+  try {
+    const ctx = buildWorktreeContext(minted.worktreeRoot);
+    const command = buildCommand(ctx);
+    const event = baseEvent(command, ctx.worktreeRoot, sessionId);
+    const result = runHookAt(event, ctx.hookPath, ctx.worktreeRoot);
+    assert.strictEqual(result.status, 0, label + ': hook exit code');
+    assert.notStrictEqual(result.stdout.trim(), '', label + ': expected non-empty stdout (injection)');
+    const rewritten = extractRewrittenCommand(result.stdout);
 
-  const parsedTokens = runtimeRoleLifecycle.parsePosixDirect(rewritten);
-  assert.ok(parsedTokens, label + ': rewritten command must parse with parsePosixDirect');
-  assert.strictEqual(parsedTokens[1], CANONICAL_ENTRYPOINT_CLI_PATH, label + ': script token must be exact absolute owner');
+    const parsedTokens = runtimeRoleLifecycle.parsePosixDirect(rewritten);
+    assert.ok(parsedTokens, label + ': rewritten command must parse with parsePosixDirect');
+    assert.strictEqual(parsedTokens[1], ctx.canonicalEntrypointPath, label + ': script token must be exact absolute owner');
 
-  const hostCompositionId = extractFlag(parsedTokens, '--host-composition');
-  assert.ok(hostCompositionId && /^[0-9a-f]{32}$/.test(hostCompositionId), label + ': expected real 32-hex --host-composition');
-  assert.strictEqual(extractFlag(parsedTokens, '--lifecycle-binding'), undefined, label + ': monitor-docs must not carry --lifecycle-binding');
+    const hostCompositionId = extractFlag(parsedTokens, '--host-composition');
+    assert.ok(hostCompositionId && /^[0-9a-f]{32}$/.test(hostCompositionId), label + ': expected real 32-hex --host-composition');
+    assert.strictEqual(extractFlag(parsedTokens, '--lifecycle-binding'), undefined, label + ': monitor-docs must not carry --lifecycle-binding');
 
-  const intent = { scope: 'all' };
-  const plan = runtimeCollaborationEntrypoints.planEntrypointStep('monitor-docs', intent, REPO_ROOT);
-  const consumed = runtimeHostClaude.consumeProductionHostComposition(REPO_ROOT, hostCompositionId, {
-    entrypoint: 'monitor-docs',
-    argvDigest: plan.argv_digest,
-    roleScope: plan.role_scope,
-  });
-  assert.strictEqual(consumed.ok, true, label + ': composition must be consumable with the exact plan tuple');
+    const intent = { scope: 'all' };
+    const plan = runtimeCollaborationEntrypoints.planEntrypointStep('monitor-docs', intent, ctx.worktreeRoot);
+    const consumed = runtimeHostClaude.consumeProductionHostComposition(ctx.worktreeRoot, hostCompositionId, {
+      entrypoint: 'monitor-docs',
+      argvDigest: plan.argv_digest,
+      roleScope: plan.role_scope,
+    });
+    assert.strictEqual(consumed.ok, true, label + ': composition must be consumable with the exact plan tuple');
 
-  console.log('PASS: ' + label);
-  return rewritten;
+    console.log('PASS: ' + label);
+    return { rewritten, ctx };
+  } finally {
+    minted.cleanup();
+  }
 }
 
 function assertNoInjection(command, cwd, label) {
@@ -154,28 +172,28 @@ function assertNoInjection(command, cwd, label) {
 
 // Case 1: exact documented relative bare command is allowed/rewritten.
 {
-  const command = 'node ' + RELATIVE_ENTRYPOINT_CLI_PATH + ' execute --entrypoint monitor-docs --project-root '
-    + PORTABLE_REPO_ROOT + ' --intent ' + monitorDocsIntent();
-  assertAdmittedAndConsume(command, REPO_ROOT, 'case-1-relative-bare-command');
+  assertAdmittedAndConsume('case-1-relative-bare-command', (ctx) =>
+    'node ' + RELATIVE_ENTRYPOINT_CLI_PATH + ' execute --entrypoint monitor-docs --project-root '
+      + ctx.portableWorktreeRoot + ' --intent ' + monitorDocsIntent());
   passed += 1;
 }
 
 // Case 2: bare absolute owner command is likewise rewritten canonically and admitted.
 {
-  const command = 'node ' + PORTABLE_CANONICAL_ENTRYPOINT_CLI_PATH + ' execute --entrypoint monitor-docs --project-root '
-    + PORTABLE_REPO_ROOT + ' --intent ' + monitorDocsIntent();
-  assertAdmittedAndConsume(command, REPO_ROOT, 'case-2-absolute-bare-command');
+  assertAdmittedAndConsume('case-2-absolute-bare-command', (ctx) =>
+    'node ' + ctx.portableCanonicalEntrypointPath + ' execute --entrypoint monitor-docs --project-root '
+      + ctx.portableWorktreeRoot + ' --intent ' + monitorDocsIntent());
   passed += 1;
 }
 
 // Case 3: existing canonical renderPosixDirect absolute command still rewrites/admitted.
 {
-  const command = runtimeRoleLifecycle.renderPosixDirect([
-    'node', CANONICAL_ENTRYPOINT_CLI_PATH, 'execute',
-    '--entrypoint', 'monitor-docs', '--project-root', REPO_ROOT,
-    '--intent', monitorDocsIntent(),
-  ]);
-  assertAdmittedAndConsume(command, REPO_ROOT, 'case-3-canonical-renderposixdirect-command');
+  assertAdmittedAndConsume('case-3-canonical-renderposixdirect-command', (ctx) =>
+    runtimeRoleLifecycle.renderPosixDirect([
+      'node', ctx.canonicalEntrypointPath, 'execute',
+      '--entrypoint', 'monitor-docs', '--project-root', ctx.worktreeRoot,
+      '--intent', monitorDocsIntent(),
+    ]));
   passed += 1;
 }
 
@@ -183,12 +201,12 @@ function assertNoInjection(command, cwd, label) {
 // while resolvedNodePath() is the real versioned executable. The hook must
 // recognize the junction only when it realpaths to that exact trusted binary.
 {
-  const command = runtimeRoleLifecycle.renderPosixDirect([
-    process.execPath, CANONICAL_ENTRYPOINT_CLI_PATH, 'execute',
-    '--entrypoint', 'monitor-docs', '--project-root', REPO_ROOT,
-    '--intent', monitorDocsIntent(),
-  ]);
-  const rewritten = assertAdmittedAndConsume(command, REPO_ROOT, 'case-3b-realpath-equivalent-node-alias');
+  const { rewritten } = assertAdmittedAndConsume('case-3b-realpath-equivalent-node-alias', (ctx) =>
+    runtimeRoleLifecycle.renderPosixDirect([
+      process.execPath, ctx.canonicalEntrypointPath, 'execute',
+      '--entrypoint', 'monitor-docs', '--project-root', ctx.worktreeRoot,
+      '--intent', monitorDocsIntent(),
+    ]));
   const parsed = runtimeRoleLifecycle.parsePosixDirect(rewritten);
   assert.strictEqual(parsed[0], runtimeRoleLifecycle.resolvedNodePath(),
     'case-3b-realpath-equivalent-node-alias: execution must use the canonical realpath');
@@ -211,24 +229,29 @@ function assertNoInjection(command, cwd, label) {
 // composition and the lifecycle binding that were absent in the failed run.
 {
   const sessionId = uniqueSessionId();
-  recordManagedSystemInit(sessionId, REPO_ROOT);
-  const command = runtimeRoleLifecycle.renderPosixDirect([
-    process.execPath, CANONICAL_ENTRYPOINT_CLI_PATH, 'execute',
-    '--entrypoint', 'init-session', '--project-root', REPO_ROOT,
-    '--intent', initSessionIntent(),
-  ]);
-  const result = runHook(baseEvent(command, REPO_ROOT, sessionId));
-  assert.strictEqual(result.status, 0, 'case-3d-exact-live-init-session-shape: hook exit code');
-  assert.notStrictEqual(result.stdout.trim(), '', 'case-3d-exact-live-init-session-shape: expected injection');
-  const parsed = runtimeRoleLifecycle.parsePosixDirect(extractRewrittenCommand(result.stdout));
-  assert.strictEqual(parsed[0], runtimeRoleLifecycle.resolvedNodePath(),
-    'case-3d-exact-live-init-session-shape: execution must use canonical Node realpath');
-  assert.match(extractFlag(parsed, '--host-composition') || '', /^[0-9a-f]{32}$/,
-    'case-3d-exact-live-init-session-shape: host composition must be injected');
-  assert.match(extractFlag(parsed, '--lifecycle-binding') || '', /^[0-9a-f]{32}$/,
-    'case-3d-exact-live-init-session-shape: lifecycle binding must be injected');
-  console.log('PASS: case-3d-exact-live-init-session-shape');
-  passed += 1;
+  const minted = recordManagedSystemInit(sessionId);
+  try {
+    const ctx = buildWorktreeContext(minted.worktreeRoot);
+    const command = runtimeRoleLifecycle.renderPosixDirect([
+      process.execPath, ctx.canonicalEntrypointPath, 'execute',
+      '--entrypoint', 'init-session', '--project-root', ctx.worktreeRoot,
+      '--intent', initSessionIntent(),
+    ]);
+    const result = runHookAt(baseEvent(command, ctx.worktreeRoot, sessionId), ctx.hookPath, ctx.worktreeRoot);
+    assert.strictEqual(result.status, 0, 'case-3d-exact-live-init-session-shape: hook exit code');
+    assert.notStrictEqual(result.stdout.trim(), '', 'case-3d-exact-live-init-session-shape: expected injection');
+    const parsed = runtimeRoleLifecycle.parsePosixDirect(extractRewrittenCommand(result.stdout));
+    assert.strictEqual(parsed[0], runtimeRoleLifecycle.resolvedNodePath(),
+      'case-3d-exact-live-init-session-shape: execution must use canonical Node realpath');
+    assert.match(extractFlag(parsed, '--host-composition') || '', /^[0-9a-f]{32}$/,
+      'case-3d-exact-live-init-session-shape: host composition must be injected');
+    assert.match(extractFlag(parsed, '--lifecycle-binding') || '', /^[0-9a-f]{32}$/,
+      'case-3d-exact-live-init-session-shape: lifecycle binding must be injected');
+    console.log('PASS: case-3d-exact-live-init-session-shape');
+    passed += 1;
+  } finally {
+    minted.cleanup();
+  }
 }
 
 // Case 4: exact relative token with cwd set to a different absolute directory receives no injection.
@@ -256,9 +279,9 @@ function assertNoInjection(command, cwd, label) {
 }
 
 {
-  const command = 'node ' + RELATIVE_ENTRYPOINT_CLI_PATH + ' execute --entrypoint monitor-docs --project-root "'
-    + REPO_ROOT + '" --intent ' + monitorDocsIntent();
-  assertAdmittedAndConsume(command, REPO_ROOT, 'case-7-claude-windows-double-quoted-project-root');
+  assertAdmittedAndConsume('case-7-claude-windows-double-quoted-project-root', (ctx) =>
+    'node ' + RELATIVE_ENTRYPOINT_CLI_PATH + ' execute --entrypoint monitor-docs --project-root "'
+      + ctx.worktreeRoot + '" --intent ' + monitorDocsIntent());
   passed += 1;
 }
 
