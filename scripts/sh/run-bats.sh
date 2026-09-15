@@ -259,9 +259,11 @@ FACT_EXECUTED_WARNING=false
 # ── Run bats (unless --eval-only) ─────────────────────────────────────────────
 # No silent install: probe resolvability first; absent bats sets a fact, never installs.
 if [[ "$EVAL_ONLY" == "false" ]]; then
-    _gnu_mktemp_preflight
     mkdir -p "$(dirname "$LOG")"
     if _bats_resolvable; then
+        # AFTER resolvability: an unresolvable bats must still report its own
+        # reason, not a mktemp one. The preflight guards the actual invocation.
+        _gnu_mktemp_preflight
         bats_rc=0
         _bats_invoke "${TARGETS[@]}" > "$LOG" 2>&1 || bats_rc=$?
         echo "[run-bats] bats exited $bats_rc (content-authoritative eval follows)" >&2
