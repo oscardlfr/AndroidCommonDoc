@@ -40,7 +40,13 @@ function sha256hex(text) { return sha256bytes(Buffer.from(text, 'utf8')); }
  * @returns {{result: object, worktreeRoot: string, cleanup: () => void}}
  */
 function mintIsolatedHostContractSession(repoRoot, { rc, runtimeHostClaude, wakeInterleaved, initFrameCount, event }) {
-  const worktreeRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'host-contract-worktree-'));
+  // realpath: the session identity minted below is recorded against this root
+  // and the hook under test later runs with it as cwd. macOS spells the same
+  // directory /var/folders/... and /private/var/folders/..., and the admission
+  // chain canonicalises, so handing the raw spelling around would make the
+  // recorded identity and the hook's own scope resolution disagree and the hook
+  // would fail closed against a session that is in fact correctly admitted.
+  const worktreeRoot = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'host-contract-worktree-')));
   const add = spawnSync('git', ['worktree', 'add', '--quiet', '--detach', worktreeRoot, 'HEAD'], { cwd: repoRoot, encoding: 'utf8' });
   if (add.status !== 0) throw new Error('git worktree add failed: ' + add.stderr);
   const cleanup = () => {

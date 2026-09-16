@@ -22,7 +22,13 @@ const { canonicalJSONStringify, sha256String } = require(
 );
 
 function mkTempDir(prefix) {
-  return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
+  // realpath, not the raw mkdtemp path: readCanonicalRequestArtifact's own
+  // parameter is named coordRootReal and it realpaths the request before
+  // path.relative(coordRootReal, real). On macOS os.tmpdir() is /var/folders/...
+  // while its realpath is /private/var/folders/..., so handing the raw spelling
+  // in would compare a canonical file against a non-canonical root and reject a
+  // genuinely confined request.
+  return fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), prefix)));
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

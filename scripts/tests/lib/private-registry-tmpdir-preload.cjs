@@ -59,8 +59,15 @@ const ownsPrivateRoot = !(typeof inheritedPrivateRoot === 'string' && path.isAbs
 // is still always force-chmod'd 0700 below regardless.
 const ALLOW_INSECURE_INHERITED_ROOT_ENV = 'ANDROID_COMMON_DOC_TEST_ALLOW_INSECURE_PRIVATE_REGISTRY_ROOT';
 const allowInsecureInheritedRoot = !ownsPrivateRoot && process.env[ALLOW_INSECURE_INHERITED_ROOT_ENV] === '1';
+// Both branches must publish the SAME spelling of the same directory. macOS
+// hands os.tmpdir() back as /var/folders/... whose realpath is
+// /private/var/folders/..., so an owner that skipped realpath would export one
+// spelling while every inheriting descendant (which does realpath) exported the
+// other -- and the containment comparisons below, which are plain string
+// prefix/equality checks, would then fail against a directory that is in fact
+// correctly contained.
 const privateRoot = ownsPrivateRoot
-  ? fs.mkdtempSync(path.join(WINDOWS_COMMON_APP_DATA || REAL_SYSTEM_TMPDIR, 'acd-private-registry-'))
+  ? fs.realpathSync(fs.mkdtempSync(path.join(WINDOWS_COMMON_APP_DATA || REAL_SYSTEM_TMPDIR, 'acd-private-registry-')))
   : fs.realpathSync(inheritedPrivateRoot);
 if (ownsPrivateRoot) fs.chmodSync(privateRoot, 0o700);
 process.env[SHARED_PRIVATE_ROOT_ENV] = privateRoot;

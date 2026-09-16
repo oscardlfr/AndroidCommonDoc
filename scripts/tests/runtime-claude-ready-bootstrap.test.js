@@ -142,7 +142,21 @@ test('receiver command templates pin canonical executable, script, coordination 
   ]));
 });
 
-test('five receiver actions fit the pinned native tool-result transport budget', () => {
+// The five-action envelope embeds the project root TWICE per action (once in the
+// ready command, once in the receiver contract) and the node path once per
+// action -- so every project-root character costs 10 envelope bytes and every
+// node-path character costs 5. Measuring the AMBIENT checkout therefore makes
+// this assertion a property of wherever the repository happens to live: it
+// passes on a short CI checkout and fails on a deep worktree, while proving
+// nothing stable about the envelope itself. Declare the bound instead, measure
+// against it, and separately assert the bound is genuinely met -- so a
+// regression that fattens the envelope is still caught, deterministically, on
+// every platform.
+const MAX_SUPPORTED_PROJECT_ROOT_CHARS = 100;
+const NATIVE_TOOL_RESULT_ENVELOPE_BUDGET_BYTES = 9300;
+
+function fiveRoleEnvelopeBytesForRootLength(rootLength) {
+  const projectRoot = path.sep + 'p'.repeat(rootLength - 1);
   const actions = SUPPORT_ROLES.map((role, index) => ({
     schema: 'coordination/role-lifecycle-action/v1',
     action_id: String(index + 1).repeat(32),
@@ -160,7 +174,7 @@ test('five receiver actions fit the pinned native tool-result transport budget',
       teammate_name: role,
       agent_type: role,
       bootstrap_artifact_ref: null,
-      bootstrap_message: claudeReadyBootstrapMessageFor(String(index + 1).repeat(32), role, PROJECT_ROOT),
+      bootstrap_message: claudeReadyBootstrapMessageFor(String(index + 1).repeat(32), role, projectRoot),
     },
     operation: 'Agent',
   }));
@@ -183,9 +197,33 @@ test('five receiver actions fit the pinned native tool-result transport budget',
     },
     status: 'ACTION_REQUIRED',
   };
-  const envelopeBytes = Buffer.byteLength(JSON.stringify(envelope), 'utf8');
-  assert.ok(envelopeBytes <= 9300,
-    `the complete five-role ACTION_REQUIRED must stay below the pinned host truncation boundary with headroom; saw ${envelopeBytes}`);
+  return Buffer.byteLength(JSON.stringify(envelope), 'utf8');
+}
+
+test('five receiver actions fit the pinned native tool-result transport budget', () => {
+  const envelopeBytes = fiveRoleEnvelopeBytesForRootLength(MAX_SUPPORTED_PROJECT_ROOT_CHARS);
+  assert.ok(envelopeBytes <= NATIVE_TOOL_RESULT_ENVELOPE_BUDGET_BYTES,
+    `the complete five-role ACTION_REQUIRED must stay below the pinned host truncation boundary `
+    + `for a project root of the declared maximum ${MAX_SUPPORTED_PROJECT_ROOT_CHARS} characters; saw ${envelopeBytes}`);
+});
+
+test('the envelope keeps genuine headroom above the declared maximum project-root length', () => {
+  // Proves the declared bound is not merely asserted but actually achievable on
+  // THIS host (the node path is ambient and also costs 5 bytes per character),
+  // and pins the headroom so a change that fattens the envelope is caught even
+  // when the declared maximum still happens to fit.
+  let supported = 0;
+  for (let length = 1; length <= 400; length += 1) {
+    if (fiveRoleEnvelopeBytesForRootLength(length) <= NATIVE_TOOL_RESULT_ENVELOPE_BUDGET_BYTES) supported = length;
+    else break;
+  }
+  assert.ok(supported >= MAX_SUPPORTED_PROJECT_ROOT_CHARS,
+    `the envelope must support project roots of at least ${MAX_SUPPORTED_PROJECT_ROOT_CHARS} characters; `
+    + `the largest that fits on this host is ${supported}`);
+  // A shorter root must obviously still fit -- guards against an inverted or
+  // length-insensitive measurement passing the bound check for the wrong reason.
+  assert.ok(fiveRoleEnvelopeBytesForRootLength(20) < fiveRoleEnvelopeBytesForRootLength(120),
+    'the envelope must grow with the project-root length, or this budget measures nothing');
 });
 
 test('invalid action ids throw TypeError with message invalid-action-id', () => {
