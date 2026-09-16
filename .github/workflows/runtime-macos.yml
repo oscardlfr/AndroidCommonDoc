@@ -1,0 +1,126 @@
+name: Runtime macOS
+
+# ----------------------------------------------------------------------------
+# AndroidCommonDoc L0 reusable workflow -- macOS conformance for the runtime
+# contracts this repository claims to support on darwin.
+#
+# Why this exists: the rest of CI runs Ubuntu and Windows only, so every macOS
+# claim was unverified by machine. That is not a theoretical gap. Two defect
+# classes shipped green on Linux and were only ever caught by hand on a Mac:
+#
+#   * macOS reaches one directory by two names (/var/folders/... and
+#     /private/var/folders/..., /tmp and /private/tmp). path.resolve does not
+#     resolve symlinks, so any identity, confinement or fault-injection check
+#     that compares spellings silently stops matching. Linux, where realpath
+#     equals the literal path, can never reproduce it.
+#   * macOS hands every user a 48-character per-user TMPDIR, which overruns the
+#     isolation-root child-state path budget. On Linux TMPDIR is /tmp and the
+#     budget is never approached.
+#
+# Scope is deliberately focal, not the full 3313-case Bats roster: that run
+# takes roughly an hour and is kept as the local/release quality gate. What runs
+# here is the subset that covers the contracts this wave actually changed, plus
+# the specific cases that were failing on darwin.
+#
+# Invoked from .github/workflows/l0-ci.yml as an unconditional, required
+# ci-gate dependency -- same convention as runtime-consultation-windows and
+# runtime-bridge-codex-windows. Informational-only status would restore exactly
+# the blind spot this job exists to close.
+# ----------------------------------------------------------------------------
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  runtime-macos:
+    name: Runtime macOS
+    runs-on: macos-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # GNU coreutils is a hard prerequisite, not a nicety: BSD mktemp ignores
+      # $TMPDIR, which silently breaks every suite that sandboxes itself by
+      # setting TMPDIR and calling `mktemp -d`. scripts/sh/run-bats.sh preflights
+      # for it and fails closed with exit 2 when it is absent, so install it
+      # explicitly and then PROVE it is the one that will be used.
+      - name: Install GNU coreutils
+        run: brew install coreutils
+
+      - name: Validate the GNU toolchain this run will actually use
+        run: |
+          set -euo pipefail
+          gnu="$(command -v gmktemp || true)"
+          if [ -z "$gnu" ]; then
+            echo "::error::gmktemp is absent after installing coreutils"
+            exit 1
+          fi
+          "$gnu" --version | head -n 1 | grep -q 'GNU coreutils' || {
+            echo "::error::gmktemp is not GNU coreutils"
+            exit 1
+          }
+          # BSD mktemp ignores TMPDIR; GNU honours it. Assert the behaviour, not the name.
+          probe="$(mktemp -d)"
+          created="$(TMPDIR="$probe" "$gnu" -d)"
+          case "$created" in
+            "$probe"/*) echo "GNU mktemp honours TMPDIR: $created" ;;
+            *) echo "::error::gmktemp did not honour TMPDIR (got $created)"; exit 1 ;;
+          esac
+          rm -rf "$created" "$probe"
+
+      - name: Build mcp-server
+        working-directory: mcp-server
+        run: |
+          npm ci
+          npm run build
+
+      # The six cases that were failing on darwin. Named one by one rather than
+      # globbed so a file silently disappearing from the set is visible in the
+      # diff instead of quietly reducing coverage.
+      - name: Previously-failing macOS cases
+        run: |
+          set -euo pipefail
+          for f in \
+            scripts/tests/private-registry-tmpdir-preload.test.js \
+            scripts/tests/runtime-bridge-codex-sequence15-characterization.test.js \
+            scripts/tests/runtime-claude-ready-bootstrap.test.js \
+            scripts/tests/runtime-collaboration-entrypoint-hook.test.js \
+            scripts/tests/runtime-role-lifecycle-registry.test.js ; do
+            echo "── $f"
+            node "$f"
+          done
+
+      # Host contract, the Claude executable pin, and certificate coexistence.
+      - name: Host contract, Claude pin and certificate coexistence
+        run: |
+          set -euo pipefail
+          node scripts/tests/runtime-host-claude.test.js
+          node scripts/tests/runtime-host-boundary.test.js
+
+      - name: Codex freeze and protected spawn
+        run: node scripts/tests/codex-pin-freeze.test.js
+
+      - name: Runtime project context and L0 sync inventory
+        run: |
+          set -euo pipefail
+          node scripts/tests/runtime-project-context.test.js
+          cd mcp-server && npx vitest run tests/unit/sync/sync-l0-hooks.test.ts
+
+      # Offline functional certification: the probe/driver contracts, including
+      # the host-contract probe finalization path, with no live Claude or Codex.
+      - name: Offline functional certification
+        run: node --test scripts/tests/claude-functional-certification.test.cjs
+
+      # The GNU mktemp preflight and the TMPDIR budget preflight are themselves
+      # macOS-motivated, so they are verified on the platform that motivated them.
+      - name: GNU mktemp and TMPDIR budget preflights
+        run: |
+          set -euo pipefail
+          npx --no-install bats scripts/tests/run-bats-gnu-mktemp.bats

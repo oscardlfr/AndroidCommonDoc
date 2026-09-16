@@ -151,6 +151,13 @@ jobs:
     name: Runtime Bridge Codex Windows
     uses: ./.github/workflows/runtime-bridge-codex-windows.yml
 
+  # macOS is a first-class supported host for the runtime contracts, and until
+  # now nothing in CI executed on it -- two defect classes (path spelling and
+  # the per-user TMPDIR length) are structurally invisible on Linux and Windows.
+  runtime-macos:
+    name: Runtime macOS
+    uses: ./.github/workflows/runtime-macos.yml
+
   # ── Wave 3: Cross-cutting validation ───────────────────────────────────
 
   skill-registry:
@@ -198,6 +205,7 @@ jobs:
       - mcp-server
       - runtime-consultation-windows
       - runtime-bridge-codex-windows
+      - runtime-macos
       - skill-registry
       - agent-template-lint
     runs-on: ubuntu-latest
@@ -214,6 +222,7 @@ jobs:
             "${{ needs.mcp-server.result }}"
             "${{ needs.runtime-consultation-windows.result }}"
             "${{ needs.runtime-bridge-codex-windows.result }}"
+            "${{ needs.runtime-macos.result }}"
             "${{ needs.skill-registry.result }}"
             "${{ needs.agent-template-lint.result }}"
           )
