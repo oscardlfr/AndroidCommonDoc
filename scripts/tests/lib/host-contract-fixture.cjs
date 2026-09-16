@@ -39,7 +39,7 @@ function sha256hex(text) { return sha256bytes(Buffer.from(text, 'utf8')); }
  *   event: the system/init event to record (session_id/model/cwd/tools/mcp_servers)
  * @returns {{result: object, worktreeRoot: string, cleanup: () => void}}
  */
-function mintIsolatedHostContractSession(repoRoot, { rc, runtimeHostClaude, wakeInterleaved, event }) {
+function mintIsolatedHostContractSession(repoRoot, { rc, runtimeHostClaude, wakeInterleaved, initFrameCount, event }) {
   const worktreeRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'host-contract-worktree-'));
   const add = spawnSync('git', ['worktree', 'add', '--quiet', '--detach', worktreeRoot, 'HEAD'], { cwd: repoRoot, encoding: 'utf8' });
   if (add.status !== 0) throw new Error('git worktree add failed: ' + add.stderr);
@@ -142,6 +142,12 @@ function mintIsolatedHostContractSession(repoRoot, { rc, runtimeHostClaude, wake
       type: 'system', subtype: 'init', session_id: sessionId, model: event.model,
       claude_code_version: '2.1.261', tools: ['Task', 'Bash', 'Read', 'SendMessage'], mcp_servers: event.mcp_servers,
     }];
+    // A probe that legitimately spans turns emits one system/init per turn, all
+    // for the SAME session. initFrameCount models that; the default of 1 keeps
+    // every existing caller byte-identical.
+    for (let extra = 1; extra < (initFrameCount || 1); extra += 1) {
+      streamRows.push(Object.assign({}, streamRows[0]));
+    }
     fs.writeFileSync(path.join(evidenceRoot, 'observer', 'events.jsonl'), observerBytes);
     fs.writeFileSync(path.join(evidenceRoot, 'claude-stream.jsonl'), streamRows.map((row) => JSON.stringify(row)).join('\n') + '\n');
 

@@ -649,11 +649,16 @@ function verifyHostProbeObservations(observerBytes, streamBytes, qualification) 
     return { ok: false, reason: 'HOST_PROBE_SEQUENCE_INVALID' };
   }
   const initRows = stream.filter((row) => row && row.type === 'system' && row.subtype === 'init');
-  if (initRows.length !== 1 || initRows[0].session_id !== qualification.session_id ||
-      initRows[0].claude_code_version !== qualification.cli.version || initRows[0].model !== qualification.cli.actual_model ||
-      !Array.isArray(initRows[0].tools) || !['Task', 'Bash', 'Read', 'SendMessage'].every((tool) => initRows[0].tools.includes(tool)) ||
-      !initRows[0].tools.every((tool) => boundedLiteral(tool, 128)) ||
-      !Array.isArray(initRows[0].mcp_servers) || !initRows[0].mcp_servers.every((server) => isPlainObject(server) && boundedLiteral(server.name, 128))) {
+  // A probe that legitimately spans turns emits one system/init PER TURN, all for
+  // the same session -- observed live on darwin as 3 identical frames. Requiring
+  // exactly one made a genuinely multi-turn probe unpublishable. Requiring at
+  // least one and validating EVERY frame is strictly stronger than validating
+  // only the first: a divergent or foreign init can no longer hide behind index 0.
+  if (initRows.length < 1 || !initRows.every((row) => row.session_id === qualification.session_id
+      && row.claude_code_version === qualification.cli.version && row.model === qualification.cli.actual_model
+      && Array.isArray(row.tools) && ['Task', 'Bash', 'Read', 'SendMessage'].every((tool) => row.tools.includes(tool))
+      && row.tools.every((tool) => boundedLiteral(tool, 128))
+      && Array.isArray(row.mcp_servers) && row.mcp_servers.every((server) => isPlainObject(server) && boundedLiteral(server.name, 128)))) {
     return { ok: false, reason: 'HOST_PROBE_SYSTEM_INIT_INVALID' };
   }
   return {

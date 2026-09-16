@@ -1863,3 +1863,22 @@ test('MACOS-PUBSEQ-02 the historical ordering still publishes', () => {
     if (typeof minted.cleanup === 'function') minted.cleanup();
   }
 });
+
+// A probe that spans turns emits one system/init per turn, all for the SAME
+// session. verifyHostProbeObservations required EXACTLY one, so a genuinely
+// multi-turn probe could never publish. Observed live on darwin: 3 identical
+// init frames for one session after the multi-turn probe fix landed.
+test('MACOS-PUBINIT-01 a multi-turn probe with repeated system/init still publishes', () => {
+  const { mintIsolatedHostContractSession } = require(path.resolve(__dirname, 'lib/host-contract-fixture.cjs'));
+  const repoRoot = path.resolve(__dirname, '..', '..');
+  const minted = mintIsolatedHostContractSession(repoRoot, {
+    rc, runtimeHostClaude: hostClaude, initFrameCount: 3, event: pubseqInitEvent(),
+  });
+  try {
+    assert.strictEqual(minted.result.ok, true,
+      'repeated identical init frames for one session must not invalidate the probe: '
+      + JSON.stringify(minted.result));
+  } finally {
+    if (typeof minted.cleanup === 'function') minted.cleanup();
+  }
+});
