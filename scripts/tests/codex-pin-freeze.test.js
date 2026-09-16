@@ -335,3 +335,70 @@ test('CPF-11 a short read is refused rather than parsed optimistically', () => {
   assert.equal(out.ok, false);
   assert.equal(out.reason, 'CODEX_PIN_FREEZE_MALFORMED');
 });
+
+// CPF-14: the Windows ACL mode literal must be one the validator actually
+// admits. `windows-acl.cjs` guards a CLOSED two-member enum ('ensure' applies
+// the owner-only ACL, 'validate' only observes one) and answers anything else
+// with reason 'invalid-mode' BEFORE it looks at the platform. That refusal is
+// fail-closed, so a wrong literal never weakens anything -- it silently
+// disables the pinned copy on Windows entirely, and no macOS or Linux run can
+// see it because the branch is behind `process.platform === 'win32'`.
+//
+// Caught by arch-platform's review of this delta: the call site shipped
+// { mode: 'enforce' }, which is not a member. The oracle here is the REAL
+// validator, never a restatement of the enum in this file -- the literal the
+// production call site actually passes is captured through the injected
+// dependency and then fed to the genuine function. Reverting the fix to
+// 'enforce' turns both halves red.
+test('CPF-14 the pinned-copy directory asks the Windows ACL validator for a mode it admits', () => {
+  const { createPinnedImageStore } = require(
+    path.resolve(__dirname, '../lib/runtime-bridge-codex/app-server-pinned-image.cjs'));
+  // The COMPOSED instance runtime-bridge-codex.cjs itself injects, not a
+  // fresh one built from the factory with test-shaped dependencies.
+  const realAcl = require(
+    path.resolve(__dirname, '../lib/runtime-consultation.cjs')).windowsPrivateDirectoryAcl;
+
+  const observedModes = [];
+  const store = createPinnedImageStore({
+    fs, os, path, crypto,
+    windowsPrivateDirectoryAcl(dirPath, options) {
+      observedModes.push(options && options.mode);
+      return { ok: true, status: 'secure' };
+    },
+  });
+
+  const source = path.join(mkdir(), 'codex-src');
+  const bytes = Buffer.from('#!/bin/sh\necho pinned\n');
+  fs.writeFileSync(source, bytes, { mode: 0o500 });
+  const digest = crypto.createHash('sha256').update(bytes).digest('hex');
+
+  const platform = Object.getOwnPropertyDescriptor(process, 'platform');
+  const fd = fs.openSync(source, fs.constants.O_RDONLY);
+  let copied;
+  try {
+    Object.defineProperty(process, 'platform', { value: 'win32', configurable: true });
+    copied = store.materializePinnedCopy(fd, bytes.length, digest);
+  } finally {
+    Object.defineProperty(process, 'platform', platform);
+    fs.closeSync(fd);
+  }
+
+  // Half 1 -- the win32 branch was genuinely entered and the copy succeeded.
+  // Without this the test would pass vacuously if the branch stopped running.
+  assert.equal(observedModes.length, 1, 'the win32 ACL branch must run exactly once');
+  assert.equal(copied.ok, true, copied.reason || 'the pinned copy must materialize on win32');
+
+  // Half 2 -- the REAL validator must not reject that literal out of hand.
+  // 'invalid-mode' is returned before the platform check, so this assertion is
+  // meaningful on macOS and Linux, which is the whole point. The target is a
+  // throwaway directory, never os.tmpdir(): on a real Windows runner 'ensure'
+  // APPLIES an owner-only ACL, and doing that to the runner's temp root would
+  // be a side effect on every other job sharing it.
+  const verdict = realAcl(mkdir(), { mode: observedModes[0] });
+  assert.notEqual(verdict.reason, 'invalid-mode',
+    'mode ' + JSON.stringify(observedModes[0]) + ' is outside the closed enum windows-acl.cjs admits');
+  assert.equal(observedModes[0], 'ensure',
+    'a directory this module creates must have the owner-only ACL APPLIED, not merely observed');
+
+  try { store.cleanupPinnedCopies(); } catch (err) { /* best effort */ }
+});

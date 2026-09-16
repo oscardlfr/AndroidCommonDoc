@@ -40,7 +40,13 @@ function ensurePinnedCopyDir(dir) {
     if (uid !== null && st.uid !== uid) return false;
     if (process.platform !== 'win32' && (st.mode & 0o077) !== 0) return false;
     if (process.platform === 'win32') {
-      const acl = windowsPrivateDirectoryAcl(dir, { mode: 'enforce' });
+      // 'ensure' APPLIES the owner-only ACL to a directory this module just
+      // created -- the same mode private-registry.cjs and local-registry.cjs
+      // use for their own private roots. 'validate' would only observe an ACL
+      // nobody had set, and the closed mode enum (windows-acl.cjs) admits
+      // exactly these two, so any other literal fails closed as 'invalid-mode'
+      // and would disable the pinned copy on Windows entirely.
+      const acl = windowsPrivateDirectoryAcl(dir, { mode: 'ensure' });
       if (!acl || acl.ok !== true) return false;
     }
     return true;
