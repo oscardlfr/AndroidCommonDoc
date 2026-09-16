@@ -154,8 +154,18 @@ jobs:
   # macOS is a first-class supported host for the runtime contracts, and until
   # now nothing in CI executed on it -- two defect classes (path spelling and
   # the per-user TMPDIR length) are structurally invisible on Linux and Windows.
+  #
+  # DELIBERATELY NOT run on ordinary develop work. GitHub bills macOS runners at
+  # 10x the per-minute rate of Linux, so gating every develop PR on this job
+  # would consume the account's Actions minutes for a platform signal that is
+  # only needed at release time. It runs on master only: on a pull request that
+  # TARGETS master (so the signal arrives before the merge, when it can still
+  # change the decision) and on a push to master (so the merged result is
+  # verified). On develop it is skipped, which is why ci-gate checks its result
+  # in the skip-tolerant branch below rather than the strict results[@] loop.
   runtime-macos:
     name: Runtime macOS
+    if: github.ref == 'refs/heads/master' || github.base_ref == 'master'
     uses: ./.github/workflows/runtime-macos.yml
 
   # ── Wave 3: Cross-cutting validation ───────────────────────────────────
@@ -222,7 +232,6 @@ jobs:
             "${{ needs.mcp-server.result }}"
             "${{ needs.runtime-consultation-windows.result }}"
             "${{ needs.runtime-bridge-codex-windows.result }}"
-            "${{ needs.runtime-macos.result }}"
             "${{ needs.skill-registry.result }}"
             "${{ needs.agent-template-lint.result }}"
           )
@@ -239,6 +248,17 @@ jobs:
           secret_scan="${{ needs.secret-scan.result }}"
           if [[ "$secret_scan" != "success" && "$secret_scan" != "skipped" ]]; then
             echo "❌ secret-scan: $secret_scan"
+            exit 1
+          fi
+          # runtime-macos runs on master only (see its `if:` above) — macOS
+          # runners bill at 10x Linux, so develop work must not pay for it.
+          # "skipped" is therefore the expected result on every develop PR and
+          # is not a pass being waved through: when the job DOES run, on a PR
+          # targeting master or a push to master, anything other than success
+          # fails the gate exactly as the strict loop would.
+          runtime_macos="${{ needs.runtime-macos.result }}"
+          if [[ "$runtime_macos" != "success" && "$runtime_macos" != "skipped" ]]; then
+            echo "❌ runtime-macos: $runtime_macos"
             exit 1
           fi
           for r in "${results[@]}"; do

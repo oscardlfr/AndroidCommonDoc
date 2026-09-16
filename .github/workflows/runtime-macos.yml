@@ -22,10 +22,20 @@ name: Runtime macOS
 # here is the subset that covers the contracts this wave actually changed, plus
 # the specific cases that were failing on darwin.
 #
-# Invoked from .github/workflows/l0-ci.yml as an unconditional, required
-# ci-gate dependency -- same convention as runtime-consultation-windows and
-# runtime-bridge-codex-windows. Informational-only status would restore exactly
-# the blind spot this job exists to close.
+# Invoked from .github/workflows/l0-ci.yml on MASTER ONLY -- a pull request
+# targeting master, or a push to master. It is deliberately NOT run on develop
+# work: GitHub bills macOS runners at 10x the Linux per-minute rate, and paying
+# that on every develop PR would consume the account's Actions minutes for a
+# signal that is only needed at release time.
+#
+# Blocking where it runs, skipped where it does not. ci-gate checks its result
+# in the skip-tolerant branch rather than the strict results[@] loop, so a
+# "skipped" on develop passes while any real failure on master still fails the
+# gate. That is the cost/coverage trade, not a downgrade to informational.
+#
+# The full 3313-case Bats roster remains the local/release quality gate, and
+# that is what actually qualifies macOS today; this job is the machine-checked
+# subset that guards the contracts this wave changed.
 # ----------------------------------------------------------------------------
 
 on:
