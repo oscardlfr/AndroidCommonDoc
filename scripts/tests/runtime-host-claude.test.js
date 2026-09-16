@@ -1736,8 +1736,17 @@ test('DRH-04 RED: direct-role admission consumes the existing claim once and cre
 // to be literally 'win32'. On darwin it returned HOST_PIN_UNPROVEN before doing
 // any work, so the SessionStart hook was inert and no macOS host identity could
 // ever be established. These fences pin the darwin counterpart.
+//
+// Platform guard is load-bearing: this file runs UNCONDITIONALLY on
+// ubuntu-latest via reusable-shell-tests.yml's bats-post "Run Node.js hook
+// tests" step (scripts/tests/*.test.js under set -e), which feeds shell-tests,
+// which ci-gate requires. queryHostParentChain() correctly returns null on any
+// platform that is neither win32 nor darwin, so these two BEHAVIOURAL tests
+// must skip there rather than assert a chain that cannot exist. The other two
+// are platform-agnostic and keep running everywhere.
+const PIN_OBSERVATION_UNSUPPORTED_PLATFORM = process.platform !== 'darwin' && process.platform !== 'win32';
 
-test('MACOS-PIN-01 the host parent chain is observable on this platform', () => {
+test('MACOS-PIN-01 the host parent chain is observable on this platform', { skip: PIN_OBSERVATION_UNSUPPORTED_PLATFORM }, () => {
   const chain = hostClaude.__TEST_ONLY__queryHostParentChain(process.pid, 10_000);
   assert.ok(Array.isArray(chain) && chain.length > 0, 'a parent chain must be observable');
   const self = chain[0];
@@ -1765,7 +1774,7 @@ test('MACOS-PIN-02 the observation source is bound to the platform that produced
 // executing binary was .../claude-code/2.1.260/claude.app/Contents/MacOS/claude
 // while `claude` on PATH was a different 2.1.272 image, so a PATH- or
 // version-derived pin would have pinned the wrong binary outright.
-test('MACOS-PIN-03 a PATH-launched ancestor reports a bare name and stays unprovable', () => {
+test('MACOS-PIN-03 a PATH-launched ancestor reports a bare name and stays unprovable', { skip: PIN_OBSERVATION_UNSUPPORTED_PLATFORM }, () => {
   // The hazard is concrete: a process launched through a PATH lookup reports a
   // BARE image name, and resolving that against the current working directory
   // can match an unrelated file of the same name. Here a decoy file literally
