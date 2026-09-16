@@ -239,14 +239,38 @@ test('CPF-07 pre-existing path/ownership contract is unchanged on every platform
 const { createAppServerPin } = require(path.resolve(
   __dirname, '../lib/runtime-bridge-codex/app-server-pin.cjs',
 ));
+const { createPinnedImageStore } = require(path.resolve(
+  __dirname, '../lib/runtime-bridge-codex/app-server-pinned-image.cjs',
+));
+// The COMPOSED instances runtime-bridge-codex.cjs itself injects, so the helper
+// below differs from production only in the fs fault it is exercising.
+const { windowsPrivateDirectoryAcl, windowsAclSnapshotsEqual } = require(path.resolve(
+  __dirname, '../lib/runtime-consultation.cjs',
+));
 
+// Every dependency the facade injects must be injected here too, with the
+// SAME fs the overrides are applied to, so the only difference between this
+// instance and production is the fault under test. Omitting any of them makes
+// the helper diverge from production in a way no macOS or Linux run can see:
+// validatePinnedCodexExecutable calls windowsPrivateDirectoryAcl behind
+// `process.platform === 'win32'`, so a missing injection is a TypeError on
+// Windows and invisible everywhere else. That is exactly how it shipped --
+// caught only once this suite first ran on a real Windows runner.
 function pinWith(fsOverrides) {
+  const pinFs = Object.assign(Object.create(fs), fsOverrides);
+  const { materializePinnedCopy, cleanupPinnedCopies } = createPinnedImageStore({
+    fs: pinFs, os, path, crypto, windowsPrivateDirectoryAcl,
+  });
   return createAppServerPin({
-    fs: Object.assign(Object.create(fs), fsOverrides),
+    fs: pinFs,
     path,
     crypto,
     os,
     isTestCapability: () => false,
+    windowsPrivateDirectoryAcl,
+    windowsAclSnapshotsEqual,
+    materializePinnedCopy,
+    cleanupPinnedCopies,
   });
 }
 
@@ -351,12 +375,7 @@ test('CPF-11 a short read is refused rather than parsed optimistically', () => {
 // dependency and then fed to the genuine function. Reverting the fix to
 // 'enforce' turns both halves red.
 test('CPF-14 the pinned-copy directory asks the Windows ACL validator for a mode it admits', () => {
-  const { createPinnedImageStore } = require(
-    path.resolve(__dirname, '../lib/runtime-bridge-codex/app-server-pinned-image.cjs'));
-  // The COMPOSED instance runtime-bridge-codex.cjs itself injects, not a
-  // fresh one built from the factory with test-shaped dependencies.
-  const realAcl = require(
-    path.resolve(__dirname, '../lib/runtime-consultation.cjs')).windowsPrivateDirectoryAcl;
+  const realAcl = windowsPrivateDirectoryAcl;
 
   const observedModes = [];
   const store = createPinnedImageStore({
@@ -401,4 +420,41 @@ test('CPF-14 the pinned-copy directory asks the Windows ACL validator for a mode
     'a directory this module creates must have the owner-only ACL APPLIED, not merely observed');
 
   try { store.cleanupPinnedCopies(); } catch (err) { /* best effort */ }
+});
+
+// CPF-15: the fault-injection helper must build an instance with every
+// dependency the facade injects. This is a regression guard for a real CI
+// failure, not a hypothetical: pinWith originally omitted
+// windowsPrivateDirectoryAcl, and validatePinnedCodexExecutable calls it from
+// inside `process.platform === 'win32'`. So CPF-08..11 threw
+// "TypeError: windowsPrivateDirectoryAcl is not a function" on Windows while
+// passing on macOS and Linux, and nothing caught it until this suite first ran
+// on a real Windows runner.
+//
+// Faking the platform reproduces that on any host. The assertion is deliberately
+// about the SHAPE of the failure, not its reason: on a non-Windows host the real
+// ACL probe cannot find PowerShell and legitimately refuses, which is a fine
+// answer. A TypeError is not -- it means the instance was built wrong.
+test('CPF-15 the fault-injection helper injects every dependency production does', () => {
+  const dir = mkdir();
+  const target = makeExecutable(dir, 'codex-binary-v1\n');
+  const freeze = writeFreeze(dir, freezeFor(target));
+  const pin = pinWith({});
+
+  const platform = Object.getOwnPropertyDescriptor(process, 'platform');
+  let out;
+  try {
+    Object.defineProperty(process, 'platform', { value: 'win32', configurable: true });
+    out = withPin({ mode: 'genuine-pinned', freeze },
+      () => pin.validatePinnedCodexExecutable(target));
+  } finally {
+    Object.defineProperty(process, 'platform', platform);
+  }
+
+  // Reaching a verdict at all is the point: the win32 branch ran and called a
+  // real function rather than undefined.
+  assert.equal(typeof out, 'object');
+  assert.equal(out.ok, false);
+  assert.equal(out.reason, 'CODEX_CLI_PATH_INSECURE',
+    'the win32 ACL branch must produce a refusal, never a TypeError');
 });
