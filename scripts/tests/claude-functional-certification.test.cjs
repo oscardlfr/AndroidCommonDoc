@@ -96,13 +96,53 @@ function runP4FullScenario(scenario, options = {}) {
   });
 }
 
+// The P5 scenarios need a "reviewed subject" document to put through mixed
+// review. The tool's DEFAULT for --p5-subject-file is
+// .planning/wave-portable-runtime-messaging-adapters/mixed-review-subject-codex-opt-in.md,
+// a historical wave's file that .gitignore:61 (`.planning/wave*/`) excludes --
+// so it can never exist in a fresh checkout, and on a developer machine it
+// survives only until that wave's directory is cleaned up. Every P5 case here
+// therefore passed or failed on ambient machine state rather than on anything
+// it was testing, and CI never caught it because reusable-shell-tests.yml
+// globs scripts/tests/*.test.js and this file is .cjs.
+//
+// Same defect class as the five fixture fixes in this wave: a test must carry
+// its own inputs. The tool only requires the path to be a regular file (it
+// copies it and hashes it as immutable evidence), so a synthesized document is
+// a faithful stand-in -- and a per-run one is strictly better, because the
+// subject digest then varies with the run instead of being a constant lifted
+// from an unrelated wave.
+const p5SubjectFile = (() => {
+  const dir = fs.mkdtempSync(path.join(privateRoot, 'cfc-p5-subject-'));
+  const file = path.join(dir, 'mixed-review-subject.md');
+  fs.writeFileSync(file, [
+    '# Mixed review subject — functional certification fixture',
+    '',
+    'Synthesized by scripts/tests/claude-functional-certification.test.cjs so the',
+    'P5 scenarios carry their own reviewed subject instead of depending on a',
+    'gitignored file from an unrelated wave. Content is immaterial to the',
+    'protocol under test: the certification tool copies this file and records its',
+    'digest as immutable evidence, and never parses it.',
+    '',
+    '## Proposal',
+    '',
+    'Admit exactly one additional selection key, `codex_worker_opt_in_roles`, and',
+    'no other. Every other key stays closed.',
+    '',
+  ].join('\n'), { encoding: 'utf8', mode: 0o600 });
+  return file;
+})();
+
 function runP5Scenario(scenario = 'p5-full-scenario', options = {}) {
+  // extraLauncherArgs APPENDS, mirroring runP4FullScenario, so a case can add a
+  // flag without silently dropping --p5-scenario or the subject file.
+  const { extraLauncherArgs = [], ...scenarioOptions } = options;
   return runScenario(scenario, {
     operation: 'entrypoint-protocol',
     transportProfile: 'native-claude-cli',
     nativeFixture: true,
-    launcherArgs: ['--p5-scenario'],
-    ...options,
+    launcherArgs: ['--p5-scenario', '--p5-subject-file', p5SubjectFile, ...extraLauncherArgs],
+    ...scenarioOptions,
   });
 }
 
@@ -1100,6 +1140,12 @@ test('NATIVE-ENTRYPOINT retires only its exact terminal session generation', asy
   const createdAt = new Date(Date.now() - 60_000).toISOString().replace(/\.\d{3}Z$/, 'Z');
   const expiresAt = new Date(Date.now() + 3_600_000).toISOString().replace(/\.\d{3}Z$/, 'Z');
   const generationId = crypto.randomBytes(16).toString('hex');
+  // mode 0600 is load-bearing, not hygiene. The private registry refuses any
+  // record that is not owner-only, and readRegistryRecord reports that as
+  // SECURITY_INVALID -- so a default-mode (0644) write makes
+  // peekSessionGeneration fail before retirement is ever attempted, and the
+  // case fails for a fixture reason rather than the one it is testing.
+  // Production writers already pass 0600 everywhere; only this fixture did not.
   fs.writeFileSync(generationPath, JSON.stringify({
     schema: 'runtime/session-generation/v1',
     provider: identity.provider,
@@ -1107,7 +1153,7 @@ test('NATIVE-ENTRYPOINT retires only its exact terminal session generation', asy
     generation_id: generationId,
     created_at: createdAt,
     expires_at: expiresAt,
-  }), { flag: 'wx' });
+  }), { flag: 'wx', mode: 0o600 });
 
   const run = await runScenario('bad-first-tool', {
     operation: 'entrypoint-protocol',
@@ -1121,7 +1167,10 @@ test('NATIVE-ENTRYPOINT retires only its exact terminal session generation', asy
 
   assert.notEqual(run.code, 0);
   assert.equal(run.state.status, 'INVALID_FIRST_ACTION');
-  assert.equal(run.state.native_session_authority_retirement.complete, true);
+  // Carry the retirement payload into the message: a bare `false !== true` says
+  // nothing about WHY, and the reason (e.g. SECURITY_INVALID) is the diagnosis.
+  assert.equal(run.state.native_session_authority_retirement.complete, true,
+    JSON.stringify(run.state.native_session_authority_retirement));
   assert.equal(run.state.native_session_authority_retirement.status, 'retired');
   assert.equal(run.state.native_session_authority_retirement.generation_id_digest,
     crypto.createHash('sha256').update(generationId).digest('hex'));
@@ -1943,7 +1992,10 @@ test('CFC-NT-01 a text-only Agent turn terminates cleanly without confirmation r
   assert.equal(run.state.stdin_closed_after_terminal, true);
   assert.equal(run.state.writers_settled, true);
   assert.equal(run.state.transcript_cleanup.complete, true);
-  assert.equal(run.state.native_session_authority_retirement.complete, true);
+  // Carry the retirement payload into the message: a bare `false !== true` says
+  // nothing about WHY, and the reason (e.g. SECURITY_INVALID) is the diagnosis.
+  assert.equal(run.state.native_session_authority_retirement.complete, true,
+    JSON.stringify(run.state.native_session_authority_retirement));
   assert.equal(fs.readdirSync(run.evidenceRoot).some((name) => /^sequence-2-/.test(name)), false,
     'a no-tool model turn must not receive a confirmation or retry message');
 });
