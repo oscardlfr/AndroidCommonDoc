@@ -4047,6 +4047,14 @@ writeJsonlFrame(child.stdin, firstMessage, (error) => {
 
 child.on('exit', (code, signal) => {
   if (terminalShutdownTimer) clearTimeout(terminalShutdownTimer);
+  // A host probe that saw an early terminal result arms an UNREF'd continuation
+  // timer, so a child that exits before that timer fires would otherwise reach
+  // process.exit() with the observations digest, the spawn/start counters and
+  // the contract verdict never recorded -- the run record would claim a probe
+  // that was never finalized. Finalize here, before any state is written, so
+  // whatever the observer did capture is persisted and judged. It is idempotent
+  // (hostProbeFinalized), so a run that already finalized is unaffected.
+  if (operation === 'host-contract-probe') finalizeHostContractProbe();
   if (transportProfile === 'native-claude-cli') {
     try {
       state.transcript_cleanup = cleanupNativeSessionTranscripts();

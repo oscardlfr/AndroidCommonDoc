@@ -90,8 +90,65 @@ test('CPF-01 a matching digest resolves the spawn command', () => {
   const freeze = writeFreeze(dir, freezeFor(target));
   const out = withPin({ mode: 'genuine-pinned', freeze }, () => validate(target));
   assert.equal(out.ok, true, out.reason);
-  assert.equal(out.command, target);
+  // The command is the protected copy of the VALIDATED bytes, not the mutable
+  // pathname that was validated -- see CPF-12/13. It must still hash to the
+  // digest the freeze pinned.
+  assert.notEqual(out.command, target,
+    'execution must not be bound to the mutable original path');
+  assert.equal(
+    crypto.createHash('sha256').update(fs.readFileSync(out.command)).digest('hex'),
+    crypto.createHash('sha256').update(fs.readFileSync(target)).digest('hex'),
+    'the executed copy must be byte-identical to the validated bytes',
+  );
   assert.deepEqual(out.args, ['app-server', '--listen', 'stdio://', '--strict-config']);
+});
+
+test('CPF-12 the executed copy lives in an owner-confined private directory', () => {
+  const dir = mkdir();
+  const target = makeExecutable(dir, 'codex-binary-v1\n');
+  const freeze = writeFreeze(dir, freezeFor(target));
+  const out = withPin({ mode: 'genuine-pinned', freeze }, () => validate(target));
+  assert.equal(out.ok, true, out.reason);
+  const copyStat = fs.lstatSync(out.command);
+  assert.equal(copyStat.isFile(), true);
+  assert.equal(copyStat.isSymbolicLink(), false);
+  const dirStat = fs.lstatSync(path.dirname(out.command));
+  assert.equal(dirStat.isDirectory(), true);
+  if (process.platform !== 'win32') {
+    assert.equal(dirStat.mode & 0o077, 0, 'the copy directory must not be group/other accessible');
+    assert.equal(copyStat.mode & 0o077, 0, 'the copy itself must not be group/other accessible');
+    assert.equal(copyStat.uid, process.getuid(), 'the copy must be owned by this user');
+  }
+  // Keyed by the validated digest, so a different binary can never reuse it.
+  assert.ok(path.basename(out.command).endsWith(
+    crypto.createHash('sha256').update(fs.readFileSync(target)).digest('hex'),
+  ), 'the copy name must be bound to the validated digest: ' + out.command);
+});
+
+test('CPF-13 replacing or rewriting the original after validation does not change the executed bytes', () => {
+  const dir = mkdir();
+  const target = makeExecutable(dir, 'codex-binary-v1\n');
+  const freeze = writeFreeze(dir, freezeFor(target));
+  const out = withPin({ mode: 'genuine-pinned', freeze }, () => validate(target));
+  assert.equal(out.ok, true, out.reason);
+  const executedBefore = fs.readFileSync(out.command);
+
+  // (a) rewrite the original in place
+  fs.writeFileSync(target, 'codex-binary-EVIL\n', { mode: 0o755 });
+  assert.deepEqual(fs.readFileSync(out.command), executedBefore,
+    'an in-place rewrite of the original must not reach the executed image');
+
+  // (b) replace the original with a different file entirely (new inode)
+  const impostor = path.join(dir, 'impostor');
+  fs.writeFileSync(impostor, 'codex-binary-IMPOSTOR\n', { mode: 0o755 });
+  fs.renameSync(impostor, target);
+  assert.deepEqual(fs.readFileSync(out.command), executedBefore,
+    'replacing the original path must not reach the executed image');
+
+  // And a re-validation now correctly refuses, because the pinned bytes are gone.
+  const after = withPin({ mode: 'genuine-pinned', freeze }, () => validate(target));
+  assert.equal(after.ok, false);
+  assert.equal(after.reason, 'CODEX_PIN_DIGEST_DRIFT');
 });
 
 test('CPF-02 an identical version with a different digest is denied', () => {
@@ -170,4 +227,111 @@ test('CPF-07 pre-existing path/ownership contract is unchanged on every platform
   const src = fs.readFileSync(path.resolve(__dirname, '../lib/runtime-bridge-codex/app-server-pin.cjs'), 'utf8');
   assert.match(src, /if \(process\.platform === 'win32'\) \{\s*\n\s*const acl = windowsPrivateDirectoryAcl\(path\.dirname\(pinnedPath\)/);
   assert.match(src, /process\.platform !== 'win32' && parseInt\(freeze\.mode_octal, 8\)/);
+});
+
+// ── Finding A: the freeze record is read through a validated DESCRIPTOR ───────
+//
+// The earlier reader lstat'd the PATHNAME and then readFileSync'd the PATHNAME,
+// so anything could be substituted in between. These four cases drive each leg
+// of the replacement deterministically by injecting an `fs` whose calls diverge
+// exactly where a real race would -- a wall-clock race would be untestable.
+
+const { createAppServerPin } = require(path.resolve(
+  __dirname, '../lib/runtime-bridge-codex/app-server-pin.cjs',
+));
+
+function pinWith(fsOverrides) {
+  return createAppServerPin({
+    fs: Object.assign(Object.create(fs), fsOverrides),
+    path,
+    crypto,
+    os,
+    isTestCapability: () => false,
+  });
+}
+
+test('CPF-08 a symlink swapped in after the lstat is refused by O_NOFOLLOW alone', () => {
+  const dir = mkdir();
+  const target = makeExecutable(dir, 'codex-binary-v1\n');
+  const realFreeze = writeFreeze(dir, freezeFor(target));
+  const linkPath = path.join(dir, 'freeze-link.json');
+  fs.symlinkSync(realFreeze, linkPath);
+  // The plain case is already caught by the pre-existing lstat isSymbolicLink()
+  // guard, so it would pass with or without this finding's fix and proves
+  // nothing about O_NOFOLLOW. Make lstat LIE -- report a regular file for a path
+  // that is really a symlink, exactly what a swap inside the check/open window
+  // looks like -- so the open is the only thing left that can refuse it.
+  const pin = pinWith({
+    lstatSync(p, ...rest) {
+      const real = fs.lstatSync(p, ...rest);
+      if (p !== linkPath) return real;
+      const honest = fs.statSync(realFreeze);
+      return Object.assign(Object.create(Object.getPrototypeOf(honest)), honest, {
+        isSymbolicLink: () => false,
+        isFile: () => true,
+      });
+    },
+  });
+  const out = withPin({ mode: 'genuine-pinned', freeze: linkPath },
+    () => pin.validatePinnedCodexExecutable(target));
+  assert.equal(out.ok, false);
+  assert.equal(out.reason, 'CODEX_PIN_FREEZE_INSECURE');
+});
+
+test('CPF-09 a freeze replaced between the pathname check and the open is refused', () => {
+  const dir = mkdir();
+  const target = makeExecutable(dir, 'codex-binary-v1\n');
+  const freezePath = writeFreeze(dir, freezeFor(target));
+  // lstat reports the file the caller vetted; the descriptor that is actually
+  // opened belongs to a DIFFERENT inode -- exactly a swap inside the window.
+  const pin = pinWith({
+    fstatSync(fd) {
+      const real = fs.fstatSync(fd);
+      return Object.assign(Object.create(Object.getPrototypeOf(real)), real, { ino: real.ino + 1 });
+    },
+  });
+  const out = withPin({ mode: 'genuine-pinned', freeze: freezePath },
+    () => pin.validatePinnedCodexExecutable(target));
+  assert.equal(out.ok, false);
+  assert.equal(out.reason, 'CODEX_PIN_FREEZE_INSECURE');
+});
+
+test('CPF-10 a freeze mutated while it is being read is refused, never parsed', () => {
+  const dir = mkdir();
+  const target = makeExecutable(dir, 'codex-binary-v1\n');
+  const freezePath = writeFreeze(dir, freezeFor(target));
+  // First fstat (identity + size) matches; the post-read fstat reports a
+  // different mtime, i.e. the bytes moved underneath the descriptor.
+  let calls = 0;
+  const pin = pinWith({
+    fstatSync(fd) {
+      const real = fs.fstatSync(fd);
+      calls += 1;
+      if (calls === 1) return real;
+      return Object.assign(Object.create(Object.getPrototypeOf(real)), real, { mtimeMs: real.mtimeMs + 1000 });
+    },
+  });
+  const out = withPin({ mode: 'genuine-pinned', freeze: freezePath },
+    () => pin.validatePinnedCodexExecutable(target));
+  assert.equal(out.ok, false);
+  assert.equal(out.reason, 'CODEX_PIN_FREEZE_INSECURE');
+});
+
+test('CPF-11 a short read is refused rather than parsed optimistically', () => {
+  const dir = mkdir();
+  const target = makeExecutable(dir, 'codex-binary-v1\n');
+  const freezePath = writeFreeze(dir, freezeFor(target));
+  // Deliver one byte and then EOF: a truncated record must never reach JSON.parse.
+  let served = 0;
+  const pin = pinWith({
+    readSync(fd, buffer, offset, length, position) {
+      if (served > 0) return 0;
+      served += 1;
+      return fs.readSync(fd, buffer, offset, Math.min(1, length), position);
+    },
+  });
+  const out = withPin({ mode: 'genuine-pinned', freeze: freezePath },
+    () => pin.validatePinnedCodexExecutable(target));
+  assert.equal(out.ok, false);
+  assert.equal(out.reason, 'CODEX_PIN_FREEZE_MALFORMED');
 });

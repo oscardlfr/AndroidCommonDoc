@@ -16,6 +16,7 @@ const expectedModules = Object.freeze([
   'app-server-diagnostics.cjs',
   'app-server-framing.cjs',
   'app-server-pin.cjs',
+  'app-server-pinned-image.cjs',
   'app-server-protocol-schema.cjs',
   'app-server-rpc-dispatch.cjs',
   'app-server-rpc-methods.cjs',

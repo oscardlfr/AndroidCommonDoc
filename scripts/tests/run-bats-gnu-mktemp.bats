@@ -46,6 +46,15 @@ FAKE
   export FAKE_BATS_TMPDIR_WITNESS="$TMPDIR_WITNESS"
   LOG="$BATS_TEST_TMPDIR/out.log"
   SHIMS_BEFORE="$(_shim_snapshot)"
+  BUDGET_SCOPED_TMPDIR=""
+}
+
+# Runs after EVERY case, including one aborted mid-way by a failed assertion, so
+# a run-scoped short TMPDIR can never outlive the test that created it.
+teardown() {
+  if [ -n "${BUDGET_SCOPED_TMPDIR:-}" ] && [ -d "$BUDGET_SCOPED_TMPDIR" ]; then
+    rm -rf -- "$BUDGET_SCOPED_TMPDIR"
+  fi
 }
 
 _make_gnu() {  # $1 = tool name to create as a GNU-shaped mktemp
@@ -170,13 +179,15 @@ _child_tmpdir() { cat "$TMPDIR_WITNESS"; }
 
 @test "TMPDIR-BUDGET-02 an ambient TMPDIR already inside the budget is left exactly as it is" {
   _make_gnu mktemp
-  local short_tmp="/tmp/l0b-budget-02-$$"
-  mkdir -p "$short_tmp"
+  # mktemp -d, never a PID-derived literal: two concurrent runs share a PID
+  # namespace only by luck, and the directory is registered for cleanup on the
+  # line after it is created so a failing assertion below still cannot leak it.
+  local short_tmp; short_tmp="$(mktemp -d /tmp/l0b-XXXXXXXX)"
+  BUDGET_SCOPED_TMPDIR="$short_tmp"
   [ "${#short_tmp}" -le 42 ]
   TMPDIR="$short_tmp" _run_runbats "$PROJ/x.bats"
   [ "$status" -eq 0 ]
   [ "$(_child_tmpdir)" = "$short_tmp" ]
-  rmdir "$short_tmp" 2>/dev/null || true
 }
 
 @test "TMPDIR-BUDGET-03 a run-scoped short TMPDIR is removed when the run ends" {

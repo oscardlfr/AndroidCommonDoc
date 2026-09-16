@@ -2017,7 +2017,17 @@ test('MACOS-PIN-02 the observation source is bound to the platform that produced
 // executing binary was .../claude-code/2.1.260/claude.app/Contents/MacOS/claude
 // while `claude` on PATH was a different 2.1.272 image, so a PATH- or
 // version-derived pin would have pinned the wrong binary outright.
-test('MACOS-PIN-03 a PATH-launched ancestor reports a bare name and stays unprovable', { skip: PIN_OBSERVATION_UNSUPPORTED_PLATFORM }, () => {
+// Darwin ONLY. PIN_OBSERVATION_UNSUPPORTED_PLATFORM also admits win32, but this
+// case asserts a specifically POSIX/darwin shape: it reads the ancestor's own
+// reported image name out of `ps` output and relies on a decoy resolving
+// relative to the child's cwd. Windows reports a full image path through a
+// different mechanism entirely, so running it there would assert darwin
+// semantics against a host that never produces them.
+const PIN_OBSERVATION_NOT_DARWIN = process.platform !== 'darwin'
+  ? 'darwin-only: this case asserts the darwin ps/bare-image-name shape'
+  : false;
+
+test('MACOS-PIN-03 a PATH-launched ancestor reports a bare name and stays unprovable', { skip: PIN_OBSERVATION_NOT_DARWIN }, () => {
   // The hazard is concrete: a process launched through a PATH lookup reports a
   // BARE image name, and resolving that against the current working directory
   // can match an unrelated file of the same name. Here a decoy file literally

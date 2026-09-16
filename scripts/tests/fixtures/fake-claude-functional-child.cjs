@@ -1110,6 +1110,16 @@ input.on('line', (line) => {
       }, 250);
       return;
     }
+    if (scenario === 'hcp-exit-before-continuation') {
+      // Turn 1 ends with the sequence still incomplete, so the driver arms its
+      // UNREF'd continuation timer -- and then the child dies before that timer
+      // can ever fire. Whatever the observer did capture must still be
+      // finalized and judged, never silently dropped on the way to exit.
+      writeHostProbeObservations({ phase: 'first-turn' });
+      emit({ type: 'result', subtype: 'success', session_id: sessionId });
+      setTimeout(() => process.exit(0), 50);
+      return;
+    }
     writeHostProbeObservations();
     emit({ type: 'system', subtype: 'fake_host_probe_complete', session_id: sessionId });
     emit({ type: 'result', subtype: 'success', session_id: sessionId });

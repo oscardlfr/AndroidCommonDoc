@@ -553,6 +553,28 @@ test('CFC-OBSERVER-02 entrypoint mode records Agent hooks without requiring or r
   assert.doesNotMatch(source, /scripts[\\/]lib/);
 });
 
+test('HCP-EXIT-BEFORE-CONTINUATION finalizes the probe when the child exits before the continuation timer fires', async () => {
+  // After an early terminal result the driver arms an UNREF'd continuation
+  // timer and keeps the session open. If the child then exits first, the exit
+  // path used to run straight to process.exit() without finalizing, so the
+  // observations digest, the spawn/start counters and the contract verdict were
+  // never recorded -- the run record described a probe that was never judged.
+  const run = await runProbeScenario('hcp-exit-before-continuation', {
+    transportProfile: 'native-claude-cli',
+    nativeFixture: true,
+  });
+  // The probe legitimately cannot COMPLETE here: the sequence never finished.
+  // What this case pins is that it was FINALIZED rather than silently skipped.
+  assert.match(String(run.state.observations_digest), /^[0-9a-f]{64}$/,
+    'the observations digest must be recorded even when the child exits first');
+  assert.equal(typeof run.state.probe_observed_agent_spawns, 'number',
+    'the spawn counter must be recorded even when the child exits first');
+  assert.equal(typeof run.state.probe_observed_subagent_starts, 'number',
+    'the subagent-start counter must be recorded even when the child exits first');
+  assert.ok(run.state.status && run.state.status !== 'ACTIVE',
+    'a finalized probe must carry a terminal verdict, never be left ACTIVE: ' + run.state.status);
+});
+
 test('HCP-POSITIVE proves the complete authority-free host contract with extra tools and MCP', async () => {
   const run = await runProbeScenario('hcp-success');
   assert.equal(run.code, 0, run.stderr);

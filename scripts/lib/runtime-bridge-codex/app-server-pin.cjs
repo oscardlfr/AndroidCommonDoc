@@ -8,6 +8,10 @@ function createAppServerPin({
   isTestCapability,
   windowsPrivateDirectoryAcl,
   windowsAclSnapshotsEqual,
+  // Finding B: supplied by app-server-pinned-image.cjs so the validated bytes,
+  // not the mutable pathname, are what ends up being executed.
+  materializePinnedCopy,
+  cleanupPinnedCopies,
 }) {
   // PLAN.md ~L921's own frozen production argv -- kept as one named constant so
   // the real value and every test-override fallback below stay byte-identical
@@ -54,15 +58,63 @@ function createAppServerPin({
       return { ok: false, reason: 'CODEX_PIN_FREEZE_ABSENT' };
     }
     const currentUid = typeof process.getuid === 'function' ? process.getuid() : null;
-    if (
-      !st.isFile() || st.isSymbolicLink() || st.nlink !== 1
-      || st.size <= 0 || st.size > CODEX_PIN_FREEZE_MAX_BYTES
-      || (currentUid !== null && st.uid !== currentUid)
-      || (process.platform !== 'win32' && (st.mode & 0o022) !== 0)
-    ) return { ok: false, reason: 'CODEX_PIN_FREEZE_INSECURE' };
+    const insecure = (candidate) => !candidate.isFile() || candidate.nlink !== 1
+      || candidate.size <= 0 || candidate.size > CODEX_PIN_FREEZE_MAX_BYTES
+      || (currentUid !== null && candidate.uid !== currentUid)
+      || (process.platform !== 'win32' && (candidate.mode & 0o022) !== 0);
+    if (st.isSymbolicLink() || insecure(st)) return { ok: false, reason: 'CODEX_PIN_FREEZE_INSECURE' };
+
+    // The lstat above observed the PATHNAME; everything from here on must be
+    // decided on the open DESCRIPTOR, or the file can be swapped between the
+    // check and the read. O_NOFOLLOW refuses a symlink planted at the pathname
+    // in that window; the fstat identity comparison catches a rename/replace of
+    // the underlying file; and re-checking both the descriptor and the pathname
+    // after the read catches a substitution that happened while we were reading.
+    let fd;
+    let raw;
+    try {
+      fd = fs.openSync(freezePath, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW || 0));
+    } catch (err) {
+      return { ok: false, reason: 'CODEX_PIN_FREEZE_INSECURE' };
+    }
+    try {
+      const opened = fs.fstatSync(fd);
+      // Same file the pathname named a moment ago, and still secure in its own right.
+      if (opened.dev !== st.dev || opened.ino !== st.ino || insecure(opened)) {
+        return { ok: false, reason: 'CODEX_PIN_FREEZE_INSECURE' };
+      }
+      // Bounded read THROUGH the descriptor. A short read is a truncation or a
+      // concurrent rewrite, never something to parse optimistically.
+      const buffer = Buffer.allocUnsafe(opened.size);
+      let filled = 0;
+      while (filled < opened.size) {
+        const got = fs.readSync(fd, buffer, filled, opened.size - filled, filled);
+        if (got <= 0) break;
+        filled += got;
+      }
+      if (filled !== opened.size) return { ok: false, reason: 'CODEX_PIN_FREEZE_MALFORMED' };
+      // Nothing may have changed underneath us while we read.
+      const after = fs.fstatSync(fd);
+      if (
+        after.dev !== opened.dev || after.ino !== opened.ino
+        || after.size !== opened.size || after.nlink !== opened.nlink
+        || after.mtimeMs !== opened.mtimeMs
+      ) return { ok: false, reason: 'CODEX_PIN_FREEZE_INSECURE' };
+      // And the pathname must still resolve to that same file, so a swap that
+      // left our descriptor untouched is caught too.
+      let pathNow;
+      try { pathNow = fs.lstatSync(freezePath); } catch (err) { return { ok: false, reason: 'CODEX_PIN_FREEZE_INSECURE' }; }
+      if (pathNow.isSymbolicLink() || pathNow.dev !== opened.dev || pathNow.ino !== opened.ino) {
+        return { ok: false, reason: 'CODEX_PIN_FREEZE_INSECURE' };
+      }
+      raw = buffer;
+    } finally {
+      try { fs.closeSync(fd); } catch { /* descriptor already gone */ }
+    }
+
     let parsed;
     try {
-      parsed = JSON.parse(fs.readFileSync(freezePath, 'utf8'));
+      parsed = JSON.parse(raw.toString('utf8'));
     } catch (err) {
       return { ok: false, reason: 'CODEX_PIN_FREEZE_MALFORMED' };
     }
@@ -89,6 +141,7 @@ function createAppServerPin({
    * rejects, and it was observed on this host in one session.
    */
   function enforceCodexPinFreeze(pinnedPath, freeze, stat) {
+    let executablePath;
     let resolved;
     try {
       resolved = fs.realpathSync(pinnedPath);
@@ -122,6 +175,13 @@ function createAppServerPin({
       }
       if (offset !== opened.size) return { ok: false, reason: 'CODEX_PIN_SHORT_READ' };
       digest = hash.digest('hex');
+      // Bind execution to these exact bytes while the validated descriptor is
+      // still open. Doing it here, not after the close, is the whole point: a
+      // second open of the mutable pathname would be a fresh, unvalidated read.
+      if (digest !== freeze.executable_sha256) return { ok: false, reason: 'CODEX_PIN_DIGEST_DRIFT' };
+      const copied = materializePinnedCopy(fd, opened.size, digest);
+      if (!copied.ok) return copied;
+      executablePath = copied.path;
     } catch (err) {
       return { ok: false, reason: 'CODEX_PIN_TARGET_UNREADABLE' };
     } finally {
@@ -129,7 +189,6 @@ function createAppServerPin({
         try { fs.closeSync(fd); } catch (err) { /* validation already decided above */ }
       }
     }
-    if (digest !== freeze.executable_sha256) return { ok: false, reason: 'CODEX_PIN_DIGEST_DRIFT' };
     const currentUid = typeof process.getuid === 'function' ? process.getuid() : null;
     if (freeze.uid !== null && currentUid !== null && freeze.uid !== currentUid) {
       return { ok: false, reason: 'CODEX_PIN_OWNER_DRIFT' };
@@ -137,7 +196,7 @@ function createAppServerPin({
     if (process.platform !== 'win32' && parseInt(freeze.mode_octal, 8) !== (stat.mode & 0o7777)) {
       return { ok: false, reason: 'CODEX_PIN_MODE_DRIFT' };
     }
-    return { ok: true };
+    return { ok: true, executablePath };
   }
 
   /**
@@ -268,6 +327,10 @@ function createAppServerPin({
     if (frozen.enforced) {
       const enforced = enforceCodexPinFreeze(pinnedPath, frozen.freeze, st);
       if (!enforced.ok) return enforced;
+      // Execute the verified copy, never the mutable pathname. Callers spawn
+      // this with shell:false exactly as before, and the owned-child BORN check
+      // then proves the child really is running THIS image.
+      return { ok: true, command: enforced.executablePath, args: DEFAULT_APP_SERVER_SPAWN_ARGS.slice() };
     }
     return { ok: true, command: pinnedPath, args: DEFAULT_APP_SERVER_SPAWN_ARGS.slice() };
   }
@@ -315,7 +378,14 @@ function createAppServerPin({
     return { command: parsed.command, args: parsed.args };
   }
 
-  return Object.freeze({ readProtectedHostCodexPin, validatePinnedCodexExecutable, resolveAppServerSpawnCommand });
+  return Object.freeze({
+    readProtectedHostCodexPin,
+    validatePinnedCodexExecutable,
+    resolveAppServerSpawnCommand,
+    // Internal to this factory's own surface -- the public facade ABI is
+    // unchanged; teardown calls this so a validated copy never outlives its run.
+    cleanupPinnedCodexCopies: cleanupPinnedCopies,
+  });
 }
 
 module.exports = Object.freeze({ createAppServerPin });

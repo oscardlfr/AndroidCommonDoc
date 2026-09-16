@@ -801,10 +801,14 @@ function publishClaudeHostContractPackage(options) {
   // exact path and bytes and its republish stays idempotent.
   const platformPath = hostContractPlatformPath(projectRoot, certificate.os);
   if (!platformPath) return { ok: false, reason: 'HOST_CONTRACT_INTERNAL_SHAPE' };
+  // Decide legacy ownership from a VERIFIED package, never from a raw
+  // certificate.os read. An unsigned or malformed legacy file claiming this
+  // platform would otherwise steer the destination, and publishNoClobber would
+  // then compare bytes against an artifact whose provenance was never checked.
+  // verifiedHostContractAt validates schema, shape and the ed25519 signature
+  // before it looks at the platform at all.
   const legacyPath = hostContractLegacyPath(projectRoot);
-  const legacyPackage = readJsonFile(legacyPath);
-  const packagePath = isPlainObject(legacyPackage) && isPlainObject(legacyPackage.certificate) &&
-    legacyPackage.certificate.os === certificate.os ? legacyPath : platformPath;
+  const packagePath = verifiedHostContractAt(legacyPath, certificate.os).ok ? legacyPath : platformPath;
   const packageBytes = Buffer.from(canonicalJSONStringify(pkg), 'utf8');
   try {
     fs.mkdirSync(path.dirname(packagePath), { recursive: true, mode: 0o700 });
