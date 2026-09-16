@@ -166,6 +166,47 @@ _bats_resolvable() {
 # `gmktemp` is GNU, a run-scoped private shim directory is prepended to the PATH
 # of the bats child alone.
 GNU_MKTEMP_SHIM_DIR=""
+RUN_BATS_SHORT_TMPDIR=""
+
+# scripts/lib/runtime-bridge-codex/isolation-topology.cjs caps a codex child's
+# own state path at 254 characters. The deepest path this suite builds beneath
+# $TMPDIR is
+#   /bats-run-XXXXXX/test/<n>/runtime-tmp/android-common-doc-runtime/uid-501/<64 hex>/isolation-roots/<32 hex>/cx/memories_1.sqlite-shm
+# i.e. 212 characters, leaving 42 for the base. macOS hands every user a
+# 48-character per-user TMPDIR, so the ambient default cannot satisfy the
+# budget: isolation roots then fail to provision with
+# ISOLATION_ROOT_PATH_BUDGET_EXCEEDED, and only for SOME tests, because the
+# remaining margin moves with the bats run-dir name and the test index. That
+# sensitivity is why the same commit could pass in one session and fail in
+# another. Give the run a short base of its own when the ambient one does not
+# fit; the ambient TMPDIR is never modified for anything but this run.
+RUN_BATS_TMPDIR_MAX_CHARS=42
+
+_cleanup_run_scoped() {
+    _cleanup_gnu_mktemp_shim
+    if [[ -n "${RUN_BATS_SHORT_TMPDIR:-}" && -d "$RUN_BATS_SHORT_TMPDIR" ]]; then
+        rm -rf -- "$RUN_BATS_SHORT_TMPDIR"
+    fi
+}
+
+_tmpdir_budget_preflight() {
+    local base="${TMPDIR:-/tmp}"
+    base="${base%/}"
+    if [[ ${#base} -le $RUN_BATS_TMPDIR_MAX_CHARS ]]; then
+        return 0   # already inside the budget: leave it exactly as it is
+    fi
+    # /tmp is the only short base guaranteed to exist; if it is unusable, run
+    # with the ambient TMPDIR rather than inventing one, so the failure stays
+    # the suite's own honest one.
+    [[ -d /tmp && -w /tmp ]] || return 0
+    local candidate="/tmp/l0b-$$-${BATS_RUN_ID:-run}"
+    candidate="${candidate:0:$RUN_BATS_TMPDIR_MAX_CHARS}"
+    mkdir -p -m 0700 -- "$candidate" || return 0
+    RUN_BATS_SHORT_TMPDIR="$candidate"
+    # Arm cleanup IMMEDIATELY: anything failing after this must leave nothing.
+    trap '_cleanup_run_scoped' EXIT INT TERM HUP
+    export TMPDIR="$candidate"
+}
 
 _is_gnu_mktemp() {
     # GNU coreutils answers --version; BSD mktemp rejects it. Name proves nothing.
@@ -203,7 +244,7 @@ _gnu_mktemp_preflight() {
     }
     # Arm cleanup IMMEDIATELY after the directory exists: anything that fails
     # between here and the shim being written must still leave nothing behind.
-    trap '_cleanup_gnu_mktemp_shim' EXIT INT TERM HUP
+    trap '_cleanup_run_scoped' EXIT INT TERM HUP
     # NOTE: no `--` here; BSD chmod (macOS) treats it as a filename.
     chmod 0700 "$GNU_MKTEMP_SHIM_DIR"
     cat > "$GNU_MKTEMP_SHIM_DIR/mktemp" <<'GNU_MKTEMP_SHIM'
@@ -263,6 +304,7 @@ if [[ "$EVAL_ONLY" == "false" ]]; then
     if _bats_resolvable; then
         # AFTER resolvability: an unresolvable bats must still report its own
         # reason, not a mktemp one. The preflight guards the actual invocation.
+        _tmpdir_budget_preflight
         _gnu_mktemp_preflight
         bats_rc=0
         _bats_invoke "${TARGETS[@]}" > "$LOG" 2>&1 || bats_rc=$?
