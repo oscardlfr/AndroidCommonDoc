@@ -102,6 +102,22 @@ function digestBytes(value) {
   return crypto.createHash('sha256').update(value).digest('hex');
 }
 
+// macOS reaches one directory by two spellings -- /var/folders/... and
+// /private/var/folders/..., /tmp and /private/tmp -- and which one a caller
+// holds depends on where it came from: a process that read TMPDIR gets the
+// short spelling, one that asked `git rev-parse --show-toplevel` (as
+// coordinationRootPathFor does) gets the canonical one. path.resolve does NOT
+// resolve symlinks, so identifying a project root by its spelling makes
+// authority depend on who is asking: a record minted by the first caller could
+// never be validated by the second, and the failure surfaced far away as
+// `claude-id01-host-contract-invalid` for evidence that was present, unexpired
+// and correctly signed. Canonicalise so the digest names the DIRECTORY.
+// An unresolvable root is unusable, so this returns null and every caller
+// fails closed rather than falling back to the raw spelling.
+function projectRootIdentityDigest(projectRoot) {
+  try { return digest(fs.realpathSync(projectRoot)); } catch { return null; }
+}
+
 function isTestCapability() {
   return process.env.NODE_ENV === 'test' && process.env[CAPABILITY_ENV_VAR] === CAPABILITY_VALUE;
 }
@@ -1171,7 +1187,7 @@ function sessionEvidencePayload(record) {
 function verifyProductionSessionRecord(projectRoot, record, sessionId) {
   if (!record || !hasExactKeys(record, SESSION_EVIDENCE_KEYS) || record.schema !== SESSION_EVIDENCE_SCHEMA ||
       record.session_digest !== digest(sessionId) ||
-      record.project_root_digest !== digest(path.resolve(projectRoot)) ||
+      record.project_root_digest !== projectRootIdentityDigest(projectRoot) ||
       typeof record.worktree_id !== 'string' || typeof record.plan_digest !== 'string' ||
       record.actual_host !== 'claude' || !boundedLiteral(record.actual_model, 128) ||
       record.actual_role_engine !== 'claude' || record.continuity !== 'session-persistent' ||
@@ -1230,12 +1246,14 @@ function recordProductionSessionIdentity(options) {
   try { worktreeId = owner.computeWorktreeId(projectRoot); } catch { return { ok: false }; }
   const plan = owner.discoverPlan(projectRoot);
   if (!plan.ok) return { ok: false };
+  const rootDigest = projectRootIdentityDigest(projectRoot);
+  if (!rootDigest) return { ok: false };
   const keys = loadOrCreateProductionKey(projectRoot);
   const startedAt = new Date();
   const record = {
     schema: SESSION_EVIDENCE_SCHEMA,
     session_digest: digest(event.session_id),
-    project_root_digest: digest(path.resolve(projectRoot)),
+    project_root_digest: rootDigest,
     worktree_id: worktreeId,
     plan_digest: plan.planDigest,
     actual_host: 'claude',
@@ -1314,7 +1332,7 @@ function verifyDirectRoleHostRecord(projectRoot, record, roleSessionId) {
       !DIGEST_RE.test(record.parent_session_digest) || !PROFILE_NAME_RE.test(record.role) ||
       !COMPOSITION_RE.test(record.action_id) || !DIGEST_RE.test(record.action_digest) ||
       !DIGEST_RE.test(record.launch_argv_digest) || !DIGEST_RE.test(record.definition_digest) ||
-      !DIGEST_RE.test(record.bootstrap_digest) || record.project_root_digest !== digest(path.resolve(projectRoot)) ||
+      !DIGEST_RE.test(record.bootstrap_digest) || record.project_root_digest !== projectRootIdentityDigest(projectRoot) ||
       !DIGEST_RE.test(record.worktree_id) || !DIGEST_RE.test(record.plan_digest) ||
       record.actual_host !== 'claude' || !boundedLiteral(record.actual_model, 128) ||
       record.continuity !== 'session-persistent' || !PROFILE_NAME_RE.test(record.requested_profile_name) ||
@@ -1415,6 +1433,8 @@ function recordDirectRoleHostIdentity(options) {
   if (!Number.isFinite(parentExpiry) || parentExpiry <= now.getTime()) {
     return { ok: false, reason: 'DIRECT_ROLE_PARENT_EXPIRED' };
   }
+  const rootDigest = projectRootIdentityDigest(projectRoot);
+  if (!rootDigest) return { ok: false, reason: 'DIRECT_ROLE_SCOPE_INVALID' };
   const keys = loadOrCreateProductionKey(projectRoot);
   const record = {
     schema: DIRECT_ROLE_HOST_SCHEMA,
@@ -1426,7 +1446,7 @@ function recordDirectRoleHostIdentity(options) {
     launch_argv_digest: digest(canonicalJSONStringify(launchArgv)),
     definition_digest: options.definitionDigest,
     bootstrap_digest: digest(action.payload.bootstrap_message),
-    project_root_digest: digest(path.resolve(projectRoot)),
+    project_root_digest: rootDigest,
     worktree_id: worktreeId,
     plan_digest: plan.planDigest,
     actual_host: 'claude',
@@ -1686,7 +1706,7 @@ function compositionPayload(record) {
 
 function verifyProductionRecord(projectRoot, record, expected) {
   if (!record || record.schema !== COMPOSITION_SCHEMA || !COMPOSITION_RE.test(record.composition_id) ||
-      record.project_root_digest !== digest(path.resolve(projectRoot)) ||
+      record.project_root_digest !== projectRootIdentityDigest(projectRoot) ||
       typeof record.worktree_id !== 'string' || typeof record.plan_digest !== 'string' ||
       record.actual_host !== 'claude' || !boundedLiteral(record.actual_model, 128) ||
       record.actual_role_engine !== 'claude' || record.continuity !== 'session-persistent' ||
@@ -1736,13 +1756,15 @@ function mintHostCompositionFromSessionObservation(options, sessionObservation) 
   try { worktreeId = owner.computeWorktreeId(projectRoot); } catch { return { ok: false }; }
   const plan = owner.discoverPlan(projectRoot);
   if (!plan.ok) return { ok: false };
+  const rootDigest = projectRootIdentityDigest(projectRoot);
+  if (!rootDigest) return { ok: false };
   const keys = loadOrCreateProductionKey(projectRoot);
   const compositionId = crypto.randomBytes(16).toString('hex');
   const createdAt = new Date();
   const record = {
     schema: COMPOSITION_SCHEMA,
     composition_id: compositionId,
-    project_root_digest: digest(path.resolve(projectRoot)),
+    project_root_digest: rootDigest,
     worktree_id: worktreeId,
     plan_digest: plan.planDigest,
     entrypoint: options.entrypoint,

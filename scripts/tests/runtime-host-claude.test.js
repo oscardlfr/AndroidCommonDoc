@@ -1712,6 +1712,60 @@ test('CERTCOEX-06 a legacy single-slot install for THIS platform keeps its exact
   }
 });
 
+// --- Project-root identity must name the DIRECTORY, not its spelling ---
+//
+// macOS reaches the same directory by two spellings: /var/folders/... and
+// /private/var/folders/..., /tmp and /private/tmp. Which one a process holds
+// depends on where it came from -- a process that read TMPDIR gets the short
+// spelling, a process that asked `git rev-parse --show-toplevel` (as
+// coordinationRootPathFor does) gets the canonical one. `path.resolve` does
+// NOT resolve symlinks, so a record minted under one spelling could never be
+// validated under the other, and the whole CLAUDE-ID-01 chain reported
+// `claude-id01-host-contract-invalid` for a session whose evidence was
+// present, unexpired and correctly signed.
+//
+// This is the same macOS canonicalization family as the run-root fix earlier
+// in this wave, reached through a different door.
+
+test('CANONROOT-01 a session identity minted through one spelling of the project root verifies through the other', () => {
+  const mod = requireHostClaude();
+  const fixture = writeHostContractFixture('canonical-root');
+  const aliases = [];
+  try {
+    const published = mod.publishClaudeHostContractPackage(certificatePublishArgs(fixture));
+    assert.strictEqual(published.ok, true, JSON.stringify(published));
+
+    // A second, equally valid spelling of the SAME directory. A symlink
+    // reproduces the macOS /var-vs-/private/var split portably.
+    const alias = path.join(os.tmpdir(), 'canonical-root-alias-' + crypto.randomBytes(6).toString('hex'));
+    fs.symlinkSync(fixture.projectRoot, alias);
+    aliases.push(alias);
+    assert.strictEqual(fs.realpathSync(alias), fs.realpathSync(fixture.projectRoot),
+      'the alias must name the same directory, or this case proves nothing');
+    assert.notStrictEqual(path.resolve(alias), path.resolve(fixture.projectRoot),
+      'the two spellings must differ, or this case could not fail');
+
+    const sessionId = 'canonical-root-session';
+    const recorded = mod.recordProductionSessionIdentity({
+      projectRoot: fixture.projectRoot,
+      event: {
+        type: 'system', subtype: 'init', session_id: sessionId, model: 'claude-sonnet-5',
+        cwd: fixture.projectRoot, tools: ['Task', 'Bash', 'Read', 'SendMessage'], mcp_servers: [],
+      },
+      hostPin: certificateHostPin(fixture),
+    });
+    assert.strictEqual(recorded.ok, true, JSON.stringify(recorded));
+
+    assert.strictEqual(mod.getProductionSessionIdentity(fixture.projectRoot, sessionId).ok, true,
+      'the minting spelling must still resolve');
+    assert.strictEqual(mod.getProductionSessionIdentity(alias, sessionId).ok, true,
+      'the SAME directory named differently must resolve the SAME session identity -- otherwise authority depends on path spelling');
+  } finally {
+    aliases.forEach((entry) => { try { fs.unlinkSync(entry); } catch { /* best effort */ } });
+    cleanupHostContractFixture(fixture);
+  }
+});
+
 test('DRH-01 RED: a genuine restricted role system/init becomes one signed direct-role identity and resolves only with its parent proof', () => {
   const mod = requireHostClaude();
   for (const name of ['recordDirectRoleHostIdentity', 'getDirectRoleHostIdentity',
