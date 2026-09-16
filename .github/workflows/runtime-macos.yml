@@ -118,6 +118,17 @@ jobs:
       - name: Offline functional certification
         run: node --test scripts/tests/claude-functional-certification.test.cjs
 
+      # This repository has no root package.json, and the npm ci above runs in
+      # mcp-server/, so nothing has put bats on the runner yet. Install it the
+      # same way reusable-shell-tests.yml does, and prove the binary resolves
+      # before relying on it -- `npx --no-install` would otherwise silently fall
+      # through to whatever bats happens to be on PATH, which is exactly why this
+      # gap was invisible on a developer machine that has one installed globally.
+      - name: Install bats
+        run: |
+          npm install bats
+          npx bats --version
+
       # The GNU mktemp preflight and the TMPDIR budget preflight are themselves
       # macOS-motivated, so they are verified on the platform that motivated them.
       - name: GNU mktemp and TMPDIR budget preflights
