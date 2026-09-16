@@ -46,6 +46,13 @@ let pinnedCopyDirMemo = null;
 function pinnedCopyDir() {
   if (pinnedCopyDirMemo === null) {
     pinnedCopyDirMemo = fs.mkdtempSync(path.join(os.tmpdir(), PINNED_COPY_DIR_PREFIX));
+    // Armed HERE, at creation, not on the success paths. A per-process
+    // directory that is abandoned is leaked, unlike the old shared one which
+    // the next run simply reused -- so if ensurePinnedCopyDir below rejects
+    // this very directory, or anything else throws before a copy exists, the
+    // teardown is already registered. The later calls are idempotent by the
+    // armed flag and are kept as defence in depth.
+    armPinnedCopyTeardown();
   }
   return pinnedCopyDirMemo;
 }

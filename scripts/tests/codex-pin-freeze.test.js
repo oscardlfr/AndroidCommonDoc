@@ -131,17 +131,18 @@ test('CPF-12 the executed copy lives in an owner-confined private directory', ()
     assert.equal(copyStat.uid, process.getuid(), 'the copy must be owned by this user');
   }
   // Keyed by the validated digest, so a different binary can never reuse it.
-  // The digest must be IN the basename; on Windows a .exe suffix follows it,
-  // because libuv will not spawn an extensionless path. Assert containment
-  // rather than a trailing match, so the contract is "named by its digest"
-  // rather than "named by its digest on POSIX only".
-  assert.ok(path.basename(out.command).includes(
-    crypto.createHash('sha256').update(fs.readFileSync(target)).digest('hex'),
-  ), 'the copy name must be bound to the validated digest: ' + out.command);
-  if (process.platform === 'win32') {
-    assert.equal(path.extname(out.command), '.exe',
-      'a Windows copy must carry .exe or spawn() cannot resolve it');
-  }
+  // Exact equality, not containment. `includes` would also accept
+  // codex-<digest>-anything.exe, which production cannot currently produce but
+  // which the assertion should not license either. Naming the whole expected
+  // basename keeps the contract exact however the scheme evolves, and covers
+  // the Windows .exe in the same breath -- libuv will not spawn an
+  // extensionless path, so the suffix is part of the contract, not decoration.
+  const expectDigest = crypto.createHash('sha256').update(fs.readFileSync(target)).digest('hex');
+  assert.equal(
+    path.basename(out.command),
+    'codex-' + expectDigest + (process.platform === 'win32' ? '.exe' : ''),
+    'the copy name must be exactly its validated digest: ' + out.command,
+  );
 });
 
 test('CPF-13 replacing or rewriting the original after validation does not change the executed bytes', () => {
@@ -506,4 +507,62 @@ test('CPF-16 a freeze record in an unprotected directory is refused', () => {
   assert.equal(out.ok, false);
   assert.equal(out.reason, 'CODEX_PIN_FREEZE_DIR_INSECURE',
     'a record whose parent anyone can write must be refused before it is read');
+});
+
+// CPF-17: two independent stores must not share a copy directory, and one
+// tearing down must not touch the other's verified copy.
+//
+// This is the property the per-process directory exists to provide. It replaced
+// a single `acd-codex-pinned-<uid>` shared by every bridge process for one user,
+// where a peer exiting between our verification and the supervisor's spawn ran
+// its own cleanup and could delete the pathname we had just verified -- the
+// descriptor is closed by then, and unlink protection only starts once the child
+// is running.
+//
+// arch-testing confirmed the property empirically with its own throwaway probe
+// during review and noted that nothing in the committed suite proved it: the
+// existing cases pass whether or not the directories are shared, because each
+// happens to use one instance. That is coverage by coincidence, so here is the
+// direct proof.
+test('CPF-17 independent stores do not share a copy directory or each other\'s cleanup', () => {
+  const dir = mkdir();
+  const target = makeExecutable(dir, 'codex-binary-v1\n');
+  const bytes = fs.readFileSync(target);
+  const digest = crypto.createHash('sha256').update(bytes).digest('hex');
+
+  const makeStore = () => createPinnedImageStore({
+    fs, os, path, crypto, windowsPrivateDirectoryAcl,
+  });
+  const a = makeStore();
+  const b = makeStore();
+
+  const open = () => fs.openSync(target, fs.constants.O_RDONLY);
+  const fdA = open();
+  const fdB = open();
+  let copyA;
+  let copyB;
+  try {
+    copyA = a.materializePinnedCopy(fdA, bytes.length, digest);
+    copyB = b.materializePinnedCopy(fdB, bytes.length, digest);
+  } finally {
+    fs.closeSync(fdA);
+    fs.closeSync(fdB);
+  }
+
+  assert.equal(copyA.ok, true, copyA.reason);
+  assert.equal(copyB.ok, true, copyB.reason);
+  assert.notEqual(path.dirname(copyA.path), path.dirname(copyB.path),
+    'two stores must not share one copy directory');
+
+  // B tearing down is exactly the peer-exit scenario. A's copy must survive it
+  // intact and still verify, not merely still exist.
+  b.cleanupPinnedCopies();
+  assert.equal(fs.existsSync(copyB.path), false, 'B must clean up its own copy');
+  assert.equal(fs.existsSync(copyA.path), true,
+    'a peer teardown must not remove another store\'s verified copy');
+  assert.equal(a.verifyPinnedCopy(copyA.path, digest).ok, true,
+    'A\'s copy must still verify after B tore down');
+
+  a.cleanupPinnedCopies();
+  assert.equal(fs.existsSync(copyA.path), false, 'A must clean up its own copy');
 });
