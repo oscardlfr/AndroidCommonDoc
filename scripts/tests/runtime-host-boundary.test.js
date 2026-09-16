@@ -961,7 +961,18 @@ test('R131-BOUNDARY-ADMITTED-ENTRYPOINT-PRETOOLUSE-26: exact signed rewritten en
   }
   const where = spawnSync('where.exe', ['claude'], { encoding: 'utf8' });
   const candidates = where.status === 0 ? where.stdout.split(/\r?\n/).filter(Boolean) : [];
-  const certificate = JSON.parse(fs.readFileSync(path.join(PROJECT_ROOT, 'setup', 'claude-host-contract.json'), 'utf8')).certificate;
+  // Certificates are stored per platform, so read whichever artifact actually
+  // holds THIS host's certificate rather than assuming the legacy single slot.
+  const certificate = [
+    path.join(PROJECT_ROOT, 'setup', 'claude-host-contract.' + process.platform + '.json'),
+    path.join(PROJECT_ROOT, 'setup', 'claude-host-contract.json'),
+  ].map((candidate) => {
+    try { return JSON.parse(fs.readFileSync(candidate, 'utf8')).certificate; } catch { return null; }
+  }).find((candidate) => candidate && candidate.os === process.platform);
+  if (!certificate) {
+    t.skip('no host certificate is published for this platform');
+    return;
+  }
   const executable = candidates.find((candidate) => {
     try { return crypto.createHash('sha256').update(fs.readFileSync(candidate)).digest('hex') === certificate.executable_digest; } catch { return false; }
   });

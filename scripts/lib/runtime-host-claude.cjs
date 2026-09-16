@@ -60,6 +60,10 @@ const HOST_CONTRACT_CERTIFICATE_SCHEMA = 'runtime/claude-id01-host-contract/v1';
 const HOST_CONTRACT_PROBE_EVENT_SCHEMA = 'runtime/claude-host-contract-probe-event/v1';
 const HOST_CONTRACT_QUALIFICATION_SCHEMA = 'androidcommondoc/p1-native-host-contract-qualification/v1';
 const HOST_CONTRACT_PROBE_VERSION = HOST_CONTRACT_PROBE_EVENT_SCHEMA;
+const HOST_CONTRACT_CERTIFICATE_BASENAME = 'claude-host-contract';
+// process.platform values (darwin, win32, linux, ...) -- bounded so a platform
+// string can never widen into a path segment.
+const HOST_CONTRACT_PLATFORM_RE = /^[a-z0-9]{1,32}$/;
 const HOST_CONTRACT_PACKAGE_KEYS = Object.freeze(['anchor', 'certificate', 'schema']);
 const HOST_CONTRACT_CERTIFICATE_KEYS = Object.freeze([
   'bundle_digest', 'cli_version', 'distinct_same_type_peers', 'evidence_method',
@@ -473,9 +477,18 @@ function compositionKeyPaths(projectRoot) {
   };
 }
 
-function hostContractPackagePath(projectRoot) {
-  const toolkitRoot = runtimeToolkitRootFor(projectRoot);
-  return toolkitRoot ? path.join(toolkitRoot, 'setup', 'claude-host-contract.json') : null;
+// Certificates are stored one per platform. The legacy single-slot artifact
+// predates that and stays readable, but only ever for the platform its OWN
+// signed certificate names -- it is never a fallback for a different host.
+// These paths are lookup hints only: which certificate is accepted is settled
+// by the signed certificate itself, never by the file name.
+function hostContractLegacyPath(root) {
+  return path.join(root, 'setup', HOST_CONTRACT_CERTIFICATE_BASENAME + '.json');
+}
+
+function hostContractPlatformPath(root, os) {
+  if (typeof os !== 'string' || !HOST_CONTRACT_PLATFORM_RE.test(os)) return null;
+  return path.join(root, 'setup', HOST_CONTRACT_CERTIFICATE_BASENAME + '.' + os + '.json');
 }
 
 function hostContractCertificatePayload(record) {
@@ -763,7 +776,19 @@ function publishClaudeHostContractPackage(options) {
   const pkg = { schema: HOST_CONTRACT_PACKAGE_SCHEMA, certificate, anchor };
   // Qualification publishes only from the toolkit/self root. Consumers read
   // this immutable package through their source reference and never publish it.
-  const packagePath = path.join(projectRoot, 'setup', 'claude-host-contract.json');
+  //
+  // The destination is keyed to the certificate's OWN signed platform, so
+  // publishing for one host can never land on, rewrite or migrate another
+  // host's certificate -- no-clobber still applies per destination. An
+  // existing legacy artifact that already holds THIS platform stays the
+  // destination, so a host installed before platform-scoped storage keeps its
+  // exact path and bytes and its republish stays idempotent.
+  const platformPath = hostContractPlatformPath(projectRoot, certificate.os);
+  if (!platformPath) return { ok: false, reason: 'HOST_CONTRACT_INTERNAL_SHAPE' };
+  const legacyPath = hostContractLegacyPath(projectRoot);
+  const legacyPackage = readJsonFile(legacyPath);
+  const packagePath = isPlainObject(legacyPackage) && isPlainObject(legacyPackage.certificate) &&
+    legacyPackage.certificate.os === certificate.os ? legacyPath : platformPath;
   const packageBytes = Buffer.from(canonicalJSONStringify(pkg), 'utf8');
   try {
     fs.mkdirSync(path.dirname(packagePath), { recursive: true, mode: 0o700 });
@@ -777,10 +802,8 @@ function publishClaudeHostContractPackage(options) {
     hostContractDigest: digest(canonicalJSONStringify(certificate)) };
 }
 
-function readVerifiedHostContractPackage(projectRoot) {
-  if (!isUsableRoot(projectRoot)) return { ok: false, reason: 'HOST_CONTRACT_ROOT_INVALID' };
-  const packagePath = hostContractPackagePath(projectRoot);
-  if (!packagePath) return { ok: false, reason: 'HOST_CONTRACT_RUNTIME_CONTEXT_INVALID' };
+function verifiedHostContractAt(packagePath, hostOs) {
+  if (!fs.existsSync(packagePath)) return { ok: false, reason: 'HOST_CONTRACT_PACKAGE_ABSENT' };
   const pkg = readJsonFile(packagePath);
   if (!isPlainObject(pkg) || !hasExactKeys(pkg, HOST_CONTRACT_PACKAGE_KEYS) ||
       pkg.schema !== HOST_CONTRACT_PACKAGE_SCHEMA || !isPlainObject(pkg.certificate) ||
@@ -807,8 +830,35 @@ function readVerifiedHostContractPackage(projectRoot) {
         Buffer.from(certificate.signature_ed25519_base64, 'base64'))) {
     return { ok: false, reason: 'HOST_CONTRACT_SIGNATURE_INVALID' };
   }
+  // Platform binding is settled AFTER the signature, against the certificate's
+  // own signed `os`. That is what keeps a file name from standing in for the
+  // certificate: a foreign certificate renamed into this host's slot is read,
+  // signature-verified and then refused -- never adopted because of where it sat.
+  if (certificate.os !== hostOs) return { ok: false, reason: 'HOST_CONTRACT_PLATFORM_MISMATCH' };
   return { ok: true, certificate, anchor: pkg.anchor, pinDigest: certificate.pin_digest,
     hostContractDigest: digest(canonicalJSONStringify(certificate)) };
+}
+
+function readVerifiedHostContractPackage(projectRoot) {
+  if (!isUsableRoot(projectRoot)) return { ok: false, reason: 'HOST_CONTRACT_ROOT_INVALID' };
+  const toolkitRoot = runtimeToolkitRootFor(projectRoot);
+  if (!toolkitRoot) return { ok: false, reason: 'HOST_CONTRACT_RUNTIME_CONTEXT_INVALID' };
+  // This host's own slot first, then the legacy artifact -- which is admitted
+  // only when its signed platform is this host's. There is deliberately no
+  // cross-platform fallback: an unmatched host fails closed.
+  const hostOs = process.platform;
+  const platformPath = hostContractPlatformPath(toolkitRoot, hostOs);
+  const legacyPath = hostContractLegacyPath(toolkitRoot);
+  const candidates = platformPath ? [platformPath, legacyPath] : [legacyPath];
+  let rejection = null;
+  for (const candidate of candidates) {
+    const result = verifiedHostContractAt(candidate, hostOs);
+    if (result.ok) return result;
+    // A certificate that is present but unusable says more than an absent one,
+    // so it is the reason reported back.
+    if (!rejection && result.reason !== 'HOST_CONTRACT_PACKAGE_ABSENT') rejection = result;
+  }
+  return rejection || { ok: false, reason: 'HOST_CONTRACT_PACKAGE_INVALID' };
 }
 
 function verifyClaudeHostContractPackage(projectRoot, options) {

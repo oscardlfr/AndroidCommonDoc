@@ -116,6 +116,21 @@ function collectDirectory(root, relativeDir, files) {
   }
 }
 
+// Host certificates are stored one per platform, so the set present in a given
+// toolkit is discovered rather than hardcoded: a toolkit qualified on one
+// platform must not be forced to carry another platform's certificate, and one
+// that has been qualified on several must cover all of them. The legacy
+// single-slot name stays a fixed, required entry.
+const HOST_CONTRACT_PLATFORM_CERTIFICATE_RE = /^claude-host-contract\.[a-z0-9]{1,32}\.json$/;
+
+function collectPlatformHostContracts(root, files) {
+  let entries;
+  try { entries = fs.readdirSync(path.join(root, 'setup'), { withFileTypes: true }); } catch { return; }
+  for (const entry of entries) {
+    if (entry.isFile() && HOST_CONTRACT_PLATFORM_CERTIFICATE_RE.test(entry.name)) files.push('setup/' + entry.name);
+  }
+}
+
 function computeRuntimeToolkitInventory(toolkitRoot) {
   let root;
   try { root = fs.realpathSync(toolkitRoot); } catch { return fail('runtime-toolkit-unresolved'); }
@@ -132,6 +147,7 @@ function computeRuntimeToolkitInventory(toolkitRoot) {
     ...['init-session', 'resume-work', 'work', 'ingest-content', 'monitor-docs'].map((command) => `.claude/commands/${command}.md`),
   ];
   try {
+    collectPlatformHostContracts(root, files);
     collectDirectory(root, 'scripts/lib/runtime-consultation', files);
     collectDirectory(root, 'scripts/lib/runtime-role-lifecycle', files);
     collectDirectory(root, 'scripts/lib/runtime-bridge-codex', files);

@@ -1383,7 +1383,9 @@ test('P1-HOST-CERT-PUBLISH RED: independently verified retained observations pro
       evidenceRoot: fixture.evidenceRoot, observerPath: fixture.observerPath,
     });
     assert.strictEqual(published.ok, true, JSON.stringify(published));
-    assert.strictEqual(published.packagePath, path.join(fixture.projectRoot, 'setup', 'claude-host-contract.json'));
+    assert.strictEqual(published.packagePath,
+      path.join(fixture.projectRoot, 'setup', 'claude-host-contract.' + process.platform + '.json'),
+      'a pristine root receives a platform-scoped certificate, so another platform can be published beside it later');
     const pkg = JSON.parse(fs.readFileSync(published.packagePath, 'utf8'));
     assert.deepStrictEqual(Object.keys(pkg).sort(), ['anchor', 'certificate', 'schema']);
     assert.strictEqual(pkg.schema, 'runtime/claude-host-contract-package/v1');
@@ -1520,6 +1522,193 @@ test('P1-HOST-CERT-FAIL-CLOSED RED: publisher rejects trusted-summary lies, obse
     assert.strictEqual(mod.publishClaudeHostContractPackage(args).ok, false);
   } finally {
     fixtures.forEach(cleanupHostContractFixture);
+  }
+});
+
+// --- F-24: platform-scoped storage for the signed host certificate ---
+//
+// The certificate already binds its platform CRYPTOGRAPHICALLY: `os` is one of
+// the fields inside hostContractCertificatePayload, and
+// verifyClaudeHostContractPackage already refuses a certificate whose signed os
+// differs from the observed pin. What was single-slot was STORAGE -- one fixed
+// setup/claude-host-contract.json, written no-clobber -- so a darwin
+// certificate could not be published beside the tracked win32 one, and macOS
+// could never reach recordProductionSessionIdentity at all.
+//
+// These cases discriminate the storage/selection change only. Signature, pin
+// and evidence semantics stay owned by the P1-HOST-CERT-* cases above; nothing
+// here re-asserts them, and nothing here weakens them.
+
+const TRACKED_CERTIFICATE_PATH = path.join(PROJECT_ROOT, 'setup', 'claude-host-contract.json');
+// The tracked certificate is the repo's real, signed, win32-issued artifact. On
+// any non-Windows host it is a genuine FOREIGN-platform certificate, which is
+// exactly the fixture these cases need -- no synthetic stand-in, and no
+// re-signing, which would prove nothing about the real artifact.
+const FOREIGN_CERTIFICATE_UNAVAILABLE = (() => {
+  let trackedOs;
+  try { trackedOs = JSON.parse(fs.readFileSync(TRACKED_CERTIFICATE_PATH, 'utf8')).certificate.os; } catch { return 'the tracked certificate is unreadable'; }
+  return trackedOs === process.platform
+    ? 'the tracked certificate was issued for this very platform, so it cannot stand in for a foreign one'
+    : false;
+})();
+
+function legacyCertificatePath(root) {
+  return path.join(root, 'setup', 'claude-host-contract.json');
+}
+function platformCertificatePath(root, platform) {
+  return path.join(root, 'setup', 'claude-host-contract.' + (platform || process.platform) + '.json');
+}
+function certificatePublishArgs(fixture) {
+  return { projectRoot: fixture.projectRoot, qualificationPath: fixture.qualificationPath,
+    evidenceRoot: fixture.evidenceRoot, observerPath: fixture.observerPath };
+}
+function certificateHostPin(fixture) {
+  return { executablePath: fixture.executablePath, cliVersion: '2.1.261',
+    observerPath: fixture.observerPath, transportProfile: 'native-claude-cli', os: process.platform };
+}
+function installForeignLegacyCertificate(root) {
+  const legacyPath = legacyCertificatePath(root);
+  fs.mkdirSync(path.dirname(legacyPath), { recursive: true });
+  const bytes = fs.readFileSync(TRACKED_CERTIFICATE_PATH);
+  fs.writeFileSync(legacyPath, bytes);
+  return { legacyPath, bytes };
+}
+
+test('CERTCOEX-01 a certificate for this host publishes beside a foreign-platform legacy artifact, which survives byte-for-byte',
+  { skip: FOREIGN_CERTIFICATE_UNAVAILABLE }, () => {
+    const mod = requireHostClaude();
+    const fixture = writeHostContractFixture('certcoex-publish');
+    try {
+      const foreign = installForeignLegacyCertificate(fixture.projectRoot);
+      const published = mod.publishClaudeHostContractPackage(certificatePublishArgs(fixture));
+      assert.strictEqual(published.ok, true,
+        'a certificate for this host must publish even though another platform already occupies the legacy slot: ' + JSON.stringify(published));
+      assert.strictEqual(published.packagePath, platformCertificatePath(fixture.projectRoot),
+        'a certificate published beside a foreign artifact must land in its own platform-scoped slot');
+      assert.deepStrictEqual(fs.readFileSync(foreign.legacyPath), foreign.bytes,
+        'the foreign-platform certificate must not be rewritten, moved, migrated or re-signed');
+      assert.strictEqual(JSON.parse(fs.readFileSync(published.packagePath, 'utf8')).certificate.os, process.platform,
+        'the newly published certificate must carry this host signed platform');
+    } finally {
+      cleanupHostContractFixture(fixture);
+    }
+  });
+
+test('CERTCOEX-02 selection resolves this host certificate and never falls back to a foreign-platform one',
+  { skip: FOREIGN_CERTIFICATE_UNAVAILABLE }, () => {
+    const mod = requireHostClaude();
+    const fixture = writeHostContractFixture('certcoex-selection');
+    try {
+      installForeignLegacyCertificate(fixture.projectRoot);
+      const published = mod.publishClaudeHostContractPackage(certificatePublishArgs(fixture));
+      assert.strictEqual(published.ok, true, JSON.stringify(published));
+      assert.strictEqual(mod.verifyClaudeHostContractPackage(fixture.projectRoot, certificateHostPin(fixture)).ok, true,
+        'with both platforms present, the certificate issued for THIS host must be the selected one');
+
+      // Remove this host certificate and leave only the foreign one: selection
+      // must fail closed rather than discharge this host against another
+      // platform signed certificate.
+      fs.rmSync(published.packagePath);
+      const orphaned = mod.verifyClaudeHostContractPackage(fixture.projectRoot, certificateHostPin(fixture));
+      assert.strictEqual(orphaned.ok, false, 'a foreign-platform certificate must never satisfy this host');
+      assert.strictEqual(orphaned.reason, 'HOST_CONTRACT_PLATFORM_MISMATCH',
+        'the refusal must name the platform binding, proving the foreign certificate was read and rejected rather than merely unseen: ' + JSON.stringify(orphaned));
+    } finally {
+      cleanupHostContractFixture(fixture);
+    }
+  });
+
+test('CERTCOEX-03 a foreign certificate parked at this host platform-scoped path is rejected -- the file name never stands in for the signed os',
+  { skip: FOREIGN_CERTIFICATE_UNAVAILABLE }, () => {
+    const mod = requireHostClaude();
+    const fixture = writeHostContractFixture('certcoex-name-is-not-authority');
+    try {
+      const parked = platformCertificatePath(fixture.projectRoot);
+      fs.mkdirSync(path.dirname(parked), { recursive: true });
+      fs.writeFileSync(parked, fs.readFileSync(TRACKED_CERTIFICATE_PATH));
+      const verified = mod.verifyClaudeHostContractPackage(fixture.projectRoot, certificateHostPin(fixture));
+      assert.strictEqual(verified.ok, false,
+        'renaming a foreign certificate into this host slot must not make it this host certificate');
+      // The reason must come from the SIGNED platform binding, not from absence:
+      // that is what proves the file was opened, signature-verified and only
+      // then refused -- the path never substitutes for validation.
+      assert.strictEqual(verified.reason, 'HOST_CONTRACT_PLATFORM_MISMATCH', JSON.stringify(verified));
+    } finally {
+      cleanupHostContractFixture(fixture);
+    }
+  });
+
+test('CERTCOEX-04 no certificate for this platform fails closed', () => {
+  const mod = requireHostClaude();
+  const fixture = writeHostContractFixture('certcoex-absent');
+  try {
+    const absent = mod.verifyClaudeHostContractPackage(fixture.projectRoot, certificateHostPin(fixture));
+    assert.strictEqual(absent.ok, false, 'an unpublished root must never verify');
+    assert.strictEqual(absent.reason, 'HOST_CONTRACT_PACKAGE_INVALID', JSON.stringify(absent));
+
+    // A certificate that exists only under ANOTHER platform scoped name is not
+    // this host certificate either, and must not be adopted by proximity.
+    const published = mod.publishClaudeHostContractPackage(certificatePublishArgs(fixture));
+    assert.strictEqual(published.ok, true, JSON.stringify(published));
+    const foreignSlot = platformCertificatePath(fixture.projectRoot, 'someotheros');
+    fs.renameSync(published.packagePath, foreignSlot);
+    const hidden = mod.verifyClaudeHostContractPackage(fixture.projectRoot, certificateHostPin(fixture));
+    assert.strictEqual(hidden.ok, false, 'a certificate filed under another platform name must not be selected');
+  } finally {
+    cleanupHostContractFixture(fixture);
+  }
+});
+
+test('CERTCOEX-05 republishing at the platform-scoped destination is idempotent and a divergent package there is refused',
+  { skip: FOREIGN_CERTIFICATE_UNAVAILABLE }, () => {
+    const mod = requireHostClaude();
+    const fixture = writeHostContractFixture('certcoex-no-clobber');
+    try {
+      const foreign = installForeignLegacyCertificate(fixture.projectRoot);
+      const args = certificatePublishArgs(fixture);
+      const first = mod.publishClaudeHostContractPackage(args);
+      assert.strictEqual(first.ok, true, JSON.stringify(first));
+      const exactBytes = fs.readFileSync(first.packagePath);
+
+      const again = mod.publishClaudeHostContractPackage(args);
+      assert.strictEqual(again.ok, true, 'an identical republish must stay idempotent at the platform-scoped destination');
+      assert.strictEqual(again.packagePath, first.packagePath);
+      assert.deepStrictEqual(fs.readFileSync(first.packagePath), exactBytes);
+
+      fs.writeFileSync(first.packagePath, '{}');
+      assert.strictEqual(mod.publishClaudeHostContractPackage(args).ok, false,
+        'no-clobber must still refuse a divergent package at the same destination');
+      assert.deepStrictEqual(fs.readFileSync(foreign.legacyPath), foreign.bytes,
+        'none of this may disturb the other platform certificate');
+    } finally {
+      cleanupHostContractFixture(fixture);
+    }
+  });
+
+test('CERTCOEX-06 a legacy single-slot install for THIS platform keeps its exact path and gains no duplicate sibling', () => {
+  const mod = requireHostClaude();
+  const fixture = writeHostContractFixture('certcoex-legacy-retained');
+  try {
+    const args = certificatePublishArgs(fixture);
+    const first = mod.publishClaudeHostContractPackage(args);
+    assert.strictEqual(first.ok, true, JSON.stringify(first));
+    const bytes = fs.readFileSync(first.packagePath);
+
+    // Recreate the historical single-slot layout this host once had.
+    const legacyPath = legacyCertificatePath(fixture.projectRoot);
+    fs.writeFileSync(legacyPath, bytes);
+    if (first.packagePath !== legacyPath) fs.rmSync(first.packagePath, { force: true });
+
+    const again = mod.publishClaudeHostContractPackage(args);
+    assert.strictEqual(again.ok, true, JSON.stringify(again));
+    assert.strictEqual(again.packagePath, legacyPath,
+      'an existing same-platform legacy artifact stays the destination, so an installed host keeps its exact path and bytes');
+    assert.strictEqual(fs.existsSync(platformCertificatePath(fixture.projectRoot)), false,
+      'no duplicate certificate may appear beside a legacy artifact that already holds this platform');
+    assert.strictEqual(mod.verifyClaudeHostContractPackage(fixture.projectRoot, certificateHostPin(fixture)).ok, true,
+      'the retained legacy artifact must still verify for this host');
+  } finally {
+    cleanupHostContractFixture(fixture);
   }
 });
 
@@ -1806,9 +1995,20 @@ test('MACOS-PIN-03 a PATH-launched ancestor reports a bare name and stays unprov
 });
 
 test('MACOS-PIN-04 observation fails closed without a platform-matched host contract', () => {
-  const observed = hostClaude.observeClaudeExecutablePin({
-    projectRoot: process.cwd(), startingPid: process.pid,
-  });
+  // Deliberately NOT the repo root. The repo ships certificates, and once one
+  // exists for THIS platform a repo-rooted call would stop exercising the
+  // no-contract path at all -- it would start depending on whether this very
+  // process happens to descend from the pinned executable. A hermetic root has
+  // no certificate for any platform, so the refusal is the one under test.
+  const emptyRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'macos-pin-04-no-contract-'));
+  let observed;
+  try {
+    observed = hostClaude.observeClaudeExecutablePin({
+      projectRoot: emptyRoot, startingPid: process.pid,
+    });
+  } finally {
+    fs.rmSync(emptyRoot, { recursive: true, force: true });
+  }
   // No contract package is published for this root, so the answer must be a
   // refusal -- never a pin synthesised from the ambient environment.
   assert.equal(observed.ok, false);

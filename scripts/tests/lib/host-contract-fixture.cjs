@@ -174,12 +174,20 @@ function mintIsolatedHostContractSession(repoRoot, { rc, runtimeHostClaude, wake
     const qualificationPath = path.join(worktreeRoot, 'qualification.json');
     fs.writeFileSync(qualificationPath, JSON.stringify(qualification));
 
-    // The worktree's OWN checked-out copy of the real repo's tracked
-    // setup/claude-host-contract.json (a separate file on disk from the real
-    // repo's copy) must be cleared first -- publishClaudeHostContractPackage
-    // no-clobber-writes and would otherwise report HOST_CONTRACT_PACKAGE_CONFLICT
-    // against the pre-existing, differently-pinned tracked certificate.
-    fs.rmSync(path.join(worktreeRoot, 'setup', 'claude-host-contract.json'), { force: true });
+    // The worktree's OWN checked-out copy of the certificate for THIS platform
+    // (a separate file on disk from the real repo's copy) must be cleared first
+    // -- publishClaudeHostContractPackage no-clobber-writes and would otherwise
+    // report HOST_CONTRACT_PACKAGE_CONFLICT against the pre-existing,
+    // differently-pinned tracked certificate that occupies the same
+    // destination. Certificates for OTHER platforms are deliberately left in
+    // place: they no longer collide, and leaving them keeps this fixture
+    // exercising the real coexisting-certificates layout.
+    for (const certificateName of ['claude-host-contract.' + process.platform + '.json', 'claude-host-contract.json']) {
+      const certificatePath = path.join(worktreeRoot, 'setup', certificateName);
+      let certificateOs = null;
+      try { certificateOs = JSON.parse(fs.readFileSync(certificatePath, 'utf8')).certificate.os; } catch { certificateOs = null; }
+      if (certificateOs === process.platform) fs.rmSync(certificatePath, { force: true });
+    }
 
     const published = runtimeHostClaude.publishClaudeHostContractPackage({
       projectRoot: worktreeRoot, qualificationPath, evidenceRoot, observerPath,
