@@ -58,6 +58,33 @@ function createAppServerPin({
       return { ok: false, reason: 'CODEX_PIN_FREEZE_ABSENT' };
     }
     const currentUid = typeof process.getuid === 'function' ? process.getuid() : null;
+    // The containing directory, validated the same way readProtectedHostCodexPin
+    // validates its own. Validating only the FILE leaves a writable parent: an
+    // attacker who can create entries there can put a stable, correctly-shaped
+    // replacement in place before the first lstat, and while the realpath and
+    // digest binding still refuse a substituted executable, an attacker-chosen
+    // record can force the pinned launch to fail. This was disclosed as a
+    // deliberate deviation when the TOCTOU finding was closed, and then raised
+    // again on its own merits; it is cheaper to honour than to keep defending.
+    const freezeDir = path.dirname(freezePath);
+    let dirStat;
+    try {
+      dirStat = fs.lstatSync(freezeDir);
+    } catch (err) {
+      return { ok: false, reason: 'CODEX_PIN_FREEZE_DIR_INSECURE' };
+    }
+    if (
+      !dirStat.isDirectory() || dirStat.isSymbolicLink()
+      || (currentUid !== null && dirStat.uid !== currentUid)
+      || (process.platform !== 'win32' && (dirStat.mode & 0o022) !== 0)
+    ) return { ok: false, reason: 'CODEX_PIN_FREEZE_DIR_INSECURE' };
+    let initialFreezeDirAcl;
+    if (process.platform === 'win32') {
+      initialFreezeDirAcl = windowsPrivateDirectoryAcl(freezeDir, { mode: 'validate' });
+      if (!initialFreezeDirAcl || initialFreezeDirAcl.ok !== true) {
+        return { ok: false, reason: 'CODEX_PIN_FREEZE_DIR_INSECURE' };
+      }
+    }
     const insecure = (candidate) => !candidate.isFile() || candidate.nlink !== 1
       || candidate.size <= 0 || candidate.size > CODEX_PIN_FREEZE_MAX_BYTES
       || (currentUid !== null && candidate.uid !== currentUid)
@@ -106,6 +133,18 @@ function createAppServerPin({
       try { pathNow = fs.lstatSync(freezePath); } catch (err) { return { ok: false, reason: 'CODEX_PIN_FREEZE_INSECURE' }; }
       if (pathNow.isSymbolicLink() || pathNow.dev !== opened.dev || pathNow.ino !== opened.ino) {
         return { ok: false, reason: 'CODEX_PIN_FREEZE_INSECURE' };
+      }
+      // The descriptor identity above proves OUR file did not move. It says
+      // nothing about the directory's permissions having been loosened while we
+      // read, which is what would let the next read be attacked -- so the
+      // before/after ACL snapshots are compared as well, exactly as
+      // readProtectedHostCodexPin compares its own.
+      if (process.platform === 'win32') {
+        const finalFreezeDirAcl = windowsPrivateDirectoryAcl(freezeDir, { mode: 'validate' });
+        if (!finalFreezeDirAcl || finalFreezeDirAcl.ok !== true
+            || !windowsAclSnapshotsEqual(initialFreezeDirAcl, finalFreezeDirAcl)) {
+          return { ok: false, reason: 'CODEX_PIN_FREEZE_DIR_CHANGED_DURING_READ' };
+        }
       }
       raw = buffer;
     } finally {

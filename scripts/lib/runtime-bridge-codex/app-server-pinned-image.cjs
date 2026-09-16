@@ -25,15 +25,35 @@ function createPinnedImageStore({ fs, os, path, crypto, windowsPrivateDirectoryA
 // the copy by the validated digest, re-verify it, and execute THAT.
 const PINNED_COPY_DIR_PREFIX = 'acd-codex-pinned-';
 
+// Per-PROCESS, created by mkdtempSync, memoized. Two review findings share this
+// one root cause, and both are closed by the same change:
+//
+//   * A single uid-keyed directory is shared by every bridge process for that
+//     user. validatePinnedCodexExecutable verifies the copy, the supervisor
+//     spawns it later, and in that interval ANOTHER process exiting runs its
+//     own cleanupPinnedCopies and can delete the verified pathname out from
+//     under us -- the descriptor is already closed, and unlink protection only
+//     starts once the child is running.
+//   * A predictable path can be pre-created as a symlink by an attacker.
+//     mkdirSync({recursive:true}) accepts an existing symlink and the chmod
+//     that followed it then changed the mode of whatever it pointed at, before
+//     the lstat below ever got to reject it.
+//
+// mkdtempSync creates atomically, with 0700, at a name nobody can predict, so
+// there is nothing to pre-create and nothing shared to race. The digest stays
+// in the file basename, so reuse-by-digest within a process is unaffected.
+let pinnedCopyDirMemo = null;
 function pinnedCopyDir() {
-  const owner = typeof process.getuid === 'function' ? String(process.getuid()) : 'win';
-  return path.join(os.tmpdir(), PINNED_COPY_DIR_PREFIX + owner);
+  if (pinnedCopyDirMemo === null) {
+    pinnedCopyDirMemo = fs.mkdtempSync(path.join(os.tmpdir(), PINNED_COPY_DIR_PREFIX));
+  }
+  return pinnedCopyDirMemo;
 }
 
 function ensurePinnedCopyDir(dir) {
   try {
-    fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
-    if (process.platform !== 'win32') fs.chmodSync(dir, 0o700);
+    // mkdtempSync already created it atomically at 0700; never mkdir/chmod a
+    // path that could have been substituted. Validate what is actually there.
     const st = fs.lstatSync(dir);
     const uid = typeof process.getuid === 'function' ? process.getuid() : null;
     if (!st.isDirectory() || st.isSymbolicLink()) return false;
@@ -88,7 +108,13 @@ function verifyPinnedCopy(copyPath, expectedDigest) {
 function materializePinnedCopy(fd, size, expectedDigest) {
   const dir = pinnedCopyDir();
   if (!ensurePinnedCopyDir(dir)) return { ok: false, reason: 'CODEX_PIN_COPY_DIR_INSECURE' };
-  const finalPath = path.join(dir, 'codex-' + expectedDigest);
+  // The .exe suffix on Windows is load-bearing, not cosmetic. This path goes
+  // to spawn(..., { shell: false }); libuv's search_path refuses to take an
+  // extensionless path containing a directory separator as-is and only probes
+  // .com and .exe candidates, so an extensionless copy fails with
+  // ERROR_FILE_NOT_FOUND and the validated PE bytes never start at all. The
+  // digest stays in the basename either way, so reuse-by-digest is unchanged.
+  const finalPath = path.join(dir, 'codex-' + expectedDigest + (process.platform === 'win32' ? '.exe' : ''));
   // A copy already keyed by this digest is reusable ONLY if it still verifies.
   const reusable = verifyPinnedCopy(finalPath, expectedDigest);
   if (reusable.ok) { armPinnedCopyTeardown(); return { ok: true, path: finalPath }; }
@@ -130,7 +156,13 @@ function materializePinnedCopy(fd, size, expectedDigest) {
 
 // Removed on teardown so a validated copy never outlives the run that made it.
 function cleanupPinnedCopies() {
-  try { fs.rmSync(pinnedCopyDir(), { recursive: true, force: true }); } catch (err) { /* best effort */ }
+  // Never call pinnedCopyDir() here: it CREATES the directory on first use, so
+  // a cleanup that ran before any copy was materialized would mint a directory
+  // purely in order to delete it. Only a directory this process actually made
+  // is removed -- and only this process's, never a peer's.
+  if (pinnedCopyDirMemo === null) return;
+  try { fs.rmSync(pinnedCopyDirMemo, { recursive: true, force: true }); } catch (err) { /* best effort */ }
+  pinnedCopyDirMemo = null;
 }
 
 // Armed the first time a copy is actually materialized, so teardown cannot be

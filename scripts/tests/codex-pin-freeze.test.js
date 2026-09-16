@@ -31,6 +31,17 @@ const created = [];
 function mkdir() {
   const dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'codex-freeze-')));
   created.push(dir);
+  // On Windows, production requires the executable's parent directory to be
+  // owner-confined (windowsPrivateDirectoryAcl ... mode: 'validate'), and a bare
+  // mkdtemp under %TEMP% does not satisfy that on a CI runner -- every case
+  // that got as far as the ACL probe failed CODEX_CLI_PATH_INSECURE. Applying
+  // the ACL here makes the fixture represent a legitimately protected location
+  // instead of weakening the contract to accept an unprotected one.
+  if (process.platform === 'win32') {
+    const acl = windowsPrivateDirectoryAcl(dir, { mode: 'ensure' });
+    assert.equal(acl && acl.ok, true,
+      'fixture directory must be owner-confined on Windows: ' + JSON.stringify(acl));
+  }
   return dir;
 }
 
@@ -120,9 +131,17 @@ test('CPF-12 the executed copy lives in an owner-confined private directory', ()
     assert.equal(copyStat.uid, process.getuid(), 'the copy must be owned by this user');
   }
   // Keyed by the validated digest, so a different binary can never reuse it.
-  assert.ok(path.basename(out.command).endsWith(
+  // The digest must be IN the basename; on Windows a .exe suffix follows it,
+  // because libuv will not spawn an extensionless path. Assert containment
+  // rather than a trailing match, so the contract is "named by its digest"
+  // rather than "named by its digest on POSIX only".
+  assert.ok(path.basename(out.command).includes(
     crypto.createHash('sha256').update(fs.readFileSync(target)).digest('hex'),
   ), 'the copy name must be bound to the validated digest: ' + out.command);
+  if (process.platform === 'win32') {
+    assert.equal(path.extname(out.command), '.exe',
+      'a Windows copy must carry .exe or spawn() cannot resolve it');
+  }
 });
 
 test('CPF-13 replacing or rewriting the original after validation does not change the executed bytes', () => {
@@ -457,4 +476,34 @@ test('CPF-15 the fault-injection helper injects every dependency production does
   assert.equal(out.ok, false);
   assert.equal(out.reason, 'CODEX_CLI_PATH_INSECURE',
     'the win32 ACL branch must produce a refusal, never a TypeError');
+});
+
+// CPF-16: the freeze record's containing directory is validated, not just the
+// record. Raised by review after being disclosed as a deliberate deviation when
+// the TOCTOU finding was closed -- a writable parent lets an attacker place a
+// stable, correctly-shaped replacement before the first lstat, and while the
+// realpath and digest binding still refuse a substituted executable, an
+// attacker-chosen record can force the pinned launch to fail.
+//
+// Deliberately NOT platform-skipped. The mechanism differs by platform but the
+// contract does not: on POSIX a group/world-writable directory is refused by
+// the mode check, on Windows a directory with no owner-confined ACL is refused
+// by the ACL probe. Same reason code either way, so one case covers both.
+test('CPF-16 a freeze record in an unprotected directory is refused', () => {
+  const safeDir = mkdir();
+  const target = makeExecutable(safeDir, 'codex-binary-v1\n');
+
+  // A directory deliberately left unprotected: mkdtemp WITHOUT the owner-only
+  // ACL mkdir() applies on Windows, and loosened past the mode gate on POSIX.
+  const looseDir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'codex-loose-')));
+  created.push(looseDir);
+  if (process.platform !== 'win32') fs.chmodSync(looseDir, 0o777);
+
+  const freeze = path.join(looseDir, 'codex-freeze.json');
+  fs.writeFileSync(freeze, JSON.stringify(freezeFor(target)), { mode: 0o600 });
+
+  const out = withPin({ mode: 'genuine-pinned', freeze }, () => validate(target));
+  assert.equal(out.ok, false);
+  assert.equal(out.reason, 'CODEX_PIN_FREEZE_DIR_INSECURE',
+    'a record whose parent anyone can write must be refused before it is read');
 });
