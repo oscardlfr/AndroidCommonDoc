@@ -195,13 +195,14 @@ _tmpdir_budget_preflight() {
     if [[ ${#base} -le $RUN_BATS_TMPDIR_MAX_CHARS ]]; then
         return 0   # already inside the budget: leave it exactly as it is
     fi
-    # /tmp is the only short base guaranteed to exist; if it is unusable, run
-    # with the ambient TMPDIR rather than inventing one, so the failure stays
-    # the suite's own honest one.
-    [[ -d /tmp && -w /tmp ]] || return 0
-    local candidate="/tmp/l0b-$$-${BATS_RUN_ID:-run}"
-    candidate="${candidate:0:$RUN_BATS_TMPDIR_MAX_CHARS}"
-    mkdir -p -m 0700 -- "$candidate" || return 0
+    # An ABSOLUTE mktemp template deliberately bypasses $TMPDIR -- the whole
+    # point here is that $TMPDIR is the thing that does not fit. mktemp gives
+    # atomic, unique, 0700 creation, so no PID-derived name can collide. If the
+    # short base cannot be created, run on the ambient TMPDIR rather than
+    # inventing one, so the failure stays the suite's own honest one.
+    local candidate
+    candidate="$(mktemp -d /tmp/l0b-XXXXXXXX 2>/dev/null)" || return 0
+    [[ -n "$candidate" && -d "$candidate" ]] || return 0
     RUN_BATS_SHORT_TMPDIR="$candidate"
     # Arm cleanup IMMEDIATELY: anything failing after this must leave nothing.
     trap '_cleanup_run_scoped' EXIT INT TERM HUP
