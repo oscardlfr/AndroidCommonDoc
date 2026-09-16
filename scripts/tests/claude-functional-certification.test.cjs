@@ -622,6 +622,31 @@ test('MACOS-CANON-01 native host-contract probe accepts a symlinked evidence roo
   assert.equal(run.state.host_identity_observation, 'system-init-stream');
 });
 
+// --- Wave 1 macOS stabilization: probe MCP compatibility (defect E) ---
+//
+// publishClaudeHostContractPackage requires observed_contract.additional_tools_allowed,
+// and the driver derives that from `init.tools.length > 3 && init.mcp_server_count > 0`.
+// The host-contract probe launched the child with --strict-mcp-config and NO
+// --mcp-config, so mcp_server_count was structurally always 0 and the property
+// could never be demonstrated -- another check that cannot pass. The offline
+// fixture meanwhile reported mcp_servers [{name:"docs"}], i.e. it modelled a world
+// the real launch could not produce. Live darwin run confirmed: tools 4,
+// mcp_servers [], extra_tools_mcp_compatible false.
+test('MACOS-MCP-01 the native host-contract probe gives its child a real MCP server', async () => {
+  const run = await runProbeScenario('hcp-success', {
+    transportProfile: 'native-claude-cli',
+    nativeFixture: true,
+  });
+  const record = JSON.parse(fs.readFileSync(path.join(run.evidenceRoot, 'run-record.json'), 'utf8'));
+  const args = record.child.args;
+  const idx = args.indexOf('--mcp-config');
+  assert.notEqual(idx, -1, 'the probe child must be given an MCP config, or additional_tools_allowed can never be observed');
+  const config = JSON.parse(args[idx + 1]);
+  assert.ok(config.mcpServers && Object.keys(config.mcpServers).length > 0, 'the MCP config must declare at least one server');
+  // --strict-mcp-config must remain, so only this declared server is visible.
+  assert.ok(args.includes('--strict-mcp-config'), 'strict MCP config must not be relaxed');
+});
+
 // --- Wave 1 macOS stabilization: multi-turn probe sequence (defect B) ---
 //
 // A real host ends its turn right after spawning the background peer -- the

@@ -1009,8 +1009,25 @@ if (transportProfile === 'native-claude-cli') {
         tools: ['Read'],
       },
     };
+    // The host contract's additional_tools_allowed property is derived from
+    // `init.tools.length > 3 && init.mcp_server_count > 0`, so a child launched
+    // with --strict-mcp-config and NO --mcp-config can never demonstrate it --
+    // the publisher would then reject its own probe's evidence. Declare the
+    // toolkit's own MCP server, exactly as the direct-role-host launch already
+    // does. --strict-mcp-config stays, so this ONE declared server is all the
+    // child can see; nothing ambient is inherited.
+    const probeMcpConfig = {
+      mcpServers: {
+        androidcommondoc: {
+          type: 'stdio',
+          command: entrypointNodeExecutable,
+          args: [path.join(toolkitRoot, 'mcp-server', 'build', 'index.js')],
+        },
+      },
+    };
     nativeArgv = [
       ...baseArgv,
+      '--mcp-config', JSON.stringify(probeMcpConfig),
       '--permission-mode', 'dontAsk', '--permission-prompts', 'none', '--restricted',
       '--tools', 'Agent,SendMessage,Read,Bash', '--agents', JSON.stringify(agents),
     ];
