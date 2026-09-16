@@ -1816,3 +1816,50 @@ test('MACOS-PIN-04 observation fails closed without a platform-matched host cont
   assert.equal(observed.executablePath, undefined, 'a refusal must not leak an executable path');
   assert.equal(observed.pinDigest, undefined, 'a refusal must not leak a pin digest');
 });
+
+// --- Wave 1 macOS stabilization: wake/resume ordering in the PUBLISHER (defect F) ---
+//
+// verifyHostProbeObservations required indexOf(wakePost) < resumeStartIndex, but a
+// real host starts the resumed actor while the wake call is still in flight, so the
+// resumed SubagentStart can precede PostToolUse(SendMessage). Observed live on darwin
+// in BOTH orders across runs. The driver already carried this same wrong assumption
+// (fixed separately); the publisher carried it too, so a genuinely complete probe was
+// rejected with HOST_PROBE_SEQUENCE_INVALID and no host contract could be published.
+function pubseqInitEvent() {
+  return {
+    type: 'system',
+    subtype: 'init',
+    session_id: 'pubseq-' + crypto.randomBytes(8).toString('hex'),
+    model: 'claude-sonnet-5',
+    tools: ['Agent', 'Bash', 'SendMessage', 'Read'],
+    mcp_servers: [],
+  };
+}
+
+test('MACOS-PUBSEQ-01 an interleaved resume start is accepted by the contract publisher', () => {
+  const { mintIsolatedHostContractSession } = require(path.resolve(__dirname, 'lib/host-contract-fixture.cjs'));
+  const repoRoot = path.resolve(__dirname, '..', '..');
+  const minted = mintIsolatedHostContractSession(repoRoot, {
+    rc, runtimeHostClaude: hostClaude, wakeInterleaved: true, event: pubseqInitEvent(),
+  });
+  try {
+    assert.strictEqual(minted.result.ok, true,
+      'a probe whose resumed SubagentStart precedes the wake PostToolUse must still publish and admit: '
+      + JSON.stringify(minted.result));
+  } finally {
+    if (typeof minted.cleanup === 'function') minted.cleanup();
+  }
+});
+
+test('MACOS-PUBSEQ-02 the historical ordering still publishes', () => {
+  const { mintIsolatedHostContractSession } = require(path.resolve(__dirname, 'lib/host-contract-fixture.cjs'));
+  const repoRoot = path.resolve(__dirname, '..', '..');
+  const minted = mintIsolatedHostContractSession(repoRoot, {
+    rc, runtimeHostClaude: hostClaude, wakeInterleaved: false, event: pubseqInitEvent(),
+  });
+  try {
+    assert.strictEqual(minted.result.ok, true, JSON.stringify(minted.result));
+  } finally {
+    if (typeof minted.cleanup === 'function') minted.cleanup();
+  }
+});

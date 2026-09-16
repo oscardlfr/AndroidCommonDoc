@@ -637,7 +637,14 @@ function verifyHostProbeObservations(observerBytes, streamBytes, qualification) 
   const aResumedTools = actorPreTools(starts[1].agent_id_digest, resumeStartIndex, resumeStopIndex);
   const bTools = actorPreTools(starts[2].agent_id_digest, bStartIndex, bStopIndex);
   if (new Set(aInitialTools.map((row) => row.tool_use_digest)).size < 2 || aResumedTools.length < 1 || bTools.length < 1 ||
-      !(firstStartIndex < firstStopIndex && firstStopIndex < indexOf(wakePre) && indexOf(wakePost) < resumeStartIndex &&
+      // The resume is caused by the wake REQUEST, not by its completion event: a
+      // host may start the resumed actor while the wake call is still in flight,
+      // so SubagentStart can legitimately precede PostToolUse(SendMessage).
+      // Observed live on darwin in BOTH orders across runs. Nothing is weakened --
+      // actor A must still have stopped before the wake, wakePost must still exist
+      // and carry success:true with resumedAgentId === startA.agent_id (checked
+      // above), and the remaining order is still asserted.
+      !(firstStartIndex < firstStopIndex && firstStopIndex < indexOf(wakePre) && indexOf(wakePre) < resumeStartIndex &&
         resumeStartIndex < resumeStopIndex && resumeStopIndex < indexOf(agentPre[1]) && indexOf(agentPre[1]) < bStartIndex && bStartIndex < bStopIndex)) {
     return { ok: false, reason: 'HOST_PROBE_SEQUENCE_INVALID' };
   }

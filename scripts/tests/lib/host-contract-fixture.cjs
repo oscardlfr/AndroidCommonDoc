@@ -39,7 +39,7 @@ function sha256hex(text) { return sha256bytes(Buffer.from(text, 'utf8')); }
  *   event: the system/init event to record (session_id/model/cwd/tools/mcp_servers)
  * @returns {{result: object, worktreeRoot: string, cleanup: () => void}}
  */
-function mintIsolatedHostContractSession(repoRoot, { rc, runtimeHostClaude, event }) {
+function mintIsolatedHostContractSession(repoRoot, { rc, runtimeHostClaude, wakeInterleaved, event }) {
   const worktreeRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'host-contract-worktree-'));
   const add = spawnSync('git', ['worktree', 'add', '--quiet', '--detach', worktreeRoot, 'HEAD'], { cwd: repoRoot, encoding: 'utf8' });
   if (add.status !== 0) throw new Error('git worktree add failed: ' + add.stderr);
@@ -108,9 +108,19 @@ function mintIsolatedHostContractSession(repoRoot, { rc, runtimeHostClaude, even
       probeEvent('PostToolUse', { tool_name: 'Agent', tool_use_id: toolA, tool_input: inputA,
         tool_response: { isAsync: true, status: 'async_launched', agentId: agentA } }),
       probeEvent('PreToolUse', { tool_name: 'SendMessage', tool_use_id: toolWake, tool_input: { recipient: 'probe-peer-a', message: 'wake' } }),
-      probeEvent('PostToolUse', { tool_name: 'SendMessage', tool_use_id: toolWake, tool_input: { recipient: 'probe-peer-a', message: 'wake' },
-        tool_response: { success: true, resumedAgentId: agentA } }),
-      probeEvent('SubagentStart', { agent_id: agentA, agent_type: 'probe-peer' }),
+      // A real host starts the resumed actor while the wake call is still in
+      // flight, so SubagentStart can precede the wake PostToolUse. Observed on
+      // darwin in both orders across runs, which is why the ordering is an
+      // option here rather than a fixed idealised sequence.
+      ...(wakeInterleaved ? [
+        probeEvent('SubagentStart', { agent_id: agentA, agent_type: 'probe-peer' }),
+        probeEvent('PostToolUse', { tool_name: 'SendMessage', tool_use_id: toolWake, tool_input: { recipient: 'probe-peer-a', message: 'wake' },
+          tool_response: { success: true, resumedAgentId: agentA } }),
+      ] : [
+        probeEvent('PostToolUse', { tool_name: 'SendMessage', tool_use_id: toolWake, tool_input: { recipient: 'probe-peer-a', message: 'wake' },
+          tool_response: { success: true, resumedAgentId: agentA } }),
+        probeEvent('SubagentStart', { agent_id: agentA, agent_type: 'probe-peer' }),
+      ]),
       probeEvent('PreToolUse', { agent_id: agentA, agent_type: 'probe-peer', tool_name: 'Read', tool_use_id: 'read-a-3', tool_input: { file_path: 'nonce' } }),
       probeEvent('PostToolUse', { agent_id: agentA, agent_type: 'probe-peer', tool_name: 'Read', tool_use_id: 'read-a-3', tool_input: { file_path: 'nonce' } }),
       probeEvent('SubagentStop', { agent_id: agentA, agent_type: 'probe-peer' }),
