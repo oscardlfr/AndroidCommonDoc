@@ -32,7 +32,9 @@ Owner-confinement — 0700 roots, owner checks, Windows owner-only ACLs — defe
 against *other* users on the host. Against a process already running as the
 **same uid**, the contract is **detection, not prevention**. fd-binding,
 `O_NOFOLLOW` and before/after identity re-checks prove that tampering happened;
-they do not make it impossible.
+they do not make it impossible. Even that detection is not uniform across
+platforms for every field — see `ctimeNs` below for the one place where it is
+narrower on Windows than on POSIX.
 
 This is the runtime's established position, not a concession invented for one
 module:
