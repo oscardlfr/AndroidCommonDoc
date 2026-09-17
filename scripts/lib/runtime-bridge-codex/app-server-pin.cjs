@@ -17,6 +17,31 @@ function createAppServerPin({
   // the real value and every test-override fallback below stay byte-identical
   // to each other, never two independently-typed literals that could drift.
   const DEFAULT_APP_SERVER_SPAWN_ARGS = Object.freeze(['app-server', '--listen', 'stdio://', '--strict-config']);
+  // Security identity is compared in BigInt, never as a double.
+  //
+  // fs.Stats reports dev/ino/mode/uid/nlink as doubles unless bigint stats are
+  // requested. Windows NTFS file IDs are 64-bit and routinely exceed
+  // Number.MAX_SAFE_INTEGER, so two genuinely different files become
+  // indistinguishable once their identities round. Measured on a real Windows
+  // runner: ino 28710447629357696 satisfies `ino + 1 === ino`, and across 500
+  // freshly created files five pairs had distinct 64-bit ids that compared equal
+  // as doubles. A swap into a nearby inode would have been accepted as the same
+  // file by every identity check in this module.
+  //
+  // Same pattern already used by runtime-consultation/root-lifecycle/
+  // root-lifecycle.cjs and runtime-bridge-codex/role-owner-registry.cjs.
+  const STAT_BIGINT = Object.freeze({ bigint: true });
+
+  // The ONE sanctioned BigInt->Number crossing: a byte length that has to index
+  // a Buffer. Returns null rather than a lossy double when the value is not
+  // exactly representable, so a caller can refuse instead of silently
+  // truncating. Identity, ownership, mode and timestamps never cross.
+  const MAX_SAFE_BIG = BigInt(Number.MAX_SAFE_INTEGER);
+  function safeSize(value) {
+    if (typeof value !== 'bigint' || value < 0n || value > MAX_SAFE_BIG) return null;
+    return Number(value);
+  }
+
   const HOST_CODEX_CONFIG_MAX_BYTES = 128 * 1024;
   const CODEX_PIN_FREEZE_MAX_BYTES = 64 * 1024;
   const CODEX_PIN_FREEZE_SCHEMA = 'androidcommondoc/codex-executable-freeze/v1';
@@ -53,11 +78,12 @@ function createAppServerPin({
     }
     let st;
     try {
-      st = fs.lstatSync(freezePath);
+      st = fs.lstatSync(freezePath, STAT_BIGINT);
     } catch (err) {
       return { ok: false, reason: 'CODEX_PIN_FREEZE_ABSENT' };
     }
     const currentUid = typeof process.getuid === 'function' ? process.getuid() : null;
+    const currentUidBig = currentUid === null ? null : BigInt(currentUid);
     // The containing directory, validated the same way readProtectedHostCodexPin
     // validates its own. Validating only the FILE leaves a writable parent: an
     // attacker who can create entries there can put a stable, correctly-shaped
@@ -69,14 +95,14 @@ function createAppServerPin({
     const freezeDir = path.dirname(freezePath);
     let dirStat;
     try {
-      dirStat = fs.lstatSync(freezeDir);
+      dirStat = fs.lstatSync(freezeDir, STAT_BIGINT);
     } catch (err) {
       return { ok: false, reason: 'CODEX_PIN_FREEZE_DIR_INSECURE' };
     }
     if (
       !dirStat.isDirectory() || dirStat.isSymbolicLink()
-      || (currentUid !== null && dirStat.uid !== currentUid)
-      || (process.platform !== 'win32' && (dirStat.mode & 0o022) !== 0)
+      || (currentUidBig !== null && dirStat.uid !== currentUidBig)
+      || (process.platform !== 'win32' && (dirStat.mode & 0o022n) !== 0n)
     ) return { ok: false, reason: 'CODEX_PIN_FREEZE_DIR_INSECURE' };
     let initialFreezeDirAcl;
     if (process.platform === 'win32') {
@@ -85,10 +111,10 @@ function createAppServerPin({
         return { ok: false, reason: 'CODEX_PIN_FREEZE_DIR_INSECURE' };
       }
     }
-    const insecure = (candidate) => !candidate.isFile() || candidate.nlink !== 1
-      || candidate.size <= 0 || candidate.size > CODEX_PIN_FREEZE_MAX_BYTES
-      || (currentUid !== null && candidate.uid !== currentUid)
-      || (process.platform !== 'win32' && (candidate.mode & 0o022) !== 0);
+    const insecure = (candidate) => !candidate.isFile() || candidate.nlink !== 1n
+      || candidate.size <= 0n || candidate.size > BigInt(CODEX_PIN_FREEZE_MAX_BYTES)
+      || (currentUidBig !== null && candidate.uid !== currentUidBig)
+      || (process.platform !== 'win32' && (candidate.mode & 0o022n) !== 0n);
     if (st.isSymbolicLink() || insecure(st)) return { ok: false, reason: 'CODEX_PIN_FREEZE_INSECURE' };
 
     // The lstat above observed the PATHNAME; everything from here on must be
@@ -105,32 +131,38 @@ function createAppServerPin({
       return { ok: false, reason: 'CODEX_PIN_FREEZE_INSECURE' };
     }
     try {
-      const opened = fs.fstatSync(fd);
+      const opened = fs.fstatSync(fd, STAT_BIGINT);
       // Same file the pathname named a moment ago, and still secure in its own right.
       if (opened.dev !== st.dev || opened.ino !== st.ino || insecure(opened)) {
         return { ok: false, reason: 'CODEX_PIN_FREEZE_INSECURE' };
       }
+      // Size crosses from BigInt to Number exactly once, and only after
+      // insecure() has already bounded it below CODEX_PIN_FREEZE_MAX_BYTES.
+      // Everything that decides IDENTITY stays BigInt; only this length, which
+      // must index a Buffer, becomes a double.
+      const size = safeSize(opened.size);
+      if (size === null) return { ok: false, reason: 'CODEX_PIN_FREEZE_MALFORMED' };
       // Bounded read THROUGH the descriptor. A short read is a truncation or a
       // concurrent rewrite, never something to parse optimistically.
-      const buffer = Buffer.allocUnsafe(opened.size);
+      const buffer = Buffer.allocUnsafe(size);
       let filled = 0;
-      while (filled < opened.size) {
-        const got = fs.readSync(fd, buffer, filled, opened.size - filled, filled);
+      while (filled < size) {
+        const got = fs.readSync(fd, buffer, filled, size - filled, filled);
         if (got <= 0) break;
         filled += got;
       }
-      if (filled !== opened.size) return { ok: false, reason: 'CODEX_PIN_FREEZE_MALFORMED' };
+      if (filled !== size) return { ok: false, reason: 'CODEX_PIN_FREEZE_MALFORMED' };
       // Nothing may have changed underneath us while we read.
-      const after = fs.fstatSync(fd);
+      const after = fs.fstatSync(fd, STAT_BIGINT);
       if (
         after.dev !== opened.dev || after.ino !== opened.ino
         || after.size !== opened.size || after.nlink !== opened.nlink
-        || after.mtimeMs !== opened.mtimeMs
+        || after.mtimeNs !== opened.mtimeNs
       ) return { ok: false, reason: 'CODEX_PIN_FREEZE_INSECURE' };
       // And the pathname must still resolve to that same file, so a swap that
       // left our descriptor untouched is caught too.
       let pathNow;
-      try { pathNow = fs.lstatSync(freezePath); } catch (err) { return { ok: false, reason: 'CODEX_PIN_FREEZE_INSECURE' }; }
+      try { pathNow = fs.lstatSync(freezePath, STAT_BIGINT); } catch (err) { return { ok: false, reason: 'CODEX_PIN_FREEZE_INSECURE' }; }
       if (pathNow.isSymbolicLink() || pathNow.dev !== opened.dev || pathNow.ino !== opened.ino) {
         return { ok: false, reason: 'CODEX_PIN_FREEZE_INSECURE' };
       }
@@ -196,9 +228,11 @@ function createAppServerPin({
     let digest;
     try {
       fd = fs.openSync(resolved, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW || 0));
-      const opened = fs.fstatSync(fd);
-      if (!opened.isFile() || opened.nlink !== 1) return { ok: false, reason: 'CODEX_PIN_TARGET_INSECURE' };
+      const opened = fs.fstatSync(fd, STAT_BIGINT);
+      if (!opened.isFile() || opened.nlink !== 1n) return { ok: false, reason: 'CODEX_PIN_TARGET_INSECURE' };
       if (opened.dev !== stat.dev || opened.ino !== stat.ino) return { ok: false, reason: 'CODEX_PIN_TARGET_REBOUND' };
+      const openedSize = safeSize(opened.size);
+      if (openedSize === null) return { ok: false, reason: 'CODEX_PIN_TARGET_INSECURE' };
       const hash = crypto.createHash('sha256');
       const buffer = Buffer.alloc(1 << 20);
       let offset = 0;
@@ -208,17 +242,17 @@ function createAppServerPin({
         hash.update(buffer.subarray(0, read));
         offset += read;
       }
-      const after = fs.fstatSync(fd);
+      const after = fs.fstatSync(fd, STAT_BIGINT);
       if (after.dev !== opened.dev || after.ino !== opened.ino || after.size !== opened.size) {
         return { ok: false, reason: 'CODEX_PIN_TARGET_CHANGED_DURING_READ' };
       }
-      if (offset !== opened.size) return { ok: false, reason: 'CODEX_PIN_SHORT_READ' };
+      if (offset !== openedSize) return { ok: false, reason: 'CODEX_PIN_SHORT_READ' };
       digest = hash.digest('hex');
       // Bind execution to these exact bytes while the validated descriptor is
       // still open. Doing it here, not after the close, is the whole point: a
       // second open of the mutable pathname would be a fresh, unvalidated read.
       if (digest !== freeze.executable_sha256) return { ok: false, reason: 'CODEX_PIN_DIGEST_DRIFT' };
-      const copied = materializePinnedCopy(fd, opened.size, digest);
+      const copied = materializePinnedCopy(fd, openedSize, digest);
       if (!copied.ok) return copied;
       executablePath = copied.path;
     } catch (err) {
@@ -232,7 +266,7 @@ function createAppServerPin({
     if (freeze.uid !== null && currentUid !== null && freeze.uid !== currentUid) {
       return { ok: false, reason: 'CODEX_PIN_OWNER_DRIFT' };
     }
-    if (process.platform !== 'win32' && parseInt(freeze.mode_octal, 8) !== (stat.mode & 0o7777)) {
+    if (process.platform !== 'win32' && BigInt(parseInt(freeze.mode_octal, 8)) !== (stat.mode & 0o7777n)) {
       return { ok: false, reason: 'CODEX_PIN_MODE_DRIFT' };
     }
     return { ok: true, executablePath };
@@ -257,17 +291,18 @@ function createAppServerPin({
     let dirStat;
     let initial;
     try {
-      dirStat = fs.lstatSync(configDir);
-      initial = fs.lstatSync(configPath);
+      dirStat = fs.lstatSync(configDir, STAT_BIGINT);
+      initial = fs.lstatSync(configPath, STAT_BIGINT);
     } catch (err) {
       if (err && err.code === 'ENOENT') return { ok: true, configured: false };
       return { ok: false, reason: 'CODEX_CONFIG_STAT_FAILED' };
     }
     const currentUid = typeof process.getuid === 'function' ? process.getuid() : null;
+    const currentUidBig = currentUid === null ? null : BigInt(currentUid);
     if (
       !dirStat.isDirectory() || dirStat.isSymbolicLink()
-      || (currentUid !== null && dirStat.uid !== currentUid)
-      || (process.platform !== 'win32' && (dirStat.mode & 0o022) !== 0)
+      || (currentUidBig !== null && dirStat.uid !== currentUidBig)
+      || (process.platform !== 'win32' && (dirStat.mode & 0o022n) !== 0n)
     ) return { ok: false, reason: 'CODEX_CONFIG_DIR_INSECURE' };
     let initialWindowsAcl;
     if (process.platform === 'win32') {
@@ -275,22 +310,24 @@ function createAppServerPin({
       if (!initialWindowsAcl || initialWindowsAcl.ok !== true) return { ok: false, reason: 'CODEX_CONFIG_DIR_INSECURE' };
     }
     if (
-      !initial.isFile() || initial.isSymbolicLink() || initial.nlink !== 1
-      || initial.size <= 0 || initial.size > HOST_CODEX_CONFIG_MAX_BYTES
-      || (currentUid !== null && initial.uid !== currentUid)
-      || (process.platform !== 'win32' && (initial.mode & 0o077) !== 0)
+      !initial.isFile() || initial.isSymbolicLink() || initial.nlink !== 1n
+      || initial.size <= 0n || initial.size > BigInt(HOST_CODEX_CONFIG_MAX_BYTES)
+      || (currentUidBig !== null && initial.uid !== currentUidBig)
+      || (process.platform !== 'win32' && (initial.mode & 0o077n) !== 0n)
     ) return { ok: false, reason: 'CODEX_CONFIG_FILE_INSECURE' };
 
     let fd;
     let bytes;
     try {
       fd = fs.openSync(configPath, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW || 0));
-      const opened = fs.fstatSync(fd);
+      const opened = fs.fstatSync(fd, STAT_BIGINT);
       if (
         !opened.isFile() || opened.dev !== initial.dev || opened.ino !== initial.ino
         || opened.size !== initial.size || opened.nlink !== initial.nlink
       ) return { ok: false, reason: 'CODEX_CONFIG_REBOUND' };
-      bytes = Buffer.alloc(opened.size);
+      const openedSize = safeSize(opened.size);
+      if (openedSize === null) return { ok: false, reason: 'CODEX_CONFIG_FILE_INSECURE' };
+      bytes = Buffer.alloc(openedSize);
       let offset = 0;
       while (offset < bytes.length) {
         const read = fs.readSync(fd, bytes, offset, bytes.length - offset, offset);
@@ -298,8 +335,8 @@ function createAppServerPin({
         offset += read;
       }
       if (offset !== bytes.length) return { ok: false, reason: 'CODEX_CONFIG_SHORT_READ' };
-      const afterFd = fs.fstatSync(fd);
-      const afterPath = fs.lstatSync(configPath);
+      const afterFd = fs.fstatSync(fd, STAT_BIGINT);
+      const afterPath = fs.lstatSync(configPath, STAT_BIGINT);
       if (
         afterFd.dev !== opened.dev || afterFd.ino !== opened.ino || afterFd.size !== opened.size
         || afterPath.isSymbolicLink() || afterPath.dev !== opened.dev || afterPath.ino !== opened.ino
@@ -343,17 +380,18 @@ function createAppServerPin({
     }
     let st;
     try {
-      st = fs.lstatSync(pinnedPath);
+      st = fs.lstatSync(pinnedPath, STAT_BIGINT);
     } catch (err) {
       return { ok: false, reason: 'CODEX_CLI_PATH_NOT_FOUND' };
     }
     const currentUid = typeof process.getuid === 'function' ? process.getuid() : null;
+    const currentUidBig = currentUid === null ? null : BigInt(currentUid);
     if (!st.isFile() || st.isSymbolicLink()) {
       return { ok: false, reason: 'CODEX_CLI_PATH_NOT_A_FILE' };
     }
     if (
-      st.nlink !== 1 || (currentUid !== null && st.uid !== currentUid)
-      || (process.platform !== 'win32' && ((st.mode & 0o022) !== 0 || (st.mode & 0o100) === 0))
+      st.nlink !== 1n || (currentUidBig !== null && st.uid !== currentUidBig)
+      || (process.platform !== 'win32' && ((st.mode & 0o022n) !== 0n || (st.mode & 0o100n) === 0n))
     ) return { ok: false, reason: 'CODEX_CLI_PATH_INSECURE' };
     if (process.platform === 'win32') {
       const acl = windowsPrivateDirectoryAcl(path.dirname(pinnedPath), { mode: 'validate' });

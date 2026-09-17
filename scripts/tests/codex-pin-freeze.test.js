@@ -21,6 +21,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const test = require('node:test');
+const { spawnSync } = require('node:child_process');
 
 const rbc = require(path.resolve(__dirname, '../lib/runtime-bridge-codex.cjs'));
 const validate = rbc.__testOnlyValidatePinnedCodexExecutable;
@@ -246,7 +247,11 @@ test('CPF-07 pre-existing path/ownership contract is unchanged on every platform
   // way, since this suite cannot execute that branch on darwin/linux.
   const src = fs.readFileSync(path.resolve(__dirname, '../lib/runtime-bridge-codex/app-server-pin.cjs'), 'utf8');
   assert.match(src, /if \(process\.platform === 'win32'\) \{\s*\n\s*const acl = windowsPrivateDirectoryAcl\(path\.dirname\(pinnedPath\)/);
-  assert.match(src, /process\.platform !== 'win32' && parseInt\(freeze\.mode_octal, 8\)/);
+  // The mode comparison is now BigInt on both sides, because `stat` is a
+  // BigIntStats: the freeze's octal string is widened rather than the stat's
+  // mode being narrowed, so the POSIX permission contract is byte-identical
+  // while identity stays out of double precision.
+  assert.match(src, /process\.platform !== 'win32' && BigInt\(parseInt\(freeze\.mode_octal, 8\)\) !== \(stat\.mode & 0o7777n\)/);
 });
 
 // ── Finding A: the freeze record is read through a validated DESCRIPTOR ───────
@@ -346,22 +351,39 @@ test('CPF-08 a symlink swapped in after the lstat is refused by O_NOFOLLOW alone
   assert.equal(out.reason, 'CODEX_PIN_FREEZE_INSECURE');
 });
 
+// Rewritten for determinism after a Windows audit found it alternating between
+// two different refusal reasons on the same HEAD. Two defects caused that:
+//
+//   * `real.ino + 1` mutated a double. A 64-bit Windows inode is its own
+//     successor at that magnitude, so on Windows the "replacement" frequently
+//     had the identical identity and the case passed or failed on whatever else
+//     happened to differ.
+//   * The override was GLOBAL, so it also reached the pinned executable's own
+//     descriptor and could refuse with CODEX_PIN_TARGET_REBOUND instead of the
+//     reason under test.
+//
+// Now the injection is scoped to the freeze descriptor alone and the two
+// identities differ under every representation, so exactly one refusal is
+// reachable. The loop asserts that in CI on every run rather than relying on
+// anyone having run it repeatedly by hand.
 test('CPF-09 a freeze replaced between the pathname check and the open is refused', () => {
   const dir = mkdir();
   const target = makeExecutable(dir, 'codex-binary-v1\n');
   const freezePath = writeFreeze(dir, freezeFor(target));
-  // lstat reports the file the caller vetted; the descriptor that is actually
-  // opened belongs to a DIFFERENT inode -- exactly a swap inside the window.
-  const pin = pinWith({
-    fstatSync(fd) {
-      const real = fs.fstatSync(fd);
-      return Object.assign(Object.create(Object.getPrototypeOf(real)), real, { ino: real.ino + 1 });
-    },
-  });
-  const out = withPin({ mode: 'genuine-pinned', freeze: freezePath },
-    () => pin.validatePinnedCodexExecutable(target));
-  assert.equal(out.ok, false);
-  assert.equal(out.reason, 'CODEX_PIN_FREEZE_INSECURE');
+
+  const reasons = new Set();
+  const REPEATS = 20;
+  for (let i = 0; i < REPEATS; i += 1) {
+    // lstat reports the file the caller vetted; the descriptor actually opened
+    // belongs to a different inode -- a swap inside the check/open window.
+    const pin = pinWithFreezeIdentity(freezePath, 424242n, 424243n);
+    const out = withPin({ mode: 'genuine-pinned', freeze: freezePath },
+      () => pin.validatePinnedCodexExecutable(target));
+    assert.equal(out.ok, false);
+    reasons.add(out.reason);
+  }
+  assert.deepEqual([...reasons], ['CODEX_PIN_FREEZE_INSECURE'],
+    `${REPEATS} runs must all refuse for the same reason; saw ${[...reasons].join(', ')}`);
 });
 
 test('CPF-10 a freeze mutated while it is being read is refused, never parsed', () => {
@@ -598,4 +620,215 @@ test('CPF-17 independent stores do not share a copy directory or each other\'s c
 
   a.cleanupPinnedCopies();
   assert.equal(fs.existsSync(copyA.path), false, 'A must clean up its own copy');
+});
+
+// ── Security identity must be compared in BigInt, never as a double ─────────
+//
+// fs.Stats exposes `ino` as a double unless `{ bigint: true }` is requested.
+// Windows NTFS file IDs are 64-bit and routinely exceed Number.MAX_SAFE_INTEGER,
+// so two genuinely different files collide once their identities are rounded.
+// Measured on a real Windows runner: ino 28710447629357696 satisfies
+// `ino + 1 === ino`, and across 500 freshly created files five pairs had
+// distinct 64-bit ids that were indistinguishable as doubles.
+//
+// This is a production defect, not a test artefact. Every identity comparison
+// that refuses a substituted file -- freeze record, pinned executable,
+// protected host Codex pin -- compared dev/ino. As doubles, a swap into a
+// nearby inode reads as the same file and is accepted.
+//
+// Scoping the injection to ONE descriptor matters as much as the values. The
+// previous global fstatSync override also reached the pinned executable's
+// descriptor, so the same case could refuse with CODEX_PIN_TARGET_REBOUND
+// instead of the reason under test -- which is why it alternated between two
+// outcomes on the same HEAD.
+
+// A Stats-shaped clone with fields replaced; the prototype is preserved so
+// isFile()/isSymbolicLink() keep working, and BigIntStats clone the same way.
+function statWith(real, fields) {
+  return Object.assign(Object.create(Object.getPrototypeOf(real)), real, fields);
+}
+
+// Reports `pathIno` for lstat of the freeze record and `fdIno` for fstat of the
+// descriptor actually opened from it. Every other path and descriptor is
+// untouched, so nothing else in the flow can produce the refusal.
+function pinWithFreezeIdentity(freezePath, pathIno, fdIno) {
+  let freezeFd = null;
+  const canonicalFreeze = fs.realpathSync(freezePath);
+  const isFreeze = (p) => {
+    try { return fs.realpathSync(p) === canonicalFreeze; } catch (err) { return false; }
+  };
+  const pick = (opts, value) => ((opts && opts.bigint) ? value : Number(value));
+  return pinWith({
+    lstatSync(p, ...rest) {
+      const real = fs.lstatSync(p, ...rest);
+      return isFreeze(p) ? statWith(real, { ino: pick(rest[0], pathIno) }) : real;
+    },
+    openSync(p, ...rest) {
+      const fd = fs.openSync(p, ...rest);
+      if (isFreeze(p)) freezeFd = fd;
+      return fd;
+    },
+    fstatSync(fd, ...rest) {
+      const real = fs.fstatSync(fd, ...rest);
+      if (freezeFd === null || fd !== freezeFd) return real;
+      return statWith(real, { ino: pick(rest[0], fdIno) });
+    },
+  });
+}
+
+// Per-leg, because a whole-chain assertion is not a guard.
+//
+// readCodexPinFreeze compares identity three times: the opened descriptor
+// against the vetted pathname, the descriptor against itself after the read,
+// and the pathname against the descriptor after the read. A single case that
+// merely reaches "refused" passes even when two of the three have regressed,
+// because whichever leg still works catches it. Verified, not assumed: with
+// only the first leg projected back to Number the earlier single-case version
+// of this test stayed green, caught by the third leg instead.
+//
+// So each leg is driven in isolation, with the other two arranged to agree.
+// Reverting any ONE of them to a Number comparison turns exactly its own case
+// red.
+function pinWithScriptedFreezeIdentity(freezePath, lstatInos, fstatInos) {
+  let freezeFd = null;
+  let lstatCall = 0;
+  let fstatCall = 0;
+  const canonicalFreeze = fs.realpathSync(freezePath);
+  const isFreeze = (candidate) => {
+    try { return fs.realpathSync(candidate) === canonicalFreeze; } catch (err) { return false; }
+  };
+  // Last value repeats, so a script shorter than the call count is still total.
+  const at = (list, i) => list[Math.min(i, list.length - 1)];
+  const pick = (opts, value) => ((opts && opts.bigint) ? value : Number(value));
+  return pinWith({
+    lstatSync(candidate, ...rest) {
+      const real = fs.lstatSync(candidate, ...rest);
+      if (!isFreeze(candidate)) return real;
+      const value = at(lstatInos, lstatCall);
+      lstatCall += 1;
+      return statWith(real, { ino: pick(rest[0], value) });
+    },
+    openSync(candidate, ...rest) {
+      const fd = fs.openSync(candidate, ...rest);
+      if (isFreeze(candidate)) freezeFd = fd;
+      return fd;
+    },
+    fstatSync(fd, ...rest) {
+      const real = fs.fstatSync(fd, ...rest);
+      if (freezeFd === null || fd !== freezeFd) return real;
+      const value = at(fstatInos, fstatCall);
+      fstatCall += 1;
+      return statWith(real, { ino: pick(rest[0], value) });
+    },
+  });
+}
+
+// A real Windows inode from the audit. The double spacing at this magnitude is
+// 4, so BASE+1n rounds to BASE: as doubles the two are the same file.
+const COLLIDING_BASE = 28710447629357696n;
+const COLLIDING_NEXT = COLLIDING_BASE + 1n;
+
+test('CPF-18 double-colliding identities are refused at each of the three legs', () => {
+  assert.equal(Number(COLLIDING_NEXT), Number(COLLIDING_BASE),
+    'the fixture must be beyond double precision or none of this proves anything');
+  assert.notEqual(COLLIDING_NEXT, COLLIDING_BASE);
+
+  // [ lstat script, fstat script, which leg it isolates ]
+  const legs = [
+    [[COLLIDING_BASE, COLLIDING_NEXT], [COLLIDING_NEXT], 'opened descriptor vs vetted pathname'],
+    [[COLLIDING_BASE], [COLLIDING_BASE, COLLIDING_NEXT], 'descriptor vs itself after the read'],
+    [[COLLIDING_BASE, COLLIDING_NEXT], [COLLIDING_BASE], 'pathname vs descriptor after the read'],
+  ];
+
+  for (const [lstatInos, fstatInos, leg] of legs) {
+    const dir = mkdir();
+    const target = makeExecutable(dir, 'codex-binary-v1\n');
+    const freezePath = writeFreeze(dir, freezeFor(target));
+    const pin = pinWithScriptedFreezeIdentity(freezePath, lstatInos, fstatInos);
+    const out = withPin({ mode: 'genuine-pinned', freeze: freezePath },
+      () => pin.validatePinnedCodexExecutable(target));
+    assert.equal(out.ok, false,
+      `leg "${leg}" accepted two files whose 64-bit identities differ`);
+    assert.equal(out.reason, 'CODEX_PIN_FREEZE_INSECURE', `leg "${leg}"`);
+  }
+});
+
+// CPF-19: the protected copy must be an image the operating system can actually
+// start. Naming it .exe on Windows is necessary but proves nothing by itself --
+// only a real CreateProcess/libuv resolution does, and that is precisely the leg
+// that was broken: an extensionless copy failed ERROR_FILE_NOT_FOUND, so the
+// validated bytes never ran while every assertion about the path still passed.
+//
+// The executable under pin has to survive being COPIED, which rules out
+// process.execPath here: Homebrew's node is a small launcher that dynamically
+// links @rpath/libnode, so a copy outside its own directory dies in dyld before
+// main(). Each platform therefore contributes something self-contained:
+//
+//   * win32 -- a real PE from System32. This is the case that matters, because
+//     it is the platform whose loader refused an extensionless path.
+//   * POSIX  -- a shebang script, which the kernel genuinely execve()s.
+//
+// Different images, identical contract: the copy resolves, starts, exits 0 and
+// prints what it was supposed to print.
+function launchableFixture(dir) {
+  if (process.platform === 'win32') {
+    const system32 = path.join(process.env.SystemRoot || 'C:\\Windows', 'System32');
+    const source = path.join(dir, 'codex-under-pin.exe');
+    // hostname.exe links only against system DLLs resolved by the standard
+    // search order, so it still runs from a private directory.
+    fs.copyFileSync(path.join(system32, 'hostname.exe'), source);
+    return { source, args: [], check: (out) => out.length > 0 };
+  }
+  const source = path.join(dir, 'codex-under-pin');
+  fs.writeFileSync(source, '#!/bin/sh\necho CPF19-LAUNCHED\n', { mode: 0o755 });
+  fs.chmodSync(source, 0o755);
+  return { source, args: [], check: (out) => out === 'CPF19-LAUNCHED' };
+}
+
+test('CPF-19 the protected copy is an image the OS actually launches', () => {
+  const dir = mkdir();
+  const { source, args, check } = launchableFixture(dir);
+
+  // The fixture itself must be launchable, or the case proves nothing about the
+  // copy. Fail loudly here rather than let a broken fixture read as a pass.
+  const baseline = spawnSync(source, args, { shell: false, encoding: 'utf8' });
+  assert.equal(baseline.status, 0,
+    'fixture executable must run before the copy is tested; stderr=' + String(baseline.stderr).slice(0, 200));
+
+  const freeze = writeFreeze(dir, freezeFor(source));
+  const out = withPin({ mode: 'genuine-pinned', freeze }, () => validate(source));
+  assert.equal(out.ok, true, out.reason);
+
+  // Created, named by its digest, and not the mutable original.
+  assert.notEqual(out.command, source);
+  assert.equal(fs.existsSync(out.command), true, 'the protected copy must exist');
+  assert.equal(
+    path.basename(out.command),
+    'codex-' + crypto.createHash('sha256').update(fs.readFileSync(source)).digest('hex')
+      + (process.platform === 'win32' ? '.exe' : ''),
+    'the copy must be named by its validated digest',
+  );
+
+  // The leg that matters: the platform resolves and starts it, shell:false,
+  // exactly as the supervisor spawns it.
+  const run = spawnSync(out.command, args, { shell: false, encoding: 'utf8' });
+  assert.equal(run.error, undefined,
+    'spawn must resolve the protected copy: ' + String(run.error));
+  assert.equal(run.status, 0,
+    'the protected copy must exit 0; stderr=' + String(run.stderr).slice(0, 200));
+  assert.equal(check(String(run.stdout).trim()), true,
+    'the launched image must be the pinned bytes, not another resolvable program');
+
+  // Cleanup, against the real production store rather than a stand-in.
+  const store = createPinnedImageStore({ fs, os, path, crypto, windowsPrivateDirectoryAcl });
+  const bytes = fs.readFileSync(source);
+  const digest = crypto.createHash('sha256').update(bytes).digest('hex');
+  const fd = fs.openSync(source, fs.constants.O_RDONLY);
+  let copy;
+  try { copy = store.materializePinnedCopy(fd, bytes.length, digest); } finally { fs.closeSync(fd); }
+  assert.equal(copy.ok, true, copy.reason);
+  const relaunched = spawnSync(copy.path, args, { shell: false, encoding: 'utf8' });
+  assert.equal(relaunched.status, 0, 'a store-materialized copy must launch too');
+  store.cleanupPinnedCopies();
+  assert.equal(fs.existsSync(copy.path), false, 'cleanup must remove the copy it made');
 });

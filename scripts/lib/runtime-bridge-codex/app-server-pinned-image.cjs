@@ -1,17 +1,64 @@
 'use strict';
 
-// Finding B (PR #247 review): the bytes that were VALIDATED must be the bytes
-// that actually run. Hashing a descriptor and then handing spawn() the mutable
-// pathname leaves a window in which the file, or its parent directory entry,
-// can be replaced between validation and exec -- and on Unix the surrounding
-// checks accept an owner-writable executable and do not protect its parent
-// directory, so the same user can do exactly that.
+// The VERIFIED ISOLATED COPY of the pinned Codex executable.
 //
-// This module owns the remedy: copy the validated bytes straight out of the
-// already-open, already-verified descriptor into an owner-confined private
-// directory, key the copy by the validated digest, re-verify it, and let the
-// caller execute THAT. It lives in its own file because every module in this
-// tree is capped at 500 lines.
+// Deliberately not called an "immutable copy". It is not immutable, and naming
+// it so would promise a guarantee this module does not deliver.
+//
+// ── What this exists to fix ────────────────────────────────────────────────
+// Hashing a descriptor and then handing spawn() the mutable PATHNAME leaves a
+// window in which the file, or its parent directory entry, can be replaced
+// between validation and exec. The surrounding checks accept an owner-writable
+// executable and do not protect its parent directory. So: copy the validated
+// bytes straight out of the already-open, already-verified descriptor into an
+// owner-confined private directory, key the copy by the validated digest,
+// re-verify it, and execute THAT.
+//
+// ── What the copy DOES protect against ─────────────────────────────────────
+//   * Any other user on the host. The directory is created by mkdtempSync at
+//     0700 with an unpredictable name, owner-checked, and on Windows carries an
+//     owner-only ACL. Another uid can neither read, write nor pre-create it.
+//   * Substitution of the ORIGINAL after validation. The copy is taken from the
+//     open descriptor, never by re-opening the pathname, so rewriting or
+//     replacing the original -- in place or by a new inode -- cannot reach the
+//     image that runs (CPF-13).
+//   * A stale or foreign copy being reused. Reuse requires a full re-hash
+//     against the validated digest, not a name match (verifyPinnedCopy).
+//   * Cross-process interference. The directory is per-process, so no peer's
+//     teardown can remove a copy this process has verified (CPF-17).
+//
+// ── What it does NOT protect against, stated plainly ───────────────────────
+// A process running as THE SAME UID. Such a process can chmod the copy writable
+// and alter it in the window between the final verifyPinnedCopy and the spawn.
+// That window is small and the copy lives at an unpredictable path, but neither
+// is a guarantee, and this module must not be described as if they were.
+//
+// ── Why that is the contract, not an oversight ─────────────────────────────
+// The local user account is a trust boundary for this entire runtime, stated
+// consistently wherever the question is faced:
+//
+//   * runtime-consultation/root-lifecycle/root-lifecycle.cjs names "a same-uid
+//     attacker" explicitly and answers with a before/after identity re-check --
+//     DETECTION of tampering, never prevention of it.
+//   * runtime-consultation/durability/write.cjs defends an "attacker-planted
+//     byte-identical file, or a hard link" with fd-binding, O_NOFOLLOW, and a
+//     re-fstat identity compare. Same shape: bind and verify, do not assume
+//     the filesystem cannot be touched.
+//   * runtime-role-lifecycle/private-registry.cjs confines its root to
+//     owner-only 0700 and checks the owner -- again a boundary against OTHER
+//     users, with no claim about this one.
+//
+// genuine-pinned binds the executable to a conductor-written freeze record by
+// DIGEST rather than trusting a path or a version string. That is its whole
+// promise, and this copy delivers it. Resisting a hostile process already
+// running as the user is a different and much stronger property, which nothing
+// in this runtime claims and which POSIX and Win32 give no portable primitive
+// for -- fexecve and memfd_create + F_SEAL_WRITE have no Node binding.
+//
+// If that contract ever changes, this comment is wrong and the mechanism, not
+// the wording, has to change with it.
+//
+// Lives in its own file because every module in this tree is capped at 500 lines.
 
 function createPinnedImageStore({ fs, os, path, crypto, windowsPrivateDirectoryAcl }) {
 // ── Finding B: the bytes that were validated must be the bytes that run ─────
@@ -23,6 +70,22 @@ function createPinnedImageStore({ fs, os, path, crypto, windowsPrivateDirectoryA
 // swap it. Copy the validated bytes straight out of the already-open,
 // already-verified descriptor into an owner-confined private directory, key
 // the copy by the validated digest, re-verify it, and execute THAT.
+// Identity, ownership and mode are compared in BigInt. fs.Stats reports them as
+// doubles by default, and Windows NTFS file IDs are 64-bit: two genuinely
+// different files become indistinguishable once their identities round, so a
+// swap into a nearby inode would read as the same file. Measured on a real
+// Windows runner, ino 28710447629357696 satisfies `ino + 1 === ino`.
+const STAT_BIGINT = Object.freeze({ bigint: true });
+const MAX_SAFE_BIG = BigInt(Number.MAX_SAFE_INTEGER);
+
+// The one sanctioned BigInt->Number crossing: a byte length that must index a
+// Buffer. Returns null rather than a lossy double, so the caller refuses
+// instead of silently truncating.
+function safeSize(value) {
+  if (typeof value !== 'bigint' || value < 0n || value > MAX_SAFE_BIG) return null;
+  return Number(value);
+}
+
 const PINNED_COPY_DIR_PREFIX = 'acd-codex-pinned-';
 
 // Per-PROCESS, created by mkdtempSync, memoized. Two review findings share this
@@ -61,11 +124,11 @@ function ensurePinnedCopyDir(dir) {
   try {
     // mkdtempSync already created it atomically at 0700; never mkdir/chmod a
     // path that could have been substituted. Validate what is actually there.
-    const st = fs.lstatSync(dir);
-    const uid = typeof process.getuid === 'function' ? process.getuid() : null;
+    const st = fs.lstatSync(dir, STAT_BIGINT);
+    const uid = typeof process.getuid === 'function' ? BigInt(process.getuid()) : null;
     if (!st.isDirectory() || st.isSymbolicLink()) return false;
     if (uid !== null && st.uid !== uid) return false;
-    if (process.platform !== 'win32' && (st.mode & 0o077) !== 0) return false;
+    if (process.platform !== 'win32' && (st.mode & 0o077n) !== 0n) return false;
     if (process.platform === 'win32') {
       // 'ensure' APPLIES the owner-only ACL to a directory this module just
       // created -- the same mode private-registry.cjs and local-registry.cjs
@@ -89,21 +152,23 @@ function verifyPinnedCopy(copyPath, expectedDigest) {
   let fd;
   try {
     fd = fs.openSync(copyPath, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW || 0));
-    const opened = fs.fstatSync(fd);
-    const uid = typeof process.getuid === 'function' ? process.getuid() : null;
-    if (!opened.isFile() || opened.nlink !== 1 || opened.size <= 0) return { ok: false };
+    const opened = fs.fstatSync(fd, STAT_BIGINT);
+    const uid = typeof process.getuid === 'function' ? BigInt(process.getuid()) : null;
+    if (!opened.isFile() || opened.nlink !== 1n || opened.size <= 0n) return { ok: false };
     if (uid !== null && opened.uid !== uid) return { ok: false };
-    if (process.platform !== 'win32' && (opened.mode & 0o077) !== 0) return { ok: false };
+    if (process.platform !== 'win32' && (opened.mode & 0o077n) !== 0n) return { ok: false };
+    const size = safeSize(opened.size);
+    if (size === null) return { ok: false };
     const hash = crypto.createHash('sha256');
     const buffer = Buffer.allocUnsafe(1024 * 1024);
     let offset = 0;
-    while (offset < opened.size) {
-      const read = fs.readSync(fd, buffer, 0, Math.min(buffer.length, opened.size - offset), offset);
+    while (offset < size) {
+      const read = fs.readSync(fd, buffer, 0, Math.min(buffer.length, size - offset), offset);
       if (read <= 0) break;
       hash.update(buffer.subarray(0, read));
       offset += read;
     }
-    if (offset !== opened.size) return { ok: false };
+    if (offset !== size) return { ok: false };
     return hash.digest('hex') === expectedDigest ? { ok: true, path: copyPath } : { ok: false };
   } catch (err) {
     return { ok: false };
