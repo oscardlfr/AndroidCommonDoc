@@ -839,14 +839,21 @@ test('CPF-19 the protected copy is an image the OS actually launches', () => {
 // the stat fields, and all three omitted ctimeNs. That matters because mtimeNs
 // is attacker-settable: the owner of a file can rewrite it in place and then
 // put the old modification time back with utimensat, leaving dev, ino, size,
-// nlink and mtimeNs all identical across the read. ctimeNs cannot be restored
-// that way -- there is no API to set it, and the very act of resetting mtime
-// updates it -- so it is the only field that witnesses that rewrite.
+// nlink and mtimeNs all identical across the read. On POSIX ctimeNs cannot be
+// restored that way -- no standard call sets it directly, and the very act of
+// resetting mtime moves it forward -- so it witnesses the rewrite there. On
+// Windows ChangeTime IS a settable field (SetFileInformationByHandle with
+// FileBasicInfo, given FILE_WRITE_ATTRIBUTES), so the same guarantee does not
+// hold: comparing it there catches an ordinary rewrite, not a same-account
+// actor who resets ChangeTime too. Platform-exact guarantee, not this file's
+// job to restate: docs/agents/runtime-messaging-trust-boundaries.md.
 //
 // This is not a claim that the same-uid boundary is closed; it is not. The
 // module's contract against that actor is DETECTION (see the threat-model
-// header in app-server-pinned-image.cjs), and a detection that a restored
-// timestamp defeats is not the detection the contract promises.
+// header in app-server-pinned-image.cjs), and on POSIX a detection that a
+// restored timestamp defeats is not the detection the contract promises; on
+// Windows this field's detection is correspondingly narrower, not the boundary
+// itself widening.
 //
 // Driven per FIELD rather than once, for the same reason CPF-18 is driven per
 // leg. A single case proves only that some field is compared; it stays green

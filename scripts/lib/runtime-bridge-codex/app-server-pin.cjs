@@ -48,12 +48,12 @@ function createAppServerPin({
   // subsets is how a field goes missing from one of them: each site here
   // previously compared a different set, and none included ctimeNs.
   //
-  // ctimeNs is the one that cannot be forged: an owner may rewrite a file in
-  // place and restore mtime with utimensat, leaving every other field identical
-  // -- but that same call moves ctime, and no API sets it. Against a same-uid
-  // actor this module promises DETECTION, not prevention, and a detection a
-  // restored timestamp defeats is not the one promised. atimeNs is excluded
-  // because reading changes it, which would make every check fail.
+  // ctimeNs strengthens detection but is not unforgeable everywhere: POSIX has
+  // no call that sets it directly, while Windows ChangeTime IS settable given
+  // FILE_WRITE_ATTRIBUTES -- so it narrows what detection catches on Windows
+  // rather than closing a gap in the same-uid boundary. atimeNs is excluded
+  // because reading changes it, which would make every check fail. Exact
+  // guarantee per platform: docs/agents/runtime-messaging-trust-boundaries.md.
   //
   // Not used where a DIGEST already binds the same bytes (see
   // enforceCodexPinFreeze's post-read check). Both rules, and why they are

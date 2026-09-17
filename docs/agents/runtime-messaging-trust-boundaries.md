@@ -84,11 +84,33 @@ list, not a set chosen per site. Three hand-picked subsets is how a field goes
 missing from one of them, which is exactly what had happened: each of the three
 re-check sites compared a different set, and none of them included `ctimeNs`.
 
-`ctimeNs` is the load-bearing field. A file's owner can rewrite it in place and
-then restore the old modification time with `utimensat`, leaving `dev`, `ino`,
-`size`, `nlink` and `mtimeNs` all identical across the read. But that same call
-moves `ctime`, and no API sets it. Since the promise against a same-uid actor is
-detection, a detection that a restored timestamp defeats is not the promise.
+`ctimeNs` is the field that most strengthens detection, but its guarantee is
+**platform-asymmetric — say so precisely, because overclaiming it is exactly the
+failure mode this document exists to prevent.**
+
+A file's owner can rewrite it in place and then restore the old modification
+time with `utimensat`, leaving `dev`, `ino`, `size`, `nlink` and `mtimeNs` all
+identical across the read. On **POSIX**, no standard call sets `ctime` to a
+chosen value: `utimensat` restores `mtime` but that call is itself a metadata
+change, and the kernel advances `ctime` as a side effect with no way to select
+what it advances to. So `ctimeNs` witnesses the rewrite there, unconditionally.
+
+On **Windows**, `ChangeTime` is a settable field, not an inert one. Per
+MS-FSA's `FileBasicInformation` set algorithm, a caller that supplies a
+`ChangeTime` value other than the `0`/`-1` sentinels has it written directly
+into `Open.File.LastChangeTime` — `SetFileInformationByHandle` with
+`FileBasicInfo`, given `FILE_WRITE_ATTRIBUTES`, sets it to whatever the caller
+chooses. So on Windows, comparing `ctimeNs` reliably catches an *ordinary*
+rewrite — one that does not think to reset `ChangeTime` too — but it is **not**
+an unforgeable witness against a same-account actor with attribute-write access
+who resets it deliberately.
+
+This does not reopen the boundary above: a same-uid/same-account actor was
+already outside what this runtime *prevents*. What changes per platform is how
+much of that actor's tampering *detection* actually catches — full on POSIX,
+partial on Windows against a sufficiently deliberate attacker. `ctimeNs` stays
+in the compared list because it still catches every same-uid rewrite on POSIX
+and every ordinary one on Windows, and it costs nothing where it doesn't help.
 
 `atimeNs` is deliberately excluded: reading the file changes it, so including it
 would make every check fail — a guard that cannot pass is as useless as one that
