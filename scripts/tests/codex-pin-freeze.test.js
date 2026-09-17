@@ -1013,7 +1013,14 @@ test('CPF-21 the pinned executable is re-checked after its read', () => {
   const clean = withPin({ mode: 'genuine-pinned', freeze }, () => validate(target));
   assert.equal(clean.ok, true, 'unforged flow must be accepted: ' + clean.reason);
 
-  for (const field of ['ctimeNs', 'mtimeNs', 'nlink', 'mode', 'uid', 'gid']) {
+  // dev/ino/size, matching what this site actually compares. It deliberately
+  // does NOT use IDENTITY_FIELDS: the executable's bytes are digest-bound twice
+  // (freeze comparison, then a re-hash of the materialized copy), so widening
+  // the stat check here would catch nothing and would refuse a legitimate
+  // launch whenever an antivirus touched the file's metadata mid-read. Asserted
+  // against the narrow contract rather than the shared list, so that a future
+  // widening of this site shows up as a test that needs a decision.
+  for (const field of ['dev', 'ino', 'size']) {
     const pairs = [];
     const pin = pinWithForgedFd(forgeAfterReadFstat(target, field, pairs));
     const out = withPin({ mode: 'genuine-pinned', freeze },
@@ -1047,7 +1054,12 @@ test('CPF-21b the host config is re-checked after its read', () => {
     assert.equal(clean.ok, true, 'unforged config read must succeed: ' + clean.reason);
     assert.equal(clean.configured, true, 'the fixture config must actually be read');
 
-    for (const field of ['ctimeNs', 'mtimeNs', 'nlink', 'mode', 'uid', 'gid']) {
+    // All nine. config.toml has no digest behind it, so this stat comparison is
+    // the sole integrity guard and every field in the list must be held up here
+    // rather than only at site 1. The first version of this loop covered six --
+    // dropping 'size' from IDENTITY_FIELDS left it green while CPF-20 caught it,
+    // so a regression narrowing THIS site alone would have slipped past.
+    for (const field of ['dev', 'ino', 'mode', 'uid', 'gid', 'nlink', 'size', 'ctimeNs', 'mtimeNs']) {
       const pairs = [];
       const pin = pinWithForgedFd(forgeAfterReadFstat(configPath, field, pairs), { testCapability: true });
       const out = pin.readProtectedHostCodexPin();

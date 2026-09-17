@@ -78,11 +78,11 @@ fail-closed bug that a green suite can easily hide.
 
 ## A post-read re-check compares one closed field list
 
-Identity re-checks compare `dev`, `ino`, `mode`, `uid`, `gid`, `nlink`, `size`,
-`ctimeNs` and `mtimeNs` — **one named list applied at every site**. Three
-hand-picked subsets is how a field goes missing from one of them, which is
-exactly what had happened: each of the three re-check sites compared a different
-set, and none of them included `ctimeNs`.
+Where a post-read comparison is the **sole** integrity guard, it compares `dev`,
+`ino`, `mode`, `uid`, `gid`, `nlink`, `size`, `ctimeNs` and `mtimeNs` — one named
+list, not a set chosen per site. Three hand-picked subsets is how a field goes
+missing from one of them, which is exactly what had happened: each of the three
+re-check sites compared a different set, and none of them included `ctimeNs`.
 
 `ctimeNs` is the load-bearing field. A file's owner can rewrite it in place and
 then restore the old modification time with `utimensat`, leaving `dev`, `ino`,
@@ -94,11 +94,35 @@ detection, a detection that a restored timestamp defeats is not the promise.
 would make every check fail — a guard that cannot pass is as useless as one that
 cannot fail.
 
-Each of the nine fields is held up by its own case in
-`scripts/tests/codex-pin-freeze.test.js` (CPF-20), which forges one field at a
-time and asserts the injected pair differs in that field and in nothing else.
-Dropping any single field from the list turns that suite red; this was verified
-by mutation, not assumed.
+### The one site that does not use the list
+
+A comparison is not the sole guard when the same bytes are also bound by a
+**digest compared against an independently-written expectation**. The pinned
+executable is: its hash is checked against the conductor-written freeze, and the
+copy that actually executes is re-hashed again before it may run. A widened stat
+check there would catch nothing the digest chain does not.
+
+It would cost something, though. That is the longest read in the module — a
+whole executable rather than a 64KB record — and the access pattern most likely
+to make an antivirus or indexer touch the file's metadata. Such a touch moves
+`ctime` without changing a byte, and a widened check would refuse to launch over
+it: fail-closed, but a breakage with no security gain. A check that can only
+produce false positives is a liability, not defence in depth — the same
+reasoning that excludes `atimeNs`. So that site keeps `dev`+`ino`+`size`, stated
+as a rule rather than left as an inconsistency for the next reader to find.
+
+### How the list is held up
+
+Each field is held up by its own case in `scripts/tests/codex-pin-freeze.test.js`
+— CPF-20 for the freeze record, CPF-21b for the config — which forge one field at
+a time and assert the injected pair differs in that field and in nothing else.
+CPF-21 asserts the executable site against its own narrower contract, so a future
+widening of it surfaces as a test that needs a decision rather than passing
+silently.
+
+Verified by mutation, not assumed: dropping any single field from the list turns
+CPF-20 and CPF-21b red, and neutralising any one of the three re-checks turns
+exactly its own case red.
 
 ## Related Docs
 

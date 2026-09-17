@@ -42,20 +42,22 @@ function createAppServerPin({
     return Number(value);
   }
 
-  // Every field that witnesses a change to the file under an open descriptor.
-  // One list, applied at all three post-read re-checks, because three
-  // hand-picked subsets is how a field goes missing from one of them: each site
-  // here previously compared a different set, and none included ctimeNs.
+  // Every field that witnesses a change to the file under an open descriptor,
+  // for the re-checks where this comparison is the ONLY integrity guard.
+  // One list rather than a set chosen per site, because three hand-picked
+  // subsets is how a field goes missing from one of them: each site here
+  // previously compared a different set, and none included ctimeNs.
   //
-  // ctimeNs is the field that cannot be forged. The owner of a file may rewrite
-  // it in place and put the old modification time back with utimensat, leaving
-  // dev/ino/size/nlink/mtimeNs identical across the read -- but that same call
-  // moves ctime, and no API sets it. Against a same-uid actor this module
-  // promises DETECTION, not prevention (see app-server-pinned-image.cjs), and a
-  // detection a restored timestamp defeats is not the one promised.
+  // ctimeNs is the one that cannot be forged: an owner may rewrite a file in
+  // place and restore mtime with utimensat, leaving every other field identical
+  // -- but that same call moves ctime, and no API sets it. Against a same-uid
+  // actor this module promises DETECTION, not prevention, and a detection a
+  // restored timestamp defeats is not the one promised. atimeNs is excluded
+  // because reading changes it, which would make every check fail.
   //
-  // atimeNs is deliberately absent: reading the file changes it, so including it
-  // would make every check fail. Mirrors isolation-identity.cjs in this package.
+  // Not used where a DIGEST already binds the same bytes (see
+  // enforceCodexPinFreeze's post-read check). Both rules, and why they are
+  // rules: docs/agents/runtime-messaging-trust-boundaries.md.
   const IDENTITY_FIELDS = Object.freeze([
     'dev', 'ino', 'mode', 'uid', 'gid', 'nlink', 'size', 'ctimeNs', 'mtimeNs',
   ]);
@@ -265,8 +267,15 @@ function createAppServerPin({
         hash.update(buffer.subarray(0, read));
         offset += read;
       }
+      // dev/ino/size, NOT IDENTITY_FIELDS -- deliberate, not inherited. These
+      // bytes are digest-bound twice (against the freeze below, then a re-hash
+      // of the materialized copy, which refuses CODEX_PIN_COPY_UNVERIFIED), so a
+      // wider stat check catches nothing the digest chain does not -- while this
+      // being the longest read here makes it the likeliest to trip over an
+      // antivirus touching ctime. Rationale in full:
+      // docs/agents/runtime-messaging-trust-boundaries.md.
       const after = fs.fstatSync(fd, STAT_BIGINT);
-      if (!identityUnchanged(after, opened)) {
+      if (after.dev !== opened.dev || after.ino !== opened.ino || after.size !== opened.size) {
         return { ok: false, reason: 'CODEX_PIN_TARGET_CHANGED_DURING_READ' };
       }
       if (offset !== openedSize) return { ok: false, reason: 'CODEX_PIN_SHORT_READ' };
