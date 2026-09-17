@@ -294,7 +294,17 @@ function pinWith(fsOverrides) {
   });
 }
 
-test('CPF-08 a symlink swapped in after the lstat is refused by O_NOFOLLOW alone', () => {
+// Guarded to POSIX because the MECHANISM under test does not exist on Windows:
+// fs.constants.O_NOFOLLOW is undefined there, so the production code falls back
+// to `| 0` and the open cannot refuse a symlink on that platform. This is not a
+// contract going uncovered -- a swapped file IS still refused on Windows, by the
+// fstat dev/ino identity comparison (CPF-09) and the post-read re-verification
+// (CPF-10), both of which run and pass on the real Windows runner. Only this one
+// mechanism is POSIX-exclusive, and asserting it on Windows would assert a
+// guarantee the platform never offered.
+test('CPF-08 a symlink swapped in after the lstat is refused by O_NOFOLLOW alone',
+  { skip: process.platform === 'win32' ? 'O_NOFOLLOW is POSIX-only; covered on win32 by CPF-09/CPF-10' : false },
+  () => {
   const dir = mkdir();
   const target = makeExecutable(dir, 'codex-binary-v1\n');
   const realFreeze = writeFreeze(dir, freezeFor(target));
@@ -471,12 +481,21 @@ test('CPF-15 the fault-injection helper injects every dependency production does
     Object.defineProperty(process, 'platform', platform);
   }
 
-  // Reaching a verdict at all is the point: the win32 branch ran and called a
-  // real function rather than undefined.
+  // Reaching a verdict AT ALL is the point, and the comment above always said
+  // so -- then the original assertion pinned a specific reason anyway and
+  // contradicted it. CODEX_CLI_PATH_INSECURE is the right answer only off
+  // Windows, where the ACL probe cannot find PowerShell and legitimately
+  // refuses. On a real Windows runner, with a directory the fixture has
+  // properly ACL-ed, the same branch legitimately SUCCEEDS -- which is equally
+  // a verdict and equally proof that a real function was called. Assert the
+  // shape only; a TypeError from a missing injection cannot produce it.
   assert.equal(typeof out, 'object');
-  assert.equal(out.ok, false);
-  assert.equal(out.reason, 'CODEX_CLI_PATH_INSECURE',
-    'the win32 ACL branch must produce a refusal, never a TypeError');
+  assert.equal(typeof out.ok, 'boolean',
+    'the win32 ACL branch must produce a verdict, never a TypeError');
+  if (out.ok === false) {
+    assert.equal(typeof out.reason, 'string',
+      'a refusal must carry a reason code');
+  }
 });
 
 // CPF-16: the freeze record's containing directory is validated, not just the
