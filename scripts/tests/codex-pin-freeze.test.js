@@ -1061,7 +1061,14 @@ test('CPF-21b the host config is re-checked after its read', () => {
   fs.chmodSync(configDir, 0o700);
   const configPath = path.join(configDir, 'config.toml');
   const pinnedCli = makeExecutable(home, 'codex-binary-v1\n', 'codex-cli');
-  fs.writeFileSync(configPath, 'CODEX_CLI_PATH = "' + pinnedCli + '"\n', { mode: 0o600 });
+  // TOML basic strings (double-quoted) forbid backslashes -- production's own
+  // regex excludes them deliberately, and its comment says literal strings are
+  // the native way to spell a Windows path. So a win32 fixture MUST use the
+  // literal form; a double-quoted `C:\...` parses as CODEX_CONFIG_PIN_MALFORMED
+  // and the case fails at its clean-path guard. Found by the Windows CI job on a
+  // real runner, not by reading the regex -- which is what that job is for.
+  const quote = process.platform === 'win32' ? "'" : '"';
+  fs.writeFileSync(configPath, 'CODEX_CLI_PATH = ' + quote + pinnedCli + quote + '\n', { mode: 0o600 });
   fs.chmodSync(configPath, 0o600);
   if (process.platform === 'win32') {
     const acl = windowsPrivateDirectoryAcl(configDir, { mode: 'ensure' });
