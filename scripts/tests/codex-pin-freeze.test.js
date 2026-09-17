@@ -317,7 +317,7 @@ function pinWith(fsOverrides) {
 //     Tracked as a follow-up rather than asserted here, since asserting
 //     O_NOFOLLOW on Windows would demand a guarantee the platform never offered.
 test('CPF-08 a symlink swapped in after the lstat is refused by O_NOFOLLOW alone',
-  { skip: process.platform === 'win32' ? 'O_NOFOLLOW is POSIX-only; covered on win32 by CPF-09/CPF-10' : false },
+  { skip: process.platform === 'win32' ? 'O_NOFOLLOW is POSIX-only; on win32 the dev/ino check backstops this reactively (see comment)' : false },
   () => {
   const dir = mkdir();
   const target = makeExecutable(dir, 'codex-binary-v1\n');
