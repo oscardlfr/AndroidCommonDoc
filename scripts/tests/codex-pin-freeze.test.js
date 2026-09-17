@@ -1013,13 +1013,12 @@ test('CPF-21 the pinned executable is re-checked after its read', () => {
   const clean = withPin({ mode: 'genuine-pinned', freeze }, () => validate(target));
   assert.equal(clean.ok, true, 'unforged flow must be accepted: ' + clean.reason);
 
-  // dev/ino/size, matching what this site actually compares. It deliberately
-  // does NOT use IDENTITY_FIELDS: the executable's bytes are digest-bound twice
-  // (freeze comparison, then a re-hash of the materialized copy), so widening
-  // the stat check here would catch nothing and would refuse a legitimate
-  // launch whenever an antivirus touched the file's metadata mid-read. Asserted
-  // against the narrow contract rather than the shared list, so that a future
-  // widening of this site shows up as a test that needs a decision.
+  // THE FLOOR: dev/ino/size, matching what this site actually compares. It
+  // deliberately does NOT use IDENTITY_FIELDS -- the executable's bytes are
+  // digest-bound twice (freeze comparison, then a re-hash of the materialized
+  // copy), so widening the stat check here would catch nothing and would refuse
+  // a legitimate launch whenever an antivirus touched the file's metadata
+  // mid-read.
   for (const field of ['dev', 'ino', 'size']) {
     const pairs = [];
     const pin = pinWithForgedFd(forgeAfterReadFstat(target, field, pairs));
@@ -1029,6 +1028,30 @@ test('CPF-21 the pinned executable is re-checked after its read', () => {
     assert.equal(out.ok, false, 'executable/' + field + ': changed under the descriptor and was accepted');
     assert.equal(out.reason, 'CODEX_PIN_TARGET_CHANGED_DURING_READ', 'executable/' + field);
   }
+
+  // THE CEILING, and the floor above is worth little without it.
+  //
+  // An earlier version of this case asserted only the floor and claimed in its
+  // own comment that a future widening of this site "shows up as a test that
+  // needs a decision". That claim was false, and was disproved rather than
+  // doubted: widening the site back to the full identityUnchanged() left the
+  // entire suite at 22/22. A superset check satisfies every floor assertion
+  // silently -- refusing MORE than required never trips a test that only checks
+  // that certain things are refused.
+  //
+  // So the narrow contract is asserted from both sides. ctimeNs is the field to
+  // pick, being the one this whole feature exists for: forging it here must be
+  // ACCEPTED, because this site is digest-backed and deliberately does not look.
+  // Widening the site now turns this red and forces the decision to be made
+  // again, which is what the comment claimed all along.
+  const ceilingPairs = [];
+  const ceilingPin = pinWithForgedFd(forgeAfterReadFstat(target, 'ctimeNs', ceilingPairs));
+  const ceiling = withPin({ mode: 'genuine-pinned', freeze },
+    () => ceilingPin.validatePinnedCodexExecutable(target));
+  assertForgedOnlyIn(ceilingPairs, 'ctimeNs', 'executable/ceiling');
+  assert.equal(ceiling.ok, true,
+    'this site is digest-backed and must NOT compare ctimeNs; if it now does, that is a '
+    + 'widening that needs deciding rather than inheriting: ' + ceiling.reason);
 });
 
 test('CPF-21b the host config is re-checked after its read', () => {

@@ -116,13 +116,19 @@ as a rule rather than left as an inconsistency for the next reader to find.
 Each field is held up by its own case in `scripts/tests/codex-pin-freeze.test.js`
 — CPF-20 for the freeze record, CPF-21b for the config — which forge one field at
 a time and assert the injected pair differs in that field and in nothing else.
-CPF-21 asserts the executable site against its own narrower contract, so a future
-widening of it surfaces as a test that needs a decision rather than passing
-silently.
+
+CPF-21 asserts the executable site from **both** sides: that `dev`/`ino`/`size`
+are refused, and that `ctimeNs` is *accepted*. The second half is what makes the
+first half worth anything. An earlier version asserted only the refusals and
+claimed a future widening of that site would surface as a test needing a
+decision — which was false, and was disproved rather than doubted: widening the
+site back to the full list left the whole suite green, because a superset check
+satisfies every "this must be refused" assertion silently. A floor without a
+ceiling does not pin a contract down.
 
 Verified by mutation, not assumed: dropping any single field from the list turns
-CPF-20 and CPF-21b red, and neutralising any one of the three re-checks turns
-exactly its own case red.
+CPF-20 and CPF-21b red, neutralising any one of the three re-checks turns exactly
+its own case red, and widening the executable site turns CPF-21 red.
 
 ## Related Docs
 
