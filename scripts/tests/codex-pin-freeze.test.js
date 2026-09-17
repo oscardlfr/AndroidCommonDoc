@@ -295,13 +295,27 @@ function pinWith(fsOverrides) {
 }
 
 // Guarded to POSIX because the MECHANISM under test does not exist on Windows:
-// fs.constants.O_NOFOLLOW is undefined there, so the production code falls back
-// to `| 0` and the open cannot refuse a symlink on that platform. This is not a
-// contract going uncovered -- a swapped file IS still refused on Windows, by the
-// fstat dev/ino identity comparison (CPF-09) and the post-read re-verification
-// (CPF-10), both of which run and pass on the real Windows runner. Only this one
-// mechanism is POSIX-exclusive, and asserting it on Windows would assert a
-// guarantee the platform never offered.
+// fs.constants.O_NOFOLLOW is undefined there, so production falls back to
+// `(fs.constants.O_NOFOLLOW || 0)` -- a pre-existing idiom this file did not
+// introduce -- and the open cannot PREVENT following a symlink on that platform.
+//
+// What replaces it there is reactive rather than preventive, and it is real:
+// following a symlink lands on a different filesystem object, so the dev/ino
+// identity comparison immediately after the open refuses it before a single byte
+// is trusted. `dev` and `ino` are populated cross-platform, unlike O_NOFOLLOW.
+// CPF-09 exercises that exact code path.
+//
+// Being exact about what IS and IS NOT proven on Windows, because an earlier
+// version of this comment claimed more than the evidence supported:
+//   * Ordinary symlink substitution IS empirically proven there -- CPF-05 plants
+//     a real fs.symlinkSync and passes on the Windows runner.
+//   * The identity comparison that backstops THIS case is exercised by CPF-09 and
+//     CPF-10 through injected fstat results, i.e. by simulation of the mismatch
+//     rather than against a real symlink. Sound, but not empirical.
+//   * So what remains unproven on Windows is narrow: a real symlink against this
+//     specific defence-in-depth scenario, where the first lstat itself lies.
+//     Tracked as a follow-up rather than asserted here, since asserting
+//     O_NOFOLLOW on Windows would demand a guarantee the platform never offered.
 test('CPF-08 a symlink swapped in after the lstat is refused by O_NOFOLLOW alone',
   { skip: process.platform === 'win32' ? 'O_NOFOLLOW is POSIX-only; covered on win32 by CPF-09/CPF-10' : false },
   () => {
