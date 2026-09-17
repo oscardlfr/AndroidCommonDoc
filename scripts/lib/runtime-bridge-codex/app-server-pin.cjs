@@ -42,6 +42,25 @@ function createAppServerPin({
     return Number(value);
   }
 
+  // Every field that witnesses a change to the file under an open descriptor.
+  // One list, applied at all three post-read re-checks, because three
+  // hand-picked subsets is how a field goes missing from one of them: each site
+  // here previously compared a different set, and none included ctimeNs.
+  //
+  // ctimeNs is the field that cannot be forged. The owner of a file may rewrite
+  // it in place and put the old modification time back with utimensat, leaving
+  // dev/ino/size/nlink/mtimeNs identical across the read -- but that same call
+  // moves ctime, and no API sets it. Against a same-uid actor this module
+  // promises DETECTION, not prevention (see app-server-pinned-image.cjs), and a
+  // detection a restored timestamp defeats is not the one promised.
+  //
+  // atimeNs is deliberately absent: reading the file changes it, so including it
+  // would make every check fail. Mirrors isolation-identity.cjs in this package.
+  const IDENTITY_FIELDS = Object.freeze([
+    'dev', 'ino', 'mode', 'uid', 'gid', 'nlink', 'size', 'ctimeNs', 'mtimeNs',
+  ]);
+  const identityUnchanged = (a, b) => IDENTITY_FIELDS.every((f) => a[f] === b[f]);
+
   const HOST_CODEX_CONFIG_MAX_BYTES = 128 * 1024;
   const CODEX_PIN_FREEZE_MAX_BYTES = 64 * 1024;
   const CODEX_PIN_FREEZE_SCHEMA = 'androidcommondoc/codex-executable-freeze/v1';
@@ -154,13 +173,17 @@ function createAppServerPin({
       if (filled !== size) return { ok: false, reason: 'CODEX_PIN_FREEZE_MALFORMED' };
       // Nothing may have changed underneath us while we read.
       const after = fs.fstatSync(fd, STAT_BIGINT);
-      if (
-        after.dev !== opened.dev || after.ino !== opened.ino
-        || after.size !== opened.size || after.nlink !== opened.nlink
-        || after.mtimeNs !== opened.mtimeNs
-      ) return { ok: false, reason: 'CODEX_PIN_FREEZE_INSECURE' };
+      if (!identityUnchanged(after, opened)) return { ok: false, reason: 'CODEX_PIN_FREEZE_INSECURE' };
       // And the pathname must still resolve to that same file, so a swap that
       // left our descriptor untouched is caught too.
+      //
+      // dev+ino deliberately, not IDENTITY_FIELDS: this asks "does the NAME
+      // still point at our file", and dev+ino is exactly what file identity
+      // means. Whether that file changed was already settled by the descriptor
+      // comparison above, against the full list. A hard link planted here in
+      // the same window raises nlink on the descriptor too, so it is caught
+      // there rather than missed. This is a different question, not a
+      // narrower version of the same one.
       let pathNow;
       try { pathNow = fs.lstatSync(freezePath, STAT_BIGINT); } catch (err) { return { ok: false, reason: 'CODEX_PIN_FREEZE_INSECURE' }; }
       if (pathNow.isSymbolicLink() || pathNow.dev !== opened.dev || pathNow.ino !== opened.ino) {
@@ -243,7 +266,7 @@ function createAppServerPin({
         offset += read;
       }
       const after = fs.fstatSync(fd, STAT_BIGINT);
-      if (after.dev !== opened.dev || after.ino !== opened.ino || after.size !== opened.size) {
+      if (!identityUnchanged(after, opened)) {
         return { ok: false, reason: 'CODEX_PIN_TARGET_CHANGED_DURING_READ' };
       }
       if (offset !== openedSize) return { ok: false, reason: 'CODEX_PIN_SHORT_READ' };
@@ -338,9 +361,8 @@ function createAppServerPin({
       const afterFd = fs.fstatSync(fd, STAT_BIGINT);
       const afterPath = fs.lstatSync(configPath, STAT_BIGINT);
       if (
-        afterFd.dev !== opened.dev || afterFd.ino !== opened.ino || afterFd.size !== opened.size
-        || afterPath.isSymbolicLink() || afterPath.dev !== opened.dev || afterPath.ino !== opened.ino
-        || afterPath.size !== opened.size || afterPath.nlink !== opened.nlink
+        !identityUnchanged(afterFd, opened)
+        || afterPath.isSymbolicLink() || !identityUnchanged(afterPath, opened)
       ) return { ok: false, reason: 'CODEX_CONFIG_CHANGED_DURING_READ' };
       if (process.platform === 'win32') {
         const finalWindowsAcl = windowsPrivateDirectoryAcl(configDir, { mode: 'validate' });

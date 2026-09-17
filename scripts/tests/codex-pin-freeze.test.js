@@ -832,3 +832,231 @@ test('CPF-19 the protected copy is an image the OS actually launches', () => {
   store.cleanupPinnedCopies();
   assert.equal(fs.existsSync(copy.path), false, 'cleanup must remove the copy it made');
 });
+
+// CPF-20: the post-read re-check must witness ANY metadata change, per field.
+//
+// The three re-check sites in this module each compared a hand-picked subset of
+// the stat fields, and all three omitted ctimeNs. That matters because mtimeNs
+// is attacker-settable: the owner of a file can rewrite it in place and then
+// put the old modification time back with utimensat, leaving dev, ino, size,
+// nlink and mtimeNs all identical across the read. ctimeNs cannot be restored
+// that way -- there is no API to set it, and the very act of resetting mtime
+// updates it -- so it is the only field that witnesses that rewrite.
+//
+// This is not a claim that the same-uid boundary is closed; it is not. The
+// module's contract against that actor is DETECTION (see the threat-model
+// header in app-server-pinned-image.cjs), and a detection that a restored
+// timestamp defeats is not the detection the contract promises.
+//
+// Driven per FIELD rather than once, for the same reason CPF-18 is driven per
+// leg. A single case proves only that some field is compared; it stays green
+// while any other one carries it. Verified, not assumed: the first version of
+// this test asserted only the ctimeNs case, and dropping mtimeNs or gid from
+// IDENTITY_FIELDS left it green -- two fields shipped that nothing held up.
+//
+// Modelled by injection rather than by racing a real rewrite, because the race
+// is non-deterministic and CPF-09 already paid for that lesson. Each injected
+// pair is asserted to differ in its one target field and in NOTHING else, so a
+// case cannot pass for an incidental reason.
+function pinWithForgedField(freezePath, field, pairs) {
+  let freezeFd = null;
+  let fstatCall = 0;
+  const canonicalFreeze = fs.realpathSync(freezePath);
+  const isFreeze = (candidate) => {
+    try { return fs.realpathSync(candidate) === canonicalFreeze; } catch (err) { return false; }
+  };
+  return pinWith({
+    openSync(candidate, ...rest) {
+      const fd = fs.openSync(candidate, ...rest);
+      if (isFreeze(candidate)) freezeFd = fd;
+      return fd;
+    },
+    fstatSync(fd, ...rest) {
+      const real = fs.fstatSync(fd, ...rest);
+      if (freezeFd === null || fd !== freezeFd) return real;
+      const call = fstatCall;
+      fstatCall += 1;
+      // Call 0 is the opened descriptor, which the production code vets on its
+      // own terms; every later one is a post-read re-check, and only those are
+      // moved. +1n on mode touches the low permission bit, never S_IFMT, so
+      // isFile() keeps answering truthfully.
+      if (call === 0 || !(rest[0] && rest[0].bigint)) return real;
+      const forged = statWith(real, { [field]: real[field] + 1n });
+      pairs.push([real, forged]);
+      return forged;
+    },
+  });
+}
+
+test('CPF-20 a post-read change is refused for every identity field', () => {
+  // The flow must be able to PASS, or refusing anything proves nothing.
+  const cleanDir = mkdir();
+  const cleanTarget = makeExecutable(cleanDir, 'codex-binary-v1\n');
+  const cleanFreeze = writeFreeze(cleanDir, freezeFor(cleanTarget));
+  const clean = withPin({ mode: 'genuine-pinned', freeze: cleanFreeze },
+    () => validate(cleanTarget));
+  assert.equal(clean.ok, true, 'unforged flow must be accepted: ' + clean.reason);
+
+  const fields = ['dev', 'ino', 'mode', 'uid', 'gid', 'nlink', 'size', 'ctimeNs', 'mtimeNs'];
+  for (const field of fields) {
+    const dir = mkdir();
+    const target = makeExecutable(dir, 'codex-binary-v1\n');
+    const freezePath = writeFreeze(dir, freezeFor(target));
+    const pairs = [];
+    const pin = pinWithForgedField(freezePath, field, pairs);
+    const out = withPin({ mode: 'genuine-pinned', freeze: freezePath },
+      () => pin.validatePinnedCodexExecutable(target));
+
+    assert.equal(pairs.length > 0, true,
+      'field "' + field + '": the harness never reached a post-read re-check');
+    for (const [real, forged] of pairs) {
+      assert.notEqual(forged[field], real[field],
+        'field "' + field + '": the forged stat must actually move it');
+      assert.equal(forged.isFile(), real.isFile(),
+        'field "' + field + '": forging must not disturb the file type');
+      for (const other of fields.filter((f) => f !== field)) {
+        assert.equal(forged[other], real[other],
+          'field "' + field + '": must be identical in ' + other + ', or the refusal is not about ' + field);
+      }
+    }
+
+    assert.equal(out.ok, false,
+      'field "' + field + '" changed under the descriptor and the record was still accepted');
+    assert.equal(out.reason, 'CODEX_PIN_FREEZE_INSECURE', 'field "' + field + '"');
+  }
+});
+
+// CPF-21: the OTHER two post-read re-checks, which nothing tested at all.
+//
+// readCodexPinFreeze is not the only place this module re-checks identity after
+// a read. enforceCodexPinFreeze does it for the pinned executable, and
+// readProtectedHostCodexPin does it for the host config.toml. Neither reason
+// code -- CODEX_PIN_TARGET_CHANGED_DURING_READ, CODEX_CONFIG_CHANGED_DURING_READ
+// -- appeared anywhere in this suite.
+//
+// That was not a hypothesis. Both `if` blocks were replaced with `if (false)`
+// and the whole suite stayed green: either check could have been deleted
+// outright and nothing would have said so. Widening IDENTITY_FIELDS without
+// covering these would have meant shipping a change to two security paths that
+// nothing exercises, while calling the change verified.
+//
+// Each leg forges ONE field on the post-read fstat of the descriptor that leg
+// owns, and asserts its own distinct reason code -- not merely ok===false, so a
+// refusal arriving from an unrelated earlier check cannot stand in for the one
+// under test.
+function pinWithForgedFd(fsOverrides, opts = {}) {
+  const pinFs = Object.assign(Object.create(fs), fsOverrides);
+  const { materializePinnedCopy, cleanupPinnedCopies } = createPinnedImageStore({
+    fs: pinFs, os, path, crypto, windowsPrivateDirectoryAcl,
+  });
+  return createAppServerPin({
+    fs: pinFs,
+    path,
+    crypto,
+    os,
+    isTestCapability: () => opts.testCapability === true,
+    windowsPrivateDirectoryAcl,
+    windowsAclSnapshotsEqual,
+    materializePinnedCopy,
+    cleanupPinnedCopies,
+  });
+}
+
+// Forges `field` on every fstat of the descriptor opened for `watched`, after
+// the first. Call 0 is the opened stat the production code vets on its own
+// terms; only the post-read re-checks are moved.
+function forgeAfterReadFstat(watched, field, pairs, extra = {}) {
+  let watchedFd = null;
+  let calls = 0;
+  const canonical = fs.realpathSync(watched);
+  const isWatched = (candidate) => {
+    try { return fs.realpathSync(candidate) === canonical; } catch (err) { return false; }
+  };
+  return Object.assign({
+    openSync(candidate, ...rest) {
+      const fd = fs.openSync(candidate, ...rest);
+      if (isWatched(candidate)) watchedFd = fd;
+      return fd;
+    },
+    fstatSync(fd, ...rest) {
+      const real = fs.fstatSync(fd, ...rest);
+      if (watchedFd === null || fd !== watchedFd) return real;
+      const call = calls;
+      calls += 1;
+      if (call === 0 || !(rest[0] && rest[0].bigint)) return real;
+      const forged = statWith(real, { [field]: real[field] + 1n });
+      pairs.push([real, forged]);
+      return forged;
+    },
+  }, extra);
+}
+
+function assertForgedOnlyIn(pairs, field, label) {
+  assert.equal(pairs.length > 0, true, label + ': the harness never reached a post-read re-check');
+  for (const [real, forged] of pairs) {
+    assert.notEqual(forged[field], real[field], label + ': the forged stat must move ' + field);
+    for (const other of ['dev', 'ino', 'mode', 'uid', 'gid', 'nlink', 'size', 'ctimeNs', 'mtimeNs']) {
+      if (other === field) continue;
+      assert.equal(forged[other], real[other],
+        label + ': must be identical in ' + other + ', or the refusal is not about ' + field);
+    }
+  }
+}
+
+test('CPF-21 the pinned executable is re-checked after its read', () => {
+  const dir = mkdir();
+  const target = makeExecutable(dir, 'codex-binary-v1\n');
+  const freeze = writeFreeze(dir, freezeFor(target));
+
+  // Unforged first: this flow must reach a successful validation, or refusing
+  // the forgery says nothing about the check under test.
+  const clean = withPin({ mode: 'genuine-pinned', freeze }, () => validate(target));
+  assert.equal(clean.ok, true, 'unforged flow must be accepted: ' + clean.reason);
+
+  for (const field of ['ctimeNs', 'mtimeNs', 'nlink', 'mode', 'uid', 'gid']) {
+    const pairs = [];
+    const pin = pinWithForgedFd(forgeAfterReadFstat(target, field, pairs));
+    const out = withPin({ mode: 'genuine-pinned', freeze },
+      () => pin.validatePinnedCodexExecutable(target));
+    assertForgedOnlyIn(pairs, field, 'executable/' + field);
+    assert.equal(out.ok, false, 'executable/' + field + ': changed under the descriptor and was accepted');
+    assert.equal(out.reason, 'CODEX_PIN_TARGET_CHANGED_DURING_READ', 'executable/' + field);
+  }
+});
+
+test('CPF-21b the host config is re-checked after its read', () => {
+  const home = mkdir();
+  const configDir = path.join(home, '.codex');
+  fs.mkdirSync(configDir, { mode: 0o700 });
+  fs.chmodSync(configDir, 0o700);
+  const configPath = path.join(configDir, 'config.toml');
+  const pinnedCli = makeExecutable(home, 'codex-binary-v1\n', 'codex-cli');
+  fs.writeFileSync(configPath, 'CODEX_CLI_PATH = "' + pinnedCli + '"\n', { mode: 0o600 });
+  fs.chmodSync(configPath, 0o600);
+  if (process.platform === 'win32') {
+    const acl = windowsPrivateDirectoryAcl(configDir, { mode: 'ensure' });
+    assert.equal(acl && acl.ok, true, 'fixture config dir must be owner-confined on Windows');
+  }
+
+  const prevHome = process.env.RUNTIME_BRIDGE_CODEX_TEST_CODEX_HOME;
+  process.env.RUNTIME_BRIDGE_CODEX_TEST_CODEX_HOME = home;
+  try {
+    // Unforged first, same reason as above.
+    const cleanPin = pinWithForgedFd({}, { testCapability: true });
+    const clean = cleanPin.readProtectedHostCodexPin();
+    assert.equal(clean.ok, true, 'unforged config read must succeed: ' + clean.reason);
+    assert.equal(clean.configured, true, 'the fixture config must actually be read');
+
+    for (const field of ['ctimeNs', 'mtimeNs', 'nlink', 'mode', 'uid', 'gid']) {
+      const pairs = [];
+      const pin = pinWithForgedFd(forgeAfterReadFstat(configPath, field, pairs), { testCapability: true });
+      const out = pin.readProtectedHostCodexPin();
+      assertForgedOnlyIn(pairs, field, 'config/' + field);
+      assert.equal(out.ok, false, 'config/' + field + ': changed under the descriptor and was accepted');
+      assert.equal(out.reason, 'CODEX_CONFIG_CHANGED_DURING_READ', 'config/' + field);
+    }
+  } finally {
+    if (prevHome === undefined) delete process.env.RUNTIME_BRIDGE_CODEX_TEST_CODEX_HOME;
+    else process.env.RUNTIME_BRIDGE_CODEX_TEST_CODEX_HOME = prevHome;
+  }
+});

@@ -48,11 +48,11 @@ Every internal module across all three trees, enforced by its tree's own module-
 - **No upward imports, no cycles.** A module never imports its own facade, another tree's facade, or a sibling in a way that would create a cycle; dependency direction is strictly downward from the facade.
 - **Readability ceilings.** Every module is ≤500 physical lines, ≤320 characters per line, and no single function body exceeds 500 lines; each facade is ≤1,500 physical lines, ≤320 characters per line. These ceilings are enforced recursively (every nested module, not an allowlist) so a future large-file regression fails CI rather than accumulating silently.
 - **Cross-platform separation.** Module extraction itself is platform-neutral; only genuinely platform-specific concerns (Windows ACL checks, Windows process-birth observers) are explicitly scoped behind `process.platform` checks, never a whole module silently assuming one OS.
-- **The local user account is a trust boundary.** Owner-confinement (0700 roots, owner checks, Windows owner-only ACLs) defends against *other* users on the host. Against a process already running as the SAME uid the contract is **detection, not prevention**: fd-binding, `O_NOFOLLOW`, and before/after identity re-checks prove tampering happened, they do not make it impossible. `root-lifecycle.cjs` names a same-uid attacker explicitly and answers with an identity re-check; `durability/write.cjs` answers a planted byte-identical file or hard link with fd-binding and a re-fstat compare; `app-server-pinned-image.cjs` executes a *verified isolated copy* — never described as immutable, because a same-uid process can still alter it between the final verification and the spawn. Any module claiming more than this is overclaiming, and POSIX/Win32 offer no portable primitive (`fexecve`, `memfd_create` + `F_SEAL_WRITE`) that Node exposes to deliver it.
-- **Security identity is compared in BigInt, never as a double.** `fs.Stats` reports `dev`/`ino`/`mode`/`uid`/`nlink` as doubles unless `{ bigint: true }` is requested. Windows NTFS file IDs are 64-bit and routinely exceed `Number.MAX_SAFE_INTEGER`, so two genuinely different files become indistinguishable once rounded — measured on a real runner, ino `28710447629357696` satisfies `ino + 1 === ino`. Every identity, ownership, mode and timestamp comparison therefore uses bigint stats; only a byte length ever crosses to `Number`, and only after it is proven `<= Number.MAX_SAFE_INTEGER`.
 - **Live-harness prohibition during offline maintenance.** Refactor/documentation/audit work never launches genuine-live certification, real agent workers, retained bridge sessions, or a real Codex app-server; verification uses injected fakes, temp fixtures and the accepted boundary/characterization suites.
 
 L1/L2 distribution is part of the contract: `runtime-project-context.cjs` and the TypeScript sync engine recursively enumerate all three trees, reject symlinks, sort paths and bind the same digest. Their parity tests prevent a new internal module from working only in L0.
+
+Security guarantees are a separate contract from these structural ones, and are stated in [runtime-messaging-trust-boundaries](runtime-messaging-trust-boundaries.md): the same-uid trust boundary (detection, not prevention), BigInt identity comparison, and the closed post-read field list. Consult it before describing any module here as making a stronger promise.
 
 ## Sub-documents
 
@@ -64,6 +64,7 @@ L1/L2 distribution is part of the contract: `runtime-project-context.cjs` and th
 | [runtime-messaging-bridges](runtime-messaging-bridges.md) | Host bridge contracts: Claude `SendMessage`/`claude-agent`, Codex app-server/MCP, registered disk consumer |
 | [runtime-messaging-cp-writer](runtime-messaging-cp-writer.md) | context-provider's narrow result-publication boundary + PATTERN-GAP ingestion workflow |
 | [runtime-messaging-modes](runtime-messaging-modes.md) | Standalone (Claude-only) vs mixed (Codex worker opt-in) operation, and the preconditions a consumer repository must satisfy |
+| [runtime-messaging-trust-boundaries](runtime-messaging-trust-boundaries.md) | Threat model: the same-uid boundary (detection, not prevention), BigInt identity comparison, the closed post-read field list |
 
 ## Current Measured Status (2026-09)
 
