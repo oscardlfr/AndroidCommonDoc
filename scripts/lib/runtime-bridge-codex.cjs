@@ -863,6 +863,8 @@ module.exports = {
   defaultProcessIdentityProvider,
   resolvedWindowsPowerShellPath,
   observeWindowsProcessBirth,
+  observeLinuxProcessBirth,
+  observeProcessBirth,
   requireProvenProcessIdentity,
   classifyProcessIdentityLiveness,
   findExistingRoleOwner,

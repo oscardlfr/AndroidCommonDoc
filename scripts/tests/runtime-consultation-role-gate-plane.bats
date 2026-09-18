@@ -1241,7 +1241,32 @@ _s16e2e_create_arch_platform_claude_peer() {
   # the first (stale) result for this second call. The whole script is
   # deliberately NOT wrapped in an async function -- no `await` anywhere in
   # it at all -- so there is no way for this test to accidentally cross a
-  # microtask boundary itself.
+  # microtask boundary itself. A `queueMicrotask` sentinel scheduled before
+  # the kill and checked immediately before the second resolve makes that
+  # claim empirical rather than merely asserted in this comment.
+  #
+  # The precondition wait below was previously a fixed 20000-iteration
+  # synchronous spin plus a bolted-on one-shot zombie fallback -- flaky under
+  # real concurrent load (1 failure in 5 focal runs, and once in a full
+  # suite) because an ITERATION COUNT is a proxy for wall-clock time only
+  # under a roughly-constant CPU schedule; under genuine contention (this
+  # file's own retained-plane E2E tests, several running at once) the same
+  # 20000 iterations can legitimately take much longer, and whether they
+  # complete before the kernel finishes transitioning the target to a zombie
+  # was pure scheduling luck. Fixed at the actual source instead of widening
+  # that spin: process-identity.cjs's own zombie-liveness gap (a zombie's
+  # /proc stat, or POSIX `ps`, still resolves and still reports its ORIGINAL
+  # birth token, so an observer that never checks process STATE reports one
+  # as PRESENT) is now closed in production, so this precondition only needs
+  # to confirm the OS-level transition happened at all, via the exact
+  # primitive production's own liveness check uses, bounded by a genuine
+  # wall-clock deadline rather than an arbitrary count. 2 real seconds is
+  # generous against actually-measured transition latency (tens of
+  # milliseconds, this session, including under 8-way concurrent load --
+  # see process-identity-zombie-liveness.test.js) -- comfortably bounded,
+  # never an unbounded wait, and not "increased" from a prior time-based
+  # bound since none existed before (the prior bound was iteration-count,
+  # a different and strictly worse kind of bound for this exact purpose).
   run node -e '
     const rbc = require(process.argv[1]);
     const rll = require(process.argv[2]);
@@ -1255,39 +1280,33 @@ _s16e2e_create_arch_platform_claude_peer() {
       process.exit(1);
     }
 
+    let sentinelRan = false;
+    queueMicrotask(() => { sentinelRan = true; });
+
     const killResult = require("child_process").spawnSync("/bin/kill", ["-KILL", String(bgPid)]);
     if (killResult.error || killResult.status !== 0) {
       process.stderr.write("precondition failed: spawnSync kill did not succeed: " + JSON.stringify(killResult.error || killResult.status));
       process.exit(1);
     }
-    // spawnSync only blocks until the kill COMMAND itself exits (signal
-    // sent); SIGKILL delivery/reaping at the kernel is asynchronous, so a
-    // brief real window can exist where `ps` still observes the dying
-    // process as PRESENT with its original birth token. Spin (still
-    // synchronously -- process.kill(pid,0) is a direct syscall, no
-    // subprocess, no event-loop yield) until the OS itself confirms ESRCH,
-    // so the discriminating claim is about the memo, never a leftover
-    // kernel-reaping race this test would otherwise inherit.
-    let reaped = false;
-    for (let i = 0; i < 20000 && !reaped; i += 1) {
-      try { process.kill(bgPid, 0); } catch (err) { if (err && err.code === "ESRCH") reaped = true; }
+
+    // Still fully synchronous: observeLinuxProcessBirth is one fs.readFileSync,
+    // observeProcessBirth is one blocking execFileSync -- no event-loop yield
+    // either way, so this loop cannot let the sentinel above fire.
+    const observe = process.platform === "linux" ? rbc.observeLinuxProcessBirth : rbc.observeProcessBirth;
+    const deadlineAt = Date.now() + 2000;
+    let confirmedNotPresent = false;
+    let lastObserved = null;
+    while (Date.now() < deadlineAt) {
+      lastObserved = observe(bgPid);
+      if (!lastObserved || lastObserved.status !== "PRESENT") { confirmedNotPresent = true; break; }
     }
-    if (!reaped) {
-      // A SIGKILLed child becomes a ZOMBIE until its real parent -- this bats
-      // shell, not us -- reaps it, and process.kill(pid,0) on a zombie does not
-      // raise ESRCH. Whether the async SIGCHLD reaper in bash wins the race
-      // inside the spin bound is pure scheduling luck, which made this test
-      // flaky (1 failure in 5 focal runs, and once in a full suite).
-      // A zombie is not a LIVE target, which is the only thing this precondition
-      // is about, so accept state Z as dead. No timeout, poll or assertion was
-      // relaxed: the discriminating STALE claim below is untouched.
-      // NOTE: no apostrophes anywhere in this block -- the whole node script is
-      // a single-quoted bash string and one would terminate it early.
-      const psState = require("child_process").spawnSync("/bin/ps", ["-o", "stat=", "-p", String(bgPid)], { encoding: "utf8" });
-      if (psState.status === 0 && /^[ \t]*Z/.test(String(psState.stdout || ""))) reaped = true;
+    if (!confirmedNotPresent) {
+      process.stderr.write("precondition failed: target pid " + bgPid + " was still observed PRESENT (never reaped, never a confirmed zombie) after the wall-clock deadline: " + JSON.stringify(lastObserved));
+      process.exit(1);
     }
-    if (!reaped) {
-      process.stderr.write("precondition failed: target pid " + bgPid + " was neither reaped nor a zombie within the spin bound");
+
+    if (sentinelRan) {
+      process.stderr.write("harness invalid: a queueMicrotask fired before the second resolve -- this run crossed a microtask boundary somewhere, so it no longer discriminates the same-tick memo bug this test targets");
       process.exit(1);
     }
 
