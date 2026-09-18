@@ -29,12 +29,28 @@
 //
 // Failure is fail-closed and specific, never a silent partial success:
 // a missing shard handoff, an incomplete shard, a shard whose digest doesn't
-// match what it was assigned, a HEAD that drifted between shards (someone
-// committed mid-run), a duplicate BATS_RUN_ID, or a total/expected mismatch
-// all abort before anything is published. A real per-case test failure is NOT
-// one of these -- it still produces a valid, published aggregate with
+// match what it was assigned, incoherent per-shard counts (non-integer,
+// negative, OK+NOT_OK != TOTAL, or a VERDICT that doesn't match them), a
+// BATS_SCOPE other than "targeted" on any per-shard handoff, a BATS_LOG that
+// doesn't match the exact path this orchestrator itself assigned that shard,
+// a BATS_HEAD that doesn't match the HEAD frozen once before the first shard
+// launched (never merely "the same as each other" -- aggregateHandoffs' own
+// mutual-consistency check is a second, independent, weaker layer beneath
+// this one), a duplicate BATS_RUN_ID, or a total/expected mismatch all abort
+// before anything is published. A real per-case test failure is NOT one of
+// these -- it still produces a valid, published aggregate with
 // BATS_VERDICT=fail; failures must be visible, never disappear into "the
 // aggregate didn't run".
+//
+// A shard's own reported handoff path is untrusted (parsed from that shard's
+// stderr, which a buggy or compromised run-bats.sh fully controls) --
+// confineHandoffPath requires it to resolve (symlinks included) to exactly
+// this run's own results directory, match the expected filename shape, and
+// be a real regular file, never a symlink, before it is ever read OR later
+// unlinked; cleanupRunArtifacts itself unlinks single files only (lstat+
+// isFile guarded), never `rmSync(...,{recursive:true})`, so nothing this
+// tool tracks can ever become a recursive-delete primitive even via a TOCTOU
+// swap between confinement and cleanup.
 //
 // The final log is named by the aggregate's own run-id
 // (suite-bats.sharded.<run_id>.log), never the shared default
@@ -45,10 +61,22 @@
 // process group (run-bats.sh chains through npm/bats/bats-exec-suite/
 // bats-exec-file/bats-exec-test -- a real multi-level tree, not a single
 // process), wait boundedly, SIGKILL only survivors, remove every artifact
-// this invocation created, and exit 128+signum. Never publish. See
-// run-bats-sharded-signals.test.js for the RED this closes: an earlier
-// version had no handler at all, so a signal reached the orchestrator's own
-// process while leaving the entire child tree running as orphans forever.
+// this invocation created, and exit 128+signum -- guaranteed to be the
+// signal's own code even if it arrives so late that a fully valid aggregate
+// already published (decideExitCode), and never silently reported as
+// "shutdown complete" if a child still hasn't confirmed dead once the kill
+// wait itself expires (state.shutdownSurvivors). Never publish on any signal
+// path. See run-bats-sharded-signals.test.js for the RED this closes: an
+// earlier version had no handler at all, so a signal reached the
+// orchestrator's own process while leaving the entire child tree running as
+// orphans forever.
+//
+// win32 is refused fail-closed before anything else runs (no killpg
+// equivalent, no POSIX process groups); run-bats.sh's own serial mode
+// remains the supported Windows path. A shard's spawn-level failure (a bad
+// bash command, an unreadable script) is caught via child.on('error') and
+// resolved as an ordinary shard failure, never left to crash the whole
+// orchestrator as an unhandled exception outside main()'s own catch.
 
 const { spawn, spawnSync } = require('child_process');
 const crypto = require('crypto');
@@ -90,18 +118,89 @@ const HANDOFF_WRITTEN_RE = /\[run-bats\] handoff written: (.+?) \(/;
 
 /** Extracts the exact handoff path a single run-bats.sh invocation wrote,
  * from that invocation's OWN stderr -- avoids any directory-snapshot race
- * between concurrent shards writing to the same .androidcommondoc/ dir. */
+ * between concurrent shards writing to the same .androidcommondoc/ dir. Pure
+ * string parsing, no filesystem access -- confineHandoffPath (below) is what
+ * decides whether the result is safe to ever read or delete. */
 function extractHandoffPath(stderrText) {
   const m = stderrText.match(HANDOFF_WRITTEN_RE);
   return m ? m[1] : null;
 }
 
-/** Validates ONE shard's result against what it was assigned. Every failure
- * is a distinct, named reason -- never a bare false. */
-function validateShardResult({ handoff, expectedFiles, gitBin }) {
+const HANDOFF_BASENAME_RE = /^bats-result\.[^/]+\.env$/;
+
+/** extractHandoffPath's return value is untrusted: it is parsed from a
+ * shard's OWN stderr text, which a compromised or merely buggy run-bats.sh
+ * (or fixture standing in for it) fully controls. Downstream, this path gets
+ * `readFileSync`'d and later `unlink`'d during abort cleanup -- an
+ * unconfined path there is a read-anything/delete-anything primitive handed
+ * to whatever wrote that stderr line. Confines it to exactly `resultsDir`
+ * (realpath-resolved, so a symlinked ancestor cannot smuggle the leaf
+ * elsewhere), requires the expected `bats-result.<anything>.env` shape, and
+ * requires the leaf itself (lstat'd on the ORIGINAL path, before resolution)
+ * to be a real regular file, never a symlink -- a symlink AT the leaf would
+ * otherwise let a shard point "its own handoff" at an arbitrary target the
+ * realpath check alone would still resolve into resultsDir's own listing. */
+function confineHandoffPath(rawPath, resultsDir) {
+  if (typeof rawPath !== 'string' || rawPath.length === 0) {
+    return { ok: false, reason: 'SHARD_HANDOFF_MISSING' };
+  }
+  let canonicalPath;
+  let canonicalDir;
+  try {
+    canonicalPath = fs.realpathSync(rawPath);
+    canonicalDir = fs.realpathSync(resultsDir);
+  } catch (err) {
+    return { ok: false, reason: 'SHARD_HANDOFF_MISSING' };
+  }
+  if (path.dirname(canonicalPath) !== canonicalDir) {
+    return { ok: false, reason: 'SHARD_HANDOFF_PATH_ESCAPES_RESULTS_DIR' };
+  }
+  if (!HANDOFF_BASENAME_RE.test(path.basename(canonicalPath))) {
+    return { ok: false, reason: 'SHARD_HANDOFF_NAME_INVALID' };
+  }
+  let leafStat;
+  try {
+    leafStat = fs.lstatSync(rawPath);
+  } catch (err) {
+    return { ok: false, reason: 'SHARD_HANDOFF_MISSING' };
+  }
+  if (leafStat.isSymbolicLink()) return { ok: false, reason: 'SHARD_HANDOFF_IS_SYMLINK' };
+  if (!leafStat.isFile()) return { ok: false, reason: 'SHARD_HANDOFF_NOT_REGULAR_FILE' };
+  return { ok: true, canonicalPath };
+}
+
+/** Validates ONE shard's result against what it was assigned AND against
+ * ground truth this orchestrator itself already knows (never merely internal
+ * self-consistency): non-negative integer counts whose OK+NOT_OK genuinely
+ * sums to TOTAL, a VERDICT that actually matches those counts, BATS_SCOPE
+ * pinned to "targeted" (only the aggregate may ever claim "full"), the exact
+ * HEAD frozen before any shard launched (never merely equal across shards --
+ * see aggregateHandoffs for that separate, weaker check), and the exact log
+ * path this orchestrator itself assigned this shard. Every failure is a
+ * distinct, named reason -- never a bare false. */
+function validateShardResult({ handoff, expectedFiles, gitBin, frozenHead, expectedLogPath }) {
   if (!handoff) return { ok: false, reason: 'SHARD_HANDOFF_MISSING' };
   if (handoff.BATS_COMPLETE !== 'true') return { ok: false, reason: 'SHARD_INCOMPLETE' };
-  if (handoff.BATS_TOTAL !== handoff.BATS_EXPECTED) return { ok: false, reason: 'SHARD_COUNT_MISMATCH' };
+  const okCt = Number(handoff.BATS_OK);
+  const notOkCt = Number(handoff.BATS_NOT_OK);
+  const expectedCt = Number(handoff.BATS_EXPECTED);
+  const totalCt = Number(handoff.BATS_TOTAL);
+  if (![okCt, notOkCt, expectedCt, totalCt].every((n) => Number.isInteger(n) && n >= 0)) {
+    return { ok: false, reason: 'SHARD_COUNTS_NOT_NONNEGATIVE_INTEGERS' };
+  }
+  if (totalCt !== expectedCt) return { ok: false, reason: 'SHARD_COUNT_MISMATCH' };
+  if (okCt + notOkCt !== totalCt) return { ok: false, reason: 'SHARD_OK_NOTOK_SUM_MISMATCH' };
+  const coherentVerdict = notOkCt === 0 ? 'pass' : 'fail';
+  if (handoff.BATS_VERDICT !== coherentVerdict) return { ok: false, reason: 'SHARD_VERDICT_INCOHERENT' };
+  if (handoff.BATS_SCOPE !== 'targeted') return { ok: false, reason: 'SHARD_SCOPE_NOT_TARGETED' };
+  if (typeof frozenHead !== 'string' || frozenHead.length === 0) {
+    return { ok: false, reason: 'SHARD_FROZEN_HEAD_REQUIRED' };
+  }
+  if (handoff.BATS_HEAD !== frozenHead) return { ok: false, reason: 'SHARD_HEAD_DRIFTED' };
+  if (typeof expectedLogPath !== 'string' || expectedLogPath.length === 0) {
+    return { ok: false, reason: 'SHARD_EXPECTED_LOG_PATH_REQUIRED' };
+  }
+  if (handoff.BATS_LOG !== expectedLogPath) return { ok: false, reason: 'SHARD_LOG_PATH_MISMATCH' };
   let expectedDigest;
   try {
     expectedDigest = computeTargetDigest(expectedFiles, gitBin);
@@ -177,10 +276,16 @@ module.exports = {
   computeTargetDigest,
   parseHandoffEnv,
   extractHandoffPath,
+  confineHandoffPath,
   validateShardResult,
   aggregateHandoffs,
   renumberTap,
   caseIdentities,
+  decideExitCode,
+  resolvePlatform,
+  createRunState,
+  requestShutdown,
+  cleanupRunArtifacts,
 };
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -217,13 +322,47 @@ function nowUtc() {
   return new Date().toISOString().replace(/\.\d{3}Z$/, 'Z');
 }
 
+// Test-only override so the win32 fail-closed preflight is exercisable from
+// any host -- this can only ever make the tool THINK it is on a MORE
+// restrictive platform than it really is (win32 refuses to even attempt a
+// run), never the reverse, so it needs no isTestCapability()-style gate: a
+// real win32 host has no way to use this to bypass its own rejection, and a
+// real POSIX host that sets it by accident only loses availability, never
+// safety.
+function resolvePlatform() {
+  return process.env.RUN_BATS_SHARDED_TEST_PLATFORM || process.platform;
+}
+
 // Overridable ONLY via env, specifically so the signal-handling test suite
 // can run fast without touching these generous production defaults.
-const GRACEFUL_WAIT_MS = Number(process.env.RUN_BATS_SHARDED_GRACEFUL_WAIT_MS) || 5000;
-const KILL_WAIT_MS = Number(process.env.RUN_BATS_SHARDED_KILL_WAIT_MS) || 2000;
+// Functions, not module-load-time constants: a direct in-process test (never
+// a real subprocess spawn) requires() this module once, before it could ever
+// set an override env var -- a `const` frozen at that first require would
+// make every direct-call test pay the full 5s/2s production defaults
+// regardless of what it sets afterward. Reading process.env at CALL time
+// costs nothing production cares about and makes requestShutdown directly
+// unit-testable with a synthetic, never-clearing liveChildren entry instead
+// of trying to win an inherently-unreliable real-process-death race.
+function gracefulWaitMs() { return Number(process.env.RUN_BATS_SHARDED_GRACEFUL_WAIT_MS) || 5000; }
+function killWaitMs() { return Number(process.env.RUN_BATS_SHARDED_KILL_WAIT_MS) || 2000; }
 const POLL_MS = 25;
 
 const SIGNAL_EXIT_CODE = Object.freeze({ SIGHUP: 129, SIGINT: 130, SIGTERM: 143 });
+
+/** A signal received at ANY point during this run always wins the final exit
+ * code, even if it arrived so late that a fully valid aggregate was already
+ * published: main()'s own post-runPool continuation and a signal handler are
+ * both single synchronous spans with no await between them, so Node is free
+ * to run either first when both become ready around the same moment --
+ * state.shuttingDown can legitimately still read false at every earlier
+ * checkpoint even though a signal is genuinely in flight. Whoever sent it is
+ * owed the signal's own semantic exit code regardless of which span won that
+ * race, never the verdict's. Pure and independent of real timing so this
+ * exact guarantee is unit-testable without forcing the race itself. */
+function decideExitCode(state, verdict) {
+  if (state.shutdownSignal) return SIGNAL_EXIT_CODE[state.shutdownSignal] || 1;
+  return verdict === 'pass' ? 0 : 1;
+}
 
 function sleep(ms) { return new Promise((resolve) => setTimeout(resolve, ms)); }
 
@@ -237,6 +376,7 @@ function createRunState() {
     shuttingDown: false,
     shutdownSignal: null,
     shutdownPromise: null,
+    shutdownSurvivors: null,
     liveChildren: new Set(),
     shardLogPaths: [],
     completedHandoffPaths: [],
@@ -249,15 +389,23 @@ function createRunState() {
 /** Removes every artifact this invocation is tracking. Idempotent by design
  * (guarded on cleanupDone) so it converges safely whether it is reached via
  * the signal path, an error path, or both racing each other -- never a
- * double-delete (harmless anyway with force:true) and, more importantly,
- * never a caller mistaking "cleanup ran" for "safe to publish anyway". */
+ * double-delete (harmless anyway) and, more importantly, never a caller
+ * mistaking "cleanup ran" for "safe to publish anyway". Every tracked path
+ * here is a FILE this invocation itself created or (for completedHandoffPaths)
+ * already confined via confineHandoffPath -- lstat+isFile before unlink is
+ * belt-and-suspenders against a TOCTOU swap, never recursive: nothing this
+ * invocation tracks is ever legitimately a directory, so `rmSync(...,
+ * {recursive:true})` here would only ever be a liability, not a feature. */
 function cleanupRunArtifacts(state) {
   if (state.cleanupDone) return;
   state.cleanupDone = true;
   const paths = [...state.shardLogPaths, ...state.completedHandoffPaths, state.aggregateLogPath, state.aggregateHandoffPath]
     .filter(Boolean);
   for (const p of paths) {
-    try { fs.rmSync(p, { recursive: true, force: true }); } catch (err) { /* best effort */ }
+    try {
+      if (!fs.lstatSync(p).isFile()) continue;
+      fs.unlinkSync(p);
+    } catch (err) { /* already gone, or never existed -- best effort */ }
   }
 }
 
@@ -288,18 +436,36 @@ async function requestShutdown(state, signal) {
 
   for (const child of state.liveChildren) signalGroup(child, 'SIGTERM');
 
-  const gracefulDeadline = Date.now() + GRACEFUL_WAIT_MS;
+  const gracefulWindow = gracefulWaitMs();
+  const gracefulDeadline = Date.now() + gracefulWindow;
   while (state.liveChildren.size > 0 && Date.now() < gracefulDeadline) await sleep(POLL_MS);
 
   if (state.liveChildren.size > 0) {
     process.stderr.write('[run-bats-sharded] ' + state.liveChildren.size
-      + ' child process group(s) survived SIGTERM within ' + GRACEFUL_WAIT_MS + 'ms -- escalating to SIGKILL\n');
+      + ' child process group(s) survived SIGTERM within ' + gracefulWindow + 'ms -- escalating to SIGKILL\n');
     for (const child of state.liveChildren) signalGroup(child, 'SIGKILL');
-    const killDeadline = Date.now() + KILL_WAIT_MS;
+    const killDeadline = Date.now() + killWaitMs();
     while (state.liveChildren.size > 0 && Date.now() < killDeadline) await sleep(POLL_MS);
   }
 
   cleanupRunArtifacts(state);
+  if (state.liveChildren.size > 0) {
+    // SIGKILL cannot itself be ignored, but this orchestrator's OWN view of
+    // "alive" only clears via a child's 'close' event -- if that never fires
+    // within KILL_WAIT_MS (a wedged kernel-level reap, a signal that silently
+    // missed its target's actual process group), claiming "shutdown complete"
+    // would be a fabricated success. Record exactly which pids never
+    // confirmed dead and say so unambiguously; the exit code is still the
+    // signal's own (set by main()/the top-level catch from
+    // state.shutdownSignal, unconditionally, regardless of this) -- this is
+    // about the MESSAGE never lying, not about inventing a second exit-code
+    // lane for an already-signaled process.
+    state.shutdownSurvivors = [...state.liveChildren].map((c) => c.pid);
+    process.stderr.write('[run-bats-sharded] FATAL: ' + state.liveChildren.size
+      + ' child process group(s) survived SIGKILL escalation and never confirmed dead -- pid(s): '
+      + state.shutdownSurvivors.join(',') + '. Shutdown is NOT complete.\n');
+    return;
+  }
   process.stderr.write('[run-bats-sharded] shutdown complete after ' + signal + '; nothing published\n');
 }
 
@@ -317,7 +483,7 @@ function installSignalHandlers(state) {
   }
 }
 
-function runBatsShard({ root, files, logPath, state }) {
+function runBatsShard({ root, files, logPath, state, bashCmd }) {
   return new Promise((resolve) => {
     if (state.shuttingDown) { resolve({ code: null, stderr: '', aborted: true }); return; }
     // stdio[0] MUST be 'ignore', not the default open pipe: some scripts this
@@ -336,7 +502,7 @@ function runBatsShard({ root, files, logPath, state }) {
     // kill() addresses exactly this child's descendants, never accidentally
     // this orchestrator process's own group (which it shares with whatever
     // shell launched it).
-    const child = spawn('bash', [
+    const child = spawn(bashCmd || 'bash', [
       path.join(root, 'scripts', 'sh', 'run-bats.sh'),
       '--project-root', root,
       '--log', logPath,
@@ -344,11 +510,23 @@ function runBatsShard({ root, files, logPath, state }) {
     ], { cwd: root, stdio: ['ignore', 'pipe', 'pipe'], detached: true });
     state.liveChildren.add(child);
     let stderr = '';
+    let spawnError = null;
     child.stderr.on('data', (chunk) => { stderr += chunk.toString('utf8'); });
     child.stdout.on('data', () => { /* discarded -- the handoff + log are the evidence, not stdout */ });
+    // Without this listener, a spawn-level failure (bad bashCmd, EACCES, a
+    // deleted/unreadable script) throws an uncaught 'error' event -- Node's
+    // default behavior for an EventEmitter's 'error' with no listener --
+    // crashing the whole orchestrator as an unhandled exception that bypasses
+    // main().catch() entirely (a thrown/rejected Promise, which that IS built
+    // to handle) and skips graceful shutdown/cleanup altogether. Recording it
+    // and still resolving (via the 'close' Node also emits for a failed
+    // spawn) keeps this exactly one more ordinary shard failure, reported
+    // through the SAME SHARD_HANDOFF_MISSING path as any other shard that
+    // never wrote a handoff -- never a process-ending crash.
+    child.on('error', (err) => { spawnError = err; });
     child.on('close', (code) => {
       state.liveChildren.delete(child);
-      resolve({ code, stderr });
+      resolve(spawnError ? { code, stderr, spawnError: spawnError.message } : { code, stderr });
     });
   });
 }
@@ -373,10 +551,35 @@ async function runPool(items, limit, worker, state) {
 
 async function main() {
   const { computeTargetDigest: digestOf, parseHandoffEnv: parseEnv, extractHandoffPath: extractPath,
-    validateShardResult: validateShard, aggregateHandoffs: aggregate, renumberTap: renumber } = module.exports;
+    confineHandoffPath: confinePath, validateShardResult: validateShard, aggregateHandoffs: aggregate,
+    renumberTap: renumber } = module.exports;
+
+  // win32 fail-closed preflight: this tool spawns POSIX bash and signals
+  // whole process groups via negative-pid kill(), neither of which Windows
+  // supports (Windows has no killpg equivalent; a negative pid there is not
+  // "this process's group", it is simply not a valid target). Silently
+  // attempting either would produce partial, misleading behavior -- an
+  // unsignalable child on abort, or a spawn that never resolves the way this
+  // tool assumes. Refuse before touching anything else, not after failing
+  // partway through. run-bats.sh itself remains the supported Windows path
+  // (serial, already portable).
+  if (resolvePlatform() === 'win32') {
+    process.stderr.write('[run-bats-sharded] UNSUPPORTED_PLATFORM:win32 -- this tool requires POSIX process-group signaling (bash + negative-pid kill()), neither of which Windows provides. Use run-bats.sh directly (serial) on Windows.\n');
+    process.exitCode = 2;
+    return;
+  }
 
   const args = parseArgs(process.argv.slice(2));
   const root = path.resolve(args.projectRoot);
+
+  // Frozen ONCE, before any shard launches -- every shard's own BATS_HEAD is
+  // held to this exact value (validateShardResult), never merely to each
+  // other's (aggregateHandoffs' own, weaker, internal-consistency check).
+  // Without this, a coordinated or coincidentally-identical wrong HEAD across
+  // every shard would sail through unnoticed.
+  const headRaw = spawnSync('git', ['-C', root, 'rev-parse', 'HEAD'], { encoding: 'utf8' });
+  if (headRaw.status !== 0) throw new Error('git rev-parse HEAD failed: ' + headRaw.stderr);
+  const frozenHead = headRaw.stdout.trim();
 
   const planRaw = spawnSync('node', [
     path.join(root, 'scripts', 'tools', 'plan-bats-shards.cjs'),
@@ -399,13 +602,21 @@ async function main() {
   // (possibly already-killed) shard what it was doing.
   state.shardLogPaths = shardLogPaths.slice();
 
+  // Test-only: lets the child.on('error') hardening be exercised with a
+  // genuinely unspawnable command (see resolvePlatform's own reasoning --
+  // this can only make a shard fail to spawn, never fake success, so it
+  // needs no isTestCapability()-style gate either).
+  const bashCmd = process.env.RUN_BATS_SHARDED_TEST_BASH_CMD || undefined;
+
   process.stderr.write('[run-bats-sharded] launching ' + plan.shards.length + ' shard(s), max-parallel=' + args.maxParallel + '\n');
   const runs = await runPool(plan.shards, args.maxParallel, async (shard, i) => {
     const files = shard.files; // repo-relative path strings, per plan-bats-shards.cjs's --json output
-    const { code, stderr, aborted } = await runBatsShard({ root, files, logPath: shardLogPaths[i], state });
-    const handoffPath = aborted ? null : extractPath(stderr);
-    if (handoffPath) state.completedHandoffPaths.push(handoffPath);
-    return { shard, files, code, stderr, handoffPath, aborted };
+    const logPath = shardLogPaths[i];
+    const { code, stderr, aborted } = await runBatsShard({ root, files, logPath, state, bashCmd });
+    const rawHandoffPath = aborted ? null : extractPath(stderr);
+    const confinement = rawHandoffPath ? confinePath(rawHandoffPath, logDir) : { ok: false, reason: 'SHARD_HANDOFF_MISSING' };
+    if (confinement.ok) state.completedHandoffPaths.push(confinement.canonicalPath);
+    return { shard, files, code, stderr, aborted, logPath, confinement };
   }, state);
 
   if (state.shuttingDown) {
@@ -418,13 +629,15 @@ async function main() {
 
   const validated = [];
   for (const run of runs) {
-    if (!run.handoffPath || !fs.existsSync(run.handoffPath)) {
-      throw new Error('shard ' + run.shard.index + ': SHARD_HANDOFF_MISSING (exit ' + run.code + ')\n' + run.shard.index + ' stderr tail: ' + run.stderr.slice(-800));
+    if (!run.confinement.ok) {
+      throw new Error('shard ' + run.shard.index + ': ' + run.confinement.reason + ' (exit ' + run.code + ')\n' + run.shard.index + ' stderr tail: ' + run.stderr.slice(-800));
     }
-    const handoff = parseEnv(fs.readFileSync(run.handoffPath, 'utf8'));
-    const verdict = validateShard({ handoff, expectedFiles: run.files, gitBin: 'git' });
+    const handoff = parseEnv(fs.readFileSync(run.confinement.canonicalPath, 'utf8'));
+    const verdict = validateShard({
+      handoff, expectedFiles: run.files, gitBin: 'git', frozenHead, expectedLogPath: run.logPath,
+    });
     if (!verdict.ok) {
-      throw new Error('shard ' + run.shard.index + ': ' + verdict.reason + ' (handoff=' + run.handoffPath + ')');
+      throw new Error('shard ' + run.shard.index + ': ' + verdict.reason + ' (handoff=' + run.confinement.canonicalPath + ')');
     }
     validated.push(handoff);
   }
@@ -516,7 +729,20 @@ async function main() {
 
   process.stderr.write('[run-bats-sharded] aggregate handoff written: ' + handoffPath
     + ' (verdict=' + verdict + ' complete=' + complete + ' total=' + agg.facts.total + ')\n');
-  process.exitCode = verdict === 'pass' ? 0 : 1;
+
+  // Publication just genuinely completed -- the file is real, valid, and
+  // stays (retroactively unpublishing a fully-written, valid result would be
+  // its own new hazard, not a fix). What can still be WRONG is the exit code:
+  // main()'s own continuation and a signal handler are both single synchronous
+  // spans in this event loop with no await between them, so Node is free to
+  // run either one first if a signal lands right as the last shard finishes
+  // -- state.shuttingDown may still read false here even though a signal is
+  // genuinely in flight. Whoever sent it is owed the signal's own exit code
+  // regardless of which span won that race, never the verdict's -- see
+  // decideExitCode, unit-testable on its own without needing to actually
+  // force this timing race in a real subprocess.
+  if (state.shutdownSignal && state.shutdownPromise) await state.shutdownPromise;
+  process.exitCode = decideExitCode(state, verdict);
 }
 
 // Invoked last, after every declaration above -- SIGNAL_EXIT_CODE and the

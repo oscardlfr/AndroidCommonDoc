@@ -83,12 +83,29 @@ async function waitFor(predicate, { timeoutMs = 5000, intervalMs = 25 } = {}) {
   }
 }
 
+/** main() now freezes `git -C root rev-parse HEAD` before launching any
+ * shard (validateShardResult holds every shard to that exact value, never
+ * merely to each other's) -- a throwaway fixture root must therefore be a
+ * real, minimal git repo, not just a plain directory, or main() fails before
+ * ever reaching the behavior under test. */
+function initFakeGitRepo(root) {
+  const run = (args) => {
+    const r = spawnSync('git', args, { cwd: root, encoding: 'utf8' });
+    if (r.status !== 0) throw new Error('git ' + args.join(' ') + ' failed in fixture root: ' + r.stderr);
+  };
+  run(['init', '--quiet']);
+  run(['config', 'user.email', 'rbs-signal-fixture@example.invalid']);
+  run(['config', 'user.name', 'rbs-signal-fixture']);
+  run(['commit', '--quiet', '--allow-empty', '-m', 'rbs-signal-fixture root']);
+}
+
 /** A throwaway project root: real planner (symlinked, untouched), a fake
  * run-bats.sh this test fully controls, one real *.bats file so discovery
  * has something to shard. */
 function makeFakeProjectRoot(trapMode) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'rbs-signal-fixture-'));
   created.push(root);
+  initFakeGitRepo(root);
   fs.mkdirSync(path.join(root, 'scripts', 'tools'), { recursive: true });
   fs.mkdirSync(path.join(root, 'scripts', 'sh'), { recursive: true });
   fs.mkdirSync(path.join(root, 'suite'), { recursive: true });
@@ -292,6 +309,83 @@ test('a STUBBORN child (ignores SIGTERM) is escalated to SIGKILL, not left runni
   assert.equal(isPidAlive(childPid), false, 'the stubborn child survived even SIGKILL to its process group');
 });
 
+test('a child that never confirms dead (signaling had no real effect) is reported as a survivor, never as "shutdown complete"', async () => {
+  // Deliberately a DIRECT, in-process call to requestShutdown, not a real
+  // subprocess: a synthetic liveChildren entry that isn't backed by any real
+  // OS process can never be signaled away and can never fire a real 'close'
+  // event to remove itself -- exactly "the kill had no effect on the real
+  // target" (a stale/reused process-group id, a signal that silently
+  // missed), reproduced deterministically instead of racing a real process's
+  // actual death against an arbitrarily short wait bound (empirically tried
+  // first: even a 1ms RUN_BATS_SHARDED_KILL_WAIT_MS still reliably lost to a
+  // real SIGKILL's confirmation, because the poll loop's own granularity
+  // guarantees at least one full wait tick regardless of how short the
+  // nominal deadline is).
+  const prevGraceful = process.env.RUN_BATS_SHARDED_GRACEFUL_WAIT_MS;
+  const prevKill = process.env.RUN_BATS_SHARDED_KILL_WAIT_MS;
+  process.env.RUN_BATS_SHARDED_GRACEFUL_WAIT_MS = '20';
+  process.env.RUN_BATS_SHARDED_KILL_WAIT_MS = '20';
+  try {
+    const state = rbs.createRunState();
+    const neverDies = { pid: 999999999 }; // astronomically unlikely to be a real pid on this machine
+    state.liveChildren.add(neverDies);
+    let stderrOut = '';
+    const origWrite = process.stderr.write.bind(process.stderr);
+    process.stderr.write = (chunk, ...rest) => { stderrOut += chunk; return origWrite(chunk, ...rest); };
+    try {
+      await rbs.requestShutdown(state, 'SIGTERM');
+    } finally {
+      process.stderr.write = origWrite;
+    }
+    assert.ok(stderrOut.includes('FATAL:') && stderrOut.includes('survived SIGKILL escalation'),
+      'a child that never confirms dead must be reported as a survivor. stderr: ' + stderrOut);
+    assert.ok(!stderrOut.includes('shutdown complete after'),
+      'must never claim "shutdown complete" while a child is not confirmed dead. stderr: ' + stderrOut);
+    assert.deepEqual(state.shutdownSurvivors, [999999999]);
+    assert.equal(state.liveChildren.size, 1, 'the never-clearing entry must still be tracked, not silently dropped');
+  } finally {
+    if (prevGraceful === undefined) delete process.env.RUN_BATS_SHARDED_GRACEFUL_WAIT_MS; else process.env.RUN_BATS_SHARDED_GRACEFUL_WAIT_MS = prevGraceful;
+    if (prevKill === undefined) delete process.env.RUN_BATS_SHARDED_KILL_WAIT_MS; else process.env.RUN_BATS_SHARDED_KILL_WAIT_MS = prevKill;
+  }
+});
+
+test('win32 is refused fail-closed before touching anything -- no plan, no shard, no directory created', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'rbs-signal-win32-'));
+  created.push(root);
+  initFakeGitRepo(root);
+  fs.mkdirSync(path.join(root, 'suite'), { recursive: true });
+  fs.writeFileSync(path.join(root, 'suite', 'fake.bats'), '#!/usr/bin/env bats\n\n@test "irrelevant" {\n  true\n}\n');
+  // Deliberately NOT creating scripts/tools/plan-bats-shards.cjs or
+  // scripts/sh/run-bats.sh: if the win32 check is not the very first thing
+  // main() does, this fixture would fail for an unrelated reason (a missing
+  // planner) instead of proving the platform gate specifically.
+  const child = runOrchestrator(root, { RUN_BATS_SHARDED_TEST_PLATFORM: 'win32' });
+  const closed = await Promise.race([child.__closed.then(() => true), sleep(8000).then(() => false)]);
+  assert.equal(closed, true, 'orchestrator never exited on win32. stderr: ' + child.__stderr);
+  assert.equal(child.exitCode, 2, 'win32 must fail closed with a distinct, non-signal exit code');
+  assert.ok(child.__stderr.includes('UNSUPPORTED_PLATFORM:win32'), 'stderr: ' + child.__stderr);
+  assert.equal(fs.existsSync(path.join(root, '.androidcommondoc')), false,
+    'must refuse before creating any run-scoped directory, not merely before publishing');
+});
+
+test('a spawn-level failure (unresolvable bash command) is reported as an ordinary shard failure, never an uncaught crash', async () => {
+  const root = makeFakeProjectRoot('graceful');
+  const child = runOrchestrator(root, {
+    RUN_BATS_SHARDED_TEST_BASH_CMD: 'rbs-signal-test-nonexistent-command-xyz123',
+  });
+  const closed = await Promise.race([child.__closed.then(() => true), sleep(8000).then(() => false)]);
+  assert.equal(closed, true, 'orchestrator never exited after a spawn-level failure -- likely an uncaught "error" event crash, not a graceful one. stderr: ' + child.__stderr);
+  // A crash from an unhandled 'error' event is a Node fatal exception, never
+  // one of this tool's own SIGNAL_EXIT_CODE values (129/130/143) -- and
+  // main().catch()'s own generic path (FATAL: ...) sets exitCode 1, so
+  // asserting a non-zero, non-signal code plus the absence of a raw
+  // Node stack trace distinguishes "handled as an ordinary shard failure"
+  // from "the process itself blew up".
+  assert.notEqual(child.exitCode, 0, 'an unresolvable bash command must not be silently treated as success');
+  assert.ok(!child.__stderr.includes('internal/child_process'),
+    'must never surface as a raw uncaught Node exception. stderr: ' + child.__stderr);
+});
+
 test('a second signal while already shutting down does not restart teardown or double-publish', async () => {
   const root = makeFakeProjectRoot('graceful');
   const child = runOrchestrator(root, { RUN_BATS_SHARDED_GRACEFUL_WAIT_MS: '2000', RUN_BATS_SHARDED_KILL_WAIT_MS: '1000' });
@@ -338,6 +432,7 @@ test('a shard that finishes with a genuinely VALID handoff in the exact instant 
   // accidental missing-file error.
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'rbs-signal-race-'));
   created.push(root);
+  initFakeGitRepo(root);
   fs.mkdirSync(path.join(root, 'scripts', 'tools'), { recursive: true });
   fs.mkdirSync(path.join(root, 'scripts', 'sh'), { recursive: true });
   fs.mkdirSync(path.join(root, 'suite'), { recursive: true });
@@ -350,6 +445,15 @@ test('a shard that finishes with a genuinely VALID handoff in the exact instant 
   assert.equal(planRaw.status, 0, 'planning failed: ' + planRaw.stderr);
   const relFiles = JSON.parse(planRaw.stdout).shards[0].files;
   const targetDigest = rbs.computeTargetDigest(relFiles);
+  // main() now freezes root's OWN HEAD before launching (not REAL_ROOT's --
+  // this fixture root is its own git repo, wholly unrelated to this
+  // worktree's), so the fabricated handoff must report THAT exact value or
+  // validateShardResult's new SHARD_HEAD_DRIFTED check would reject it for a
+  // completely different, unrelated reason than the one this test targets.
+  // Captured once in JS, then baked into the trap as a literal -- avoids
+  // embedding another live `git -C '<path>'` shell substitution inside the
+  // already-elaborate single-quoted trap string.
+  const fixtureHead = spawnSync('git', ['-C', root, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).stdout.trim();
 
   const fakeScript = [
     '#!/usr/bin/env bash',
@@ -380,7 +484,7 @@ test('a shard that finishes with a genuinely VALID handoff in the exact instant 
     // explained by "the shard finished writing it right as it was told to
     // stop" -- exactly the race this test exists to model.
     'trap \'{',
-    '  printf "BATS_OK=1\\nBATS_NOT_OK=0\\nBATS_EXPECTED=1\\nBATS_TOTAL=1\\nBATS_COMPLETE=true\\nBATS_VERDICT=pass\\nBATS_LOG=%s\\nBATS_HEAD=%s\\nBATS_RUN_ID=%s\\nBATS_GENERATED_AT=%s\\nBATS_SCOPE=targeted\\nBATS_TARGET_DIGEST=%s\\nBATS_ENV_FINGERPRINT=test\\n" "$LOG" "$(git -C \'' + REAL_ROOT + '\' rev-parse HEAD)" "$RUNID" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "' + targetDigest + '" > "$HANDOFF";' + ' ' +
+    '  printf "BATS_OK=1\\nBATS_NOT_OK=0\\nBATS_EXPECTED=1\\nBATS_TOTAL=1\\nBATS_COMPLETE=true\\nBATS_VERDICT=pass\\nBATS_LOG=%s\\nBATS_HEAD=%s\\nBATS_RUN_ID=%s\\nBATS_GENERATED_AT=%s\\nBATS_SCOPE=targeted\\nBATS_TARGET_DIGEST=%s\\nBATS_ENV_FINGERPRINT=test\\n" "$LOG" "' + fixtureHead + '" "$RUNID" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "' + targetDigest + '" > "$HANDOFF";' + ' ' +
       // MUST be the "[run-bats]" prefix (the real script's own name), not
       // this orchestrator's "[run-bats-sharded]" prefix -- extractHandoffPath
       // greps for the former; the latter made extractPath() return null
