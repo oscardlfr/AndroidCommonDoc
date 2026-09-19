@@ -30,9 +30,15 @@ const os = require('node:os');
 const path = require('node:path');
 const test = require('node:test');
 const { spawnSync } = require('node:child_process');
+const { buildShardFailureDiagnostic } = require('./lib/shard-failure-diagnostic.cjs');
 
 const ROOT = path.resolve(__dirname, '..', '..');
 const TOOL = path.join(ROOT, 'scripts', 'tools', 'run-bats-sharded.cjs');
+
+function currentHead() {
+  const r = spawnSync('git', ['-C', ROOT, 'rev-parse', 'HEAD'], { encoding: 'utf8' });
+  return r.status === 0 ? r.stdout.trim() : '(git rev-parse failed)';
+}
 
 function cleanupHandoffs(before) {
   const dir = path.join(ROOT, '.androidcommondoc');
@@ -70,15 +76,23 @@ test('a shard containing a script that reads stdin like write-verdict.sh does no
     // second in practice (confirmed empirically), so 20s only needs to be
     // "clearly not infinite", not tightly tuned -- a hang and a slow CI
     // runner must not be confused with each other.
-    const result = spawnSync('node', [
+    const command = [
       TOOL, '--project-root', ROOT, '--suite-root', tmp, '--shard-count', '1', '--max-parallel', '1',
-    ], { cwd: ROOT, encoding: 'utf8', timeout: 20000 });
+    ];
+    const result = spawnSync('node', command, { cwd: ROOT, encoding: 'utf8', timeout: 20000 });
     const elapsedMs = Date.now() - start;
+
+    // Built BEFORE cleanup: cleanupHandoffs deletes the very handoff/TAP-log
+    // files this diagnostic needs to read. Built unconditionally but only
+    // used on failure -- cheap, and keeps the failure path simple.
+    const diagnostic = result.status !== 0
+      ? buildShardFailureDiagnostic({ result, command: ['node', ...command], cwd: ROOT, head: currentHead() })
+      : null;
 
     cleanupHandoffs(before);
 
     assert.notEqual(result.signal, 'SIGTERM', 'the process was killed by the timeout -- it hung, exactly the regressed bug');
-    assert.equal(result.status, 0, 'expected a clean pass: ' + result.stderr);
+    assert.equal(result.status, 0, diagnostic || 'expected a clean pass');
     assert.ok(elapsedMs < 15000, 'took ' + elapsedMs + 'ms -- suspiciously close to the timeout for a single trivial case; investigate before raising the bound');
   } finally {
     fs.rmSync(tmp, { recursive: true, force: true });
