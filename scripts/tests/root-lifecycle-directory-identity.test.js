@@ -124,10 +124,21 @@ test('RLDI-03 validateRootConfinement still refuses a genuine identity swap (dev
   // A real ABA-adjacent swap: something else occupies the exact same path
   // with a different inode by the time the re-check runs -- the identity
   // fields this function DOES compare must still catch this.
+  //
+  // Deliberately NOT rmdirSync+mkdirSync at the same path: on Linux, an
+  // immediately-freed inode number is commonly reused for the very next
+  // allocation in the same directory (observed on real Linux CI, ext4-backed
+  // /tmp), so the "swap" could silently keep the same ino and the test
+  // wouldn't be exercising a swap at all -- a filesystem-dependent flake, not
+  // a production defect. Creating the replacement at a SIBLING path first
+  // guarantees a genuinely distinct inode allocation (no reuse question,
+  // since it's not the just-freed slot), then renaming it into place leaves
+  // something at the exact same path with a different identity, portably.
   const swapRoot = (existingCoordRoot) => {
+    const replacement = fs.mkdtempSync(existingCoordRoot + '-swap-');
+    fs.chmodSync(replacement, 0o700);
     fs.rmdirSync(existingCoordRoot);
-    fs.mkdirSync(existingCoordRoot, { recursive: true });
-    fs.chmodSync(existingCoordRoot, 0o700);
+    fs.renameSync(replacement, existingCoordRoot);
     return true;
   };
   const lifecycle = lifecycleWith(swapRoot);

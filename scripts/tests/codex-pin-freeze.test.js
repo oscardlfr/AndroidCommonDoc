@@ -1164,7 +1164,12 @@ test('CPF-24 a config with two CODEX_CLI_PATH assignments is refused as ambiguou
   const home = mkdir();
   const first = makeExecutable(home, 'codex-binary-v1\n', 'codex-cli-a');
   const second = makeExecutable(home, 'codex-binary-v2\n', 'codex-cli-b');
-  configWith(home, 'CODEX_CLI_PATH = "' + first + '"\nCODEX_CLI_PATH = "' + second + '"\n');
+  // Same win32 quoting rule as the fixture above: TOML basic (double-quoted)
+  // strings forbid backslashes, so a raw win32 path needs the literal
+  // (single-quoted) form or it parses as CODEX_CONFIG_PIN_MALFORMED instead
+  // of reaching the ambiguous-count check this test targets.
+  const quote = process.platform === 'win32' ? "'" : '"';
+  configWith(home, 'CODEX_CLI_PATH = ' + quote + first + quote + '\nCODEX_CLI_PATH = ' + quote + second + quote + '\n');
   const out = withCodexHome(home, () => pinWithForgedFd({}, { testCapability: true }).readProtectedHostCodexPin());
   assert.equal(out.ok, false, 'two CODEX_CLI_PATH assignments were silently accepted (which one would run?)');
   assert.equal(out.reason, 'CODEX_CONFIG_PIN_AMBIGUOUS');
