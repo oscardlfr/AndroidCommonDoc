@@ -1109,3 +1109,63 @@ test('CPF-21b the host config is re-checked after its read', () => {
     else process.env.RUNTIME_BRIDGE_CODEX_TEST_CODEX_HOME = prevHome;
   }
 });
+
+// CPF-22/23/24: the config.toml parser's own reason codes, which had zero
+// coverage anywhere in this codebase before this file. Found alongside the
+// CODEX_CONFIG_PIN_MALFORMED backstop below: arch-testing traced the parsing
+// loop and found it sat OUTSIDE readProtectedHostCodexPin's own try/catch, so
+// a future regression in the `if (!match) return` guard would surface as an
+// uncaught TypeError, not a reason code. That backstop is production code
+// now (app-server-pin.cjs); these three cases are the coverage gap itself.
+function configWith(home, tomlBody) {
+  const configDir = path.join(home, '.codex');
+  fs.mkdirSync(configDir, { mode: 0o700 });
+  fs.chmodSync(configDir, 0o700);
+  const configPath = path.join(configDir, 'config.toml');
+  fs.writeFileSync(configPath, tomlBody, { mode: 0o600 });
+  fs.chmodSync(configPath, 0o600);
+  if (process.platform === 'win32') {
+    const acl = windowsPrivateDirectoryAcl(configDir, { mode: 'ensure' });
+    assert.equal(acl && acl.ok, true, 'fixture config dir must be owner-confined on Windows');
+  }
+  return configPath;
+}
+
+function withCodexHome(home, fn) {
+  const prevHome = process.env.RUNTIME_BRIDGE_CODEX_TEST_CODEX_HOME;
+  process.env.RUNTIME_BRIDGE_CODEX_TEST_CODEX_HOME = home;
+  try { return fn(); } finally {
+    if (prevHome === undefined) delete process.env.RUNTIME_BRIDGE_CODEX_TEST_CODEX_HOME;
+    else process.env.RUNTIME_BRIDGE_CODEX_TEST_CODEX_HOME = prevHome;
+  }
+}
+
+test('CPF-22 a malformed CODEX_CLI_PATH line is refused, not thrown', () => {
+  const home = mkdir();
+  // Unquoted value: matches the "line starts an assignment" probe but not the
+  // full grammar, so it must reach CODEX_CONFIG_PIN_MALFORMED via the `if
+  // (!match) return` guard -- the exact guard whose removal the backstop now
+  // catches.
+  configWith(home, 'CODEX_CLI_PATH = not-a-valid-toml-string\n');
+  const out = withCodexHome(home, () => pinWithForgedFd({}, { testCapability: true }).readProtectedHostCodexPin());
+  assert.equal(out.ok, false, 'a malformed CODEX_CLI_PATH line was accepted');
+  assert.equal(out.reason, 'CODEX_CONFIG_PIN_MALFORMED');
+});
+
+test('CPF-23 a config with no CODEX_CLI_PATH assignment is refused as absent', () => {
+  const home = mkdir();
+  configWith(home, '# codex config -- no CLI pin set\nmodel = "gpt-5-codex"\n');
+  const out = withCodexHome(home, () => pinWithForgedFd({}, { testCapability: true }).readProtectedHostCodexPin());
+  assert.equal(out.ok, false, 'a config with no CODEX_CLI_PATH assignment was accepted');
+  assert.equal(out.reason, 'CODEX_CONFIG_PIN_ABSENT');
+});
+
+test('CPF-24 a config with two CODEX_CLI_PATH assignments is refused as ambiguous', () => {
+  const home = mkdir();
+  const first = makeExecutable(home, 'codex-binary-v1\n', 'codex-cli-a');
+  const second = makeExecutable(home, 'codex-binary-v2\n', 'codex-cli-b');
+  configWith(home, 'CODEX_CLI_PATH = "' + first + '"\nCODEX_CLI_PATH = "' + second + '"\n');
+  const out = withCodexHome(home, () => pinWithForgedFd({}, { testCapability: true }).readProtectedHostCodexPin());
+  assert.equal(out.ok, false, 'two CODEX_CLI_PATH assignments were silently accepted (which one would run?)');
+  assert.equal(out.reason, 'CODEX_CONFIG_PIN_AMBIGUOUS');
+});
