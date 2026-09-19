@@ -82,7 +82,10 @@ claudeHost.getProductionSessionIdentity = (projectRoot, sessionId) => {
 };
 
 function makeGitProject() {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rll-registry-'));
+  // realpath: production canonicalises every registry/trace path it touches, so a
+  // raw macOS /var/folders spelling here would make fixture-supplied paths compare
+  // unequal to the ones production actually writes and unlinks.
+  const dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'rll-registry-')));
   execFileSync('git', ['-C', dir, 'init', '-q']);
   execFileSync('git', ['-C', dir, 'config', 'user.email', 'rll-registry-test@test.local']);
   execFileSync('git', ['-C', dir, 'config', 'user.name', 'RLL Registry Test']);
@@ -3572,7 +3575,7 @@ test('findActionAcrossRepos: exactly MAX_ACTION_REPO_SCAN_ENTRIES entries (cap, 
 // ─────────────────────────────────────────────────────────────────────────────
 
 function makeGitProjectAt(prefix) {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
+  const dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), prefix)));
   execFileSync('git', ['-C', dir, 'init', '-q']);
   execFileSync('git', ['-C', dir, 'config', 'user.email', 'rll-registry-seal-test@test.local']);
   execFileSync('git', ['-C', dir, 'config', 'user.name', 'RLL Registry Seal Test']);

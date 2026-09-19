@@ -227,3 +227,52 @@ describe("source-referenced runtime installation", () => {
     }
   });
 });
+
+// F-19/F-21: darwin path canonicalisation at the manifest boundary.
+//
+// The manifest's L0 `path` is authored LEXICALLY relative to the consumer root
+// as given. Production resolved it against realpath(projectRoot) instead. On
+// macOS /var -> /private/var adds one segment, so the relative `..` traversal
+// landed one level high and produced paths like /private/Users/... which never
+// exist. Linux has no such symlink, and the mcp-server CI matrix is
+// [ubuntu-latest, windows-latest] only, so no runner ever exercised this.
+describe("darwin manifest path canonicalisation (F-21)", () => {
+  let projectRoot: string;
+
+  beforeEach(async () => {
+    // tmpdir() on macOS is /var/... whose realpath is /private/var/... -- the
+    // exact shape that exposes the defect. On Linux the two coincide and this
+    // test simply keeps passing, which is the intended cross-platform contract.
+    projectRoot = await mkdtemp(join(tmpdir(), "f21-consumer-"));
+    await mkdir(join(projectRoot, ".claude"), { recursive: true });
+    await writeRuntimeManifest(projectRoot);
+  });
+
+  afterEach(async () => {
+    await rm(projectRoot, { recursive: true, force: true });
+  });
+
+  it("resolves a relative L0 source against the root as given, never by prepending /private", async () => {
+    const result = await installRuntimeConsumer(projectRoot, REAL_L0_ROOT, { dryRun: true });
+    // The precise defect signature: an ENOENT naming a /private-prefixed path.
+    const reason = String((result as { reason?: string }).reason ?? "");
+    expect(reason).not.toMatch(/\/private\/Users/);
+    expect(reason).not.toMatch(/ENOENT/);
+    // And it must not be rejected as an invalid L0 source, which is how the
+    // mis-resolved path surfaced when realpath happened to succeed.
+    expect(reason).not.toBe("runtime-l0-source-invalid");
+  });
+
+  it("still rejects a genuinely wrong L0 source path", async () => {
+    await writeFile(join(projectRoot, "l0-manifest.json"), JSON.stringify({
+      version: 2,
+      sources: [{ layer: "L0", path: "definitely/not/the/toolkit", role: "tooling" }],
+      topology: "flat", last_synced: "2026-09-05T00:00:00.000Z",
+      selection: { mode: "include-all", exclude_skills: [], exclude_agents: [], exclude_commands: [], exclude_categories: [], exclude_hooks: [] },
+      checksums: {}, l2_specific: { commands: [], agents: [], skills: [] }, migrations_applied: [],
+    }, null, 2) + "\n");
+    const result = await installRuntimeConsumer(projectRoot, REAL_L0_ROOT, { dryRun: true });
+    expect(result.ok).toBe(false);
+    expect((result as { reason?: string }).reason).toBe("runtime-l0-source-invalid");
+  });
+});

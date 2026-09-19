@@ -60,6 +60,10 @@ const HOST_CONTRACT_CERTIFICATE_SCHEMA = 'runtime/claude-id01-host-contract/v1';
 const HOST_CONTRACT_PROBE_EVENT_SCHEMA = 'runtime/claude-host-contract-probe-event/v1';
 const HOST_CONTRACT_QUALIFICATION_SCHEMA = 'androidcommondoc/p1-native-host-contract-qualification/v1';
 const HOST_CONTRACT_PROBE_VERSION = HOST_CONTRACT_PROBE_EVENT_SCHEMA;
+const HOST_CONTRACT_CERTIFICATE_BASENAME = 'claude-host-contract';
+// process.platform values (darwin, win32, linux, ...) -- bounded so a platform
+// string can never widen into a path segment.
+const HOST_CONTRACT_PLATFORM_RE = /^[a-z0-9]{1,32}$/;
 const HOST_CONTRACT_PACKAGE_KEYS = Object.freeze(['anchor', 'certificate', 'schema']);
 const HOST_CONTRACT_CERTIFICATE_KEYS = Object.freeze([
   'bundle_digest', 'cli_version', 'distinct_same_type_peers', 'evidence_method',
@@ -96,6 +100,22 @@ function digest(value) {
 
 function digestBytes(value) {
   return crypto.createHash('sha256').update(value).digest('hex');
+}
+
+// macOS reaches one directory by two spellings -- /var/folders/... and
+// /private/var/folders/..., /tmp and /private/tmp -- and which one a caller
+// holds depends on where it came from: a process that read TMPDIR gets the
+// short spelling, one that asked `git rev-parse --show-toplevel` (as
+// coordinationRootPathFor does) gets the canonical one. path.resolve does NOT
+// resolve symlinks, so identifying a project root by its spelling makes
+// authority depend on who is asking: a record minted by the first caller could
+// never be validated by the second, and the failure surfaced far away as
+// `claude-id01-host-contract-invalid` for evidence that was present, unexpired
+// and correctly signed. Canonicalise so the digest names the DIRECTORY.
+// An unresolvable root is unusable, so this returns null and every caller
+// fails closed rather than falling back to the raw spelling.
+function projectRootIdentityDigest(projectRoot) {
+  try { return digest(fs.realpathSync(projectRoot)); } catch { return null; }
 }
 
 function isTestCapability() {
@@ -473,9 +493,18 @@ function compositionKeyPaths(projectRoot) {
   };
 }
 
-function hostContractPackagePath(projectRoot) {
-  const toolkitRoot = runtimeToolkitRootFor(projectRoot);
-  return toolkitRoot ? path.join(toolkitRoot, 'setup', 'claude-host-contract.json') : null;
+// Certificates are stored one per platform. The legacy single-slot artifact
+// predates that and stays readable, but only ever for the platform its OWN
+// signed certificate names -- it is never a fallback for a different host.
+// These paths are lookup hints only: which certificate is accepted is settled
+// by the signed certificate itself, never by the file name.
+function hostContractLegacyPath(root) {
+  return path.join(root, 'setup', HOST_CONTRACT_CERTIFICATE_BASENAME + '.json');
+}
+
+function hostContractPlatformPath(root, os) {
+  if (typeof os !== 'string' || !HOST_CONTRACT_PLATFORM_RE.test(os)) return null;
+  return path.join(root, 'setup', HOST_CONTRACT_CERTIFICATE_BASENAME + '.' + os + '.json');
 }
 
 function hostContractCertificatePayload(record) {
@@ -637,16 +666,28 @@ function verifyHostProbeObservations(observerBytes, streamBytes, qualification) 
   const aResumedTools = actorPreTools(starts[1].agent_id_digest, resumeStartIndex, resumeStopIndex);
   const bTools = actorPreTools(starts[2].agent_id_digest, bStartIndex, bStopIndex);
   if (new Set(aInitialTools.map((row) => row.tool_use_digest)).size < 2 || aResumedTools.length < 1 || bTools.length < 1 ||
-      !(firstStartIndex < firstStopIndex && firstStopIndex < indexOf(wakePre) && indexOf(wakePost) < resumeStartIndex &&
+      // The resume is caused by the wake REQUEST, not by its completion event: a
+      // host may start the resumed actor while the wake call is still in flight,
+      // so SubagentStart can legitimately precede PostToolUse(SendMessage).
+      // Observed live on darwin in BOTH orders across runs. Nothing is weakened --
+      // actor A must still have stopped before the wake, wakePost must still exist
+      // and carry success:true with resumedAgentId === startA.agent_id (checked
+      // above), and the remaining order is still asserted.
+      !(firstStartIndex < firstStopIndex && firstStopIndex < indexOf(wakePre) && indexOf(wakePre) < resumeStartIndex &&
         resumeStartIndex < resumeStopIndex && resumeStopIndex < indexOf(agentPre[1]) && indexOf(agentPre[1]) < bStartIndex && bStartIndex < bStopIndex)) {
     return { ok: false, reason: 'HOST_PROBE_SEQUENCE_INVALID' };
   }
   const initRows = stream.filter((row) => row && row.type === 'system' && row.subtype === 'init');
-  if (initRows.length !== 1 || initRows[0].session_id !== qualification.session_id ||
-      initRows[0].claude_code_version !== qualification.cli.version || initRows[0].model !== qualification.cli.actual_model ||
-      !Array.isArray(initRows[0].tools) || !['Task', 'Bash', 'Read', 'SendMessage'].every((tool) => initRows[0].tools.includes(tool)) ||
-      !initRows[0].tools.every((tool) => boundedLiteral(tool, 128)) ||
-      !Array.isArray(initRows[0].mcp_servers) || !initRows[0].mcp_servers.every((server) => isPlainObject(server) && boundedLiteral(server.name, 128))) {
+  // A probe that legitimately spans turns emits one system/init PER TURN, all for
+  // the same session -- observed live on darwin as 3 identical frames. Requiring
+  // exactly one made a genuinely multi-turn probe unpublishable. Requiring at
+  // least one and validating EVERY frame is strictly stronger than validating
+  // only the first: a divergent or foreign init can no longer hide behind index 0.
+  if (initRows.length < 1 || !initRows.every((row) => row.session_id === qualification.session_id
+      && row.claude_code_version === qualification.cli.version && row.model === qualification.cli.actual_model
+      && Array.isArray(row.tools) && ['Task', 'Bash', 'Read', 'SendMessage'].every((tool) => row.tools.includes(tool))
+      && row.tools.every((tool) => boundedLiteral(tool, 128))
+      && Array.isArray(row.mcp_servers) && row.mcp_servers.every((server) => isPlainObject(server) && boundedLiteral(server.name, 128)))) {
     return { ok: false, reason: 'HOST_PROBE_SYSTEM_INIT_INVALID' };
   }
   return {
@@ -751,7 +792,23 @@ function publishClaudeHostContractPackage(options) {
   const pkg = { schema: HOST_CONTRACT_PACKAGE_SCHEMA, certificate, anchor };
   // Qualification publishes only from the toolkit/self root. Consumers read
   // this immutable package through their source reference and never publish it.
-  const packagePath = path.join(projectRoot, 'setup', 'claude-host-contract.json');
+  //
+  // The destination is keyed to the certificate's OWN signed platform, so
+  // publishing for one host can never land on, rewrite or migrate another
+  // host's certificate -- no-clobber still applies per destination. An
+  // existing legacy artifact that already holds THIS platform stays the
+  // destination, so a host installed before platform-scoped storage keeps its
+  // exact path and bytes and its republish stays idempotent.
+  const platformPath = hostContractPlatformPath(projectRoot, certificate.os);
+  if (!platformPath) return { ok: false, reason: 'HOST_CONTRACT_INTERNAL_SHAPE' };
+  // Decide legacy ownership from a VERIFIED package, never from a raw
+  // certificate.os read. An unsigned or malformed legacy file claiming this
+  // platform would otherwise steer the destination, and publishNoClobber would
+  // then compare bytes against an artifact whose provenance was never checked.
+  // verifiedHostContractAt validates schema, shape and the ed25519 signature
+  // before it looks at the platform at all.
+  const legacyPath = hostContractLegacyPath(projectRoot);
+  const packagePath = verifiedHostContractAt(legacyPath, certificate.os).ok ? legacyPath : platformPath;
   const packageBytes = Buffer.from(canonicalJSONStringify(pkg), 'utf8');
   try {
     fs.mkdirSync(path.dirname(packagePath), { recursive: true, mode: 0o700 });
@@ -765,10 +822,8 @@ function publishClaudeHostContractPackage(options) {
     hostContractDigest: digest(canonicalJSONStringify(certificate)) };
 }
 
-function readVerifiedHostContractPackage(projectRoot) {
-  if (!isUsableRoot(projectRoot)) return { ok: false, reason: 'HOST_CONTRACT_ROOT_INVALID' };
-  const packagePath = hostContractPackagePath(projectRoot);
-  if (!packagePath) return { ok: false, reason: 'HOST_CONTRACT_RUNTIME_CONTEXT_INVALID' };
+function verifiedHostContractAt(packagePath, hostOs) {
+  if (!fs.existsSync(packagePath)) return { ok: false, reason: 'HOST_CONTRACT_PACKAGE_ABSENT' };
   const pkg = readJsonFile(packagePath);
   if (!isPlainObject(pkg) || !hasExactKeys(pkg, HOST_CONTRACT_PACKAGE_KEYS) ||
       pkg.schema !== HOST_CONTRACT_PACKAGE_SCHEMA || !isPlainObject(pkg.certificate) ||
@@ -795,8 +850,35 @@ function readVerifiedHostContractPackage(projectRoot) {
         Buffer.from(certificate.signature_ed25519_base64, 'base64'))) {
     return { ok: false, reason: 'HOST_CONTRACT_SIGNATURE_INVALID' };
   }
+  // Platform binding is settled AFTER the signature, against the certificate's
+  // own signed `os`. That is what keeps a file name from standing in for the
+  // certificate: a foreign certificate renamed into this host's slot is read,
+  // signature-verified and then refused -- never adopted because of where it sat.
+  if (certificate.os !== hostOs) return { ok: false, reason: 'HOST_CONTRACT_PLATFORM_MISMATCH' };
   return { ok: true, certificate, anchor: pkg.anchor, pinDigest: certificate.pin_digest,
     hostContractDigest: digest(canonicalJSONStringify(certificate)) };
+}
+
+function readVerifiedHostContractPackage(projectRoot) {
+  if (!isUsableRoot(projectRoot)) return { ok: false, reason: 'HOST_CONTRACT_ROOT_INVALID' };
+  const toolkitRoot = runtimeToolkitRootFor(projectRoot);
+  if (!toolkitRoot) return { ok: false, reason: 'HOST_CONTRACT_RUNTIME_CONTEXT_INVALID' };
+  // This host's own slot first, then the legacy artifact -- which is admitted
+  // only when its signed platform is this host's. There is deliberately no
+  // cross-platform fallback: an unmatched host fails closed.
+  const hostOs = process.platform;
+  const platformPath = hostContractPlatformPath(toolkitRoot, hostOs);
+  const legacyPath = hostContractLegacyPath(toolkitRoot);
+  const candidates = platformPath ? [platformPath, legacyPath] : [legacyPath];
+  let rejection = null;
+  for (const candidate of candidates) {
+    const result = verifiedHostContractAt(candidate, hostOs);
+    if (result.ok) return result;
+    // A certificate that is present but unusable says more than an absent one,
+    // so it is the reason reported back.
+    if (!rejection && result.reason !== 'HOST_CONTRACT_PACKAGE_ABSENT') rejection = result;
+  }
+  return rejection || { ok: false, reason: 'HOST_CONTRACT_PACKAGE_INVALID' };
 }
 
 function verifyClaudeHostContractPackage(projectRoot, options) {
@@ -889,22 +971,99 @@ function queryWindowsParentChain(powerShellPath, startingPid, timeoutMs) {
   return rows;
 }
 
+// Darwin counterpart of the Windows parent-chain walk. One `ps` snapshot is
+// taken and the ppid chain is followed from the starting process, so every row
+// comes from a single consistent view of the process table rather than from a
+// sequence of races. `comm` on darwin is the executable path of the running
+// image, which is the only thing this observation is allowed to trust: never a
+// version string, never PATH, never configuration, never a SessionStart claim.
+// Proven necessary on this host -- the executing binary was
+// .../Claude/claude-code/2.1.260/claude.app/Contents/MacOS/claude while the
+// `claude` on PATH was an entirely different 2.1.272 image.
+const DARWIN_PS_ROW_RE = /^\s*(\d+)\s+(\d+)\s+(\S{3}\s+\S{3}\s+\d{1,2}\s+\d{2}:\d{2}:\d{2}\s+\d{4})\s+(\S.*?)\s*$/;
+
+function queryDarwinParentChain(startingPid, timeoutMs) {
+  const result = spawnSync('/bin/ps', ['-Awwo', 'pid=,ppid=,lstart=,comm='], {
+    encoding: 'utf8', timeout: timeoutMs, maxBuffer: 1 << 24,
+  });
+  if (result.status !== 0 || result.error || typeof result.stdout !== 'string' || result.stdout.trim().length === 0) return null;
+  const byPid = new Map();
+  for (const line of result.stdout.split('\n')) {
+    const match = DARWIN_PS_ROW_RE.exec(line);
+    if (!match) continue;
+    const processId = Number(match[1]);
+    const creationTime = match[3];
+    if (!Number.isInteger(processId) || processId <= 0 || !Number.isFinite(Date.parse(creationTime))) continue;
+    byPid.set(processId, {
+      process_id: processId,
+      parent_process_id: Number(match[2]),
+      creation_time: creationTime,
+      executable_path: match[4],
+    });
+  }
+  const rows = [];
+  const seen = new Set();
+  let current = startingPid;
+  // Same bound as the Windows walk: at most 8 ancestors, and a cycle stops it.
+  while (Number.isInteger(current) && current > 0 && byPid.has(current) && !seen.has(current) && rows.length < 8) {
+    seen.add(current);
+    const row = byPid.get(current);
+    rows.push(row);
+    current = row.parent_process_id;
+  }
+  if (rows.length === 0) return null;
+  for (const row of rows) {
+    if (typeof row.executable_path !== 'string' || row.executable_path.length === 0) return null;
+  }
+  return rows;
+}
+
+// The observation source is bound to the platform that produced it, so a record
+// can never claim a chain it did not walk.
+const PIN_OBSERVATION_SOURCES = Object.freeze({
+  win32: 'interactive-windows-parent-chain',
+  darwin: 'interactive-darwin-parent-chain',
+});
+
+function pinObservationSourceFor(platform) {
+  return Object.prototype.hasOwnProperty.call(PIN_OBSERVATION_SOURCES, platform)
+    ? PIN_OBSERVATION_SOURCES[platform]
+    : null;
+}
+
+function queryHostParentChain(startingPid, timeoutMs) {
+  if (process.platform === 'win32') {
+    let powerShellPath;
+    try { powerShellPath = require('./runtime-bridge-codex.cjs').resolvedWindowsPowerShellPath(); } catch { powerShellPath = null; }
+    if (!powerShellPath) return null;
+    return queryWindowsParentChain(powerShellPath, startingPid, timeoutMs);
+  }
+  if (process.platform === 'darwin') return queryDarwinParentChain(startingPid, timeoutMs);
+  return null;
+}
+
 function observeClaudeExecutablePin(options) {
   const projectRoot = options && options.projectRoot;
   const startingPid = options && options.startingPid !== undefined ? options.startingPid : process.pid;
-  if (process.platform !== 'win32' || !isUsableRoot(projectRoot) || !Number.isInteger(startingPid) || startingPid <= 0) {
+  const observationSource = pinObservationSourceFor(process.platform);
+  if (observationSource === null || !isUsableRoot(projectRoot) || !Number.isInteger(startingPid) || startingPid <= 0) {
     return { ok: false, reason: 'HOST_PIN_UNPROVEN' };
   }
   const startedMs = Date.now();
   const contract = readVerifiedHostContractPackage(projectRoot);
-  if (!contract.ok || contract.certificate.os !== 'win32') return { ok: false, reason: 'HOST_PIN_UNPROVEN' };
-  let powerShellPath;
-  try { powerShellPath = require('./runtime-bridge-codex.cjs').resolvedWindowsPowerShellPath(); } catch { powerShellPath = null; }
-  if (!powerShellPath) return { ok: false, reason: 'HOST_PIN_UNPROVEN' };
-  const before = queryWindowsParentChain(powerShellPath, startingPid, 10000);
+  // The certificate must have been issued for the platform doing the observing.
+  // A Windows-issued certificate can never be discharged by a darwin chain, and
+  // vice versa.
+  if (!contract.ok || contract.certificate.os !== process.platform) return { ok: false, reason: 'HOST_PIN_UNPROVEN' };
+  const before = queryHostParentChain(startingPid, 10000);
   if (!before || Date.now() - startedMs >= 15000) return { ok: false, reason: 'HOST_PIN_UNPROVEN' };
   const matches = [];
   for (const row of before) {
+    // A non-absolute image name (darwin `comm` reports a bare name for a process
+    // launched through a PATH lookup) identifies nothing: resolving it would be
+    // resolved against the CURRENT working directory and could match an
+    // unrelated file of the same name. Such an ancestor is never provable.
+    if (!path.isAbsolute(row.executable_path)) continue;
     try {
       const resolved = fs.realpathSync(row.executable_path);
       const stat = fs.statSync(resolved);
@@ -917,14 +1076,26 @@ function observeClaudeExecutablePin(options) {
   if (matches.length !== 1) return { ok: false, reason: 'HOST_PIN_UNPROVEN' };
   const remainingMs = 15000 - (Date.now() - startedMs);
   if (remainingMs <= 0) return { ok: false, reason: 'HOST_PIN_UNPROVEN' };
-  const after = queryWindowsParentChain(powerShellPath, startingPid, Math.min(10000, remainingMs));
+  const after = queryHostParentChain(startingPid, Math.min(10000, remainingMs));
   if (!after || Date.now() - startedMs > 15000) return { ok: false, reason: 'HOST_PIN_UNPROVEN' };
   const match = matches[0];
+  // Same identity test on both platforms: the pid, its birth time, and the image
+  // path must all still agree. Windows keeps its case-insensitive comparison;
+  // darwin compares canonical paths exactly rather than lowercasing, which would
+  // be a weakening rather than a portability fix.
+  const samePath = (candidate) => {
+    let resolvedCandidate;
+    try { resolvedCandidate = fs.realpathSync(candidate); } catch { return false; }
+    const left = path.resolve(resolvedCandidate);
+    const right = path.resolve(match.resolved);
+    return process.platform === 'win32' ? left.toLowerCase() === right.toLowerCase() : left === right;
+  };
   const stable = after.filter((row) => row.process_id === match.row.process_id &&
-    row.creation_time === match.row.creation_time && path.resolve(row.executable_path).toLowerCase() === path.resolve(match.resolved).toLowerCase());
+    row.creation_time === match.row.creation_time && samePath(row.executable_path));
   if (stable.length !== 1) return { ok: false, reason: 'HOST_PIN_UNPROVEN' };
   return {
     ok: true,
+    observationSource,
     processId: match.row.process_id,
     processBirth: match.row.creation_time,
     executablePath: match.resolved,
@@ -950,7 +1121,7 @@ function verifyInteractivePinEvidence(projectRoot, record, sessionId) {
       !DIGEST_RE.test(record.pin_digest) || !DIGEST_RE.test(record.host_contract_digest) ||
       !DIGEST_RE.test(record.executable_digest) || !DIGEST_RE.test(record.process_birth_digest) ||
       !Number.isInteger(record.process_id) || record.process_id <= 0 ||
-      record.observation_source !== 'interactive-windows-parent-chain' ||
+      record.observation_source !== pinObservationSourceFor(process.platform) ||
       !boundedLiteral(record.observed_at, 128) || !boundedLiteral(record.expires_at, 128) ||
       !DIGEST_RE.test(record.key_id) || typeof record.signature_ed25519_base64 !== 'string') return false;
   const observed = Date.parse(record.observed_at);
@@ -988,7 +1159,7 @@ function recordInteractiveSessionPin(options) {
     pin_digest: observed.pinDigest, host_contract_digest: observed.hostContractDigest,
     executable_digest: observed.executableDigest, process_id: observed.processId,
     process_birth_digest: digest(observed.processBirth),
-    observation_source: 'interactive-windows-parent-chain', observed_at: now.toISOString(),
+    observation_source: observed.observationSource, observed_at: now.toISOString(),
     expires_at: new Date(now.getTime() + SESSION_EVIDENCE_TTL_SECONDS * 1000).toISOString(), key_id: keys.keyId,
   };
   record.signature_ed25519_base64 = crypto.sign(null, interactivePinEvidencePayload(record), keys.privateKey).toString('base64');
@@ -1020,7 +1191,7 @@ function sessionEvidencePayload(record) {
 function verifyProductionSessionRecord(projectRoot, record, sessionId) {
   if (!record || !hasExactKeys(record, SESSION_EVIDENCE_KEYS) || record.schema !== SESSION_EVIDENCE_SCHEMA ||
       record.session_digest !== digest(sessionId) ||
-      record.project_root_digest !== digest(path.resolve(projectRoot)) ||
+      record.project_root_digest !== projectRootIdentityDigest(projectRoot) ||
       typeof record.worktree_id !== 'string' || typeof record.plan_digest !== 'string' ||
       record.actual_host !== 'claude' || !boundedLiteral(record.actual_model, 128) ||
       record.actual_role_engine !== 'claude' || record.continuity !== 'session-persistent' ||
@@ -1079,12 +1250,14 @@ function recordProductionSessionIdentity(options) {
   try { worktreeId = owner.computeWorktreeId(projectRoot); } catch { return { ok: false }; }
   const plan = owner.discoverPlan(projectRoot);
   if (!plan.ok) return { ok: false };
+  const rootDigest = projectRootIdentityDigest(projectRoot);
+  if (!rootDigest) return { ok: false };
   const keys = loadOrCreateProductionKey(projectRoot);
   const startedAt = new Date();
   const record = {
     schema: SESSION_EVIDENCE_SCHEMA,
     session_digest: digest(event.session_id),
-    project_root_digest: digest(path.resolve(projectRoot)),
+    project_root_digest: rootDigest,
     worktree_id: worktreeId,
     plan_digest: plan.planDigest,
     actual_host: 'claude',
@@ -1163,7 +1336,7 @@ function verifyDirectRoleHostRecord(projectRoot, record, roleSessionId) {
       !DIGEST_RE.test(record.parent_session_digest) || !PROFILE_NAME_RE.test(record.role) ||
       !COMPOSITION_RE.test(record.action_id) || !DIGEST_RE.test(record.action_digest) ||
       !DIGEST_RE.test(record.launch_argv_digest) || !DIGEST_RE.test(record.definition_digest) ||
-      !DIGEST_RE.test(record.bootstrap_digest) || record.project_root_digest !== digest(path.resolve(projectRoot)) ||
+      !DIGEST_RE.test(record.bootstrap_digest) || record.project_root_digest !== projectRootIdentityDigest(projectRoot) ||
       !DIGEST_RE.test(record.worktree_id) || !DIGEST_RE.test(record.plan_digest) ||
       record.actual_host !== 'claude' || !boundedLiteral(record.actual_model, 128) ||
       record.continuity !== 'session-persistent' || !PROFILE_NAME_RE.test(record.requested_profile_name) ||
@@ -1264,6 +1437,8 @@ function recordDirectRoleHostIdentity(options) {
   if (!Number.isFinite(parentExpiry) || parentExpiry <= now.getTime()) {
     return { ok: false, reason: 'DIRECT_ROLE_PARENT_EXPIRED' };
   }
+  const rootDigest = projectRootIdentityDigest(projectRoot);
+  if (!rootDigest) return { ok: false, reason: 'DIRECT_ROLE_SCOPE_INVALID' };
   const keys = loadOrCreateProductionKey(projectRoot);
   const record = {
     schema: DIRECT_ROLE_HOST_SCHEMA,
@@ -1275,7 +1450,7 @@ function recordDirectRoleHostIdentity(options) {
     launch_argv_digest: digest(canonicalJSONStringify(launchArgv)),
     definition_digest: options.definitionDigest,
     bootstrap_digest: digest(action.payload.bootstrap_message),
-    project_root_digest: digest(path.resolve(projectRoot)),
+    project_root_digest: rootDigest,
     worktree_id: worktreeId,
     plan_digest: plan.planDigest,
     actual_host: 'claude',
@@ -1535,7 +1710,7 @@ function compositionPayload(record) {
 
 function verifyProductionRecord(projectRoot, record, expected) {
   if (!record || record.schema !== COMPOSITION_SCHEMA || !COMPOSITION_RE.test(record.composition_id) ||
-      record.project_root_digest !== digest(path.resolve(projectRoot)) ||
+      record.project_root_digest !== projectRootIdentityDigest(projectRoot) ||
       typeof record.worktree_id !== 'string' || typeof record.plan_digest !== 'string' ||
       record.actual_host !== 'claude' || !boundedLiteral(record.actual_model, 128) ||
       record.actual_role_engine !== 'claude' || record.continuity !== 'session-persistent' ||
@@ -1585,13 +1760,15 @@ function mintHostCompositionFromSessionObservation(options, sessionObservation) 
   try { worktreeId = owner.computeWorktreeId(projectRoot); } catch { return { ok: false }; }
   const plan = owner.discoverPlan(projectRoot);
   if (!plan.ok) return { ok: false };
+  const rootDigest = projectRootIdentityDigest(projectRoot);
+  if (!rootDigest) return { ok: false };
   const keys = loadOrCreateProductionKey(projectRoot);
   const compositionId = crypto.randomBytes(16).toString('hex');
   const createdAt = new Date();
   const record = {
     schema: COMPOSITION_SCHEMA,
     composition_id: compositionId,
-    project_root_digest: digest(path.resolve(projectRoot)),
+    project_root_digest: rootDigest,
     worktree_id: worktreeId,
     plan_digest: plan.planDigest,
     entrypoint: options.entrypoint,
@@ -1728,6 +1905,8 @@ module.exports = {
   findCurrentProductionAdmission,
   operationForAction,
   COMPOSITION_OPERATIONS,
+  __TEST_ONLY__queryHostParentChain: queryHostParentChain,
+  __TEST_ONLY__pinObservationSourceFor: pinObservationSourceFor,
   __TEST_ONLY__mintHostAdapterBrand: mintHostAdapterBrand,
   __TEST_ONLY__admitIbindEvidence: admitIbindEvidence,
 };

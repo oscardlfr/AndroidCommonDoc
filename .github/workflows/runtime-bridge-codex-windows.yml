@@ -42,3 +42,16 @@ jobs:
       - name: Run runtime bridge codex Windows tests
         shell: pwsh
         run: pwsh -NoLogo -NoProfile -NonInteractive -File scripts/tests/runtime-bridge-codex-windows.ps1
+
+      # The digest-keyed pinned executable copy is the one bridge path whose
+      # Windows leg is an ACL call, and the PowerShell suite above predates it,
+      # so nothing here executed it on a real Windows host. That blind spot is
+      # not theoretical: this suite's own CPF-14 exists because the call site
+      # shipped a mode literal outside windows-acl.cjs's closed enum, which
+      # fails closed and therefore disabled the whole feature on Windows while
+      # every Linux and macOS run stayed green. Run the Node suite here so the
+      # owner-confined directory, the ACL application and the copy/re-verify
+      # round trip are exercised against genuine Windows ACLs.
+      - name: Codex pinned-copy contract on real Windows ACLs
+        shell: pwsh
+        run: node scripts/tests/codex-pin-freeze.test.js

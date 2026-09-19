@@ -1273,7 +1273,21 @@ _s16e2e_create_arch_platform_claude_peer() {
       try { process.kill(bgPid, 0); } catch (err) { if (err && err.code === "ESRCH") reaped = true; }
     }
     if (!reaped) {
-      process.stderr.write("precondition failed: target pid " + bgPid + " was not reaped as dead within the spin bound");
+      // A SIGKILLed child becomes a ZOMBIE until its real parent -- this bats
+      // shell, not us -- reaps it, and process.kill(pid,0) on a zombie does not
+      // raise ESRCH. Whether the async SIGCHLD reaper in bash wins the race
+      // inside the spin bound is pure scheduling luck, which made this test
+      // flaky (1 failure in 5 focal runs, and once in a full suite).
+      // A zombie is not a LIVE target, which is the only thing this precondition
+      // is about, so accept state Z as dead. No timeout, poll or assertion was
+      // relaxed: the discriminating STALE claim below is untouched.
+      // NOTE: no apostrophes anywhere in this block -- the whole node script is
+      // a single-quoted bash string and one would terminate it early.
+      const psState = require("child_process").spawnSync("/bin/ps", ["-o", "stat=", "-p", String(bgPid)], { encoding: "utf8" });
+      if (psState.status === 0 && /^[ \t]*Z/.test(String(psState.stdout || ""))) reaped = true;
+    }
+    if (!reaped) {
+      process.stderr.write("precondition failed: target pid " + bgPid + " was neither reaped nor a zombie within the spin bound");
       process.exit(1);
     }
 

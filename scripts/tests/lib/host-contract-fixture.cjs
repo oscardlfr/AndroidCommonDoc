@@ -39,8 +39,14 @@ function sha256hex(text) { return sha256bytes(Buffer.from(text, 'utf8')); }
  *   event: the system/init event to record (session_id/model/cwd/tools/mcp_servers)
  * @returns {{result: object, worktreeRoot: string, cleanup: () => void}}
  */
-function mintIsolatedHostContractSession(repoRoot, { rc, runtimeHostClaude, event }) {
-  const worktreeRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'host-contract-worktree-'));
+function mintIsolatedHostContractSession(repoRoot, { rc, runtimeHostClaude, wakeInterleaved, initFrameCount, event }) {
+  // realpath: the session identity minted below is recorded against this root
+  // and the hook under test later runs with it as cwd. macOS spells the same
+  // directory /var/folders/... and /private/var/folders/..., and the admission
+  // chain canonicalises, so handing the raw spelling around would make the
+  // recorded identity and the hook's own scope resolution disagree and the hook
+  // would fail closed against a session that is in fact correctly admitted.
+  const worktreeRoot = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'host-contract-worktree-')));
   const add = spawnSync('git', ['worktree', 'add', '--quiet', '--detach', worktreeRoot, 'HEAD'], { cwd: repoRoot, encoding: 'utf8' });
   if (add.status !== 0) throw new Error('git worktree add failed: ' + add.stderr);
   const cleanup = () => {
@@ -108,9 +114,19 @@ function mintIsolatedHostContractSession(repoRoot, { rc, runtimeHostClaude, even
       probeEvent('PostToolUse', { tool_name: 'Agent', tool_use_id: toolA, tool_input: inputA,
         tool_response: { isAsync: true, status: 'async_launched', agentId: agentA } }),
       probeEvent('PreToolUse', { tool_name: 'SendMessage', tool_use_id: toolWake, tool_input: { recipient: 'probe-peer-a', message: 'wake' } }),
-      probeEvent('PostToolUse', { tool_name: 'SendMessage', tool_use_id: toolWake, tool_input: { recipient: 'probe-peer-a', message: 'wake' },
-        tool_response: { success: true, resumedAgentId: agentA } }),
-      probeEvent('SubagentStart', { agent_id: agentA, agent_type: 'probe-peer' }),
+      // A real host starts the resumed actor while the wake call is still in
+      // flight, so SubagentStart can precede the wake PostToolUse. Observed on
+      // darwin in both orders across runs, which is why the ordering is an
+      // option here rather than a fixed idealised sequence.
+      ...(wakeInterleaved ? [
+        probeEvent('SubagentStart', { agent_id: agentA, agent_type: 'probe-peer' }),
+        probeEvent('PostToolUse', { tool_name: 'SendMessage', tool_use_id: toolWake, tool_input: { recipient: 'probe-peer-a', message: 'wake' },
+          tool_response: { success: true, resumedAgentId: agentA } }),
+      ] : [
+        probeEvent('PostToolUse', { tool_name: 'SendMessage', tool_use_id: toolWake, tool_input: { recipient: 'probe-peer-a', message: 'wake' },
+          tool_response: { success: true, resumedAgentId: agentA } }),
+        probeEvent('SubagentStart', { agent_id: agentA, agent_type: 'probe-peer' }),
+      ]),
       probeEvent('PreToolUse', { agent_id: agentA, agent_type: 'probe-peer', tool_name: 'Read', tool_use_id: 'read-a-3', tool_input: { file_path: 'nonce' } }),
       probeEvent('PostToolUse', { agent_id: agentA, agent_type: 'probe-peer', tool_name: 'Read', tool_use_id: 'read-a-3', tool_input: { file_path: 'nonce' } }),
       probeEvent('SubagentStop', { agent_id: agentA, agent_type: 'probe-peer' }),
@@ -132,6 +148,12 @@ function mintIsolatedHostContractSession(repoRoot, { rc, runtimeHostClaude, even
       type: 'system', subtype: 'init', session_id: sessionId, model: event.model,
       claude_code_version: '2.1.261', tools: ['Task', 'Bash', 'Read', 'SendMessage'], mcp_servers: event.mcp_servers,
     }];
+    // A probe that legitimately spans turns emits one system/init per turn, all
+    // for the SAME session. initFrameCount models that; the default of 1 keeps
+    // every existing caller byte-identical.
+    for (let extra = 1; extra < (initFrameCount || 1); extra += 1) {
+      streamRows.push(Object.assign({}, streamRows[0]));
+    }
     fs.writeFileSync(path.join(evidenceRoot, 'observer', 'events.jsonl'), observerBytes);
     fs.writeFileSync(path.join(evidenceRoot, 'claude-stream.jsonl'), streamRows.map((row) => JSON.stringify(row)).join('\n') + '\n');
 
@@ -158,12 +180,20 @@ function mintIsolatedHostContractSession(repoRoot, { rc, runtimeHostClaude, even
     const qualificationPath = path.join(worktreeRoot, 'qualification.json');
     fs.writeFileSync(qualificationPath, JSON.stringify(qualification));
 
-    // The worktree's OWN checked-out copy of the real repo's tracked
-    // setup/claude-host-contract.json (a separate file on disk from the real
-    // repo's copy) must be cleared first -- publishClaudeHostContractPackage
-    // no-clobber-writes and would otherwise report HOST_CONTRACT_PACKAGE_CONFLICT
-    // against the pre-existing, differently-pinned tracked certificate.
-    fs.rmSync(path.join(worktreeRoot, 'setup', 'claude-host-contract.json'), { force: true });
+    // The worktree's OWN checked-out copy of the certificate for THIS platform
+    // (a separate file on disk from the real repo's copy) must be cleared first
+    // -- publishClaudeHostContractPackage no-clobber-writes and would otherwise
+    // report HOST_CONTRACT_PACKAGE_CONFLICT against the pre-existing,
+    // differently-pinned tracked certificate that occupies the same
+    // destination. Certificates for OTHER platforms are deliberately left in
+    // place: they no longer collide, and leaving them keeps this fixture
+    // exercising the real coexisting-certificates layout.
+    for (const certificateName of ['claude-host-contract.' + process.platform + '.json', 'claude-host-contract.json']) {
+      const certificatePath = path.join(worktreeRoot, 'setup', certificateName);
+      let certificateOs = null;
+      try { certificateOs = JSON.parse(fs.readFileSync(certificatePath, 'utf8')).certificate.os; } catch { certificateOs = null; }
+      if (certificateOs === process.platform) fs.rmSync(certificatePath, { force: true });
+    }
 
     const published = runtimeHostClaude.publishClaudeHostContractPackage({
       projectRoot: worktreeRoot, qualificationPath, evidenceRoot, observerPath,

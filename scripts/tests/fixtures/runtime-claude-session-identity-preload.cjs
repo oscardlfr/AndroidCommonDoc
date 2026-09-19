@@ -39,8 +39,17 @@ if (typeof encoded === 'string' && encoded.length > 0) {
 const unlinkFailurePath = process.env.RUNTIME_TEST_UNLINK_FAILURE_PATH;
 if (typeof unlinkFailurePath === 'string' && unlinkFailurePath.length > 0) {
   const originalUnlinkSync = fs.unlinkSync;
+  // path.resolve does NOT resolve symlinks, so a /var/folders vs
+  // /private/var/folders difference between the injected path and the path
+  // production actually unlinks would silently skip the injection -- the test
+  // would then observe a clean stop and report "no block" for a failure that was
+  // never injected at all. Compare by realpath, falling back to the lexical form
+  // when the target is already gone.
+  const identityOf = (p) => {
+    try { return fs.realpathSync(p); } catch { return path.resolve(p); }
+  };
   fs.unlinkSync = (target) => {
-    if (path.resolve(target) === path.resolve(unlinkFailurePath)) {
+    if (identityOf(target) === identityOf(unlinkFailurePath)) {
       const error = new Error('Injected test-only unlink failure');
       error.code = 'EACCES';
       throw error;

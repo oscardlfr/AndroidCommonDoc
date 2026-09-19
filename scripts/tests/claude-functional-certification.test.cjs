@@ -96,13 +96,53 @@ function runP4FullScenario(scenario, options = {}) {
   });
 }
 
+// The P5 scenarios need a "reviewed subject" document to put through mixed
+// review. The tool's DEFAULT for --p5-subject-file is
+// .planning/wave-portable-runtime-messaging-adapters/mixed-review-subject-codex-opt-in.md,
+// a historical wave's file that .gitignore:61 (`.planning/wave*/`) excludes --
+// so it can never exist in a fresh checkout, and on a developer machine it
+// survives only until that wave's directory is cleaned up. Every P5 case here
+// therefore passed or failed on ambient machine state rather than on anything
+// it was testing, and CI never caught it because reusable-shell-tests.yml
+// globs scripts/tests/*.test.js and this file is .cjs.
+//
+// Same defect class as the five fixture fixes in this wave: a test must carry
+// its own inputs. The tool only requires the path to be a regular file (it
+// copies it and hashes it as immutable evidence), so a synthesized document is
+// a faithful stand-in -- and a per-run one is strictly better, because the
+// subject digest then varies with the run instead of being a constant lifted
+// from an unrelated wave.
+const p5SubjectFile = (() => {
+  const dir = fs.mkdtempSync(path.join(privateRoot, 'cfc-p5-subject-'));
+  const file = path.join(dir, 'mixed-review-subject.md');
+  fs.writeFileSync(file, [
+    '# Mixed review subject — functional certification fixture',
+    '',
+    'Synthesized by scripts/tests/claude-functional-certification.test.cjs so the',
+    'P5 scenarios carry their own reviewed subject instead of depending on a',
+    'gitignored file from an unrelated wave. Content is immaterial to the',
+    'protocol under test: the certification tool copies this file and records its',
+    'digest as immutable evidence, and never parses it.',
+    '',
+    '## Proposal',
+    '',
+    'Admit exactly one additional selection key, `codex_worker_opt_in_roles`, and',
+    'no other. Every other key stays closed.',
+    '',
+  ].join('\n'), { encoding: 'utf8', mode: 0o600 });
+  return file;
+})();
+
 function runP5Scenario(scenario = 'p5-full-scenario', options = {}) {
+  // extraLauncherArgs APPENDS, mirroring runP4FullScenario, so a case can add a
+  // flag without silently dropping --p5-scenario or the subject file.
+  const { extraLauncherArgs = [], ...scenarioOptions } = options;
   return runScenario(scenario, {
     operation: 'entrypoint-protocol',
     transportProfile: 'native-claude-cli',
     nativeFixture: true,
-    launcherArgs: ['--p5-scenario'],
-    ...options,
+    launcherArgs: ['--p5-scenario', '--p5-subject-file', p5SubjectFile, ...extraLauncherArgs],
+    ...scenarioOptions,
   });
 }
 
@@ -553,6 +593,28 @@ test('CFC-OBSERVER-02 entrypoint mode records Agent hooks without requiring or r
   assert.doesNotMatch(source, /scripts[\\/]lib/);
 });
 
+test('HCP-EXIT-BEFORE-CONTINUATION finalizes the probe when the child exits before the continuation timer fires', async () => {
+  // After an early terminal result the driver arms an UNREF'd continuation
+  // timer and keeps the session open. If the child then exits first, the exit
+  // path used to run straight to process.exit() without finalizing, so the
+  // observations digest, the spawn/start counters and the contract verdict were
+  // never recorded -- the run record described a probe that was never judged.
+  const run = await runProbeScenario('hcp-exit-before-continuation', {
+    transportProfile: 'native-claude-cli',
+    nativeFixture: true,
+  });
+  // The probe legitimately cannot COMPLETE here: the sequence never finished.
+  // What this case pins is that it was FINALIZED rather than silently skipped.
+  assert.match(String(run.state.observations_digest), /^[0-9a-f]{64}$/,
+    'the observations digest must be recorded even when the child exits first');
+  assert.equal(typeof run.state.probe_observed_agent_spawns, 'number',
+    'the spawn counter must be recorded even when the child exits first');
+  assert.equal(typeof run.state.probe_observed_subagent_starts, 'number',
+    'the subagent-start counter must be recorded even when the child exits first');
+  assert.ok(run.state.status && run.state.status !== 'ACTIVE',
+    'a finalized probe must carry a terminal verdict, never be left ACTIVE: ' + run.state.status);
+});
+
 test('HCP-POSITIVE proves the complete authority-free host contract with extra tools and MCP', async () => {
   const run = await runProbeScenario('hcp-success');
   assert.equal(run.code, 0, run.stderr);
@@ -582,6 +644,185 @@ test('HCP-POSITIVE proves the complete authority-free host contract with extra t
   assert.match(aPrompt, new RegExp(path.join(run.evidenceRoot, 'probe-a-two.txt').replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
   assert.match(aPrompt, new RegExp(path.join(run.evidenceRoot, `${run.state.probe_nonce}.txt`).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
   assert.match(bPrompt, new RegExp(path.join(run.evidenceRoot, 'probe-b-one.txt').replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+});
+
+// --- Wave 1 macOS stabilization: boundary canonicalization (defect C) ---
+//
+// The native host-contract probe is the only path that sets childCwd/expectedCwd
+// to runRoot. The child reports its cwd the way the OS does -- realpath-resolved --
+// while the driver compared it against a symlink-blind path.resolve(runRoot).
+// On darwin EVERY candidate root is symlinked (/tmp -> /private/tmp,
+// /var/folders -> /private/var/folders), so validateInit could never succeed
+// against the real binary. Proven live before this fence existed: two independent
+// genuine-pinned runs returned INVALID_SYSTEM_INIT_EVIDENCE with init:null while a
+// real system/init frame sat in the captured stream.
+//
+// The symlink here is explicit so this fences on every symlink-capable platform,
+// not only on darwin.
+test('MACOS-CANON-01 native host-contract probe accepts a symlinked evidence root', async () => {
+  const canonicalRoot = fs.realpathSync(fs.mkdtempSync(path.join(privateRoot, 'canon-')));
+  const linkParent = fs.realpathSync(fs.mkdtempSync(path.join(privateRoot, 'link-')));
+  const symlinkedRoot = path.join(linkParent, 'evidence-via-symlink');
+  fs.symlinkSync(canonicalRoot, symlinkedRoot, 'dir');
+  assert.notEqual(symlinkedRoot, fs.realpathSync(symlinkedRoot), 'fixture must actually be a symlink');
+
+  const run = await runProbeScenario('hcp-success', {
+    transportProfile: 'native-claude-cli',
+    nativeFixture: true,
+    evidenceRoot: symlinkedRoot,
+  });
+  // Scope: this fences the cwd boundary only. A fake child legitimately cannot
+  // reach HOST_CONTRACT_PROBE_COMPLETED on the native profile, because the
+  // evidence-mode guard refuses fake-fixture rows where genuine-pinned is
+  // required -- that guard is correct and is deliberately NOT relaxed here.
+  // The driver records a rejection in state.status, not state.verdict.
+  assert.notEqual(
+    run.state.status, 'INVALID_SYSTEM_INIT_EVIDENCE',
+    'a realpath-resolved child cwd must not be read as a foreign cwd',
+  );
+  assert.notEqual(run.state.init, null, 'the system/init frame must be accepted and recorded');
+  assert.equal(run.state.host_identity_observation, 'system-init-stream');
+});
+
+// --- Wave 1 macOS stabilization: probe MCP compatibility (defect E) ---
+//
+// publishClaudeHostContractPackage requires observed_contract.additional_tools_allowed,
+// and the driver derives that from `init.tools.length > 3 && init.mcp_server_count > 0`.
+// The host-contract probe launched the child with --strict-mcp-config and NO
+// --mcp-config, so mcp_server_count was structurally always 0 and the property
+// could never be demonstrated -- another check that cannot pass. The offline
+// fixture meanwhile reported mcp_servers [{name:"docs"}], i.e. it modelled a world
+// the real launch could not produce. Live darwin run confirmed: tools 4,
+// mcp_servers [], extra_tools_mcp_compatible false.
+test('MACOS-MCP-01 the native host-contract probe gives its child a real MCP server', async () => {
+  const run = await runProbeScenario('hcp-success', {
+    transportProfile: 'native-claude-cli',
+    nativeFixture: true,
+  });
+  const record = JSON.parse(fs.readFileSync(path.join(run.evidenceRoot, 'run-record.json'), 'utf8'));
+  const args = record.child.args;
+  const idx = args.indexOf('--mcp-config');
+  assert.notEqual(idx, -1, 'the probe child must be given an MCP config, or additional_tools_allowed can never be observed');
+  const config = JSON.parse(args[idx + 1]);
+  assert.ok(config.mcpServers && Object.keys(config.mcpServers).length > 0, 'the MCP config must declare at least one server');
+  // --strict-mcp-config must remain, so only this declared server is visible.
+  assert.ok(args.includes('--strict-mcp-config'), 'strict MCP config must not be relaxed');
+});
+
+// --- Wave 1 macOS stabilization: multi-turn probe sequence (defect B) ---
+//
+// A real host ends its turn right after spawning the background peer -- the
+// architecture says so explicitly ("language models are not expected to block
+// forever inside one inference call"). The driver finalized the probe on the
+// FIRST `result` frame, so the pending SendMessage resume and the second peer
+// could never be observed and `agentPre.length === 2` was unreachable: a check
+// that cannot pass. Proven live: a genuine-pinned run recorded exactly one
+// Agent spawn, `post_turn_summary` = "waiting for completion", and only
+// sequence-0-input.jsonl was ever written.
+test('MACOS-TURN-01 probe spans turns instead of finalizing on the first result', async () => {
+  const run = await runProbeScenario('hcp-split-turn', {
+    transportProfile: 'native-claude-cli',
+    nativeFixture: true,
+  });
+  // Directly measured discriminator: how much of the sequence existed when
+  // finalization ran. Finalizing on the first terminal result pins this at 1
+  // (and 1 SubagentStart); spanning the turns reaches the full 2 spawns and the
+  // three starts A / resumed-A / B.
+  assert.equal(
+    run.state.probe_observed_agent_spawns, 2,
+    'both peer spawns must exist before the probe is judged',
+  );
+  assert.equal(
+    run.state.probe_observed_subagent_starts, 3,
+    'A, resumed A and B must all be observed before the probe is judged',
+  );
+  assert.notEqual(
+    run.state.status, 'HOST_PIN_UNPROVEN',
+    'the sequence must not be judged incomplete after only the first turn',
+  );
+  // A fake child still cannot buy a genuine verdict: the evidence-mode guard is
+  // the correct next stop, and is deliberately not relaxed.
+  assert.equal(run.state.status, 'INVALID_EVIDENCE_MODE');
+  assert.equal(run.state.evidence_mode, 'fake-fixture');
+});
+
+// --- Wave 1 macOS stabilization: wake/resume ordering (defect B, live finding) ---
+//
+// The resumed actor is started while the wake tool call is still in flight, so
+// SubagentStart legitimately precedes the wake's own PostToolUse. The driver
+// searched for the resumed start strictly AFTER PostToolUse(SendMessage), so a
+// correct host was reported HOST_UNSUPPORTED_NO_STABLE_RESUME. Observed live on
+// darwin: SubagentStart(agent 6602a4e4, unchanged) landed one row BEFORE
+// PostToolUse(SendMessage), with the full A / resumed-A / B order otherwise
+// exactly as required.
+test('MACOS-WAKE-01 a resumed start that precedes the wake PostToolUse still counts', async () => {
+  const run = await runProbeScenario('hcp-wake-interleaved');
+  assert.notEqual(
+    run.state.status, 'HOST_UNSUPPORTED_NO_STABLE_RESUME',
+    'the resume window must start at the wake request, not at its completion event',
+  );
+  assert.equal(run.state.status, 'HOST_CONTRACT_PROBE_COMPLETED', run.stderr);
+  assert.equal(run.state.stable_actor_resume, true);
+  assert.equal(run.state.distinct_same_type_peers, true);
+  assert.equal(run.code, 0, run.stderr);
+});
+
+// Widening the window must not accept a REPLACEMENT actor: the resumed start
+// still has to carry the original actor's id.
+test('MACOS-WAKE-02 an interleaved start from a replacement actor is still rejected', async () => {
+  const run = await runProbeScenario('hcp-resume-id-drift');
+  assert.notEqual(run.code, 0, 'a replacement actor must not be accepted as a resume');
+  assert.equal(run.state.status, 'HOST_REPLACEMENT_CHILD');
+});
+
+// A resumed turn is a NEW prompt for the SAME actor. The driver correlated the
+// resumed SubagentStop against the ORIGINAL start's prompt id, so a correct host
+// was reported HOST_UNSUPPORTED_NO_STOP. Observed live on darwin: actor be1ad4d2
+// started under prompt 1b6aac62, stopped, was woken, restarted as the SAME actor
+// under prompt 0c129e32, and stopped again under 0c129e32.
+test('MACOS-WAKE-03 the resumed stop correlates to the resumed prompt, not the original', async () => {
+  const run = await runProbeScenario('hcp-resumed-prompt-rotation');
+  assert.notEqual(
+    run.state.status, 'HOST_UNSUPPORTED_NO_STOP',
+    'a resumed turn legitimately carries a new prompt id for the same actor',
+  );
+  assert.equal(run.state.status, 'HOST_CONTRACT_PROBE_COMPLETED', run.stderr);
+  assert.equal(run.state.stable_actor_resume, true, 'the actor id is what must stay stable');
+  assert.equal(run.code, 0, run.stderr);
+});
+
+// Confinement must NOT be relaxed to buy the fix above: canonicalizing both ends
+// is the fix; accepting anything that merely normalizes to a similar string is not.
+test('MACOS-CANON-02 a child cwd outside the run root is still rejected after canonicalization', async () => {
+  const canonicalRoot = fs.realpathSync(fs.mkdtempSync(path.join(privateRoot, 'canon-out-')));
+  const foreignRoot = fs.realpathSync(fs.mkdtempSync(path.join(privateRoot, 'foreign-')));
+  const run = await runProbeScenario('hcp-success', {
+    transportProfile: 'native-claude-cli',
+    nativeFixture: true,
+    evidenceRoot: canonicalRoot,
+    extraEnv: { P4_CERT_TEST_FORCE_CHILD_CWD: foreignRoot },
+  });
+  assert.equal(
+    run.state.status, 'INVALID_SYSTEM_INIT_EVIDENCE',
+    'an out-of-root cwd must fail closed even once both ends are canonicalized',
+  );
+  assert.notEqual(run.code, 0, 'an out-of-root cwd must exit non-zero');
+});
+
+// A root that does not exist must be refused outright rather than silently
+// realpath-ing to something else.
+test('MACOS-CANON-03 a non-existent evidence root is refused, not silently resolved', async () => {
+  const parent = fs.realpathSync(fs.mkdtempSync(path.join(privateRoot, 'absent-')));
+  const missingRoot = path.join(parent, 'does-not-exist');
+  await assert.rejects(
+    () => runProbeScenario('hcp-success', {
+      transportProfile: 'native-claude-cli',
+      nativeFixture: true,
+      evidenceRoot: missingRoot,
+    }),
+    'a missing run root must not produce a usable probe state',
+  );
+  assert.equal(fs.existsSync(missingRoot), false, 'the driver must not create the missing root');
 });
 
 test('HCP-IDENTITY rejects wrong wake identity, replacement actors, and peer ID collision distinctly', async () => {
@@ -899,6 +1140,12 @@ test('NATIVE-ENTRYPOINT retires only its exact terminal session generation', asy
   const createdAt = new Date(Date.now() - 60_000).toISOString().replace(/\.\d{3}Z$/, 'Z');
   const expiresAt = new Date(Date.now() + 3_600_000).toISOString().replace(/\.\d{3}Z$/, 'Z');
   const generationId = crypto.randomBytes(16).toString('hex');
+  // mode 0600 is load-bearing, not hygiene. The private registry refuses any
+  // record that is not owner-only, and readRegistryRecord reports that as
+  // SECURITY_INVALID -- so a default-mode (0644) write makes
+  // peekSessionGeneration fail before retirement is ever attempted, and the
+  // case fails for a fixture reason rather than the one it is testing.
+  // Production writers already pass 0600 everywhere; only this fixture did not.
   fs.writeFileSync(generationPath, JSON.stringify({
     schema: 'runtime/session-generation/v1',
     provider: identity.provider,
@@ -906,7 +1153,7 @@ test('NATIVE-ENTRYPOINT retires only its exact terminal session generation', asy
     generation_id: generationId,
     created_at: createdAt,
     expires_at: expiresAt,
-  }), { flag: 'wx' });
+  }), { flag: 'wx', mode: 0o600 });
 
   const run = await runScenario('bad-first-tool', {
     operation: 'entrypoint-protocol',
@@ -920,7 +1167,10 @@ test('NATIVE-ENTRYPOINT retires only its exact terminal session generation', asy
 
   assert.notEqual(run.code, 0);
   assert.equal(run.state.status, 'INVALID_FIRST_ACTION');
-  assert.equal(run.state.native_session_authority_retirement.complete, true);
+  // Carry the retirement payload into the message: a bare `false !== true` says
+  // nothing about WHY, and the reason (e.g. SECURITY_INVALID) is the diagnosis.
+  assert.equal(run.state.native_session_authority_retirement.complete, true,
+    JSON.stringify(run.state.native_session_authority_retirement));
   assert.equal(run.state.native_session_authority_retirement.status, 'retired');
   assert.equal(run.state.native_session_authority_retirement.generation_id_digest,
     crypto.createHash('sha256').update(generationId).digest('hex'));
@@ -1742,7 +1992,10 @@ test('CFC-NT-01 a text-only Agent turn terminates cleanly without confirmation r
   assert.equal(run.state.stdin_closed_after_terminal, true);
   assert.equal(run.state.writers_settled, true);
   assert.equal(run.state.transcript_cleanup.complete, true);
-  assert.equal(run.state.native_session_authority_retirement.complete, true);
+  // Carry the retirement payload into the message: a bare `false !== true` says
+  // nothing about WHY, and the reason (e.g. SECURITY_INVALID) is the diagnosis.
+  assert.equal(run.state.native_session_authority_retirement.complete, true,
+    JSON.stringify(run.state.native_session_authority_retirement));
   assert.equal(fs.readdirSync(run.evidenceRoot).some((name) => /^sequence-2-/.test(name)), false,
     'a no-tool model turn must not receive a confirmation or retry message');
 });

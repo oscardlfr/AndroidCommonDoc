@@ -955,18 +955,43 @@ test('R131-BOUNDARY-ADMITTED-ENTRYPOINT-PRETOOLUSE-26: exact signed rewritten en
   const intent = { scope: 'all' };
   const plan = entrypoints.planEntrypointStep('monitor-docs', intent, PROJECT_ROOT);
   const sessionId = 'r131-boundary-production-' + crypto.randomBytes(12).toString('hex');
-  if (process.platform !== 'win32') {
-    t.skip('the checked-in host contract is pinned to the selected Windows host');
+  // Certificates are stored per platform, so this is no longer Windows-only:
+  // whichever platform has a published certificate and its pinned executable
+  // present exercises the real production identity path on that host.
+  //
+  // Discovery is deliberately wide (PATH entries, their realpaths, and the
+  // per-version install directory) because it is only a search: the pinned
+  // executable is settled by matching the certificate's signed
+  // executable_digest below, never by where the file was found.
+  const candidates = [];
+  const lookup = process.platform === 'win32'
+    ? spawnSync('where.exe', ['claude'], { encoding: 'utf8' })
+    : spawnSync('which', ['-a', 'claude'], { encoding: 'utf8' });
+  if (lookup.status === 0) {
+    for (const entry of lookup.stdout.split(/\r?\n/).filter(Boolean)) {
+      candidates.push(entry);
+      try { candidates.push(fs.realpathSync(entry)); } catch { /* a stale PATH entry is simply not a candidate */ }
+    }
+  }
+  const versionsDir = path.join(os.homedir(), '.local', 'share', 'claude', 'versions');
+  try {
+    for (const entry of fs.readdirSync(versionsDir)) candidates.push(path.join(versionsDir, entry));
+  } catch { /* no per-version install on this host */ }
+  const certificate = [
+    path.join(PROJECT_ROOT, 'setup', 'claude-host-contract.' + process.platform + '.json'),
+    path.join(PROJECT_ROOT, 'setup', 'claude-host-contract.json'),
+  ].map((candidate) => {
+    try { return JSON.parse(fs.readFileSync(candidate, 'utf8')).certificate; } catch { return null; }
+  }).find((candidate) => candidate && candidate.os === process.platform);
+  if (!certificate) {
+    t.skip('no host certificate is published for this platform');
     return;
   }
-  const where = spawnSync('where.exe', ['claude'], { encoding: 'utf8' });
-  const candidates = where.status === 0 ? where.stdout.split(/\r?\n/).filter(Boolean) : [];
-  const certificate = JSON.parse(fs.readFileSync(path.join(PROJECT_ROOT, 'setup', 'claude-host-contract.json'), 'utf8')).certificate;
   const executable = candidates.find((candidate) => {
     try { return crypto.createHash('sha256').update(fs.readFileSync(candidate)).digest('hex') === certificate.executable_digest; } catch { return false; }
   });
   if (!executable) {
-    t.skip('the selected pinned Claude executable is not on PATH');
+    t.skip('the pinned Claude executable for this platform is not installed here');
     return;
   }
   assert.strictEqual(host.recordProductionSessionIdentity({

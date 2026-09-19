@@ -94,6 +94,75 @@ test('P3-RUNTIME-INVENTORY includes every modular runtime dependency tree', () =
   assert.ok(paths.has('scripts/lib/runtime-bridge-codex/process-identity.cjs'));
 });
 
+// --- F-24: platform-scoped host certificates must reach the consumer ---
+//
+// Certificates are stored one per platform, so the inventory that a consumer
+// verifies its installation against has to DISCOVER the set actually present
+// rather than carry one hardcoded name. If it did not, a darwin certificate
+// would be invisible to `verifyRuntimeConsumerInstallation({verifyContent:true})`:
+// it could be swapped or removed under an installed consumer without ever
+// moving `runtime.toolkit_content_sha256`.
+//
+// The root here is SYNTHESIZED from the real inventory's own path list -- the
+// inventory only requires each listed path to be a regular file, never any
+// particular content -- so this stays hermetic and never touches the shared
+// worktree.
+function synthesizeToolkitRoot() {
+  const source = computeRuntimeToolkitInventory(TOOLKIT_ROOT);
+  assert.strictEqual(source.ok, true, JSON.stringify(source));
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'synthetic-toolkit-'));
+  for (const entry of source.entries) {
+    const absolute = path.join(root, entry.relative_path);
+    fs.mkdirSync(path.dirname(absolute), { recursive: true });
+    fs.writeFileSync(absolute, '');
+  }
+  return root;
+}
+
+test('P3-RUNTIME-INVENTORY-HOSTCERT covers every platform-scoped host certificate present, and nothing that merely looks like one', () => {
+  const root = synthesizeToolkitRoot();
+  try {
+    const before = computeRuntimeToolkitInventory(root);
+    assert.strictEqual(before.ok, true, JSON.stringify(before));
+    const beforePaths = new Set(before.entries.map((entry) => entry.relative_path));
+    assert.ok(beforePaths.has('setup/claude-host-contract.json'),
+      'the legacy single-slot certificate stays a required entry');
+
+    // A certificate published for another platform must become part of the
+    // content digest the consumer verifies against.
+    fs.writeFileSync(path.join(root, 'setup', 'claude-host-contract.darwin.json'), '{}');
+    fs.writeFileSync(path.join(root, 'setup', 'claude-host-contract.win32.json'), '{}');
+    const after = computeRuntimeToolkitInventory(root);
+    assert.strictEqual(after.ok, true, JSON.stringify(after));
+    const afterPaths = new Set(after.entries.map((entry) => entry.relative_path));
+    assert.ok(afterPaths.has('setup/claude-host-contract.darwin.json'),
+      'a darwin certificate must be inventoried, or a consumer could never detect it changing');
+    assert.ok(afterPaths.has('setup/claude-host-contract.win32.json'));
+    assert.notStrictEqual(after.digest, before.digest,
+      'adding a certificate must move the content digest a consumer pins');
+
+    // Neighbours that are not platform certificates must stay out, so the
+    // digest cannot be perturbed by unrelated files dropped into setup/.
+    // NOTE: the uppercase decoy deliberately has no lowercase counterpart among
+    // the certificates above. macOS APFS is case-insensitive by default, so
+    // 'claude-host-contract.DARWIN.json' would be the SAME FILE as the darwin
+    // certificate and would silently overwrite its bytes instead of testing the
+    // regex.
+    const decoys = ['claude-host-contract.json.bak', 'claude-host-contract..json',
+      'claude-host-contract.MIXEDCASE.json', 'claude-host-contract.darwin.json.tmp', 'not-a-certificate.json'];
+    for (const decoy of decoys) fs.writeFileSync(path.join(root, 'setup', decoy), '');
+    const withDecoys = computeRuntimeToolkitInventory(root);
+    assert.strictEqual(withDecoys.ok, true, JSON.stringify(withDecoys));
+    assert.deepStrictEqual(
+      withDecoys.entries.map((entry) => entry.relative_path),
+      after.entries.map((entry) => entry.relative_path),
+      'only claude-host-contract.<platform>.json siblings may join the inventory: ' + JSON.stringify(decoys));
+    assert.strictEqual(withDecoys.digest, after.digest);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('P3-RUNTIME-CONTEXT malformed, disabled, ambiguous, remote, wrong-layer and foreign toolkit pins fail closed', () => {
   const mutations = [
     (m) => { delete m.runtime; },

@@ -205,8 +205,29 @@ const P4_SUPPORT_ROLES = ['arch-platform', 'arch-testing', 'arch-integration', '
 const P4_NATIVE_AGENT_ROLES = [...P4_SUPPORT_ROLES, 'toolkit-specialist'];
 const parentRoot = path.join(os.tmpdir(), 'androidcommondoc-p4-live-cert-v1');
 fs.mkdirSync(parentRoot, { recursive: true });
-const runRoot = evidenceRootArg ? path.resolve(evidenceRootArg) : fs.mkdtempSync(path.join(parentRoot, 'run-'));
-fs.mkdirSync(runRoot, { recursive: true });
+// The run root is one end of a trust boundary: the child is spawned with it as
+// cwd and then reports that cwd back realpath-resolved by the OS. Comparing a
+// symlink-blind path.resolve() against that reply can never succeed on a platform
+// whose temp roots are symlinks (darwin: /tmp -> /private/tmp,
+// /var/folders -> /private/var/folders). Canonicalize here, once, so both ends of
+// every later comparison are real paths -- never normalized strings.
+const requestedRunRoot = evidenceRootArg
+  ? path.resolve(evidenceRootArg)
+  : fs.mkdtempSync(path.join(parentRoot, 'run-'));
+if (evidenceRootArg && !fs.existsSync(requestedRunRoot)) {
+  // Fail closed: a root that does not exist cannot be canonicalized, and
+  // creating it implicitly would let a typo silently become a fresh trust root.
+  process.stderr.write(`evidence root does not exist: ${requestedRunRoot}\n`);
+  process.exit(66);
+}
+fs.mkdirSync(requestedRunRoot, { recursive: true });
+let runRoot;
+try {
+  runRoot = fs.realpathSync(requestedRunRoot);
+} catch {
+  process.stderr.write(`evidence root could not be canonicalized: ${requestedRunRoot}\n`);
+  process.exit(66);
+}
 const p5SubjectPath = p5Scenario ? path.join(runRoot, 'p5-reviewed-subject.md') : null;
 if (p5Scenario) fs.copyFileSync(path.resolve(p5SubjectSourceArg), p5SubjectPath, fs.constants.COPYFILE_EXCL);
 const offlineSessionId = process.env.P4_CERT_OFFLINE_TEST === '1'
@@ -988,8 +1009,25 @@ if (transportProfile === 'native-claude-cli') {
         tools: ['Read'],
       },
     };
+    // The host contract's additional_tools_allowed property is derived from
+    // `init.tools.length > 3 && init.mcp_server_count > 0`, so a child launched
+    // with --strict-mcp-config and NO --mcp-config can never demonstrate it --
+    // the publisher would then reject its own probe's evidence. Declare the
+    // toolkit's own MCP server, exactly as the direct-role-host launch already
+    // does. --strict-mcp-config stays, so this ONE declared server is all the
+    // child can see; nothing ambient is inherited.
+    const probeMcpConfig = {
+      mcpServers: {
+        androidcommondoc: {
+          type: 'stdio',
+          command: entrypointNodeExecutable,
+          args: [path.join(toolkitRoot, 'mcp-server', 'build', 'index.js')],
+        },
+      },
+    };
     nativeArgv = [
       ...baseArgv,
+      '--mcp-config', JSON.stringify(probeMcpConfig),
       '--permission-mode', 'dontAsk', '--permission-prompts', 'none', '--restricted',
       '--tools', 'Agent,SendMessage,Read,Bash', '--agents', JSON.stringify(agents),
     ];
@@ -2554,10 +2592,61 @@ function settleP5OwnedSupervisor() {
   };
 }
 
+// How many terminal `result` frames the probe will consume before giving up, and
+// how long it will wait for a further turn after an incomplete one. A real host
+// ends its turn as soon as it has spawned the background peer, so the resume and
+// the second peer necessarily arrive in LATER turns.
+const HOST_PROBE_MAX_TERMINAL_RESULTS = 8;
+const HOST_PROBE_CONTINUATION_MS = Number.parseInt(
+  process.env.P4_CERT_HOST_PROBE_CONTINUATION_MS || '120000', 10,
+);
+let hostProbeContinuationTimer = null;
+let hostProbeFinalized = false;
+
+// The probe's own completion predicate, stated once: two peer spawns and the
+// three SubagentStarts (A, resumed A, B). Anything less means the sequence is
+// still outstanding and finalizing now would judge an unfinished run.
+function hostProbeSequenceObservable() {
+  const rows = readObserverRows();
+  const named = rows.map((row) => row.raw_event || row);
+  const agentPre = named.filter((event) => event.hook_event_name === 'PreToolUse' && event.tool_name === 'Agent');
+  const starts = named.filter((event) => event.hook_event_name === 'SubagentStart');
+  return agentPre.length >= 2 && starts.length >= 3;
+}
+
+function armHostProbeContinuation() {
+  if (hostProbeContinuationTimer !== null) return;
+  hostProbeContinuationTimer = setTimeout(() => {
+    hostProbeContinuationTimer = null;
+    // Deadline reached with the sequence still outstanding: finalize and let the
+    // contract report the truth. This must never be turned into a pass.
+    finalizeHostContractProbe();
+    writeState();
+  }, HOST_PROBE_CONTINUATION_MS);
+  if (typeof hostProbeContinuationTimer.unref === 'function') hostProbeContinuationTimer.unref();
+}
+
 function finalizeHostContractProbe() {
+  if (hostProbeFinalized) return;
+  hostProbeFinalized = true;
+  if (hostProbeContinuationTimer !== null) {
+    clearTimeout(hostProbeContinuationTimer);
+    hostProbeContinuationTimer = null;
+  }
   const rows = readObserverRows();
   const expectedEvidenceMode = transportProfile === 'native-claude-cli' ? 'genuine-pinned' : 'fake-fixture';
   state.observations_digest = digestObject(rows);
+  // Recorded before ANY verdict, so it stays truthful no matter which guard the
+  // run stops at: how much of the sequence actually existed at the moment
+  // finalization ran. Finalizing on the first terminal result pins this at one
+  // spawn and one start; a correctly spanned probe reaches two and three.
+  {
+    const observed = rows.map((row) => row.raw_event || row);
+    state.probe_observed_agent_spawns = observed
+      .filter((event) => event.hook_event_name === 'PreToolUse' && event.tool_name === 'Agent').length;
+    state.probe_observed_subagent_starts = observed
+      .filter((event) => event.hook_event_name === 'SubagentStart').length;
+  }
   if (rows.length === 0) return fail('HOST_PIN_UNPROVEN', 'The host observer produced no evidence.');
   if (rows.some((row) => row.producer !== 'claude-host-contract-probe')) {
     return fail('HOST_PIN_UNPROVEN', 'Observer evidence came from an untrusted producer.');
@@ -2665,7 +2754,16 @@ function finalizeHostContractProbe() {
     && index > aStartRow.index
     && index < wake.index);
   if (!initialStop) return fail('HOST_UNSUPPORTED_NO_STOP', 'Actor A did not stop before its native wake.');
-  const resumeStarts = agentStarts.filter(({ index }) => index > wakePost.index && index < bPre.index);
+  if (!wakePost) return fail('HOST_UNSUPPORTED_NO_STABLE_RESUME', 'The native wake never completed successfully.');
+  // The resume is caused by the wake REQUEST, not by its completion event: a
+  // host may start the resumed actor while the wake tool call is still in
+  // flight, so SubagentStart can legitimately precede PostToolUse(SendMessage).
+  // Observed live on darwin. The window therefore opens at the wake itself.
+  // This does not weaken anything: actor A is already required to have stopped
+  // before `wake.index`, exactly one start may fall in the window, that start
+  // must carry the unchanged actor id, and the overall A / resumed-A / B order
+  // is still asserted below.
+  const resumeStarts = agentStarts.filter(({ index }) => index > wake.index && index < bPre.index);
   if (resumeStarts.length !== 1) {
     return fail('HOST_UNSUPPORTED_NO_STABLE_RESUME', 'The successful native wake did not emit exactly one resumed SubagentStart.');
   }
@@ -2687,7 +2785,7 @@ function finalizeHostContractProbe() {
   const canonicalFirstRead = path.join(runRoot, 'probe-a-one.txt');
   if (!aPost) {
     const firstPath = aReads[0] && aReads[0].event.tool_input && aReads[0].event.tool_input.file_path;
-    if (!aStart || firstPath !== canonicalFirstRead) {
+    if (!aStart || !sameCanonicalFile(firstPath, canonicalFirstRead)) {
       return fail('HOST_UNSUPPORTED_NO_EXECUTED_INPUT', 'Neither executed-input observation rung was available.');
     }
     state.evidence_method = 'START_PLUS_FIRST_OBSERVED_COMMAND';
@@ -2700,7 +2798,10 @@ function finalizeHostContractProbe() {
     && event.agent_id === aStart.agent_id
     && index > resumeStarts[0].index
     && index < bPre.index
-    && (!aStart.prompt_id || event.prompt_id === aStart.prompt_id));
+    // A resumed turn is a NEW prompt for the SAME actor, so the resumed stop
+    // correlates to the RESUMED start's prompt, never the original one.
+    // Same-actor continuity is still enforced above by agent_id.
+    && (!resumedAStart.prompt_id || event.prompt_id === resumedAStart.prompt_id));
   if (!resumedStop) return fail('HOST_UNSUPPORTED_NO_STOP', 'Resumed actor A did not emit a correlated SubagentStop.');
   if (!thirdRead || thirdRead.agent_id !== aStart.agent_id) {
     return fail('HOST_REPLACEMENT_CHILD', 'The post-wake event came from a replacement actor.');
@@ -3509,11 +3610,38 @@ function handleEntrypointEnvelope(envelope) {
   advanceP4Stage(envelope);
 }
 
+// Realpath BOTH ends of the boundary. This is not a string-normalization
+// relaxation: a directory outside the run root still canonicalizes to a
+// different real path and is still rejected (MACOS-CANON-02), and an
+// unresolvable path yields null and fails closed rather than comparing equal.
+function canonicalDirOrNull(candidate) {
+  if (typeof candidate !== 'string' || candidate.length === 0) return null;
+  try { return fs.realpathSync(path.resolve(candidate)); } catch { return null; }
+}
+
+function sameCanonicalDir(actual, expected) {
+  const canonicalActual = canonicalDirOrNull(actual);
+  const canonicalExpected = canonicalDirOrNull(expected);
+  return canonicalActual !== null && canonicalExpected !== null && canonicalActual === canonicalExpected;
+}
+
+// Same boundary rule for a FILE both sides name: canonicalize the containing
+// directory and require an exact basename match. The directory is canonicalized
+// rather than the file itself so a not-yet-created file fails closed on the
+// basename instead of throwing, and an unresolvable directory yields null and
+// still fails closed.
+function sameCanonicalFile(actual, expected) {
+  if (typeof actual !== 'string' || typeof expected !== 'string') return false;
+  if (actual === expected) return true;
+  if (path.basename(actual) !== path.basename(expected)) return false;
+  return sameCanonicalDir(path.dirname(actual), path.dirname(expected));
+}
+
 function validateInit(event) {
   const tools = Array.isArray(event.tools) ? event.tools : [];
   const expectedCwd = transportProfile === 'native-claude-cli' && operation === 'host-contract-probe' ? runRoot : projectRoot;
   return event.session_id === sessionId
-    && path.resolve(event.cwd || '') === expectedCwd
+    && sameCanonicalDir(event.cwd, expectedCwd)
     && typeof event.model === 'string' && event.model.length > 0
     && tools.includes('Bash') && tools.includes('SendMessage')
     && (tools.includes('Agent') || tools.includes('Task'))
@@ -3589,7 +3717,20 @@ function handleFrame(event) {
     return;
   }
   if (operation === 'host-contract-probe') {
-    if (nativeClaudeExecutable && event.type === 'result') finalizeHostContractProbe();
+    // Turn semantics belong to the PROFILE, not to whether the binary happens to
+    // be the real one -- otherwise this path is unreachable offline and ships
+    // unverified, which is exactly how the first-result defect survived.
+    if (transportProfile === 'native-claude-cli' && event.type === 'result') {
+      state.probe_terminal_results = (state.probe_terminal_results || 0) + 1;
+      if (hostProbeSequenceObservable() || state.probe_terminal_results >= HOST_PROBE_MAX_TERMINAL_RESULTS) {
+        finalizeHostContractProbe();
+      } else {
+        // The resume and the second peer are still outstanding. Keep stdin and
+        // the session open so later turns can still be observed, bounded by a
+        // deadline -- never finalize an unfinished sequence here.
+        armHostProbeContinuation();
+      }
+    }
     writeState();
     return;
   }
@@ -3906,6 +4047,14 @@ writeJsonlFrame(child.stdin, firstMessage, (error) => {
 
 child.on('exit', (code, signal) => {
   if (terminalShutdownTimer) clearTimeout(terminalShutdownTimer);
+  // A host probe that saw an early terminal result arms an UNREF'd continuation
+  // timer, so a child that exits before that timer fires would otherwise reach
+  // process.exit() with the observations digest, the spawn/start counters and
+  // the contract verdict never recorded -- the run record would claim a probe
+  // that was never finalized. Finalize here, before any state is written, so
+  // whatever the observer did capture is persisted and judged. It is idempotent
+  // (hostProbeFinalized), so a run that already finalized is unaffected.
+  if (operation === 'host-contract-probe') finalizeHostContractProbe();
   if (transportProfile === 'native-claude-cli') {
     try {
       state.transcript_cleanup = cleanupNativeSessionTranscripts();

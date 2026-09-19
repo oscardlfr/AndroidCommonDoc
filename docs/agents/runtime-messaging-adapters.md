@@ -33,7 +33,7 @@ All three runtime facades are thin **composition/CLI roots**, not owners of doma
 |---|---|---|---|---|
 | `scripts/lib/runtime-consultation.cjs` | `runtime-consultation/`: identity/argv/path primitives, durability, protocol, transactions, transition locks, host bridge, content publication, R33 conformance (deferred, see below), root lifecycle/ACL, grant registry and authority, routing/canonical-request construction, dispatch, CLI command controllers | 1,402 / 235 | 57 | 69 keys |
 | `scripts/lib/runtime-role-lifecycle.cjs` | `runtime-role-lifecycle/`: bindings, actions, policy, authority, grants, recovery, root-source contract/bootstrap history, and Claude lifecycle observations | 1,500 / 283 | 63 | 271 keys |
-| `scripts/lib/runtime-bridge-codex.cjs` | `runtime-bridge-codex/`: process admission, isolation, credentials and owned-child lifecycle, plus supervisor/connection engines, turn execution and read-view projection, internal-search/Context7 evidence retrieval, deterministic MCP loopback (test-only), and CLI command controllers | 1,011 / 282 | 83 | 50 keys (79 under test capability) |
+| `scripts/lib/runtime-bridge-codex.cjs` | `runtime-bridge-codex/`: process admission, isolation, credentials and owned-child lifecycle, plus supervisor/connection engines, turn execution and read-view projection, internal-search/Context7 evidence retrieval, deterministic MCP loopback (test-only), and CLI command controllers | 1,018 / 282 | 84 | 50 keys (79 under test capability) |
 
 Counts above are recalculated from disk, not hand-maintained prose — `scripts/tests/runtime-messaging-docs-drift.test.js` re-derives every number in this table straight from the module-boundaries suites and this file's own source text, and fails if either drifts from the other. For per-module names, dependency edges and exact reference-identity guarantees, the **source of truth is the three `scripts/tests/runtime-{consultation,role-lifecycle,bridge-codex}-module-boundaries.test.js` suites**, never this page: they pin the exact discovered module set per tree, assert no upward/sibling-cycle imports, and verify every public export is the literal composed reference, not a copy. Runtime authority state is facade/provider-local; consultation's deterministic fixed-id/fixed-clock CLI seam is intentionally process-scoped because each production CLI invocation is a fresh process.
 
@@ -52,6 +52,8 @@ Every internal module across all three trees, enforced by its tree's own module-
 
 L1/L2 distribution is part of the contract: `runtime-project-context.cjs` and the TypeScript sync engine recursively enumerate all three trees, reject symlinks, sort paths and bind the same digest. Their parity tests prevent a new internal module from working only in L0.
 
+Security guarantees are a separate contract from these structural ones, and are stated in [runtime-messaging-trust-boundaries](runtime-messaging-trust-boundaries.md): the same-uid trust boundary (detection, not prevention), BigInt identity comparison, and the closed post-read field list. Consult it before describing any module here as making a stronger promise.
+
 ## Sub-documents
 
 | Doc | Covers |
@@ -62,6 +64,7 @@ L1/L2 distribution is part of the contract: `runtime-project-context.cjs` and th
 | [runtime-messaging-bridges](runtime-messaging-bridges.md) | Host bridge contracts: Claude `SendMessage`/`claude-agent`, Codex app-server/MCP, registered disk consumer |
 | [runtime-messaging-cp-writer](runtime-messaging-cp-writer.md) | context-provider's narrow result-publication boundary + PATTERN-GAP ingestion workflow |
 | [runtime-messaging-modes](runtime-messaging-modes.md) | Standalone (Claude-only) vs mixed (Codex worker opt-in) operation, and the preconditions a consumer repository must satisfy |
+| [runtime-messaging-trust-boundaries](runtime-messaging-trust-boundaries.md) | Threat model: the same-uid boundary (detection, not prevention), BigInt identity comparison, the closed post-read field list |
 
 ## Current Measured Status (2026-09)
 

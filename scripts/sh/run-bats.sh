@@ -155,14 +155,121 @@ _bats_resolvable() {
         || command -v bats >/dev/null 2>&1
 }
 
+# ── GNU mktemp preflight (F-22c; run mode only) ───────────────────────────────
+# BSD `mktemp` IGNORES $TMPDIR; GNU coreutils' honours it. Suites here export
+# TMPDIR to bats' own per-test tmpdir and then call `mktemp -d`, so under BSD
+# mktemp the project root escapes the sandbox and every test in such a file dies
+# in shared setup(). Observed on darwin: 368 failures from exactly that, plus a
+# truncated run. Running 3304 tests on a silently-BSD mktemp is never acceptable.
+#
+# No package is installed and the global PATH is never modified: when only
+# `gmktemp` is GNU, a run-scoped private shim directory is prepended to the PATH
+# of the bats child alone.
+GNU_MKTEMP_SHIM_DIR=""
+RUN_BATS_SHORT_TMPDIR=""
+
+# scripts/lib/runtime-bridge-codex/isolation-topology.cjs caps a codex child's
+# own state path at 254 characters. The deepest path this suite builds beneath
+# $TMPDIR is
+#   /bats-run-XXXXXX/test/<n>/runtime-tmp/android-common-doc-runtime/uid-501/<64 hex>/isolation-roots/<32 hex>/cx/memories_1.sqlite-shm
+# i.e. 212 characters, leaving 42 for the base. macOS hands every user a
+# 48-character per-user TMPDIR, so the ambient default cannot satisfy the
+# budget: isolation roots then fail to provision with
+# ISOLATION_ROOT_PATH_BUDGET_EXCEEDED, and only for SOME tests, because the
+# remaining margin moves with the bats run-dir name and the test index. That
+# sensitivity is why the same commit could pass in one session and fail in
+# another. Give the run a short base of its own when the ambient one does not
+# fit; the ambient TMPDIR is never modified for anything but this run.
+RUN_BATS_TMPDIR_MAX_CHARS=42
+
+_cleanup_run_scoped() {
+    _cleanup_gnu_mktemp_shim
+    if [[ -n "${RUN_BATS_SHORT_TMPDIR:-}" && -d "$RUN_BATS_SHORT_TMPDIR" ]]; then
+        rm -rf -- "$RUN_BATS_SHORT_TMPDIR"
+    fi
+}
+
+_tmpdir_budget_preflight() {
+    local base="${TMPDIR:-/tmp}"
+    base="${base%/}"
+    if [[ ${#base} -le $RUN_BATS_TMPDIR_MAX_CHARS ]]; then
+        return 0   # already inside the budget: leave it exactly as it is
+    fi
+    # An ABSOLUTE mktemp template deliberately bypasses $TMPDIR -- the whole
+    # point here is that $TMPDIR is the thing that does not fit. mktemp gives
+    # atomic, unique, 0700 creation, so no PID-derived name can collide. If the
+    # short base cannot be created, run on the ambient TMPDIR rather than
+    # inventing one, so the failure stays the suite's own honest one.
+    local candidate
+    candidate="$(mktemp -d /tmp/l0b-XXXXXXXX 2>/dev/null)" || return 0
+    [[ -n "$candidate" && -d "$candidate" ]] || return 0
+    RUN_BATS_SHORT_TMPDIR="$candidate"
+    # Arm cleanup IMMEDIATELY: anything failing after this must leave nothing.
+    trap '_cleanup_run_scoped' EXIT INT TERM HUP
+    export TMPDIR="$candidate"
+}
+
+_is_gnu_mktemp() {
+    # GNU coreutils answers --version; BSD mktemp rejects it. Name proves nothing.
+    "$1" --version 2>/dev/null | head -n 1 | grep -q "GNU coreutils"
+}
+
+_cleanup_gnu_mktemp_shim() {
+    if [[ -n "${GNU_MKTEMP_SHIM_DIR:-}" && -d "$GNU_MKTEMP_SHIM_DIR" ]]; then
+        rm -rf -- "$GNU_MKTEMP_SHIM_DIR"
+    fi
+}
+
+_gnu_mktemp_preflight() {
+    if _is_gnu_mktemp mktemp; then
+        return 0   # native mktemp is GNU (Linux, Windows/MSYS): nothing to do
+    fi
+    local gnu_path
+    gnu_path="$(command -v gmktemp 2>/dev/null || true)"
+    if [[ -z "$gnu_path" ]] || ! _is_gnu_mktemp "$gnu_path"; then
+        echo "[run-bats] ERROR: GNU coreutils mktemp required, none found (exit 2)." >&2
+        echo "[run-bats]   The effective 'mktemp' is not GNU and no GNU 'gmktemp' is on PATH." >&2
+        echo "[run-bats]   BSD mktemp ignores \$TMPDIR, which breaks this suite's per-test sandbox" >&2
+        echo "[run-bats]   and silently corrupts results. Install GNU coreutils, e.g.:" >&2
+        echo "[run-bats]     brew install coreutils    # provides 'gmktemp'" >&2
+        echo "[run-bats]   then re-run. No package was installed and PATH was not modified." >&2
+        exit 2
+    fi
+    # Exported so the shim resolves it at run time instead of embedding path text.
+    RUN_BATS_GNU_MKTEMP="$gnu_path"
+    export RUN_BATS_GNU_MKTEMP
+    GNU_MKTEMP_SHIM_DIR="${TMPDIR:-/tmp}/run-bats-gnushim-${BATS_RUN_ID}"
+    mkdir -p -m 0700 -- "$GNU_MKTEMP_SHIM_DIR" || {
+        echo "[run-bats] ERROR: could not create the GNU mktemp shim directory (exit 2)." >&2
+        exit 2
+    }
+    # Arm cleanup IMMEDIATELY after the directory exists: anything that fails
+    # between here and the shim being written must still leave nothing behind.
+    trap '_cleanup_run_scoped' EXIT INT TERM HUP
+    # NOTE: no `--` here; BSD chmod (macOS) treats it as a filename.
+    chmod 0700 "$GNU_MKTEMP_SHIM_DIR"
+    cat > "$GNU_MKTEMP_SHIM_DIR/mktemp" <<'GNU_MKTEMP_SHIM'
+#!/usr/bin/env bash
+# Run-scoped shim: forwards to the GNU mktemp this run proved, read from the
+# environment so no path text is embedded and spaces survive quoting.
+exec "$RUN_BATS_GNU_MKTEMP" "$@"
+GNU_MKTEMP_SHIM
+    chmod 0700 "$GNU_MKTEMP_SHIM_DIR/mktemp"
+}
+
 # _bats_invoke <args...> — runs bats via whichever method _bats_resolvable found,
 # mirroring its exact priority order (npx --no-install first, plain PATH `bats` as
 # fallback). Callers must have already confirmed _bats_resolvable before calling this.
 _bats_invoke() {
+    # Only the bats child gets the shim; the ambient PATH is left untouched.
+    local _invoke_path="$PATH"
+    if [[ -n "${GNU_MKTEMP_SHIM_DIR:-}" ]]; then
+        _invoke_path="$GNU_MKTEMP_SHIM_DIR:$PATH"
+    fi
     if command -v npx >/dev/null 2>&1 && npx --no-install bats --version >/dev/null 2>&1; then
-        npx --no-install bats "$@"
+        PATH="$_invoke_path" npx --no-install bats "$@"
     else
-        bats "$@"
+        PATH="$_invoke_path" bats "$@"
     fi
 }
 
@@ -196,6 +303,10 @@ FACT_EXECUTED_WARNING=false
 if [[ "$EVAL_ONLY" == "false" ]]; then
     mkdir -p "$(dirname "$LOG")"
     if _bats_resolvable; then
+        # AFTER resolvability: an unresolvable bats must still report its own
+        # reason, not a mktemp one. The preflight guards the actual invocation.
+        _tmpdir_budget_preflight
+        _gnu_mktemp_preflight
         bats_rc=0
         _bats_invoke "${TARGETS[@]}" > "$LOG" 2>&1 || bats_rc=$?
         echo "[run-bats] bats exited $bats_rc (content-authoritative eval follows)" >&2

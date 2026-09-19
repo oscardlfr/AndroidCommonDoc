@@ -15,7 +15,11 @@ const operation = argValue('--operation') || process.env.P4_CERT_FAKE_OPERATION 
 const probeNonce = argValue('--probe-nonce') || process.env.P4_CERT_FAKE_PROBE_NONCE;
 const scenario = process.env.P4_CERT_FAKE_SCENARIO || 'success';
 const directRole = argValue('--agent');
-const projectRoot = process.cwd();
+// process.cwd() is realpath-resolved by the OS, exactly like the real CLI's
+// reported cwd -- that fidelity is what makes the canonicalization fence real.
+// The override exists only so a negative test can present a genuinely foreign
+// cwd; it is never used to make a positive case pass.
+const projectRoot = process.env.P4_CERT_TEST_FORCE_CHILD_CWD || process.cwd();
 let turn = 0;
 let awaitingActionInterrupt = false;
 let deferredInterruptedResult = null;
@@ -303,7 +307,13 @@ function appendObserverRow(row) {
   fs.appendFileSync(path.join(observerRoot, 'events.jsonl'), `${JSON.stringify(row)}\n`);
 }
 
-function writeHostProbeObservations() {
+// `phase` splits the observation stream the way a real host splits it across
+// turns: 'first-turn' stops right after the background peer's SubagentStart
+// (the point at which a real model's turn genuinely ends, because it cannot
+// block inside one inference call waiting for that peer), and 'rest' appends
+// everything the later turns produce. Omitting `phase` writes the whole stream
+// in one turn, which is the historical single-turn behaviour.
+function writeHostProbeObservations({ phase = 'all' } = {}) {
   const evidenceRoot = process.env.P4_CERT_EVIDENCE_ROOT;
   const manifest = JSON.parse(fs.readFileSync(path.join(evidenceRoot, 'probe-manifest.json'), 'utf8'));
   const a = manifest.actions['probe-peer-a'];
@@ -368,10 +378,17 @@ function writeHostProbeObservations() {
       ...(transientTranscripts ? { agent_transcript_path: transientTranscripts.actor } : {}),
     });
   }
+  // 'hcp-resumed-prompt-rotation' models the real host: the resumed actor keeps
+  // its agent id but receives a new prompt id for the resumed turn.
+  const resumedPromptId = scenario === 'hcp-resumed-prompt-rotation' ? 'prompt-probe-a-resumed' : 'prompt-probe-a';
   if (scenario !== 'hcp-missing-wake') {
     const wakeRecipient = scenario === 'hcp-wrong-wake-id' ? 'probe-peer-foreign' : 'probe-peer-a';
     add({ ...base, hook_event_name: 'PreToolUse', tool_use_id: 'toolu-wake-a', tool_name: 'SendMessage', tool_input: { to: wakeRecipient, summary: 'Resume probe actor with retained context', message: 'resume probe' } });
-    add({
+    // A real host starts the resumed actor while the wake tool call is still in
+    // flight, so SubagentStart can legitimately precede the wake's own
+    // PostToolUse. 'hcp-wake-interleaved' reproduces that observed ordering;
+    // every other scenario keeps the historical post-then-start ordering.
+    const emitWakePost = () => add({
       ...base,
       hook_event_name: 'PostToolUse',
       tool_use_id: 'toolu-wake-a',
@@ -381,15 +398,20 @@ function writeHostProbeObservations() {
         ? { success: false, message: 'delivery rejected' }
         : { success: true, message: 'delivery accepted' },
     });
+    const wakeInterleaved = scenario === 'hcp-wake-interleaved';
+    if (!wakeInterleaved) emitWakePost();
     if (!['hcp-rejected-wake', 'hcp-rejected-wake-then-peer-b'].includes(scenario)) {
       add({
         ...base,
         hook_event_name: 'SubagentStart',
         agent_id: scenario === 'hcp-resume-id-drift' ? 'agent-probe-a-replacement' : 'agent-probe-a',
         agent_type: 'probe-peer-a',
-        prompt_id: 'prompt-probe-a',
+        // A resumed turn is a NEW prompt for the SAME actor, which is what a
+        // real host emits. Only the actor id is required to stay stable.
+        prompt_id: resumedPromptId,
       });
     }
+    if (wakeInterleaved) emitWakePost();
   }
   add({
     ...base,
@@ -407,7 +429,7 @@ function writeHostProbeObservations() {
       hook_event_name: 'SubagentStop',
       agent_id: scenario === 'hcp-resume-id-drift' ? 'agent-probe-a-replacement' : 'agent-probe-a',
       agent_type: 'probe-peer-a',
-      prompt_id: 'prompt-probe-a',
+      prompt_id: resumedPromptId,
       ...(transientTranscripts ? { agent_transcript_path: transientTranscripts.actor } : {}),
     });
   }
@@ -431,7 +453,16 @@ function writeHostProbeObservations() {
   });
   const observerRoot = path.join(evidenceRoot, 'observer');
   fs.mkdirSync(observerRoot, { recursive: true });
-  fs.writeFileSync(path.join(observerRoot, 'events.jsonl'), `${rows.map((row) => JSON.stringify(row)).join('\n')}\n`, { flag: 'wx' });
+  const firstStart = rows.findIndex((row) => row.hook_event_name === 'SubagentStart');
+  const splitAt = firstStart === -1 ? rows.length : firstStart + 1;
+  const selected = phase === 'first-turn' ? rows.slice(0, splitAt)
+    : phase === 'rest' ? rows.slice(splitAt)
+      : rows;
+  if (selected.length === 0) return;
+  const payload = `${selected.map((row) => JSON.stringify(row)).join('\n')}\n`;
+  const eventsPath = path.join(observerRoot, 'events.jsonl');
+  if (phase === 'rest') fs.appendFileSync(eventsPath, payload);
+  else fs.writeFileSync(eventsPath, payload, { flag: 'wx' });
 }
 
 function emitRaw(value) {
@@ -1065,6 +1096,30 @@ input.on('line', (line) => {
   }
 
   if (hostProbe) {
+    if (scenario === 'hcp-split-turn') {
+      // Model a real host: turn 1 ends immediately after the background peer is
+      // spawned, emitting a terminal `result` while the resume and the second
+      // peer are still outstanding. The remaining turns arrive only if the
+      // driver keeps stdin and the session open instead of finalizing here.
+      writeHostProbeObservations({ phase: 'first-turn' });
+      emit({ type: 'result', subtype: 'success', session_id: sessionId });
+      setTimeout(() => {
+        writeHostProbeObservations({ phase: 'rest' });
+        emit({ type: 'system', subtype: 'fake_host_probe_complete', session_id: sessionId });
+        emit({ type: 'result', subtype: 'success', session_id: sessionId });
+      }, 250);
+      return;
+    }
+    if (scenario === 'hcp-exit-before-continuation') {
+      // Turn 1 ends with the sequence still incomplete, so the driver arms its
+      // UNREF'd continuation timer -- and then the child dies before that timer
+      // can ever fire. Whatever the observer did capture must still be
+      // finalized and judged, never silently dropped on the way to exit.
+      writeHostProbeObservations({ phase: 'first-turn' });
+      emit({ type: 'result', subtype: 'success', session_id: sessionId });
+      setTimeout(() => process.exit(0), 50);
+      return;
+    }
     writeHostProbeObservations();
     emit({ type: 'system', subtype: 'fake_host_probe_complete', session_id: sessionId });
     emit({ type: 'result', subtype: 'success', session_id: sessionId });

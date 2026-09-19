@@ -279,8 +279,15 @@ const { runBoundedOwnedObserverProcess, observeOwnedChildBornProvenance } = crea
   fs, path, spawn, resolvedPsPath, observeWindowsProcessIdentity, observeLinuxProcessBirth,
   getIsolatedPathPosix: () => ISOLATED_PATH_POSIX,
 });
+const { createPinnedImageStore } = require('./runtime-bridge-codex/app-server-pinned-image.cjs');
+const { materializePinnedCopy, cleanupPinnedCopies } = createPinnedImageStore({
+  fs, os, path, crypto, windowsPrivateDirectoryAcl,
+});
 const { readProtectedHostCodexPin, validatePinnedCodexExecutable, resolveAppServerSpawnCommand } =
-  createAppServerPin({ fs, os, path, isTestCapability, windowsPrivateDirectoryAcl, windowsAclSnapshotsEqual });
+  createAppServerPin({
+    fs, os, path, crypto, isTestCapability, windowsPrivateDirectoryAcl, windowsAclSnapshotsEqual,
+    materializePinnedCopy, cleanupPinnedCopies,
+  });
 const { resolveSessionRunSpawnCommand, resolveSessionRunCredentialSource, resolveSessionRunBornProvenance } =
   createSessionRunTestBackend({
     isTestCapability, resolvedNodePath, resolveAppServerSpawnCommand, createCredentialSourceProvider,

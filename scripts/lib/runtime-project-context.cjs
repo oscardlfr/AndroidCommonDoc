@@ -83,8 +83,14 @@ function resolveRuntimeProjectContext(consumerRoot) {
   const l0Sources = manifest.sources.filter((source) => source && source.layer === 'L0' && source.role === 'tooling');
   if (l0Sources.length !== 1 || typeof l0Sources[0].path !== 'string' || l0Sources[0].path.length === 0 ||
       Object.prototype.hasOwnProperty.call(l0Sources[0], 'remote')) return fail('runtime-l0-source-invalid');
+  // The manifest's L0 path is authored LEXICALLY relative to the consumer root
+  // AS GIVEN. Resolving it against the canonicalised root changes the segment
+  // count -- on macOS `/var` -> `/private/var` adds one -- so the relative `..`
+  // traversal lands one level too high and yields `/private/Users/...` paths
+  // that never exist. Resolve lexically against the root as given; realpath is
+  // valid only on the final target. Never build a path by prepending `/private`.
   let canonicalSource;
-  try { canonicalSource = fs.realpathSync(path.resolve(canonicalConsumer, l0Sources[0].path)); }
+  try { canonicalSource = fs.realpathSync(path.resolve(consumerRoot, l0Sources[0].path)); }
   catch { return fail('runtime-l0-source-unresolved'); }
   if (canonicalSource !== TOOLKIT_ROOT) return fail('runtime-toolkit-source-mismatch');
 
@@ -110,6 +116,21 @@ function collectDirectory(root, relativeDir, files) {
   }
 }
 
+// Host certificates are stored one per platform, so the set present in a given
+// toolkit is discovered rather than hardcoded: a toolkit qualified on one
+// platform must not be forced to carry another platform's certificate, and one
+// that has been qualified on several must cover all of them. The legacy
+// single-slot name stays a fixed, required entry.
+const HOST_CONTRACT_PLATFORM_CERTIFICATE_RE = /^claude-host-contract\.[a-z0-9]{1,32}\.json$/;
+
+function collectPlatformHostContracts(root, files) {
+  let entries;
+  try { entries = fs.readdirSync(path.join(root, 'setup'), { withFileTypes: true }); } catch { return; }
+  for (const entry of entries) {
+    if (entry.isFile() && HOST_CONTRACT_PLATFORM_CERTIFICATE_RE.test(entry.name)) files.push('setup/' + entry.name);
+  }
+}
+
 function computeRuntimeToolkitInventory(toolkitRoot) {
   let root;
   try { root = fs.realpathSync(toolkitRoot); } catch { return fail('runtime-toolkit-unresolved'); }
@@ -126,6 +147,7 @@ function computeRuntimeToolkitInventory(toolkitRoot) {
     ...['init-session', 'resume-work', 'work', 'ingest-content', 'monitor-docs'].map((command) => `.claude/commands/${command}.md`),
   ];
   try {
+    collectPlatformHostContracts(root, files);
     collectDirectory(root, 'scripts/lib/runtime-consultation', files);
     collectDirectory(root, 'scripts/lib/runtime-role-lifecycle', files);
     collectDirectory(root, 'scripts/lib/runtime-bridge-codex', files);

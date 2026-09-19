@@ -818,6 +818,24 @@ async function collectInventoryDirectory(root: string, relativeDir: string, out:
   }
 }
 
+// Host certificates are stored one per platform, so the set present in a given
+// toolkit is discovered rather than hardcoded: a toolkit qualified on one
+// platform must not be forced to carry another platform's certificate, and one
+// that has been qualified on several must cover all of them. The legacy
+// single-slot name stays a fixed, required entry. Kept behaviourally identical
+// to collectPlatformHostContracts in scripts/lib/runtime-project-context.cjs --
+// mcp-server/tests/unit/sync/sync-l0-hooks.test.ts compares the two inventories
+// entry for entry.
+const HOST_CONTRACT_PLATFORM_CERTIFICATE_RE = /^claude-host-contract\.[a-z0-9]{1,32}\.json$/;
+
+async function collectPlatformHostContracts(root: string, out: string[]): Promise<void> {
+  let entries;
+  try { entries = await readdir(path.join(root, "setup"), { withFileTypes: true }); } catch { return; }
+  for (const entry of entries) {
+    if (entry.isFile() && HOST_CONTRACT_PLATFORM_CERTIFICATE_RE.test(entry.name)) out.push(`setup/${entry.name}`);
+  }
+}
+
 export async function computeRuntimeToolkitInventory(toolkitRoot: string): Promise<{
   entries: RuntimeToolkitInventoryEntry[];
   digest: string;
@@ -835,6 +853,7 @@ export async function computeRuntimeToolkitInventory(toolkitRoot: string): Promi
     ...["init-session", "resume-work", "work", "ingest-content", "monitor-docs"].map((skill) => `skills/${skill}/SKILL.md`),
     ...["init-session", "resume-work", "work", "ingest-content", "monitor-docs"].map((command) => `.claude/commands/${command}.md`),
   ];
+  await collectPlatformHostContracts(canonicalRoot, files);
   await collectInventoryDirectory(canonicalRoot, "scripts/lib/runtime-consultation", files);
   await collectInventoryDirectory(canonicalRoot, "scripts/lib/runtime-role-lifecycle", files);
   await collectInventoryDirectory(canonicalRoot, "scripts/lib/runtime-bridge-codex", files);
@@ -867,6 +886,30 @@ export interface RuntimeConsumerInstallResult {
   registrations?: number;
 }
 
+/**
+ * The manifest's L0 `path` is authored LEXICALLY relative to the consumer root
+ * as GIVEN. Resolving it against a canonicalised root changes the segment count
+ * -- on macOS `/var` -> `/private/var` adds one -- so the relative `..`
+ * traversal lands one level too high and yields paths like `/private/Users/...`
+ * that never exist. Resolve lexically against the root as given, then use
+ * realpath only on the final target, which is the one place it is valid. No
+ * path is ever built by prepending `/private`.
+ *
+ * An unresolvable source is an invalid source: it fails closed here rather than
+ * escaping as an uncaught ENOENT from the preflight.
+ */
+async function l0SourceResolvesToToolkit(
+  rootAsGiven: string,
+  sourcePath: string,
+  canonicalToolkit: string,
+): Promise<boolean> {
+  try {
+    return await realpath(path.resolve(rootAsGiven, sourcePath)) === canonicalToolkit;
+  } catch {
+    return false;
+  }
+}
+
 export async function installRuntimeConsumer(
   projectRoot: string,
   toolkitRoot: string,
@@ -881,7 +924,7 @@ export async function installRuntimeConsumer(
     const manifest = await readManifest(manifestPath);
     const l0Sources = manifest.sources.filter((source) => source.layer === "L0" && source.role === "tooling");
     if (l0Sources.length !== 1 || l0Sources[0].remote !== undefined ||
-        await realpath(path.resolve(consumer, l0Sources[0].path)) !== toolkit) {
+        !(await l0SourceResolvesToToolkit(projectRoot, l0Sources[0].path, toolkit))) {
       return { ok: false, reason: "runtime-l0-source-invalid", dryRun };
     }
     const consumerLayer: "L1" | "L2" = await access(path.join(consumer, "skills", "registry.json"))
