@@ -4,7 +4,7 @@ bats_require_minimum_version 1.5.0
 # CI-parity tests: assert that .github/workflows/reusable-shell-tests.yml contains
 # the same completeness logic as scripts/sh/run-bats.sh.
 #
-# Coverage map (11 tests):
+# Coverage map (12 tests):
 #   #CP1  Workflow contains the plan-parse grep (^1\.[0-9]) — mirroring run-bats.sh LD1(c)
 #   #CP2  Workflow contains the total != expected mismatch fail branch — LD1(c)
 #   #CP3  Workflow contains the Executed-warning grep — LD1(d)
@@ -24,6 +24,11 @@ bats_require_minimum_version 1.5.0
 #         sentinels -- no fewer (accidental re-inclusion of a suite that still
 #         needs the absent native provider) and no more/no wildcard (overbroad
 #         exclusion silently hiding an unrelated functional suite)
+#   #CP12 bats-post installs bats (npm install bats + npx bats --version)
+#         before running the Node hook-test roster -- that roster includes
+#         run-bats-sharded-stdin-regression.test.js, which spawns run-bats.sh
+#         for real and needs bats resolvable, unlike bats-post's other Node
+#         tests, which don't touch a real bats subprocess at all
 #
 # Rationale: the CI inline bats guard (reusable-shell-tests.yml) duplicates the
 # completeness logic from run-bats.sh by design (consumer-portability invariant —
@@ -300,4 +305,47 @@ NAMES
         echo "$actual" >&2
         return 1
     }
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# #CP12  bats-post installs bats before running the Node hook-test roster
+#
+# bats-post runs `npm ci` (mcp-server deps) but, unlike the `bats` matrix job,
+# never ran `npm install bats` -- GitHub Actions jobs are isolated VMs with no
+# shared filesystem/npm cache, so `run-bats-sharded-stdin-regression.test.js`
+# (which spawns run-bats.sh for real) found bats unresolvable, producing an
+# empty TAP log and BATS_EXPECTED=0/BATS_TOTAL=0 -- SHARD_INCOMPLETE, not a
+# flake. Reproduced in a clean Docker container with and without `npm install
+# bats` present. The install step must exist, appear before "Run Node.js hook
+# tests", and use the exact same install command as the matrix job (never a
+# separate/drifted install mechanism).
+# ─────────────────────────────────────────────────────────────────────────────
+@test "#CP12 PARITY: bats-post installs bats before running the Node hook-test roster" {
+    [ -f "$WORKFLOW" ] || {
+        echo "WORKFLOW not found: $WORKFLOW" >&2
+        return 1
+    }
+    local after_post
+    after_post="$(awk 'f{print} /^  bats-post:/{f=1}' "$WORKFLOW")"
+    [ -n "$after_post" ] || {
+        echo "bats-post: job not found in $WORKFLOW" >&2
+        return 1
+    }
+
+    grep -qF 'Install bats for Node hook tests' <<< "$after_post"
+    grep -qF 'npm install bats' <<< "$after_post"
+    grep -qF 'npx bats --version' <<< "$after_post"
+
+    local install_line run_line
+    install_line="$(grep -n 'name: Install bats for Node hook tests' "$WORKFLOW" | head -1 | cut -d: -f1)"
+    run_line="$(grep -n 'name: Run Node.js hook tests' "$WORKFLOW" | head -1 | cut -d: -f1)"
+    [ -n "$install_line" ] || {
+        echo "Install bats for Node hook tests step not found in $WORKFLOW" >&2
+        return 1
+    }
+    [ -n "$run_line" ] || {
+        echo "Run Node.js hook tests step not found in $WORKFLOW" >&2
+        return 1
+    }
+    [ "$install_line" -lt "$run_line" ]
 }

@@ -250,11 +250,11 @@ test('owned-child provenance receives the platform birth observers it calls', ()
   );
 });
 
-test('production export ABI remains closed at 50 keys', () => {
+test('production export ABI remains closed at 52 keys', () => {
   assert.deepEqual(exportsFromFreshProcess(false), productionExports);
 });
 
-test('test-capability export ABI remains closed at 79 keys', () => {
+test('test-capability export ABI remains closed at 81 keys', () => {
   assert.deepEqual(exportsFromFreshProcess(true), [...productionExports, ...testOnlyExports].sort());
 });
 
