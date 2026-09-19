@@ -77,6 +77,18 @@ function cmdRootInit(flags) {
  * provide. Wording narrowed after the same overclaim was withdrawn from the R33
  * snapshot helper; path-based sampling cannot establish continuity anywhere.
  *
+ * Deliberately compares dev/ino/mode/uid/gid ONLY -- not nlink, mtime or
+ * ctime, unlike this repository's FILE identity re-checks (app-server-pin.cjs,
+ * registry-record-io.cjs). This is a DIRECTORY, and probed empirically: an
+ * ordinary file OR subdirectory created inside it moves its own ctime and
+ * mtime, and a subdirectory additionally bumps nlink, while dev/ino/mode/uid/
+ * gid stay stable either way. coordRoot is a coordination root this repo's
+ * own comments say is shared across cooperating processes, so legitimate
+ * sibling creation during this window is plausible. Adding ctime/mtime/nlink
+ * here would not close a gap -- it would false-positive on ordinary,
+ * unrelated activity from a process this root is meant to be shared with.
+ * Regression-pinned in root-lifecycle-directory-identity.test.js (RLDI-01/02).
+ *
  * Extracted from
  * `cmdRootValidate` (unchanged behavior/order/errors) so any OTHER caller
  * needing the SAME confined-root guarantee (e.g. the WP3 bridge's own

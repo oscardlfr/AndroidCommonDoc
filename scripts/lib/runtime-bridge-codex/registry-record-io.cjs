@@ -91,6 +91,23 @@ function createRegistryRecordIo({
     }
   }
 
+  // Every field that witnesses a change to the file under an open descriptor.
+  // This comparison is the SOLE integrity guard for a durable registry record
+  // -- no digest backs it -- so it uses the full list, same rule as PR #247's
+  // app-server-pin.cjs: one named list rather than a hand-picked subset per
+  // site, because a hand-picked subset is how a field goes missing.
+  //
+  // ctimeNs strengthens detection but is not unforgeable everywhere: POSIX has
+  // no call that sets it directly; Windows ChangeTime IS settable given
+  // FILE_WRITE_ATTRIBUTES, so it narrows what detection catches there rather
+  // than closing a gap in the same-uid boundary. Full guarantee:
+  // docs/agents/runtime-messaging-trust-boundaries.md. atimeNs is excluded --
+  // reading the file changes it, which would make every check fail.
+  const IDENTITY_FIELDS = Object.freeze([
+    'dev', 'ino', 'mode', 'uid', 'gid', 'nlink', 'size', 'ctimeNs', 'mtimeNs',
+  ]);
+  const identityUnchanged = (a, b) => IDENTITY_FIELDS.every((f) => a[f] === b[f]);
+
   const REGISTRY_RECORD_MAX_BYTES = 32 * 1024;
 
   function readDurableRegistryRecordFd(recordPath, maxBytes) {
@@ -145,7 +162,7 @@ function createRegistryRecordIo({
       if (offset !== size) return { ok: false, reason: 'REGISTRY_RECORD_SHORT_READ' };
 
       const stAfter = fs.fstatSync(fd, { bigint: true });
-      if (stAfter.dev !== st.dev || stAfter.ino !== st.ino || stAfter.mode !== st.mode || stAfter.nlink !== st.nlink || stAfter.size !== st.size) {
+      if (!identityUnchanged(stAfter, st)) {
         return { ok: false, reason: 'REGISTRY_RECORD_IDENTITY_MISMATCH' }; // changed identity/metadata DURING the read.
       }
 

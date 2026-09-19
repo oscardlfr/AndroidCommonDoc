@@ -237,6 +237,11 @@ jobs:
           npm ci
           npm run build
 
+      - name: Install bats for Node hook tests
+        run: |
+          npm install bats
+          npx bats --version
+
       - name: Run Node.js hook tests
         run: |
           set -e

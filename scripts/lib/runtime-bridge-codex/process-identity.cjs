@@ -175,6 +175,19 @@ function createProcessIdentity({
     const commandEnd = statText.lastIndexOf(') ');
     if (commandEnd < 0) return { status: 'UNAVAILABLE' };
     const fieldsFromState = statText.slice(commandEnd + 2).trim().split(/\s+/);
+    // Field 3 (fieldsFromState[0]) is process state: R/S/D/T/... for a
+    // genuinely scheduled process, Z for a zombie -- a process table entry
+    // that has already exited and holds no live resources, kept only so its
+    // exit status can be collected. /proc/<pid>/stat still resolves and still
+    // reports a stable pgid/starttime for a zombie (this is exactly what a
+    // zombie IS), so without this check a killed-but-not-yet-reaped target
+    // reads as PRESENT with a byte-identical birth token to when it was
+    // genuinely alive -- indistinguishable from LIVE to every caller of
+    // classifyProcessIdentityLiveness. A caller treating "not yet reaped" as
+    // "still live" is the exact gap S16-HOSTBRIDGE-LIVENESS-NO-SAME-TICK-
+    // STALE-01 exists to close in the same synchronous burst that observes
+    // the kill; this closes it at its actual source instead.
+    if (fieldsFromState[0] === 'Z') return { status: 'ABSENT' };
     const pgid = Number(fieldsFromState[2]);
     const startTicks = fieldsFromState[19];
     if (!Number.isInteger(pgid) || pgid <= 0 || typeof startTicks !== 'string' || !/^\d+$/.test(startTicks)) {
@@ -225,9 +238,26 @@ function createProcessIdentity({
     const psPath = resolvedPsPath();
     if (!psPath) return { status: 'UNAVAILABLE' };
     try {
-      const out = execFileSync(psPath, ['-o', 'lstart=', '-p', String(pid)],
+      // "stat=,lstart=" (not "lstart=" alone): `ps` still resolves a zombie
+      // pid and still reports its (frozen, from before it exited) lstart --
+      // exactly the observeLinuxProcessBirth gap above, same fix. BSD/macOS
+      // `ps -o stat=` pads the state column to a fixed width; trim() the
+      // WHOLE output first (removing trailing padding after lstart), then
+      // split on the first run of whitespace so the state token and the
+      // (internally space-separated) lstart text are never confused for
+      // each other regardless of that padding width.
+      const raw = execFileSync(psPath, ['-o', 'stat=,lstart=', '-p', String(pid)],
         { encoding: 'utf8', windowsHide: true }).trim();
-      return out.length > 0 ? { status: 'PRESENT', birthToken: out } : { status: 'ABSENT' };
+      if (raw.length === 0) return { status: 'ABSENT' };
+      const m = raw.match(/^(\S+)\s+(.+)$/);
+      if (!m) return { status: 'UNAVAILABLE' };
+      const state = m[1];
+      const lstart = m[2];
+      // BSD STAT(1): a zombie's state field always starts with "Z"
+      // (optionally followed by modifier characters, e.g. "Z+"); no other
+      // state code begins with Z.
+      if (state.startsWith('Z')) return { status: 'ABSENT' };
+      return { status: 'PRESENT', birthToken: lstart };
     } catch (err) {
       return (err && typeof err.status === 'number' && !err.code) ? { status: 'ABSENT' } : { status: 'UNAVAILABLE' };
     }

@@ -387,16 +387,16 @@ function createAppServerPin({
       }
     }
 
-    const assignments = [];
-    for (const line of bytes.toString('utf8').split(/\r?\n/)) {
-      if (!/^\s*CODEX_CLI_PATH\s*=/.test(line)) continue;
-      // TOML basic strings retain the existing conservative no-backslash rule;
-      // literal strings are the native way to spell Windows paths without
-      // interpreting `\` as an escape character.
-      const match = line.match(/^\s*CODEX_CLI_PATH\s*=\s*(?:"([^"\\\r\n]+)"|'([^'\r\n]+)')\s*(?:#.*)?$/);
-      if (!match) return { ok: false, reason: 'CODEX_CONFIG_PIN_MALFORMED' };
-      assignments.push(match[1] !== undefined ? match[1] : match[2]);
-    }
+    let assignments = []; // guarded below; a regression here fails closed, not raw.
+    try {
+      for (const line of bytes.toString('utf8').split(/\r?\n/)) {
+        if (!/^\s*CODEX_CLI_PATH\s*=/.test(line)) continue;
+        // Basic strings keep the no-backslash rule; literal strings spell Windows paths.
+        const match = line.match(/^\s*CODEX_CLI_PATH\s*=\s*(?:"([^"\\\r\n]+)"|'([^'\r\n]+)')\s*(?:#.*)?$/);
+        if (!match) return { ok: false, reason: 'CODEX_CONFIG_PIN_MALFORMED' };
+        assignments.push(match[1] !== undefined ? match[1] : match[2]);
+      }
+    } catch (err) { return { ok: false, reason: 'CODEX_CONFIG_PIN_PARSE_ERROR' }; }
     if (assignments.length === 0) return { ok: false, reason: 'CODEX_CONFIG_PIN_ABSENT' };
     if (assignments.length !== 1) return { ok: false, reason: 'CODEX_CONFIG_PIN_AMBIGUOUS' };
     return { ok: true, configured: true, path: assignments[0] };
