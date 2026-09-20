@@ -1801,6 +1801,7 @@ _inject_action_scan_decoys() {
   _start_bridge_bg "$argv_json" BG_OUT
   owner_file="$(_wait_for_owner_file verifier)"
   [ -n "$owner_file" ]
+  _wait_for_role_state verifier "$action_json" READY >/dev/null
   local original
   original="$(cat "$owner_file")"
 
