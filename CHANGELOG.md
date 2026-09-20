@@ -5,6 +5,12 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 
 ## [Unreleased]
 
+### Fixed (workflow-input-boundary-audit — GitHub Actions trust boundaries)
+
+- Removed raw untrusted GitHub expression interpolation from the shell and `github-script` bodies of the ten audited workflows/templates. Values now cross into runtimes through `env`, are quoted at consumption, and retain documented defaults and boolean semantics.
+- Added semantic fences where quoting alone is insufficient: a single inert glob for README workflow counting, one canonical Gradle task path, a safe release-version token, and cross-repository sync metadata restricted to `L0|L1|L2` plus `scheduled`/hexadecimal commit identifiers.
+- Hardened `qg-path-audit.sh` so canonical H2/H3 and table-form plans are parsed without broadening their allow-list, prose cannot smuggle a table path, and Git enumeration errors fail closed instead of appearing as an empty diff. Added focused RED/GREEN coverage for every repaired boundary.
+
 ### Changed (portable-runtime-messaging-adapters — bounded runtime internals)
 
 - Split the three stable runtime compatibility facades (`runtime-consultation.cjs`, `runtime-role-lifecycle.cjs`, `runtime-bridge-codex.cjs`) into 204 cohesive internal CommonJS modules (57 + 63 + 84) covering consultation protocol/durability/transactions, lifecycle authority/grants/root-source contract, and Codex process isolation/credentials/recovery/app-server connection/supervisor-engine/turn-execution/Context7 evidence. Public CLI/CommonJS ABIs remain closed (69 / 271 / 50 & 79-under-test-capability keys); every internal module is capped at 500 lines and 320 chars/line, no function body exceeds 500 lines, none imports upward, and all three trees are recursively included in L1/L2 consumer inventories with symlink rejection and deterministic digests. See [runtime-messaging-adapters § Architecture Map](docs/agents/runtime-messaging-adapters.md#architecture-map) for the current per-tree breakdown.

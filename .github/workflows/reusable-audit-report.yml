@@ -95,8 +95,9 @@ jobs:
           echo "Audit log found. Generating report for $WEEKS weeks..."
 
           # Generate report via Node.js script (avoids full MCP server startup)
-          node - <<'EOF' > /tmp/audit-report.json
-          import { readFileSync, createReadStream } from 'node:fs';
+          LOG_FILE="$LOG_FILE" WEEKS="$WEEKS" PROJECT_ROOT="$PROJECT_ROOT" \
+            node --input-type=module - <<'EOF' > /tmp/audit-data.json
+          import { createReadStream } from 'node:fs';
           import { createInterface } from 'node:readline';
           import path from 'node:path';
 
@@ -133,7 +134,6 @@ jobs:
             console.log(JSON.stringify({ latest, health, total: entries.length, recent: recent.length }));
           });
           EOF
-          LOG_FILE="$LOG_FILE" WEEKS="$WEEKS" PROJECT_ROOT="$PROJECT_ROOT" node --input-type=module < /tmp/audit-report.json 2>/dev/null > /tmp/audit-data.json || echo '{}' > /tmp/audit-data.json
 
           HEALTH=$(python3 -c "import json; d=json.load(open('/tmp/audit-data.json')); print(d.get('health','UNKNOWN'))" 2>/dev/null || echo "UNKNOWN")
           COVERAGE=$(python3 -c "import json; d=json.load(open('/tmp/audit-data.json')); print(d.get('latest',{}).get('coverage_pct','—'))" 2>/dev/null || echo "—")
@@ -169,11 +169,11 @@ jobs:
         if: inputs.generate_html && steps.audit.outputs.status != 'no_data'
         run: |
           LOG="$ACD_INPUT_PROJECT_ROOT/.androidcommondoc/audit-log.jsonl"
-          python3 - <<PYEOF > /tmp/audit-report.html
-          import json, sys, datetime
+          ACD_AUDIT_LOG_PATH="$LOG" python3 - <<'PYEOF' > /tmp/audit-report.html
+          import json, sys, datetime, os
 
           try:
-              entries = [json.loads(l) for l in open("$LOG") if l.strip()]
+              entries = [json.loads(l) for l in open(os.environ['ACD_AUDIT_LOG_PATH']) if l.strip()]
           except:
               entries = []
 

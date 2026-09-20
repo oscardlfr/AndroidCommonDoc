@@ -94,11 +94,20 @@ jobs:
           # ── CONFIGURABLE: Dispatchers hardcoded outside DI ───────────────
 
           DI_PATTERN="$ACD_INPUT_DI_PATH_PATTERN"
+          if printf '' | grep -P -- "$DI_PATTERN" >/dev/null 2>&1; then
+            :
+          else
+            DI_REGEX_STATUS=$?
+            if [ "$DI_REGEX_STATUS" -eq 2 ]; then
+              echo "::error::di_path_pattern must be a valid PCRE expression" >&2
+              exit 2
+            fi
+          fi
           DISPATCHERS=$(git diff "$BASE..$HEAD" -- '*.kt' \
             | grep '^\+' \
             | grep -v '^\+\+\+' \
             | grep -P 'Dispatchers\.(IO|Default|Main)' \
-            | grep -v -P "$DI_PATTERN|Test|test" || true)
+              | grep -v -P -- "$DI_PATTERN|Test|test" || true)
 
           if [ -n "$DISPATCHERS" ]; then
             if [ "$ACD_INPUT_FAIL_ON_DISPATCHERS_WARNING" = "true" ]; then

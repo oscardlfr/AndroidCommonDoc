@@ -204,6 +204,18 @@ jobs:
           SOURCE_LAYER="${ACD_PAYLOAD_SOURCE_LAYER:-L0}"
           SOURCE_COMMIT="${ACD_PAYLOAD_L0_COMMIT:-scheduled}"
 
+          case "$SOURCE_LAYER" in
+            L0|L1|L2) ;;
+            *)
+              echo "::error::source_layer must be one of L0, L1, or L2" >&2
+              exit 2
+              ;;
+          esac
+          if [[ "$SOURCE_COMMIT" != "scheduled" && ! "$SOURCE_COMMIT" =~ ^[0-9A-Fa-f]{7,64}$ ]]; then
+            echo "::error::l0_commit must be 'scheduled' or a 7-64 character hexadecimal commit id" >&2
+            exit 2
+          fi
+
           # Configure git
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"

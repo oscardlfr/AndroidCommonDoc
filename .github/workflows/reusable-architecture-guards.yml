@@ -63,7 +63,12 @@ jobs:
       - name: Run architecture guards
         env:
           ACD_INPUT_GRADLE_TASK: ${{ inputs.gradle_task }}
-        run: ./gradlew "$ACD_INPUT_GRADLE_TASK" --no-daemon
+        run: |
+          if [[ ! "$ACD_INPUT_GRADLE_TASK" =~ ^:?[A-Za-z0-9_][A-Za-z0-9_.-]*(:[A-Za-z0-9_][A-Za-z0-9_.-]*)*$ ]]; then
+            echo "::error::gradle_task must contain exactly one Gradle task path" >&2
+            exit 2
+          fi
+          ./gradlew "$ACD_INPUT_GRADLE_TASK" --no-daemon
 
       - name: Upload guard results
         uses: actions/upload-artifact@v5

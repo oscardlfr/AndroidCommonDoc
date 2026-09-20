@@ -101,8 +101,8 @@ jobs:
         run: |
           # Skills
           if [ "${ACD_INPUT_CHECK_SKILLS:-true}" = "true" ] && [ -d "${ACD_INPUT_SKILLS_DIR:-skills/}" ]; then
-            SKILLS=$(ls "${ACD_INPUT_SKILLS_DIR:-skills/}" \
-              | grep -vE "${ACD_INPUT_SKILLS_EXCLUDE_PATTERN:-registry|params|schema}" \
+            SKILLS=$(ls -- "${ACD_INPUT_SKILLS_DIR:-skills/}" \
+              | grep -vE -- "${ACD_INPUT_SKILLS_EXCLUDE_PATTERN:-registry|params|schema}" \
               | wc -l | tr -d ' ')
           else
             SKILLS="skip"
@@ -122,7 +122,7 @@ jobs:
 
           # Agents
           if [ "${ACD_INPUT_CHECK_AGENTS:-true}" = "true" ] && [ -d "${ACD_INPUT_AGENTS_DIR:-.claude/agents/}" ]; then
-            AGENTS=$(ls "${ACD_INPUT_AGENTS_DIR:-.claude/agents/}" | wc -l | tr -d ' ')
+            AGENTS=$(ls -- "${ACD_INPUT_AGENTS_DIR:-.claude/agents/}" | wc -l | tr -d ' ')
           else
             AGENTS="skip"
           fi
@@ -130,7 +130,7 @@ jobs:
           # Detekt rules
           ACD_DETEKT_RULES_DIR_RESOLVED="${ACD_INPUT_DETEKT_RULES_DIR:-detekt-rules/src/main/kotlin/com/androidcommondoc/detekt/rules/}"
           if [ "${ACD_INPUT_CHECK_DETEKT_RULES:-true}" = "true" ] && [ -d "$ACD_DETEKT_RULES_DIR_RESOLVED" ]; then
-            RULES=$(ls "$ACD_DETEKT_RULES_DIR_RESOLVED"*.kt 2>/dev/null \
+            RULES=$(ls -- "$ACD_DETEKT_RULES_DIR_RESOLVED"*.kt 2>/dev/null \
               | grep -v generated | wc -l | tr -d ' ')
           else
             RULES="skip"
@@ -139,7 +139,7 @@ jobs:
           # MCP tools (exclude index.ts — it's the barrel export, not a tool)
           ACD_MCP_TOOLS_DIR_RESOLVED="${ACD_INPUT_MCP_TOOLS_DIR:-mcp-server/src/tools/}"
           if [ "${ACD_INPUT_CHECK_MCP_TOOLS:-true}" = "true" ] && [ -d "$ACD_MCP_TOOLS_DIR_RESOLVED" ]; then
-            MCP_TOOLS=$(ls "$ACD_MCP_TOOLS_DIR_RESOLVED"*.ts 2>/dev/null | grep -v index.ts | wc -l | tr -d ' ')
+            MCP_TOOLS=$(ls -- "$ACD_MCP_TOOLS_DIR_RESOLVED"*.ts 2>/dev/null | grep -v index.ts | wc -l | tr -d ' ')
           else
             MCP_TOOLS="skip"
           fi
@@ -147,18 +147,8 @@ jobs:
           # Reusable workflows
           if [ "${ACD_INPUT_CHECK_REUSABLE_WF:-true}" = "true" ]; then
             ACD_WF_PATTERN_RESOLVED="${ACD_INPUT_REUSABLE_WF_PATTERN:-.github/workflows/reusable-*.yml}"
-            case "$ACD_WF_PATTERN_RESOLVED" in
-              -*|*[[:space:]]*)
-                echo "::error::reusable_wf_pattern must be a single token with no leading '-' and no embedded whitespace" >&2
-                REUSABLE_WF="invalid"
-                ;;
-              *)
-                shopt -s nullglob
-                ACD_WF_MATCHES=( $ACD_WF_PATTERN_RESOLVED )
-                shopt -u nullglob
-                REUSABLE_WF=${#ACD_WF_MATCHES[@]}
-                ;;
-            esac
+            REUSABLE_WF=$(ACD_WF_GLOB_PATTERN="$ACD_WF_PATTERN_RESOLVED" python3 -c \
+              "import glob, os; print(len(glob.glob(os.environ['ACD_WF_GLOB_PATTERN'])))")
           else
             REUSABLE_WF="skip"
           fi
@@ -216,7 +206,7 @@ jobs:
             local label=$1
             local value=$2
             [ "$value" = "skip" ] && echo "⏭  $label: skipped" && return
-            if grep -qE "\b${value}\b" "$README"; then
+            if grep -qE "\b${value}\b" -- "$README"; then
               echo "✅  $label: $value found in $README"
             else
               echo "❌  $label: $value NOT found in $README"

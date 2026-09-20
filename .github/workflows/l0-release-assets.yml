@@ -38,6 +38,9 @@ jobs:
     runs-on: ubuntu-latest
     env:
       ACD_INPUT_TAG_NAME: ${{ github.event.inputs.tag_name }}
+      ACD_GITHUB_REF_TYPE: ${{ github.ref_type }}
+      ACD_GITHUB_REF_NAME: ${{ github.ref_name }}
+      ACD_GITHUB_REPOSITORY: ${{ github.repository }}
     steps:
       - uses: actions/checkout@v4
 
@@ -46,10 +49,14 @@ jobs:
         run: |
           if [ -n "$ACD_INPUT_TAG_NAME" ]; then
             VERSION="$ACD_INPUT_TAG_NAME"
-          elif [ "${{ github.ref_type }}" = "tag" ]; then
-            VERSION="${{ github.ref_name }}"
+          elif [ "$ACD_GITHUB_REF_TYPE" = "tag" ]; then
+            VERSION="$ACD_GITHUB_REF_NAME"
           else
             VERSION="snapshot-$(git rev-parse --short HEAD)"
+          fi
+          if [[ ! "$VERSION" =~ ^[A-Za-z0-9][A-Za-z0-9._+-]*$ ]]; then
+            echo "::error::tag_name must be one safe release token (letters, digits, dot, underscore, plus, or hyphen)" >&2
+            exit 2
           fi
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "📌 Version: $VERSION"
@@ -118,7 +125,7 @@ jobs:
 
           \`\`\`bash
           # Download and extract
-          curl -sL https://github.com/${{ github.repository }}/releases/download/${VERSION}/androidcommondoc-assets.tar.gz | tar xz
+          curl -sL https://github.com/${ACD_GITHUB_REPOSITORY}/releases/download/${VERSION}/androidcommondoc-assets.tar.gz | tar xz
 
           # Point your manifest at the extracted directory
           # Then run /sync-l0 --l0-root androidcommondoc-${VERSION}
@@ -146,8 +153,8 @@ jobs:
           echo "" >> "$GITHUB_STEP_SUMMARY"
           echo "Version: \`$VERSION\`" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
-          if [ "${{ github.ref_type }}" = "tag" ] || [ -n "$ACD_INPUT_TAG_NAME" ]; then
-            echo "Published to [GitHub Releases](https://github.com/${{ github.repository }}/releases/tag/$VERSION)" >> "$GITHUB_STEP_SUMMARY"
+          if [ "$ACD_GITHUB_REF_TYPE" = "tag" ] || [ -n "$ACD_INPUT_TAG_NAME" ]; then
+            echo "Published to [GitHub Releases](https://github.com/${ACD_GITHUB_REPOSITORY}/releases/tag/$VERSION)" >> "$GITHUB_STEP_SUMMARY"
           else
             echo "Snapshot artifact uploaded (7-day retention)" >> "$GITHUB_STEP_SUMMARY"
           fi
