@@ -36,14 +36,16 @@ jobs:
   release-assets:
     name: "📦 Package & Release"
     runs-on: ubuntu-latest
+    env:
+      ACD_INPUT_TAG_NAME: ${{ github.event.inputs.tag_name }}
     steps:
       - uses: actions/checkout@v4
 
       - name: Determine version
         id: version
         run: |
-          if [ -n "${{ github.event.inputs.tag_name }}" ]; then
-            VERSION="${{ github.event.inputs.tag_name }}"
+          if [ -n "$ACD_INPUT_TAG_NAME" ]; then
+            VERSION="$ACD_INPUT_TAG_NAME"
           elif [ "${{ github.ref_type }}" = "tag" ]; then
             VERSION="${{ github.ref_name }}"
           else
@@ -53,8 +55,10 @@ jobs:
           echo "📌 Version: $VERSION"
 
       - name: Package distributable assets
+        env:
+          ACD_STEP_VERSION: ${{ steps.version.outputs.version }}
         run: |
-          VERSION=${{ steps.version.outputs.version }}
+          VERSION="$ACD_STEP_VERSION"
           STAGING="androidcommondoc-${VERSION}"
           mkdir -p "$STAGING"
 
@@ -93,8 +97,9 @@ jobs:
         if: github.ref_type == 'tag' || github.event.inputs.tag_name != ''
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ACD_STEP_VERSION: ${{ steps.version.outputs.version }}
         run: |
-          VERSION=${{ steps.version.outputs.version }}
+          VERSION="$ACD_STEP_VERSION"
           SKILLS=$(find "androidcommondoc-${VERSION}/skills" -name "SKILL.md" | wc -l)
           AGENTS=$(find "androidcommondoc-${VERSION}/.claude/agents" -name "*.md" | wc -l)
           COMMANDS=$(find "androidcommondoc-${VERSION}/.claude/commands" -name "*.md" | wc -l)
@@ -133,13 +138,15 @@ jobs:
           retention-days: 7
 
       - name: Summary
+        env:
+          ACD_STEP_VERSION: ${{ steps.version.outputs.version }}
         run: |
-          VERSION=${{ steps.version.outputs.version }}
+          VERSION="$ACD_STEP_VERSION"
           echo "### 📦 L0 Assets Packaged" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
           echo "Version: \`$VERSION\`" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
-          if [ "${{ github.ref_type }}" = "tag" ] || [ -n "${{ github.event.inputs.tag_name }}" ]; then
+          if [ "${{ github.ref_type }}" = "tag" ] || [ -n "$ACD_INPUT_TAG_NAME" ]; then
             echo "Published to [GitHub Releases](https://github.com/${{ github.repository }}/releases/tag/$VERSION)" >> "$GITHUB_STEP_SUMMARY"
           else
             echo "Snapshot artifact uploaded (7-day retention)" >> "$GITHUB_STEP_SUMMARY"
