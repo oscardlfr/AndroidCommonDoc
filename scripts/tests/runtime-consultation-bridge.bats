@@ -3077,6 +3077,7 @@ _set_ready_timeout_seconds() {
   _start_bridge_bg "$argv_json" BG_OUT
   owner_file="$(_wait_for_owner_file verifier)"
   [ -n "$owner_file" ]
+  _wait_for_role_state verifier "$action_json" READY >/dev/null
 
   node -e '
     const fs = require("fs");
@@ -3111,6 +3112,7 @@ _set_ready_timeout_seconds() {
   _start_bridge_bg "$argv_json" BG_OUT
   owner_file="$(_wait_for_owner_file verifier)"
   [ -n "$owner_file" ]
+  _wait_for_role_state verifier "$action_json" READY >/dev/null
 
   # Tamper ONLY pid_identity -- every other field (including both instance
   # ids, which the ORIGINAL point-6 fix already checked) is left untouched.
@@ -3448,6 +3450,7 @@ _set_ready_timeout_seconds() {
   _start_bridge_bg "$argv_json" BG_OUT
   owner_file="$(_wait_for_owner_file verifier)"
   [ -n "$owner_file" ]
+  _wait_for_role_state verifier "$action_json" READY >/dev/null
 
   # Tamper ONLY supervisor_instance_id to a CORRUPTED, non-hex-shaped value
   # (uppercase + punctuation) -- necessarily also DIFFERENT from what this
@@ -3509,6 +3512,7 @@ _set_ready_timeout_seconds() {
   _start_bridge_bg "$argv_json" BG_OUT
   owner_file="$(_wait_for_owner_file verifier)"
   [ -n "$owner_file" ]
+  _wait_for_role_state verifier "$action_json" READY >/dev/null
 
   # Tamper coordination_root_id to well-formed hex, but 40 characters --
   # neither the correct 64-hex digest this call expects NOR a plausible
