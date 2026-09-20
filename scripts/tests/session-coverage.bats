@@ -1813,10 +1813,10 @@ YAML
     grep -q 'ACD_INPUT_README_PATH: ${{ inputs.readme_path }}' "$wf"
 }
 
-@test "input-fence: readme-audit.yml sanitizing boundary for steps.counts.outputs.* stays intact (Scope Decision A -- wc -l/Python len() integer coercion; loosening this reopens those 7 excluded sites as taint sources and must trigger a re-evaluation of the exclusion)" {
+@test "input-fence: readme-audit.yml sanitizing boundary for steps.counts.outputs.* stays intact (Scope Decision A -- wc -l/Python len() integer coercion; loosening this reopens those 6 excluded sites as taint sources and must trigger a re-evaluation of the exclusion; reusable_wf graduated OUT of this exclusion once hardened with explicit case-statement fail-closed validation + nullglob array counting -- see the 'reusable_wf_pattern' exploit tests below -- so the wc-l floor drops from 6 to 5, leaving 5 wc-l sites + 1 Python len() site = 6 total)" {
     wf="$L0_ROOT/.github/workflows/readme-audit.yml"
     wc_l_count=$(grep -cF "| wc -l | tr -d ' '" "$wf" || true)
-    [ "${wc_l_count:-0}" -ge 6 ]
+    [ "${wc_l_count:-0}" -ge 5 ]
     grep -qF 'print(len(entries))' "$wf"
 }
 
@@ -1973,6 +1973,98 @@ EOF
     fi
     ACD_INPUT_SKILLS_EXCLUDE_PATTERN="$payload" bash "$WORK_DIR/exploit.sh" >/dev/null 2>&1 || true
     [ ! -f "$WORK_DIR/pwned" ]
+}
+
+@test "exploit: readme-audit.yml 'reusable_wf_pattern' input allows leading-dash option-injection and cross-pattern word-splitting into ls before hardening (RED, numeric-miscount class -- not code-execution)" {
+    wf="$L0_ROOT/.github/workflows/readme-audit.yml"
+    mkdir -p "$WORK_DIR/dirA" "$WORK_DIR/dirB"
+    touch "$WORK_DIR/dirA/reusable-a.yml" "$WORK_DIR/dirA/reusable-b.yml"
+    touch "$WORK_DIR/dirB/doc-a.yml" "$WORK_DIR/dirB/doc-b.yml" "$WORK_DIR/dirB/doc-c.yml"
+    payload="--reverse $WORK_DIR/dirA/reusable-*.yml $WORK_DIR/dirB/doc-*.yml"
+    if run_block_lines "$wf" | grep -qE 'ls[[:space:]]+(--[[:space:]]+)?\$\{?ACD_INPUT_REUSABLE_WF_PATTERN'; then
+        cat > "$WORK_DIR/exploit.sh" <<'EOF'
+#!/usr/bin/env bash
+REUSABLE_WF=$(ls ${ACD_INPUT_REUSABLE_WF_PATTERN:-.github/workflows/reusable-*.yml} 2>/dev/null | wc -l | tr -d ' ')
+echo "$REUSABLE_WF"
+EOF
+    else
+        grep -qF 'ACD_WF_PATTERN_RESOLVED' "$wf"
+        cat > "$WORK_DIR/exploit.sh" <<'EOF'
+#!/usr/bin/env bash
+if [ "${ACD_INPUT_CHECK_REUSABLE_WF:-true}" = "true" ]; then
+    ACD_WF_PATTERN_RESOLVED="${ACD_INPUT_REUSABLE_WF_PATTERN:-.github/workflows/reusable-*.yml}"
+    case "$ACD_WF_PATTERN_RESOLVED" in
+        -*|*[[:space:]]*)
+            echo "::error::reusable_wf_pattern must be a single token with no leading '-' and no embedded whitespace" >&2
+            REUSABLE_WF="invalid"
+            ;;
+        *)
+            shopt -s nullglob
+            ACD_WF_MATCHES=( $ACD_WF_PATTERN_RESOLVED )
+            shopt -u nullglob
+            REUSABLE_WF=${#ACD_WF_MATCHES[@]}
+            ;;
+    esac
+else
+    REUSABLE_WF="skip"
+fi
+echo "$REUSABLE_WF"
+EOF
+    fi
+    result=$(ACD_INPUT_REUSABLE_WF_PATTERN="$payload" bash "$WORK_DIR/exploit.sh")
+    # Numeric-miscount class, not code-execution -- no touch-sentinel available.
+    # Pre-fix: "--reverse" is silently consumed as an ls option and both
+    # sub-patterns independently expand and sum (2+3=5). Post-fix: fail-closed
+    # to the literal string "invalid". Assert the vulnerable value is
+    # categorically absent (uniform across both branches), not a per-branch
+    # expected value.
+    [ "$result" != "5" ]
+}
+
+@test "exploit: readme-audit.yml 'reusable_wf_pattern' input allows cross-pattern word-splitting into ls via embedded whitespace alone before hardening (RED, isolates multi-pattern ambiguity from option-injection)" {
+    wf="$L0_ROOT/.github/workflows/readme-audit.yml"
+    mkdir -p "$WORK_DIR/dirA" "$WORK_DIR/dirB"
+    touch "$WORK_DIR/dirA/reusable-a.yml" "$WORK_DIR/dirA/reusable-b.yml"
+    touch "$WORK_DIR/dirB/doc-a.yml" "$WORK_DIR/dirB/doc-b.yml" "$WORK_DIR/dirB/doc-c.yml"
+    payload="$WORK_DIR/dirA/reusable-*.yml $WORK_DIR/dirB/doc-*.yml"
+    if run_block_lines "$wf" | grep -qE 'ls[[:space:]]+(--[[:space:]]+)?\$\{?ACD_INPUT_REUSABLE_WF_PATTERN'; then
+        cat > "$WORK_DIR/exploit.sh" <<'EOF'
+#!/usr/bin/env bash
+REUSABLE_WF=$(ls ${ACD_INPUT_REUSABLE_WF_PATTERN:-.github/workflows/reusable-*.yml} 2>/dev/null | wc -l | tr -d ' ')
+echo "$REUSABLE_WF"
+EOF
+    else
+        grep -qF 'ACD_WF_PATTERN_RESOLVED' "$wf"
+        cat > "$WORK_DIR/exploit.sh" <<'EOF'
+#!/usr/bin/env bash
+if [ "${ACD_INPUT_CHECK_REUSABLE_WF:-true}" = "true" ]; then
+    ACD_WF_PATTERN_RESOLVED="${ACD_INPUT_REUSABLE_WF_PATTERN:-.github/workflows/reusable-*.yml}"
+    case "$ACD_WF_PATTERN_RESOLVED" in
+        -*|*[[:space:]]*)
+            echo "::error::reusable_wf_pattern must be a single token with no leading '-' and no embedded whitespace" >&2
+            REUSABLE_WF="invalid"
+            ;;
+        *)
+            shopt -s nullglob
+            ACD_WF_MATCHES=( $ACD_WF_PATTERN_RESOLVED )
+            shopt -u nullglob
+            REUSABLE_WF=${#ACD_WF_MATCHES[@]}
+            ;;
+    esac
+else
+    REUSABLE_WF="skip"
+fi
+echo "$REUSABLE_WF"
+EOF
+    fi
+    result=$(ACD_INPUT_REUSABLE_WF_PATTERN="$payload" bash "$WORK_DIR/exploit.sh")
+    [ "$result" != "5" ]
+}
+
+@test "correctness: readme-audit.yml reusable_wf nullglob toggle is scoped (hygiene -- RULES/MCP_TOOLS execute earlier in this same step and are not reachable by this toggle today; guards a future reorder/addition)" {
+    wf="$L0_ROOT/.github/workflows/readme-audit.yml"
+    grep -qF 'shopt -s nullglob' "$wf"
+    grep -qF 'shopt -u nullglob' "$wf"
 }
 
 @test "exploit: doc-audit.yml 'layer' input allows command-substitution injection before hardening (RED)" {

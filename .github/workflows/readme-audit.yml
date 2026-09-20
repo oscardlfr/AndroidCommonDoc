@@ -146,7 +146,19 @@ jobs:
 
           # Reusable workflows
           if [ "${ACD_INPUT_CHECK_REUSABLE_WF:-true}" = "true" ]; then
-            REUSABLE_WF=$(ls ${ACD_INPUT_REUSABLE_WF_PATTERN:-.github/workflows/reusable-*.yml} 2>/dev/null | wc -l | tr -d ' ')
+            ACD_WF_PATTERN_RESOLVED="${ACD_INPUT_REUSABLE_WF_PATTERN:-.github/workflows/reusable-*.yml}"
+            case "$ACD_WF_PATTERN_RESOLVED" in
+              -*|*[[:space:]]*)
+                echo "::error::reusable_wf_pattern must be a single token with no leading '-' and no embedded whitespace" >&2
+                REUSABLE_WF="invalid"
+                ;;
+              *)
+                shopt -s nullglob
+                ACD_WF_MATCHES=( $ACD_WF_PATTERN_RESOLVED )
+                shopt -u nullglob
+                REUSABLE_WF=${#ACD_WF_MATCHES[@]}
+                ;;
+            esac
           else
             REUSABLE_WF="skip"
           fi
