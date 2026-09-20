@@ -97,3 +97,7 @@ l0-manifest.json
 .androidcommondoc/
 .gsd/milestones/
 .claude/scheduled_tasks.lock
+
+# ── Locally-downloaded lint binaries (not for distribution) ──
+actionlint
+actionlint.exe
