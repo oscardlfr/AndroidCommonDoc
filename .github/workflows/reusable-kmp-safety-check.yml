@@ -37,6 +37,9 @@ on:
         type: string
         default: "di/|Di|Module|Injection|Hilt|Koin"
 
+permissions:
+  contents: read
+
 jobs:
   kmp-safety-check:
     name: "🛡️ KMP Safety Check"
@@ -47,6 +50,10 @@ jobs:
           fetch-depth: 0
 
       - name: Check KMP safety patterns in diff
+        env:
+          ACD_INPUT_DI_PATH_PATTERN: ${{ inputs.di_path_pattern }}
+          ACD_INPUT_FAIL_ON_DISPATCHERS_WARNING: ${{ inputs.fail_on_dispatchers_warning }}
+          ACD_INPUT_FAIL_ON_RUN_BLOCKING: ${{ inputs.fail_on_run_blocking }}
         run: |
           BASE="${{ github.event.pull_request.base.sha }}"
           HEAD="${{ github.event.pull_request.head.sha }}"
@@ -86,7 +93,7 @@ jobs:
 
           # ── CONFIGURABLE: Dispatchers hardcoded outside DI ───────────────
 
-          DI_PATTERN="${{ inputs.di_path_pattern }}"
+          DI_PATTERN="$ACD_INPUT_DI_PATH_PATTERN"
           DISPATCHERS=$(git diff "$BASE..$HEAD" -- '*.kt' \
             | grep '^\+' \
             | grep -v '^\+\+\+' \
@@ -94,7 +101,7 @@ jobs:
             | grep -v -P "$DI_PATTERN|Test|test" || true)
 
           if [ -n "$DISPATCHERS" ]; then
-            if [ "${{ inputs.fail_on_dispatchers_warning }}" = "true" ]; then
+            if [ "$ACD_INPUT_FAIL_ON_DISPATCHERS_WARNING" = "true" ]; then
               echo "::error::Hardcoded Dispatchers detected outside DI modules."
               ERRORS=$((ERRORS + 1))
             else
@@ -114,7 +121,7 @@ jobs:
             | grep -v -P 'Test|test|Spec' || true)
 
           if [ -n "$RUN_BLOCKING" ]; then
-            if [ "${{ inputs.fail_on_run_blocking }}" = "true" ]; then
+            if [ "$ACD_INPUT_FAIL_ON_RUN_BLOCKING" = "true" ]; then
               echo "::error::runBlocking detected in non-test code — use suspend functions instead."
               ERRORS=$((ERRORS + 1))
             else

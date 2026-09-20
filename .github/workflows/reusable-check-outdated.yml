@@ -47,6 +47,9 @@ on:
         type: string
         default: "master"
 
+permissions:
+  contents: read
+
 jobs:
   check-outdated:
     name: "Check Outdated Dependencies"
@@ -74,12 +77,16 @@ jobs:
 
       - name: Check dependency freshness
         id: check
+        env:
+          ACD_INPUT_PROJECT_ROOT: ${{ inputs.project_root }}
+          ACD_INPUT_FORMAT: ${{ inputs.format }}
+          ACD_INPUT_MAX_AGE: ${{ inputs.max_age }}
         run: |
           EXIT_CODE=0
           node .l0-tooling/mcp-server/build/cli/check-outdated.js \
-            "${{ inputs.project_root }}" \
-            --format "${{ inputs.format }}" \
-            --max-age "${{ inputs.max_age }}" | tee /tmp/check-outdated-output.txt || EXIT_CODE=$?
+            "$ACD_INPUT_PROJECT_ROOT" \
+            --format "$ACD_INPUT_FORMAT" \
+            --max-age "$ACD_INPUT_MAX_AGE" | tee /tmp/check-outdated-output.txt || EXIT_CODE=$?
 
           echo "exit_code=$EXIT_CODE" >> "$GITHUB_OUTPUT"
 
