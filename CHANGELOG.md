@@ -24,6 +24,19 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 - **`run-bats.sh` bats-resolvability probe**: `npx --no-install bats ...` failed with a locale-dependent "not recognized" error on Windows/Git-Bash even when `bats` was genuinely installed and directly invocable — `_bats_resolvable()` now falls back to `command -v bats` when the npx probe fails, and a new `_bats_invoke()` helper mirrors the same try-npx-then-direct-node fallback at both call sites.
 - **`qg-doc-validators.sh`'s `doc_structure_vitest` subcheck**: identical npx PATH-resolution failure class — `run_doc_structure_vitest()` now captures npx's real exit code, detects failure via absence of vitest's own "Test Files" output marker, and falls back to `node node_modules/vitest/vitest.mjs run tests/integration/doc-structure.test.ts`.
 
+### Fixed (wave1-macos-stabilization — cross-platform identity certificate + path-budget correctness)
+
+- **Per-platform host-certificate coexistence** (F-24): `setup/claude-host-contract.json` was a single git-tracked certificate hardcoded to `certificate.os: "win32"`, so a signed darwin certificate could never be published and macOS could never reach `recordProductionSessionIdentity`. Split into one certificate per platform (`claude-host-contract.<platform>.json`); the legacy filename stays readable only for the platform its own signed certificate names, never as a cross-platform fallback; platform selection settles on the signed `os` field only after signature verification.
+- **macOS symlink-identity gap**: `path.resolve` does not resolve symlinks, but macOS resolves `/var/folders/…`/`/tmp` and their `/private/...` counterparts to the same directory (and `git rev-parse --show-toplevel` returns the canonical spelling) — any identity/confinement/fault-injection check comparing raw path spellings silently stopped matching on macOS. Fixed to compare via `fs.realpathSync`.
+- **macOS TMPDIR path-budget overrun**: macOS's per-user TMPDIR (48 chars) left only 42 of the isolation root's 254-char child-state budget, overrunning it; Linux/Windows never approached this because TMPDIR is short/fixed there.
+
+### Fixed (wave1-macos-followups — Bats parallelization + zombie-process liveness)
+
+- **Zombie-process liveness misclassification**: Linux (`/proc/<pid>/stat`) and Darwin/POSIX (`ps -o stat=`) liveness observers in `process-identity.cjs` compared only a birth token, never process STATE — a zombie process still resolves and still reports its pre-exit birth token, so it was misclassified `PRESENT`. Both observers now check state first (`Z` state → `ABSENT`). Root-caused and fixed the intermittent Bats flake `S16-HOSTBRIDGE-LIVENESS-NO-SAME-TICK-STALE-01`.
+- **ctimeNs identity-check gap** closed in `registry-record-io.cjs` (now compares the full identity field list).
+- **config.toml parse hardening**: fails closed on an unexpected parse error rather than silently proceeding.
+- **Opt-in parallel Bats orchestrator** (`run-bats-sharded.cjs`, NEW): ~3x faster local runs; `run-bats.sh` itself untouched. Handles SIGINT/SIGTERM/SIGHUP; hardened against incoherent shard counts, unconfined/recursive cleanup, late-signal exit-code races, a false "shutdown complete" report, missing spawn-error handling; adds a win32 preflight.
+
 ### Added (qg-artifact-binding — QG required-step artifact binding)
 
 - **`emit-push-proof.sh` generic artifact-binding loop** (W1): binds one HEAD/freshness/status-checked receipt per qualifying `required_steps[]` entry (today: `secret-scan`, `doc-validator-parity` — the two required steps with a declared `artifact`, no `evidence` sub-object, and not marked `mint_rederived`). Four fail-closed die-codes: `artifact-binding-absent`, `artifact-binding-head`, `artifact-binding-stale`, `artifact-binding-status`. Digests recorded into `push-proof.json`'s `artifact_digests`.
