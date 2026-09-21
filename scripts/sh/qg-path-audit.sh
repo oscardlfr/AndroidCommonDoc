@@ -10,9 +10,9 @@
 #
 # Checks:
 #   1. Read CLASS sentinel from <wave-dir>/CLASS
-#   2. Read PLAN.md ### Wave Class → **Class**: <value>
+#   2. Read PLAN.md ##/### Wave Class → **Class**: <value>
 #   3. FAIL exit 1 if CLASS sentinel != PLAN.md class
-#   4. Extract ### Path-Manifest file list from PLAN.md
+#   4. Extract ### Path-Manifest / ### Path Manifest file list from PLAN.md
 #   5. Run: git diff --name-only <base>..HEAD (forward-slash)
 #   6. FAIL exit 1 if any touched file is NOT in the manifest
 #   7. FAIL exit 1 if any HARNESS-pattern path is in touched files AND declared class < HARNESS
@@ -81,11 +81,15 @@ if [[ ! -f "$CLASS_SENTINEL_FILE" ]]; then
   exit 2
 fi
 
-CLASS_SENTINEL="$(grep -m1 '[^[:space:]]' "$CLASS_SENTINEL_FILE" | tr -d '[:space:]\r' || true)"
+CLASS_SENTINEL="$(grep -m1 '[^[:space:]]' "$CLASS_SENTINEL_FILE" | sed -e 's/\r$//' -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' || true)"
+if [[ ! "$CLASS_SENTINEL" =~ ^[A-Za-z0-9_-]+$ ]]; then
+  echo "[qg-path-audit] ERROR: CLASS sentinel must be one canonical token" >&2
+  exit 2
+fi
 
 # ── Step 2: Read PLAN.md Wave Class ──────────────────────────────────────────
 # Anchor: section starts on the FIRST line matching exactly:
-#   ^###[[:space:]]+Wave[[:space:]]+Class[[:space:]]*$
+#   ^#{2,3}[[:space:]]+Wave[[:space:]]+Class[[:space:]]*$
 # Boundary: any markdown heading (H1-H6) ends the section (mirrors Step 4's
 # Path-Manifest anchoring below). Take the first **Class**: line found INSIDE
 # that window — NOT the first **Class**: anywhere in PLAN.md (a decoy bold
@@ -94,7 +98,7 @@ CLASS_SENTINEL="$(grep -m1 '[^[:space:]]' "$CLASS_SENTINEL_FILE" | tr -d '[:spac
 PLAN_CLASS=""
 IN_CLASS_SECTION=0
 while IFS= read -r line; do
-  if [[ "$line" =~ ^###[[:space:]]+Wave[[:space:]]+Class[[:space:]]*$ ]]; then
+  if [[ "$line" =~ ^#{2,3}[[:space:]]+Wave[[:space:]]+Class[[:space:]]*$ ]]; then
     IN_CLASS_SECTION=1
     continue
   fi
@@ -103,7 +107,10 @@ while IFS= read -r line; do
       break
     fi
     if [[ "$line" =~ \*\*Class\*\*: ]]; then
-      PLAN_CLASS="$(echo "$line" | sed 's/.*\*\*Class\*\*:[[:space:]]*//' | tr -d '[:space:]\r')"
+      class_text="$(echo "$line" | sed 's/.*\*\*Class\*\*:[[:space:]]*//' | tr -d '\r')"
+      if [[ "$class_text" =~ ^([A-Za-z0-9_-]+)([[:space:]]|\(|$) ]]; then
+        PLAN_CLASS="${BASH_REMATCH[1]}"
+      fi
       break
     fi
   fi
@@ -126,24 +133,23 @@ echo "[qg-path-audit] CLASS check: $CLASS_SENTINEL == $PLAN_CLASS OK" >&2
 
 # ── Step 4: Extract Path-Manifest file list ───────────────────────────────────
 # Anchor: section starts on the FIRST line matching exactly:
-#   ^###[[:space:]]+Path-Manifest[[:space:]]*$
+#   ^###[[:space:]]+Path(-|[[:space:]]+)Manifest[[:space:]]*$
 # Boundary terminators (first match ends the section):
 #   (a) ^#{1,6}[[:space:]]          — any markdown heading (H1–H6)
 #   (b) ^[[:space:]]*\*\*[Ee]xcluded — a bold Excluded marker
 #   (c) ^[[:space:]]*<!--[[:space:]]*end[[:space:]]+Path-Manifest — explicit end comment
-# Path-only counting: a line is a manifest entry ONLY when, after stripping a
-#   leading "- " (with optional surrounding backtick), trailing backtick, and
-#   trailing " (…)" annotation, the remaining token matches ^[A-Za-z0-9._/-]+$
-#   (non-empty, no spaces). Bold sub-headers like "**New files (create)**" are
-#   skipped; only "- path/to/file" bullets are counted. Non-Excluded bold labels
-#   do NOT end the section — only the Excluded marker does.
-# Exit 2: if the ### Path-Manifest header is never found in PLAN.md.
+# Path-only counting accepts either the historical "- path/to/file" bullets or
+#   numbered Markdown-table rows whose SECOND cell is the path. Table rows must
+#   start with a decimal index; headers, separators, prose/decoy rows, and paths
+#   appearing in any other cell are ignored. In both forms the extracted token
+#   must match ^[A-Za-z0-9._/-]+$ (non-empty, no spaces).
+# Exit 2: if neither supported Path Manifest heading is found in PLAN.md.
 
 MANIFEST_FILES=()
 IN_MANIFEST=0
 FOUND_MANIFEST=0
 while IFS= read -r line; do
-  if [[ "$line" =~ ^###[[:space:]]+Path-Manifest[[:space:]]*$ ]]; then
+  if [[ "$line" =~ ^###[[:space:]]+Path(-|[[:space:]]+)Manifest[[:space:]]*$ ]]; then
     FOUND_MANIFEST=1
     IN_MANIFEST=1
     continue
@@ -160,6 +166,28 @@ while IFS= read -r line; do
     # Boundary terminator (c): explicit end-marker comment
     if [[ "$line" =~ ^[[:space:]]*\<\!--[[:space:]]*end[[:space:]]+Path-Manifest ]]; then
       break
+    fi
+    # Canonical table form: | <numeric index> | `<path>` | ... |
+    # Capture only the second cell, then apply the same strict path-token check
+    # as the bullet form below. Requiring a numeric first cell prevents prose,
+    # header, separator, and decoy rows from widening the allow-list.
+    table_line="${line//$'\r'/}"
+    if [[ "$table_line" =~ ^[[:space:]]*\|[[:space:]]*[0-9]+[[:space:]]*\|[[:space:]]*([^|]+)[[:space:]]*\| ]]; then
+      table_path="${BASH_REMATCH[1]}"
+      table_path="${table_path#"${table_path%%[! ]*}"}"
+      table_path="${table_path%"${table_path##*[! ]}"}"
+      if [[ "$table_path" =~ ^\`([A-Za-z0-9._/-]+)\`($|[[:space:]].*) ]]; then
+        table_path="${BASH_REMATCH[1]}"
+      elif [[ "$table_path" =~ ^[A-Za-z0-9._/-]+$ ]]; then
+        table_path="${table_path#\`}"
+        table_path="${table_path%\`}"
+      else
+        continue
+      fi
+      if [[ -n "$table_path" && "$table_path" =~ ^[A-Za-z0-9._/-]+$ && "$table_path" =~ [A-Za-z0-9] ]]; then
+        MANIFEST_FILES+=("$table_path")
+      fi
+      continue
     fi
     # Path-only counting: strip leading "- `" or "- " prefix
     stripped="${line#- \`}"
@@ -182,8 +210,8 @@ while IFS= read -r line; do
 done < "$PLAN_FILE"
 
 if [[ $FOUND_MANIFEST -eq 0 ]]; then
-  echo "[qg-path-audit] ERROR: ### Path-Manifest header not found in PLAN.md — cannot build allow-list."
-  echo "[qg-path-audit] ERROR: ### Path-Manifest header not found in PLAN.md — cannot build allow-list." >&2
+  echo "[qg-path-audit] ERROR: ### Path-Manifest / ### Path Manifest header not found in PLAN.md — cannot build allow-list."
+  echo "[qg-path-audit] ERROR: ### Path-Manifest / ### Path Manifest header not found in PLAN.md — cannot build allow-list." >&2
   exit 2
 fi
 
@@ -195,11 +223,16 @@ echo "[qg-path-audit] Manifest has ${#MANIFEST_FILES[@]} entries." >&2
 PROJ_ROOT="${PROJECT_ROOT:-$(cd "$WAVE_DIR/../.." && pwd)}"
 
 TOUCHED_FILES=()
+if ! touched_output="$(git -C "$PROJ_ROOT" diff --no-renames --name-only "${BASE_REF}..HEAD" 2>&1)"; then
+  echo "[qg-path-audit] ERROR: could not enumerate touched files from ${BASE_REF}..HEAD" >&2
+  [[ -n "$touched_output" ]] && echo "$touched_output" >&2
+  exit 2
+fi
 while IFS= read -r f; do
   # Normalize to forward-slash (Windows safety)
   f="${f//\\//}"
   [[ -n "$f" ]] && TOUCHED_FILES+=("$f")
-done < <(git -C "$PROJ_ROOT" diff --name-only "${BASE_REF}..HEAD" 2>/dev/null || true)
+done <<< "$touched_output"
 
 echo "[qg-path-audit] Touched files: ${#TOUCHED_FILES[@]}" >&2
 

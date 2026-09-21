@@ -70,10 +70,28 @@ on:
         type: boolean
         default: true
 
+permissions:
+  contents: read
+
 jobs:
   readme-audit:
     name: Verify README counts are current
     runs-on: ubuntu-latest
+    env:
+      ACD_INPUT_CHECK_SKILLS: ${{ inputs.check_skills }}
+      ACD_INPUT_SKILLS_DIR: ${{ inputs.skills_dir }}
+      ACD_INPUT_SKILLS_EXCLUDE_PATTERN: ${{ inputs.skills_exclude_pattern }}
+      ACD_INPUT_CHECK_REGISTRY: ${{ inputs.check_registry }}
+      ACD_INPUT_REGISTRY_PATH: ${{ inputs.registry_path }}
+      ACD_INPUT_CHECK_AGENTS: ${{ inputs.check_agents }}
+      ACD_INPUT_AGENTS_DIR: ${{ inputs.agents_dir }}
+      ACD_INPUT_CHECK_DETEKT_RULES: ${{ inputs.check_detekt_rules }}
+      ACD_INPUT_DETEKT_RULES_DIR: ${{ inputs.detekt_rules_dir }}
+      ACD_INPUT_CHECK_MCP_TOOLS: ${{ inputs.check_mcp_tools }}
+      ACD_INPUT_MCP_TOOLS_DIR: ${{ inputs.mcp_tools_dir }}
+      ACD_INPUT_CHECK_REUSABLE_WF: ${{ inputs.check_reusable_wf }}
+      ACD_INPUT_REUSABLE_WF_PATTERN: ${{ inputs.reusable_wf_pattern }}
+      ACD_INPUT_README_PATH: ${{ inputs.readme_path }}
 
     steps:
       - uses: actions/checkout@v5
@@ -82,19 +100,20 @@ jobs:
         id: counts
         run: |
           # Skills
-          if [ "${{ inputs.check_skills || 'true' }}" = "true" ] && [ -d "${{ inputs.skills_dir || 'skills/' }}" ]; then
-            SKILLS=$(ls "${{ inputs.skills_dir || 'skills/' }}" \
-              | grep -vE "${{ inputs.skills_exclude_pattern || 'registry|params|schema' }}" \
+          if [ "${ACD_INPUT_CHECK_SKILLS:-true}" = "true" ] && [ -d "${ACD_INPUT_SKILLS_DIR:-skills/}" ]; then
+            SKILLS=$(ls -- "${ACD_INPUT_SKILLS_DIR:-skills/}" \
+              | grep -vE -- "${ACD_INPUT_SKILLS_EXCLUDE_PATTERN:-registry|params|schema}" \
               | wc -l | tr -d ' ')
           else
             SKILLS="skip"
           fi
 
           # Registry
-          if [ "${{ inputs.check_registry || 'true' }}" = "true" ] && [ -f "${{ inputs.registry_path || 'skills/registry.json' }}" ]; then
-            REGISTRY=$(python3 -c "
-          import json
-          d = json.load(open('${{ inputs.registry_path || 'skills/registry.json' }}'))
+          ACD_REGISTRY_PATH_RESOLVED="${ACD_INPUT_REGISTRY_PATH:-skills/registry.json}"
+          if [ "${ACD_INPUT_CHECK_REGISTRY:-true}" = "true" ] && [ -f "$ACD_REGISTRY_PATH_RESOLVED" ]; then
+            REGISTRY=$(ACD_REGISTRY_PATH_RESOLVED="$ACD_REGISTRY_PATH_RESOLVED" python3 -c "
+          import json, os
+          d = json.load(open(os.environ['ACD_REGISTRY_PATH_RESOLVED']))
           entries = d.get('skills', d.get('entries', []))
           print(len(entries))")
           else
@@ -102,30 +121,34 @@ jobs:
           fi
 
           # Agents
-          if [ "${{ inputs.check_agents || 'true' }}" = "true" ] && [ -d "${{ inputs.agents_dir || '.claude/agents/' }}" ]; then
-            AGENTS=$(ls "${{ inputs.agents_dir || '.claude/agents/' }}" | wc -l | tr -d ' ')
+          if [ "${ACD_INPUT_CHECK_AGENTS:-true}" = "true" ] && [ -d "${ACD_INPUT_AGENTS_DIR:-.claude/agents/}" ]; then
+            AGENTS=$(ls -- "${ACD_INPUT_AGENTS_DIR:-.claude/agents/}" | wc -l | tr -d ' ')
           else
             AGENTS="skip"
           fi
 
           # Detekt rules
-          if [ "${{ inputs.check_detekt_rules || 'true' }}" = "true" ] && [ -d "${{ inputs.detekt_rules_dir || 'detekt-rules/src/main/kotlin/com/androidcommondoc/detekt/rules/' }}" ]; then
-            RULES=$(ls "${{ inputs.detekt_rules_dir || 'detekt-rules/src/main/kotlin/com/androidcommondoc/detekt/rules/' }}"*.kt 2>/dev/null \
+          ACD_DETEKT_RULES_DIR_RESOLVED="${ACD_INPUT_DETEKT_RULES_DIR:-detekt-rules/src/main/kotlin/com/androidcommondoc/detekt/rules/}"
+          if [ "${ACD_INPUT_CHECK_DETEKT_RULES:-true}" = "true" ] && [ -d "$ACD_DETEKT_RULES_DIR_RESOLVED" ]; then
+            RULES=$(ls -- "$ACD_DETEKT_RULES_DIR_RESOLVED"*.kt 2>/dev/null \
               | grep -v generated | wc -l | tr -d ' ')
           else
             RULES="skip"
           fi
 
           # MCP tools (exclude index.ts — it's the barrel export, not a tool)
-          if [ "${{ inputs.check_mcp_tools || 'true' }}" = "true" ] && [ -d "${{ inputs.mcp_tools_dir || 'mcp-server/src/tools/' }}" ]; then
-            MCP_TOOLS=$(ls "${{ inputs.mcp_tools_dir || 'mcp-server/src/tools/' }}"*.ts 2>/dev/null | grep -v index.ts | wc -l | tr -d ' ')
+          ACD_MCP_TOOLS_DIR_RESOLVED="${ACD_INPUT_MCP_TOOLS_DIR:-mcp-server/src/tools/}"
+          if [ "${ACD_INPUT_CHECK_MCP_TOOLS:-true}" = "true" ] && [ -d "$ACD_MCP_TOOLS_DIR_RESOLVED" ]; then
+            MCP_TOOLS=$(ls -- "$ACD_MCP_TOOLS_DIR_RESOLVED"*.ts 2>/dev/null | grep -v index.ts | wc -l | tr -d ' ')
           else
             MCP_TOOLS="skip"
           fi
 
           # Reusable workflows
-          if [ "${{ inputs.check_reusable_wf || 'true' }}" = "true" ]; then
-            REUSABLE_WF=$(ls ${{ inputs.reusable_wf_pattern || '.github/workflows/reusable-*.yml' }} 2>/dev/null | wc -l | tr -d ' ')
+          if [ "${ACD_INPUT_CHECK_REUSABLE_WF:-true}" = "true" ]; then
+            ACD_WF_PATTERN_RESOLVED="${ACD_INPUT_REUSABLE_WF_PATTERN:-.github/workflows/reusable-*.yml}"
+            REUSABLE_WF=$(ACD_WF_GLOB_PATTERN="$ACD_WF_PATTERN_RESOLVED" python3 -c \
+              "import glob, os; print(len(glob.glob(os.environ['ACD_WF_GLOB_PATTERN'])))")
           else
             REUSABLE_WF="skip"
           fi
@@ -176,14 +199,14 @@ jobs:
 
       - name: Check README mentions key counts
         run: |
-          README="${{ inputs.readme_path || 'README.md' }}"
+          README="${ACD_INPUT_README_PATH:-README.md}"
           FAIL=0
 
           check() {
             local label=$1
             local value=$2
             [ "$value" = "skip" ] && echo "⏭  $label: skipped" && return
-            if grep -qE "\b${value}\b" "$README"; then
+            if grep -qE "\b${value}\b" -- "$README"; then
               echo "✅  $label: $value found in $README"
             else
               echo "❌  $label: $value NOT found in $README"

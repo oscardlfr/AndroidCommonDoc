@@ -335,8 +335,10 @@ describe('quality-gate-protocol doc', () => {
     expect(content).toContain('Production File Verification');
   });
 
-  it('version bumped to 4', () => {
-    expect(content).toContain('version: 4');
+  it('keeps the quality-gate protocol at version 4 or newer', () => {
+    const match = content.match(/^version:\s*"?(\d+)"?\s*$/m);
+    expect(match).not.toBeNull();
+    expect(Number(match?.[1])).toBeGreaterThanOrEqual(4);
   });
 
   it('has architect deliberation step', () => {

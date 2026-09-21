@@ -226,11 +226,11 @@ process.stdin.on('end', () => {
       return;
     }
     const planContent = fs.readFileSync(planPath, 'utf8');
-    if (!/^###\s+Spawn Table/m.test(planContent)) {
+    if (!/^#{2,3}\s+Spawn Table/m.test(planContent)) {
       if (process.env.SKIP_SPAWN_TABLE === '1') process.exit(0);
       block(
-        '[premature-execution-gate] PLAN.md missing "### Spawn Table" section for wave "' + slug + '".\n'
-        + 'Planner must add ### Spawn Table before specialists execute.\n'
+        '[premature-execution-gate] PLAN.md missing a "## Spawn Table" (or "### Spawn Table") section for wave "' + slug + '".\n'
+        + 'Planner must add a Spawn Table heading (## or ###) before specialists execute.\n'
         + 'Emergency escape: SKIP_SPAWN_TABLE=1'
       );
       return;

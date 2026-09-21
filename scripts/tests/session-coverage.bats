@@ -27,6 +27,15 @@ source "$BATS_TEST_DIRNAME/lib/readme-counts.sh"
 # Reusable workflow run: block extractor -- for the input-interpolation fence.
 source "$BATS_TEST_DIRNAME/lib/workflow-run-blocks.sh"
 
+# Materialize the guide before matching it.  With `set -o pipefail`, piping the
+# producer into `grep -q` is racy: grep may exit after its first match while the
+# producer is still writing, turning a successful assertion into SIGPIPE 141.
+orchestration_guide_grep() {
+    local guide
+    guide="$(cat_orchestration_guide)" || return
+    grep "$@" <<< "$guide"
+}
+
 setup() {
     source "$SH_LIB"
     WORK_DIR=$(mktemp -d)
@@ -221,12 +230,14 @@ teardown() {
     ! grep -E '\$\{\{[^}]*\|\|[^}]*"[A-Za-z]' "$L0_ROOT/.github/workflows/l0-sync-dispatch.yml"
 }
 
-@test "syntax: auto-sync SOURCE_LAYER uses single quotes" {
-    grep -q "|| 'L0'" "$L0_ROOT/setup/templates/workflows/l0-auto-sync.yml"
+@test "correctness: l0-auto-sync.yml SOURCE_LAYER shell-side default preserves 'L0' fallback (supersedes obsolete single-quote-mitigation check)" {
+    wf="$L0_ROOT/setup/templates/workflows/l0-auto-sync.yml"
+    run_block_lines "$wf" | grep -qF 'SOURCE_LAYER="${ACD_PAYLOAD_SOURCE_LAYER:-L0}"'
 }
 
-@test "syntax: auto-sync SOURCE_COMMIT uses single quotes" {
-    grep -q "|| 'scheduled'" "$L0_ROOT/setup/templates/workflows/l0-auto-sync.yml"
+@test "correctness: l0-auto-sync.yml SOURCE_COMMIT shell-side default preserves 'scheduled' fallback (supersedes obsolete single-quote-mitigation check)" {
+    wf="$L0_ROOT/setup/templates/workflows/l0-auto-sync.yml"
+    run_block_lines "$wf" | grep -qF 'SOURCE_COMMIT="${ACD_PAYLOAD_L0_COMMIT:-scheduled}"'
 }
 
 # ===========================================================================
@@ -1165,21 +1176,21 @@ assert d['profiles']['advanced']['overrides'].get('debugger') == 'opus', 'debugg
 
 @test "templates: team-lead NEVER writes code" {
     # BL-W45 hub-split: content may be in tl-* sub-docs
-    cat_orchestration_guide | grep -q "NEVER write code\|NEVER writes code\|NEVER write code yourself"
+    orchestration_guide_grep -q "NEVER write code\|NEVER writes code\|NEVER write code yourself"
 }
 
 @test "templates: team-lead has agent roster with team roles" {
     # BL-W45 hub-split: content may be in tl-* sub-docs
-    cat_orchestration_guide | grep -q "Agent Roster"
-    cat_orchestration_guide | grep -q "arch-testing"
-    cat_orchestration_guide | grep -q "quality-gater"
-    cat_orchestration_guide | grep -q "planner"
+    orchestration_guide_grep -q "Agent Roster"
+    orchestration_guide_grep -q "arch-testing"
+    orchestration_guide_grep -q "quality-gater"
+    orchestration_guide_grep -q "planner"
 }
 
 @test "templates: team-lead delegates testing to skills" {
     # BL-W45 hub-split: content may be in tl-* sub-docs
-    cat_orchestration_guide | grep -q "/test"
-    cat_orchestration_guide | grep -q "/test-full-parallel"
+    orchestration_guide_grep -q "/test"
+    orchestration_guide_grep -q "/test-full-parallel"
 }
 
 @test "templates: arch-testing is mini-orchestrator with MCP tools" {
@@ -1218,24 +1229,24 @@ assert d['profiles']['advanced']['overrides'].get('debugger') == 'opus', 'debugg
 
 @test "templates: team-lead has architect verification gate" {
     # BL-W45 hub-split: use cat_orchestration_guide for all content checks
-    cat_orchestration_guide | grep -qE "Architect Verification"
-    cat_orchestration_guide | grep -q "arch-testing"
-    cat_orchestration_guide | grep -q "arch-platform"
-    cat_orchestration_guide | grep -q "arch-integration"
-    cat_orchestration_guide | grep -q "NEVER write code\|NEVER write code yourself"
+    orchestration_guide_grep -qE "Architect Verification"
+    orchestration_guide_grep -q "arch-testing"
+    orchestration_guide_grep -q "arch-platform"
+    orchestration_guide_grep -q "arch-integration"
+    orchestration_guide_grep -q "NEVER write code\|NEVER write code yourself"
 }
 
 @test "templates: team-lead has planning delegation" {
     # BL-W45 hub-split: content may be in tl-* sub-docs
     # Wave 25: "Planning Delegation" section title became "Planning Phase (EnterPlanMode gate)"
-    cat_orchestration_guide | grep -qE "Planning Phase|Planning Delegation"
-    cat_orchestration_guide | grep -q "planner"
+    orchestration_guide_grep -qE "Planning Phase|Planning Delegation"
+    orchestration_guide_grep -q "planner"
 }
 
 @test "templates: team-lead has TDD-first for bug fixes" {
     # BL-W45 hub-split: content may be in tl-* sub-docs
-    cat_orchestration_guide | grep -q "TDD-first for bug fixes"
-    cat_orchestration_guide | grep -q "failing test"
+    orchestration_guide_grep -q "TDD-first for bug fixes"
+    orchestration_guide_grep -q "failing test"
 }
 
 @test "templates: all architects can delegate and cross-verify" {
@@ -1259,9 +1270,9 @@ assert d['profiles']['advanced']['overrides'].get('debugger') == 'opus', 'debugg
 
 @test "templates: team-lead has MCP tools section" {
     # BL-W45 hub-split: content may be in tl-* sub-docs
-    cat_orchestration_guide | grep -q "MCP Tools"
-    cat_orchestration_guide | grep -q "verify-kmp-packages"
-    cat_orchestration_guide | grep -q "35"
+    orchestration_guide_grep -q "MCP Tools"
+    orchestration_guide_grep -q "verify-kmp-packages"
+    orchestration_guide_grep -q "35"
 }
 
 @test "docs: agents-hub references 3-phase model and team topology" {
@@ -1303,10 +1314,10 @@ assert d['profiles']['advanced']['overrides'].get('debugger') == 'opus', 'debugg
 
 @test "templates: team-lead has post-change checklist" {
     # BL-W45 hub-split: content may be in tl-* sub-docs
-    cat_orchestration_guide | grep -q "Post-Change Checklist"
-    cat_orchestration_guide | grep -q "automatic"
-    cat_orchestration_guide | grep -q "audit-docs"
-    cat_orchestration_guide | grep -q "readme-audit"
+    orchestration_guide_grep -q "Post-Change Checklist"
+    orchestration_guide_grep -q "automatic"
+    orchestration_guide_grep -q "audit-docs"
+    orchestration_guide_grep -q "readme-audit"
 }
 
 @test "README: template count is current" {
@@ -1318,9 +1329,9 @@ assert d['profiles']['advanced']['overrides'].get('debugger') == 'opus', 'debugg
 
 @test "templates: team-lead references official anthropic skills" {
     # BL-W45 hub-split: content may be in tl-* sub-docs
-    cat_orchestration_guide | grep -q "Official Skills"
-    cat_orchestration_guide | grep -q "tdd-workflow"
-    cat_orchestration_guide | grep -q "security-review"
+    orchestration_guide_grep -q "Official Skills"
+    orchestration_guide_grep -q "tdd-workflow"
+    orchestration_guide_grep -q "security-review"
 }
 
 @test "agents: 12 agents reference official skills" {
@@ -1394,7 +1405,7 @@ assert d['profiles']['advanced']['overrides'].get('debugger') == 'opus', 'debugg
 
 @test "arch: PM assigns to architects (not devs directly)" {
     # BL-W45 hub-split: content may be in tl-* sub-docs
-    cat_orchestration_guide | grep -qE "assigns.*architects|assign.*work.*architects"
+    orchestration_guide_grep -qE "assigns.*architects|assign.*work.*architects"
 }
 
 @test "arch: all architects have CUSTOMIZE markers for project guardians" {
@@ -1436,7 +1447,7 @@ assert d['profiles']['advanced']['overrides'].get('debugger') == 'opus', 'debugg
 
 @test "arch: PM template forbids Bash+CLI spawning" {
     # BL-W45 hub-split: content may be in tl-* sub-docs
-    cat_orchestration_guide | grep -qE "FORBIDDEN.*Bash.*cli|Spawning agents via Bash"
+    orchestration_guide_grep -qE "FORBIDDEN.*Bash.*cli|Spawning agents via Bash"
 }
 
 @test "arch: architects are read-only (no Write/Edit, have SendMessage)" {
@@ -1555,7 +1566,7 @@ jobs:
 
           echo "${{ inputs.x }}"
 YAML
-    run_block_lines "$WORK_DIR/bad-block.yml" | grep -q '${{ inputs\.'
+    run_block_expression_text "$WORK_DIR/bad-block.yml" | grep -qF '${{inputs.'
 }
 
 @test "run_block_lines: positive control - flags raw input interpolation inside a single-line run:" {
@@ -1573,7 +1584,7 @@ jobs:
       - name: unsafe single-line
         run: echo ${{ inputs.x }}
 YAML
-    run_block_lines "$WORK_DIR/bad-single-line.yml" | grep -q '${{ inputs\.'
+    run_block_expression_text "$WORK_DIR/bad-single-line.yml" | grep -qF '${{inputs.'
 }
 
 @test "run_block_lines: positive control - flags step-output interpolation inside a block-form run: (CodeRabbit PR #245 Major #2)" {
@@ -1588,13 +1599,18 @@ jobs:
 
           bash "${{ steps.foo.outputs.bar }}"
 YAML
-    run_block_lines "$WORK_DIR/bad-steps-block.yml" | grep -q '${{ steps\.'
+    run_block_expression_text "$WORK_DIR/bad-steps-block.yml" | grep -qF '${{steps.'
 }
 
 @test "input-fence: reusable-shell-tests.yml has no raw input interpolation inside run: blocks" {
     wf="$L0_ROOT/.github/workflows/reusable-shell-tests.yml"
-    ! run_block_lines "$wf" | grep -q '${{ inputs\.'
-    ! run_block_lines "$wf" | grep -q '${{ steps\.'
+    # Combined into a single grep -qE alternation deliberately: two separate
+    # `! cmd1` / `! cmd2` lines are NOT equivalent to "both must hold" under
+    # bats/bash -- `!` exempts a command from triggering errexit, so an
+    # earlier failing `! grep` is silently swallowed and only the LAST
+    # negated line's result actually determines the test's outcome. A
+    # single combined check has no such blind spot.
+    run_block_expression_absent "$wf" '\$\{\{(inputs|steps)(\.|\[)'
 }
 
 @test "input-fence: reusable-shell-tests.yml env-maps androidcommondoc_path" {
@@ -1604,8 +1620,9 @@ YAML
 
 @test "input-fence: reusable-copilot-parity.yml has no raw input interpolation inside run: blocks" {
     wf="$L0_ROOT/.github/workflows/reusable-copilot-parity.yml"
-    ! run_block_lines "$wf" | grep -q '${{ inputs\.'
-    ! run_block_lines "$wf" | grep -q '${{ steps\.'
+    # See reusable-shell-tests.yml's sibling test above for why this is one
+    # combined grep -qE, not two separate `! ...` lines.
+    run_block_expression_absent "$wf" '\$\{\{(inputs|steps)(\.|\[)'
 }
 
 @test "input-fence: reusable-copilot-parity.yml env-maps androidcommondoc_path" {
@@ -1615,8 +1632,9 @@ YAML
 
 @test "input-fence: reusable-lint-resources.yml has no raw input interpolation inside run: blocks" {
     wf="$L0_ROOT/.github/workflows/reusable-lint-resources.yml"
-    ! run_block_lines "$wf" | grep -q '${{ inputs\.'
-    ! run_block_lines "$wf" | grep -q '${{ steps\.'
+    # See reusable-shell-tests.yml's sibling test above for why this is one
+    # combined grep -qE, not two separate `! ...` lines.
+    run_block_expression_absent "$wf" '\$\{\{(inputs|steps)(\.|\[)'
 }
 
 @test "input-fence: reusable-lint-resources.yml env-maps androidcommondoc_path, strict, and module_path" {
@@ -1628,8 +1646,9 @@ YAML
 
 @test "input-fence: reusable-agent-parity.yml has no raw input interpolation inside run: blocks" {
     wf="$L0_ROOT/.github/workflows/reusable-agent-parity.yml"
-    ! run_block_lines "$wf" | grep -q '${{ inputs\.'
-    ! run_block_lines "$wf" | grep -q '${{ steps\.'
+    # See reusable-shell-tests.yml's sibling test above for why this is one
+    # combined grep -qE, not two separate `! ...` lines.
+    run_block_expression_absent "$wf" '\$\{\{(inputs|steps)(\.|\[)'
 }
 
 @test "input-fence: reusable-agent-parity.yml job-level env-maps androidcommondoc_path and target" {
@@ -1638,3 +1657,1032 @@ YAML
     grep -q 'ACD_INPUT_TARGET: ${{ inputs.target }}' "$wf"
 }
 
+# ============================================================
+# Section: Wave 2 -- workflow input/expression boundary audit
+# (workflow-input-boundary-audit -- extends the G0 fence above to `script:`
+# blocks (JS-context, actions/github-script) and to the Wave-2 file
+# manifest. RED-only: authored ahead of the hardening fix landing in these
+# files -- every test below is expected to fail against current HEAD.)
+# ============================================================
+
+# ---- Task 1: extractor contract -- script_block_lines mechanics ----------
+
+@test "script_block_lines: block body continues past a blank line (does not terminate early)" {
+    cat > "$WORK_DIR/blank-mid-script-block.yml" <<'YAML'
+jobs:
+  x:
+    steps:
+      - name: has a blank line mid-block
+        uses: actions/github-script@v7
+        with:
+          script: |
+            console.log("marker-before");
+
+            console.log("marker-after");
+YAML
+    result="$(script_block_lines "$WORK_DIR/blank-mid-script-block.yml")"
+    echo "$result" | grep -q "marker-before"
+    echo "$result" | grep -q "marker-after"
+}
+
+@test "script_block_lines: positive control - flags step-output interpolation inside a block-form script:" {
+    cat > "$WORK_DIR/bad-script-block.yml" <<'YAML'
+jobs:
+  bad:
+    runs-on: ubuntu-latest
+    steps:
+      - name: unsafe script
+        uses: actions/github-script@v7
+        with:
+          script: |
+            console.log("before");
+
+            console.log("${{ steps.foo.outputs.bar }}");
+YAML
+    script_block_expression_text "$WORK_DIR/bad-script-block.yml" | grep -qF '${{steps.'
+}
+
+# ---- Task 1: Extractor Contract fixtures ----------------------------------
+# (scalar and block-scalar `|` positive controls already exist above this
+# section from G0; these add folded `>`, nested/varying-indentation,
+# github.event.inputs, and if:/with: negative coverage per PLAN.md's
+# "Inventory / Extractor Contract" requirement.)
+
+@test "run_block_lines: positive control - flags raw input interpolation inside a folded (>) run: block" {
+    cat > "$WORK_DIR/bad-folded.yml" <<'YAML'
+jobs:
+  bad:
+    runs-on: ubuntu-latest
+    steps:
+      - name: unsafe folded block
+        run: >
+          echo "before"
+
+          echo "${{ inputs.x }}"
+YAML
+    run_block_expression_text "$WORK_DIR/bad-folded.yml" | grep -qF '${{inputs.'
+}
+
+@test "run_block_lines: recognizes YAML block indentation indicators and whitespace before colon" {
+    cat > "$WORK_DIR/explicit-indent.yml" <<'YAML'
+jobs:
+  bad:
+    runs-on: ubuntu-latest
+    steps:
+      - name: literal explicit indent
+        run : |2
+          echo "${{ inputs.literal }}"
+      - name: folded explicit indent and strip chomping
+        run: >2-
+          echo "${{ inputs.folded }}"
+YAML
+    result="$(run_block_lines "$WORK_DIR/explicit-indent.yml")"
+    echo "$result" | grep -q '${{ inputs\.literal }}'
+    echo "$result" | grep -q '${{ inputs\.folded }}'
+}
+
+@test "run_block_lines: recognizes quoted keys and anchor-prefixed block scalars" {
+    cat > "$WORK_DIR/quoted-anchor.yml" <<'YAML'
+jobs:
+  bad:
+    runs-on: ubuntu-latest
+    steps:
+      - name: double-quoted run key with anchor
+        "run": &command |2
+          echo "${{inputs['quoted']}}"
+      - name: single-quoted run key
+        'run' : >2-
+          echo "${{   inputs.folded }}"
+      - name: quoted github-script key with anchor
+        uses: actions/github-script@v7
+        with:
+          "script": &script_body |2
+            console.log(`${{steps['unsafe'].outputs.value}}`)
+YAML
+    run_result="$(run_block_lines "$WORK_DIR/quoted-anchor.yml")"
+    script_result="$(script_block_lines "$WORK_DIR/quoted-anchor.yml")"
+    echo "$run_result" | grep -q "inputs\['quoted'\]" || return 1
+    echo "$run_result" | grep -q 'inputs.folded' || return 1
+    echo "$script_result" | grep -q "steps\['unsafe'\]" || return 1
+}
+
+@test "workflow expression normalization catches compact, multiline, and bracket context notation" {
+    cat > "$WORK_DIR/expression-spellings.yml" <<'YAML'
+jobs:
+  bad:
+    runs-on: ubuntu-latest
+    steps:
+      - run: |2
+          echo "${{inputs['compact']}}"
+          echo "${{
+            github['event']['client_payload']['source_layer']
+          }}"
+          echo "${{ INPUTS.uppercase }}"
+          echo "${{ inputs[format('{0}', 'dynamic')] }}"
+YAML
+    normalized="$(run_block_expression_text "$WORK_DIR/expression-spellings.yml")"
+    echo "$normalized" | grep -qF '${{inputs.compact}}' || return 1
+    echo "$normalized" | grep -qF '${{github.event.client_payload.source_layer}}' || return 1
+    echo "$normalized" | grep -qiE '\$\{\{inputs(\.|\[)' || return 1
+}
+
+@test "workflow parser sees flow, explicit, tagged, and multiline runtime scalars" {
+    cat > "$WORK_DIR/yaml-runtime-forms.yml" <<'YAML'
+jobs:
+  bad:
+    runs-on: ubuntu-latest
+    steps:
+      - { run: 'echo "${{ inputs.flow }}"' }
+      - ? run
+        : |
+          echo "${{ inputs.explicit }}"
+      - run: !!str |
+          echo "${{ inputs.tagged }}"
+      - run: echo safe
+          && echo "${{ inputs.plain_multiline }}"
+      - run: "echo safe
+          && echo '${{ inputs.quoted_multiline }}'"
+      - env:
+          COMMAND: &command 'echo "${{ inputs.alias }}"'
+        run: *command
+YAML
+    normalized="$(run_block_expression_text "$WORK_DIR/yaml-runtime-forms.yml")"
+    for key in flow explicit tagged plain_multiline quoted_multiline alias; do
+        echo "$normalized" | grep -qF "\${{inputs.${key}}}" || return 1
+    done
+}
+
+@test "workflow parser fails closed on malformed YAML" {
+    cat > "$WORK_DIR/malformed-runtime.yml" <<'YAML'
+jobs:
+  bad:
+    steps:
+      - run: [unterminated
+YAML
+    run run_block_expression_text "$WORK_DIR/malformed-runtime.yml"
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"invalid YAML"* ]] || return 1
+}
+
+@test "run_block_lines: classifies taint correctly across a nested matrix structure with varying inner indentation" {
+    cat > "$WORK_DIR/nested-varying-indent.yml" <<'YAML'
+on:
+  workflow_call:
+    inputs:
+      x:
+        type: string
+        default: ''
+jobs:
+  safe-job:
+    runs-on: ubuntu-latest
+    steps:
+      - name: no interpolation here
+        run: echo "nothing to see"
+  bad-job:
+    strategy:
+      matrix:
+        os: [ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: nested job with varying inner indentation
+        run: |
+          echo "shallow"
+              echo "deeper-indent-still-in-block"
+          echo "${{ inputs.x }}"
+YAML
+    result="$(run_block_lines "$WORK_DIR/nested-varying-indent.yml")"
+    echo "$result" | grep -q "shallow"
+    echo "$result" | grep -q "deeper-indent-still-in-block"
+    echo "$result" | grep -q '${{ inputs\.'
+    echo "$result" | grep -q "nothing to see"
+}
+
+@test "run_block_lines: positive control - flags github.event.inputs interpolation inside a block-form run: (l0-release-assets.yml class)" {
+    cat > "$WORK_DIR/bad-event-inputs.yml" <<'YAML'
+jobs:
+  bad:
+    runs-on: ubuntu-latest
+    steps:
+      - name: unsafe event-inputs block
+        run: |
+          echo "before"
+
+          echo "${{ github.event.inputs.x }}"
+YAML
+    run_block_expression_text "$WORK_DIR/bad-event-inputs.yml" | grep -qF '${{github.event.inputs.'
+}
+
+@test "run_block_lines: negative control - if:/with: interpolation is correctly NOT extracted" {
+    cat > "$WORK_DIR/if-with-negative.yml" <<'YAML'
+on:
+  workflow_call:
+    inputs:
+      x:
+        type: string
+        default: ''
+      should_run:
+        type: boolean
+        default: true
+jobs:
+  mixed:
+    runs-on: ubuntu-latest
+    steps:
+      - name: uses if and with for interpolation only, never run
+        if: ${{ inputs.should_run }}
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.x }}
+      - name: run step has no interpolation
+        run: echo "safe"
+YAML
+    run_block_expression_absent "$WORK_DIR/if-with-negative.yml" '\$\{\{inputs(\.|\[)'
+}
+
+# ---- Task 2: shell hostile-value class -- input-fence pairs --------------
+
+@test "input-fence: readme-audit.yml has no raw input interpolation inside run: blocks" {
+    wf="$L0_ROOT/.github/workflows/readme-audit.yml"
+    run_block_expression_absent "$wf" '\$\{\{inputs(\.|\[)'
+}
+
+@test "input-fence: readme-audit.yml env-maps all 14 in-scope inputs (steps.counts.outputs.* excluded per PLAN.md Scope Decision A -- sanitized via wc -l/len() integer coercion, not a gate item this wave)" {
+    wf="$L0_ROOT/.github/workflows/readme-audit.yml"
+    grep -q 'ACD_INPUT_CHECK_SKILLS: ${{ inputs.check_skills }}' "$wf"
+    grep -q 'ACD_INPUT_SKILLS_DIR: ${{ inputs.skills_dir }}' "$wf"
+    grep -q 'ACD_INPUT_SKILLS_EXCLUDE_PATTERN: ${{ inputs.skills_exclude_pattern }}' "$wf"
+    grep -q 'ACD_INPUT_CHECK_REGISTRY: ${{ inputs.check_registry }}' "$wf"
+    grep -q 'ACD_INPUT_REGISTRY_PATH: ${{ inputs.registry_path }}' "$wf"
+    grep -q 'ACD_INPUT_CHECK_AGENTS: ${{ inputs.check_agents }}' "$wf"
+    grep -q 'ACD_INPUT_AGENTS_DIR: ${{ inputs.agents_dir }}' "$wf"
+    grep -q 'ACD_INPUT_CHECK_DETEKT_RULES: ${{ inputs.check_detekt_rules }}' "$wf"
+    grep -q 'ACD_INPUT_DETEKT_RULES_DIR: ${{ inputs.detekt_rules_dir }}' "$wf"
+    grep -q 'ACD_INPUT_CHECK_MCP_TOOLS: ${{ inputs.check_mcp_tools }}' "$wf"
+    grep -q 'ACD_INPUT_MCP_TOOLS_DIR: ${{ inputs.mcp_tools_dir }}' "$wf"
+    grep -q 'ACD_INPUT_CHECK_REUSABLE_WF: ${{ inputs.check_reusable_wf }}' "$wf"
+    grep -q 'ACD_INPUT_REUSABLE_WF_PATTERN: ${{ inputs.reusable_wf_pattern }}' "$wf"
+    grep -q 'ACD_INPUT_README_PATH: ${{ inputs.readme_path }}' "$wf"
+}
+
+@test "input-fence: readme-audit.yml keeps all seven steps.counts.outputs values integer-only (five wc-l and two Python len boundaries)" {
+    wf="$L0_ROOT/.github/workflows/readme-audit.yml"
+    wc_l_count=$(grep -cF "| wc -l | tr -d ' '" "$wf" || true)
+    [ "${wc_l_count:-0}" -ge 5 ]
+    grep -qF 'print(len(entries))' "$wf"
+    grep -qF "print(len(glob.glob(os.environ['ACD_WF_GLOB_PATTERN'])))" "$wf"
+}
+
+@test "input-fence: doc-audit.yml has no raw input interpolation inside run: blocks" {
+    wf="$L0_ROOT/.github/workflows/doc-audit.yml"
+    # Single combined grep -qE, not two separate `! ...` lines -- `!` exempts
+    # a command from triggering bash errexit, so an earlier failing `! grep`
+    # would otherwise be silently swallowed and only the LAST negated line
+    # would determine the test's outcome.
+    run_block_expression_absent "$wf" '\$\{\{(inputs|steps)(\.|\[)'
+}
+
+@test "input-fence: doc-audit.yml env-maps layer, waves, and with_upstream" {
+    wf="$L0_ROOT/.github/workflows/doc-audit.yml"
+    grep -q 'ACD_INPUT_LAYER: ${{ inputs.layer }}' "$wf"
+    grep -q 'ACD_INPUT_WAVES: ${{ inputs.waves }}' "$wf"
+    grep -q 'ACD_INPUT_WITH_UPSTREAM: ${{ inputs.with_upstream }}' "$wf"
+}
+
+@test "input-fence: doc-monitor.yml has no raw input interpolation inside run: blocks" {
+    wf="$L0_ROOT/.github/workflows/doc-monitor.yml"
+    # See doc-audit.yml's sibling test above for why this is one combined
+    # grep -qE, not two separate `! ...` lines.
+    run_block_expression_absent "$wf" '\$\{\{(inputs|steps)(\.|\[)'
+}
+
+@test "input-fence: doc-monitor.yml env-maps tier" {
+    wf="$L0_ROOT/.github/workflows/doc-monitor.yml"
+    grep -q 'ACD_INPUT_TIER: ${{ inputs.tier }}' "$wf"
+}
+
+@test "input-fence: reusable-architecture-guards.yml has no raw input interpolation inside run: blocks" {
+    wf="$L0_ROOT/.github/workflows/reusable-architecture-guards.yml"
+    # See doc-audit.yml's sibling test above for why this is one combined
+    # grep -qE, not two separate `! ...` lines.
+    run_block_expression_absent "$wf" '\$\{\{(inputs|steps)(\.|\[)'
+}
+
+@test "input-fence: reusable-architecture-guards.yml env-maps gradle_task" {
+    wf="$L0_ROOT/.github/workflows/reusable-architecture-guards.yml"
+    grep -q 'ACD_INPUT_GRADLE_TASK: ${{ inputs.gradle_task }}' "$wf"
+}
+
+@test "input-fence: reusable-check-outdated.yml has no raw input interpolation inside run: blocks" {
+    wf="$L0_ROOT/.github/workflows/reusable-check-outdated.yml"
+    # See doc-audit.yml's sibling test above for why this is one combined
+    # grep -qE, not two separate `! ...` lines.
+    run_block_expression_absent "$wf" '\$\{\{(inputs|steps)(\.|\[)'
+}
+
+@test "input-fence: reusable-check-outdated.yml env-maps project_root, format, and max_age" {
+    wf="$L0_ROOT/.github/workflows/reusable-check-outdated.yml"
+    grep -q 'ACD_INPUT_PROJECT_ROOT: ${{ inputs.project_root }}' "$wf"
+    grep -q 'ACD_INPUT_FORMAT: ${{ inputs.format }}' "$wf"
+    grep -q 'ACD_INPUT_MAX_AGE: ${{ inputs.max_age }}' "$wf"
+}
+
+@test "input-fence: reusable-kmp-safety-check.yml has no raw input interpolation inside run: blocks" {
+    wf="$L0_ROOT/.github/workflows/reusable-kmp-safety-check.yml"
+    # See doc-audit.yml's sibling test above for why this is one combined
+    # grep -qE, not two separate `! ...` lines.
+    run_block_expression_absent "$wf" '\$\{\{(inputs|steps)(\.|\[)'
+}
+
+@test "input-fence: reusable-kmp-safety-check.yml env-maps di_path_pattern, fail_on_dispatchers_warning, and fail_on_run_blocking" {
+    wf="$L0_ROOT/.github/workflows/reusable-kmp-safety-check.yml"
+    grep -q 'ACD_INPUT_DI_PATH_PATTERN: ${{ inputs.di_path_pattern }}' "$wf"
+    grep -q 'ACD_INPUT_FAIL_ON_DISPATCHERS_WARNING: ${{ inputs.fail_on_dispatchers_warning }}' "$wf"
+    grep -q 'ACD_INPUT_FAIL_ON_RUN_BLOCKING: ${{ inputs.fail_on_run_blocking }}' "$wf"
+}
+
+@test "input-fence: reusable-commit-lint.yml has no raw input interpolation inside run: blocks" {
+    wf="$L0_ROOT/.github/workflows/reusable-commit-lint.yml"
+    # See doc-audit.yml's sibling test above for why this is one combined
+    # grep -qE, not two separate `! ...` lines.
+    run_block_expression_absent "$wf" '\$\{\{(inputs|steps)(\.|\[)'
+}
+
+@test "input-fence: reusable-commit-lint.yml env-maps valid_types, valid_scopes, and max_subject_length (squash_merge and PR_TITLE already env-mapped -- do not re-flag)" {
+    wf="$L0_ROOT/.github/workflows/reusable-commit-lint.yml"
+    grep -q 'ACD_INPUT_VALID_TYPES: ${{ inputs.valid_types }}' "$wf"
+    grep -q 'ACD_INPUT_VALID_SCOPES: ${{ inputs.valid_scopes }}' "$wf"
+    grep -q 'ACD_INPUT_MAX_SUBJECT_LENGTH: ${{ inputs.max_subject_length }}' "$wf"
+}
+
+@test "input-fence: reusable-audit-report.yml has no raw input interpolation inside run: blocks (shell surface only -- script: surface covered separately)" {
+    wf="$L0_ROOT/.github/workflows/reusable-audit-report.yml"
+    # See doc-audit.yml's sibling test above for why this is one combined
+    # grep -qE, not two separate `! ...` lines.
+    run_block_expression_absent "$wf" '\$\{\{(inputs|steps)(\.|\[)'
+}
+
+@test "input-fence: reusable-audit-report.yml env-maps project_root and weeks_lookback (shell surface)" {
+    wf="$L0_ROOT/.github/workflows/reusable-audit-report.yml"
+    grep -q 'ACD_INPUT_PROJECT_ROOT: ${{ inputs.project_root }}' "$wf"
+    grep -q 'ACD_INPUT_WEEKS_LOOKBACK: ${{ inputs.weeks_lookback }}' "$wf"
+}
+
+@test "input-fence: l0-release-assets.yml has no raw input/step/event-input interpolation inside run: blocks (elevated review -- contents: write)" {
+    wf="$L0_ROOT/.github/workflows/l0-release-assets.yml"
+    # Single combined grep -qE across all three patterns, not three separate
+    # `! ...` lines -- see doc-audit.yml's sibling test above for why.
+    run_block_expression_absent "$wf" '\$\{\{((inputs|steps)(\.|\[)|github(\[|\.event\.inputs\.))'
+}
+
+@test "input-fence: l0-release-assets.yml env-maps tag_name and version (elevated review -- contents: write)" {
+    wf="$L0_ROOT/.github/workflows/l0-release-assets.yml"
+    grep -q 'ACD_INPUT_TAG_NAME: ${{ github.event.inputs.tag_name }}' "$wf"
+    grep -q 'ACD_STEP_VERSION: ${{ steps.version.outputs.version }}' "$wf"
+}
+
+# ---- Task 3: JS-context class -- reusable-audit-report.yml script: block --
+
+@test "input-fence: reusable-audit-report.yml has no raw steps.* interpolation inside script: blocks (github-script, privileged PR-comment API call)" {
+    wf="$L0_ROOT/.github/workflows/reusable-audit-report.yml"
+    script_block_expression_absent "$wf" '\$\{\{steps(\.|\[)'
+}
+
+@test "input-fence: reusable-audit-report.yml script: block env-maps status/coverage/detekt/cve_critical and reads them via process.env, not JS template-literal interpolation" {
+    wf="$L0_ROOT/.github/workflows/reusable-audit-report.yml"
+    grep -q 'ACD_STEP_STATUS: ${{ steps.audit.outputs.status }}' "$wf"
+    grep -q 'ACD_STEP_COVERAGE: ${{ steps.audit.outputs.coverage }}' "$wf"
+    grep -q 'ACD_STEP_DETEKT: ${{ steps.audit.outputs.detekt }}' "$wf"
+    grep -q 'ACD_STEP_CVE_CRITICAL: ${{ steps.audit.outputs.cve_critical }}' "$wf"
+    grep -q 'process.env.ACD_STEP_STATUS' "$wf"
+    grep -q 'process.env.ACD_STEP_COVERAGE' "$wf"
+    grep -q 'process.env.ACD_STEP_DETEKT' "$wf"
+    grep -q 'process.env.ACD_STEP_CVE_CRITICAL' "$wf"
+}
+
+# ---- Task 4: hostile-value/exploit tests ----------------------------------
+# Each test below simulates GH Actions' actual textual substitution: it
+# takes the real site's exact shell/JS quoting context, substitutes a
+# hostile payload in place of the ${{ }} token, and executes the result in
+# an isolated per-test tmpdir ($WORK_DIR, fresh per bats setup()/teardown())
+# with a benign sentinel (`touch`/writeFileSync) -- never a destructive
+# action. RED now (the sentinel fires); GREEN once the site is hardened
+# (env projection + quoting for shell, env: + process.env for JS).
+
+@test "exploit: readme-audit.yml 'skills_exclude_pattern' input allows quote-breaking injection before hardening (RED)" {
+    wf="$L0_ROOT/.github/workflows/readme-audit.yml"
+    payload=$(printf 'x"; touch "%s/pwned"; echo "' "$WORK_DIR")
+    if run_block_expression_text "$wf" | grep -qF 'inputs.skills_exclude_pattern'; then
+        cat > "$WORK_DIR/exploit.sh" <<EOF
+#!/usr/bin/env bash
+echo "irrelevant" | grep -vE "$payload"
+EOF
+    else
+        grep -qF 'ACD_INPUT_SKILLS_EXCLUDE_PATTERN: ${{ inputs.skills_exclude_pattern }}' "$wf"
+        cat > "$WORK_DIR/exploit.sh" <<'EOF'
+#!/usr/bin/env bash
+echo "irrelevant" | grep -vE "$ACD_INPUT_SKILLS_EXCLUDE_PATTERN"
+EOF
+    fi
+    ACD_INPUT_SKILLS_EXCLUDE_PATTERN="$payload" bash "$WORK_DIR/exploit.sh" >/dev/null 2>&1 || true
+    [ ! -f "$WORK_DIR/pwned" ]
+}
+
+@test "exploit: readme-audit.yml 'reusable_wf_pattern' input allows leading-dash option-injection and cross-pattern word-splitting into ls before hardening (RED, numeric-miscount class -- not code-execution)" {
+    wf="$L0_ROOT/.github/workflows/readme-audit.yml"
+    mkdir -p "$WORK_DIR/dirA" "$WORK_DIR/dirB"
+    touch "$WORK_DIR/dirA/reusable-a.yml" "$WORK_DIR/dirA/reusable-b.yml"
+    touch "$WORK_DIR/dirB/doc-a.yml" "$WORK_DIR/dirB/doc-b.yml" "$WORK_DIR/dirB/doc-c.yml"
+    payload="--reverse $WORK_DIR/dirA/reusable-*.yml $WORK_DIR/dirB/doc-*.yml"
+    if run_block_lines "$wf" | grep -qE 'ls[[:space:]]+(--[[:space:]]+)?\$\{?ACD_INPUT_REUSABLE_WF_PATTERN'; then
+        cat > "$WORK_DIR/exploit.sh" <<'EOF'
+#!/usr/bin/env bash
+REUSABLE_WF=$(ls ${ACD_INPUT_REUSABLE_WF_PATTERN:-.github/workflows/reusable-*.yml} 2>/dev/null | wc -l | tr -d ' ')
+echo "$REUSABLE_WF"
+EOF
+    else
+        grep -qF 'ACD_WF_PATTERN_RESOLVED' "$wf"
+        cat > "$WORK_DIR/exploit.sh" <<'EOF'
+#!/usr/bin/env bash
+if [ "${ACD_INPUT_CHECK_REUSABLE_WF:-true}" = "true" ]; then
+    ACD_WF_PATTERN_RESOLVED="${ACD_INPUT_REUSABLE_WF_PATTERN:-.github/workflows/reusable-*.yml}"
+    REUSABLE_WF=$(ACD_WF_GLOB_PATTERN="$ACD_WF_PATTERN_RESOLVED" python3 -c \
+        "import glob, os; print(len(glob.glob(os.environ['ACD_WF_GLOB_PATTERN'])))")
+else
+    REUSABLE_WF="skip"
+fi
+echo "$REUSABLE_WF"
+EOF
+    fi
+    result=$(ACD_INPUT_REUSABLE_WF_PATTERN="$payload" bash "$WORK_DIR/exploit.sh")
+    # Numeric-miscount class, not code-execution -- no touch-sentinel available.
+    # Pre-fix: "--reverse" is silently consumed as an ls option and both
+    # sub-patterns independently expand and sum (2+3=5). Post-fix the entire
+    # value is one inert glob pattern, so the cross-pattern miscount disappears.
+    [ "$result" != "5" ]
+}
+
+@test "exploit: readme-audit.yml 'reusable_wf_pattern' input allows cross-pattern word-splitting into ls via embedded whitespace alone before hardening (RED, isolates multi-pattern ambiguity from option-injection)" {
+    wf="$L0_ROOT/.github/workflows/readme-audit.yml"
+    mkdir -p "$WORK_DIR/dirA" "$WORK_DIR/dirB"
+    touch "$WORK_DIR/dirA/reusable-a.yml" "$WORK_DIR/dirA/reusable-b.yml"
+    touch "$WORK_DIR/dirB/doc-a.yml" "$WORK_DIR/dirB/doc-b.yml" "$WORK_DIR/dirB/doc-c.yml"
+    payload="$WORK_DIR/dirA/reusable-*.yml $WORK_DIR/dirB/doc-*.yml"
+    if run_block_lines "$wf" | grep -qE 'ls[[:space:]]+(--[[:space:]]+)?\$\{?ACD_INPUT_REUSABLE_WF_PATTERN'; then
+        cat > "$WORK_DIR/exploit.sh" <<'EOF'
+#!/usr/bin/env bash
+REUSABLE_WF=$(ls ${ACD_INPUT_REUSABLE_WF_PATTERN:-.github/workflows/reusable-*.yml} 2>/dev/null | wc -l | tr -d ' ')
+echo "$REUSABLE_WF"
+EOF
+    else
+        grep -qF 'ACD_WF_PATTERN_RESOLVED' "$wf"
+        cat > "$WORK_DIR/exploit.sh" <<'EOF'
+#!/usr/bin/env bash
+if [ "${ACD_INPUT_CHECK_REUSABLE_WF:-true}" = "true" ]; then
+    ACD_WF_PATTERN_RESOLVED="${ACD_INPUT_REUSABLE_WF_PATTERN:-.github/workflows/reusable-*.yml}"
+    REUSABLE_WF=$(ACD_WF_GLOB_PATTERN="$ACD_WF_PATTERN_RESOLVED" python3 -c \
+        "import glob, os; print(len(glob.glob(os.environ['ACD_WF_GLOB_PATTERN'])))")
+else
+    REUSABLE_WF="skip"
+fi
+echo "$REUSABLE_WF"
+EOF
+    fi
+    result=$(ACD_INPUT_REUSABLE_WF_PATTERN="$payload" bash "$WORK_DIR/exploit.sh")
+    [ "$result" != "5" ]
+}
+
+@test "correctness: readme-audit.yml reusable_wf matching does not mutate shell glob state" {
+    wf="$L0_ROOT/.github/workflows/readme-audit.yml"
+    ! grep -qF 'shopt -s nullglob' "$wf"
+    ! grep -qF 'ACD_WF_MATCHES=(' "$wf"
+    grep -qF 'ACD_WF_GLOB_PATTERN="$ACD_WF_PATTERN_RESOLVED" python3' "$wf"
+}
+
+@test "input-fence: readme-audit.yml counts one inert workflow glob while preserving valid paths with spaces and dashes" {
+    wf="$L0_ROOT/.github/workflows/readme-audit.yml"
+    grep -qF "glob.glob(os.environ['ACD_WF_GLOB_PATTERN'])" "$wf"
+    ! grep -qF "reusable_wf_pattern must be a single token" "$wf"
+
+    mkdir -p "$WORK_DIR/-workflow files"
+    touch "$WORK_DIR/-workflow files/reusable-a.yml" "$WORK_DIR/-workflow files/reusable-b.yml"
+    pattern="$WORK_DIR/-workflow files/reusable-*.yml"
+    run env ACD_WF_GLOB_PATTERN="$pattern" python3 -c "import glob, os; print(len(glob.glob(os.environ['ACD_WF_GLOB_PATTERN'])))"
+    [ "$status" -eq 0 ]
+    [ "$output" = "2" ]
+
+    second="$WORK_DIR/second"
+    mkdir -p "$second"
+    touch "$second/reusable-c.yml"
+    run env ACD_WF_GLOB_PATTERN="$pattern $second/reusable-*.yml" python3 -c "import glob, os; print(len(glob.glob(os.environ['ACD_WF_GLOB_PATTERN'])))"
+    [ "$status" -eq 0 ]
+    [ "$output" = "0" ]
+
+    sentinel="$WORK_DIR/glob-command-substitution"
+    run env ACD_WF_GLOB_PATTERN="\$(touch $sentinel)" python3 -c "import glob, os; print(len(glob.glob(os.environ['ACD_WF_GLOB_PATTERN'])))"
+    [ "$status" -eq 0 ]
+    [ "$output" = "0" ]
+    [ ! -e "$sentinel" ]
+}
+
+@test "correctness: readme-audit.yml terminates options before every caller-controlled grep pattern and path" {
+    wf="$L0_ROOT/.github/workflows/readme-audit.yml"
+    grep -qF 'ls -- "${ACD_INPUT_SKILLS_DIR:-skills/}"' "$wf"
+    grep -qF 'grep -vE -- "${ACD_INPUT_SKILLS_EXCLUDE_PATTERN:-registry|params|schema}"' "$wf"
+    grep -qF 'ls -- "${ACD_INPUT_AGENTS_DIR:-.claude/agents/}"' "$wf"
+    grep -qF 'ls -- "$ACD_DETEKT_RULES_DIR_RESOLVED"*.kt' "$wf"
+    grep -qF 'ls -- "$ACD_MCP_TOOLS_DIR_RESOLVED"*.ts' "$wf"
+    grep -qF 'grep -qE "\b${value}\b" -- "$README"' "$wf"
+}
+
+@test "correctness: reusable-kmp-safety-check.yml terminates grep options before the caller-controlled DI regex" {
+    wf="$L0_ROOT/.github/workflows/reusable-kmp-safety-check.yml"
+    grep -qF 'grep -v -P -- "$DI_PATTERN|Test|test"' "$wf"
+}
+
+@test "correctness: reusable-kmp-safety-check.yml fails closed when the caller supplies invalid PCRE" {
+    wf="$L0_ROOT/.github/workflows/reusable-kmp-safety-check.yml"
+    grep -qF 'if [ "$DI_REGEX_STATUS" -eq 2 ]; then' "$wf"
+    grep -qF 'di_path_pattern must be a valid PCRE expression' "$wf"
+
+    run bash -c '
+      pattern=$1
+      if printf "" | grep -P -- "$pattern" >/dev/null 2>&1; then :; else
+        status=$?
+        if [ "$status" -eq 2 ]; then exit 2; fi
+      fi
+    ' _ '(|Test'
+    [ "$status" -eq 2 ]
+
+    run bash -c '
+      pattern=$1
+      if printf "" | grep -P -- "$pattern" >/dev/null 2>&1; then :; else
+        status=$?
+        if [ "$status" -eq 2 ]; then exit 2; fi
+      fi
+    ' _ '(^|/)di(/|$)'
+    [ "$status" -eq 0 ]
+}
+
+@test "input-fence: reusable-architecture-guards.yml rejects options and multi-argument text where one Gradle task is required" {
+    wf="$L0_ROOT/.github/workflows/reusable-architecture-guards.yml"
+    grep -qF 'if [[ ! "$ACD_INPUT_GRADLE_TASK" =~ ^:?[A-Za-z0-9_][A-Za-z0-9_.-]*(:[A-Za-z0-9_][A-Za-z0-9_.-]*)*$ ]]; then' "$wf"
+
+    run bash -c 'task=$1; [[ "$task" =~ ^:?[A-Za-z0-9_][A-Za-z0-9_.-]*(:[A-Za-z0-9_][A-Za-z0-9_.-]*)*$ ]]' _ ':konsist-guard:test'
+    [ "$status" -eq 0 ]
+    run bash -c 'task=$1; [[ "$task" =~ ^:?[A-Za-z0-9_][A-Za-z0-9_.-]*(:[A-Za-z0-9_][A-Za-z0-9_.-]*)*$ ]]' _ '--version'
+    [ "$status" -ne 0 ]
+    run bash -c 'task=$1; [[ "$task" =~ ^:?[A-Za-z0-9_][A-Za-z0-9_.-]*(:[A-Za-z0-9_][A-Za-z0-9_.-]*)*$ ]]' _ ':guard:test --scan'
+    [ "$status" -ne 0 ]
+}
+
+@test "input-fence: reusable-check-outdated.yml rejects option-shaped roots and invalid format/age values before the CLI" {
+    wf="$L0_ROOT/.github/workflows/reusable-check-outdated.yml"
+    grep -qF '"$ACD_INPUT_PROJECT_ROOT" == -*' "$wf"
+    grep -qF 'summary|json)' "$wf"
+    grep -qF '[[ ! "$ACD_INPUT_MAX_AGE" =~ ^[0-9]+$ ]]' "$wf"
+
+    validate='root=$1; format=$2; age=$3
+      [[ -n "$root" && "$root" != -* && "$root" != *$'"'"'\n'"'"'* && "$root" != *$'"'"'\r'"'"'* ]] || exit 2
+      case "$format" in summary|json) ;; *) exit 2;; esac
+      [[ "$age" =~ ^[0-9]+$ ]] || exit 2'
+    run bash -c "$validate" _ 'project with spaces' summary 24
+    [ "$status" -eq 0 ]
+    run bash -c "$validate" _ --help summary 24
+    [ "$status" -eq 2 ]
+    run bash -c "$validate" _ . yaml 24
+    [ "$status" -eq 2 ]
+    run bash -c "$validate" _ . summary -1
+    [ "$status" -eq 2 ]
+}
+
+@test "input-fence: l0-release-assets.yml validates version as one safe path and output token" {
+    wf="$L0_ROOT/.github/workflows/l0-release-assets.yml"
+    grep -qF 'if [[ ! "$VERSION" =~ ^[A-Za-z0-9][A-Za-z0-9._+-]*$ ]]; then' "$wf"
+
+    run bash -c 'version=$1; [[ "$version" =~ ^[A-Za-z0-9][A-Za-z0-9._+-]*$ ]]' _ 'v1.2.3-rc.1+build.7'
+    [ "$status" -eq 0 ]
+    run bash -c 'version=$1; [[ "$version" =~ ^[A-Za-z0-9][A-Za-z0-9._+-]*$ ]]' _ 'v1/../../../escape'
+    [ "$status" -ne 0 ]
+    run bash -c 'version=$1; [[ "$version" =~ ^[A-Za-z0-9][A-Za-z0-9._+-]*$ ]]' _ $'v1.2.3\nother=value'
+  [ "$status" -ne 0 ]
+}
+
+@test "input-fence: l0-release-assets.yml projects ref metadata through env before elevated shell execution" {
+    wf="$L0_ROOT/.github/workflows/l0-release-assets.yml"
+    run_block_expression_absent "$wf" '\$\{\{github(\[|\.(ref_name|ref_type|repository))'
+    grep -qF 'ACD_GITHUB_REF_TYPE: ${{ github.ref_type }}' "$wf"
+    grep -qF 'ACD_GITHUB_REF_NAME: ${{ github.ref_name }}' "$wf"
+    grep -qF 'ACD_GITHUB_REPOSITORY: ${{ github.repository }}' "$wf"
+
+    sentinel="$WORK_DIR/ref-name-injection"
+    payload=$(printf 'v1$(touch "%s")' "$sentinel")
+    cat > "$WORK_DIR/ref-name.sh" <<'EOF'
+#!/usr/bin/env bash
+VERSION="$ACD_GITHUB_REF_NAME"
+[[ "$VERSION" =~ ^[A-Za-z0-9][A-Za-z0-9._+-]*$ ]]
+EOF
+    run env ACD_GITHUB_REF_NAME="$payload" bash "$WORK_DIR/ref-name.sh"
+    [ "$status" -ne 0 ]
+    [ ! -f "$sentinel" ]
+}
+
+@test "input-fence: reusable-audit-report.yml never expands project_root into generated Python source" {
+    wf="$L0_ROOT/.github/workflows/reusable-audit-report.yml"
+    sentinel="$WORK_DIR/python-source-injection"
+    payload=$(printf '/dev/null")]\n__import__("pathlib").Path(r"%s").write_text("1")\n#' "$sentinel")
+    log_path="$payload/.androidcommondoc/audit-log.jsonl"
+
+    ! grep -qF 'open("$LOG")' "$wf"
+    grep -qF "python3 - <<'PYEOF'" "$wf"
+    grep -qF "os.environ['ACD_AUDIT_LOG_PATH']" "$wf"
+    ACD_AUDIT_LOG_PATH="$log_path" python3 - <<'PYEOF' >/dev/null 2>&1 || true
+import json, os
+try:
+    entries = [json.loads(l) for l in open(os.environ['ACD_AUDIT_LOG_PATH']) if l.strip()]
+except:
+    entries = []
+PYEOF
+
+    [ ! -f "$sentinel" ]
+}
+
+@test "audit-report: generated Node module consumes a real JSONL log and emits valid summary JSON" {
+    wf="$L0_ROOT/.github/workflows/reusable-audit-report.yml"
+    module="$WORK_DIR/audit-report.mjs"
+    awk '
+      /node --input-type=module - <<.EOF. > \/tmp\/audit-data.json/ { capture=1; next }
+      capture && /^          EOF$/ { exit }
+      capture { sub(/^          /, ""); print }
+    ' "$wf" > "$module"
+    [ -s "$module" ]
+
+    project="$WORK_DIR/project with spaces"
+    mkdir -p "$project/.androidcommondoc"
+    cat > "$project/.androidcommondoc/audit-log.jsonl" <<'JSONL'
+{"ts":"2099-01-01T00:00:00Z","event":"coverage","coverage_pct":87,"detekt_violations":2,"project":"sample"}
+{"ts":"2099-01-01T00:00:01Z","event":"android_test","pass_rate":99,"project":"sample"}
+{"ts":"2099-01-01T00:00:02Z","event":"sbom_scan","cve_critical":0,"cve_high":1,"project":"sample"}
+JSONL
+
+    run env \
+      LOG_FILE="$project/.androidcommondoc/audit-log.jsonl" \
+      WEEKS=5200 \
+      PROJECT_ROOT="$project" \
+      node "$module"
+    [ "$status" -eq 0 ]
+    printf '%s' "$output" | node -e '
+      let input="";
+      process.stdin.on("data", c => input += c);
+      process.stdin.on("end", () => {
+        const report = JSON.parse(input);
+        if (report.health !== "HEALTHY" || report.total !== 3 || report.latest.project !== "sample") process.exit(1);
+      });
+    '
+}
+
+@test "exploit: doc-audit.yml 'layer' input allows command-substitution injection before hardening (RED)" {
+    wf="$L0_ROOT/.github/workflows/doc-audit.yml"
+    payload=$(printf '$(touch "%s/pwned")' "$WORK_DIR")
+    if run_block_expression_text "$wf" | grep -qF 'inputs.layer'; then
+        cat > "$WORK_DIR/exploit.sh" <<EOF
+#!/usr/bin/env bash
+echo --layer "$payload" > /dev/null
+EOF
+    else
+        grep -qF 'ACD_INPUT_LAYER: ${{ inputs.layer }}' "$wf"
+        cat > "$WORK_DIR/exploit.sh" <<'EOF'
+#!/usr/bin/env bash
+echo --layer "$ACD_INPUT_LAYER" > /dev/null
+EOF
+    fi
+    ACD_INPUT_LAYER="$payload" bash "$WORK_DIR/exploit.sh" >/dev/null 2>&1 || true
+    [ ! -f "$WORK_DIR/pwned" ]
+}
+
+@test "exploit: doc-monitor.yml 'tier' input allows backtick injection before hardening (RED, unquoted site)" {
+    wf="$L0_ROOT/.github/workflows/doc-monitor.yml"
+    payload=$(printf '`touch "%s/pwned"`' "$WORK_DIR")
+    if run_block_expression_text "$wf" | grep -qF 'inputs.tier'; then
+        cat > "$WORK_DIR/exploit.sh" <<EOF
+#!/usr/bin/env bash
+echo --tier $payload --output /dev/null > /dev/null
+EOF
+    else
+        grep -qF 'ACD_INPUT_TIER: ${{ inputs.tier }}' "$wf"
+        cat > "$WORK_DIR/exploit.sh" <<'EOF'
+#!/usr/bin/env bash
+echo --tier $ACD_INPUT_TIER --output /dev/null > /dev/null
+EOF
+    fi
+    ACD_INPUT_TIER="$payload" bash "$WORK_DIR/exploit.sh" >/dev/null 2>&1 || true
+    [ ! -f "$WORK_DIR/pwned" ]
+}
+
+@test "exploit: reusable-architecture-guards.yml 'gradle_task' input allows embedded-newline injection before hardening (RED, unquoted site)" {
+    wf="$L0_ROOT/.github/workflows/reusable-architecture-guards.yml"
+    payload=$(printf ':test\ntouch "%s/pwned"\necho ok' "$WORK_DIR")
+    if run_block_expression_text "$wf" | grep -qF 'inputs.gradle_task'; then
+        cat > "$WORK_DIR/exploit.sh" <<EOF
+#!/usr/bin/env bash
+true $payload --no-daemon
+EOF
+    else
+        grep -qF 'ACD_INPUT_GRADLE_TASK: ${{ inputs.gradle_task }}' "$wf"
+        cat > "$WORK_DIR/exploit.sh" <<'EOF'
+#!/usr/bin/env bash
+true $ACD_INPUT_GRADLE_TASK --no-daemon
+EOF
+    fi
+    ACD_INPUT_GRADLE_TASK="$payload" bash "$WORK_DIR/exploit.sh" >/dev/null 2>&1 || true
+    [ ! -f "$WORK_DIR/pwned" ]
+}
+
+@test "exploit: reusable-check-outdated.yml 'project_root' input allows quote-breaking injection before hardening (RED)" {
+    wf="$L0_ROOT/.github/workflows/reusable-check-outdated.yml"
+    payload=$(printf 'x"; touch "%s/pwned"; echo "' "$WORK_DIR")
+    if run_block_expression_text "$wf" | grep -qF 'inputs.project_root'; then
+        cat > "$WORK_DIR/exploit.sh" <<EOF
+#!/usr/bin/env bash
+true "$payload" --format summary > /dev/null
+EOF
+    else
+        grep -qF 'ACD_INPUT_PROJECT_ROOT: ${{ inputs.project_root }}' "$wf"
+        cat > "$WORK_DIR/exploit.sh" <<'EOF'
+#!/usr/bin/env bash
+true "$ACD_INPUT_PROJECT_ROOT" --format summary > /dev/null
+EOF
+    fi
+    ACD_INPUT_PROJECT_ROOT="$payload" bash "$WORK_DIR/exploit.sh" >/dev/null 2>&1 || true
+    [ ! -f "$WORK_DIR/pwned" ]
+}
+
+@test "exploit: reusable-kmp-safety-check.yml 'di_path_pattern' input allows command-substitution injection before hardening (RED)" {
+    wf="$L0_ROOT/.github/workflows/reusable-kmp-safety-check.yml"
+    payload=$(printf '$(touch "%s/pwned")' "$WORK_DIR")
+    if run_block_expression_text "$wf" | grep -qF 'inputs.di_path_pattern'; then
+        cat > "$WORK_DIR/exploit.sh" <<EOF
+#!/usr/bin/env bash
+DI_PATTERN="$payload"
+EOF
+    else
+        grep -qF 'ACD_INPUT_DI_PATH_PATTERN: ${{ inputs.di_path_pattern }}' "$wf"
+        cat > "$WORK_DIR/exploit.sh" <<'EOF'
+#!/usr/bin/env bash
+DI_PATTERN="$ACD_INPUT_DI_PATH_PATTERN"
+EOF
+    fi
+    ACD_INPUT_DI_PATH_PATTERN="$payload" bash "$WORK_DIR/exploit.sh" >/dev/null 2>&1 || true
+    [ ! -f "$WORK_DIR/pwned" ]
+}
+
+@test "exploit: reusable-commit-lint.yml 'valid_types' input allows backtick injection before hardening (RED)" {
+    wf="$L0_ROOT/.github/workflows/reusable-commit-lint.yml"
+    payload=$(printf '`touch %s/pwned`' "$WORK_DIR")
+    if run_block_expression_text "$wf" | grep -qF 'inputs.valid_types'; then
+        cat > "$WORK_DIR/exploit.sh" <<EOF
+#!/usr/bin/env bash
+VALID_TYPES="$payload"
+EOF
+    else
+        grep -qF 'ACD_INPUT_VALID_TYPES: ${{ inputs.valid_types }}' "$wf"
+        cat > "$WORK_DIR/exploit.sh" <<'EOF'
+#!/usr/bin/env bash
+VALID_TYPES="$ACD_INPUT_VALID_TYPES"
+EOF
+    fi
+    ACD_INPUT_VALID_TYPES="$payload" bash "$WORK_DIR/exploit.sh" >/dev/null 2>&1 || true
+    [ ! -f "$WORK_DIR/pwned" ]
+}
+
+@test "exploit: reusable-audit-report.yml 'project_root' input allows quote-breaking injection before hardening (RED, shell surface)" {
+    wf="$L0_ROOT/.github/workflows/reusable-audit-report.yml"
+    payload=$(printf 'x"; touch "%s/pwned"; echo "' "$WORK_DIR")
+    if run_block_expression_text "$wf" | grep -qF 'inputs.project_root'; then
+        cat > "$WORK_DIR/exploit.sh" <<EOF
+#!/usr/bin/env bash
+PROJECT_ROOT="$payload"
+EOF
+    else
+        grep -qF 'ACD_INPUT_PROJECT_ROOT: ${{ inputs.project_root }}' "$wf"
+        cat > "$WORK_DIR/exploit.sh" <<'EOF'
+#!/usr/bin/env bash
+PROJECT_ROOT="$ACD_INPUT_PROJECT_ROOT"
+EOF
+    fi
+    ACD_INPUT_PROJECT_ROOT="$payload" bash "$WORK_DIR/exploit.sh" >/dev/null 2>&1 || true
+    [ ! -f "$WORK_DIR/pwned" ]
+}
+
+@test "exploit: l0-release-assets.yml unquoted steps.version.outputs.version allows command-substitution injection before hardening (RED, elevated review -- contents: write)" {
+    wf="$L0_ROOT/.github/workflows/l0-release-assets.yml"
+    payload=$(printf '$(touch "%s/pwned")' "$WORK_DIR")
+    if run_block_expression_text "$wf" | grep -qF 'steps.version.outputs.version'; then
+        cat > "$WORK_DIR/exploit.sh" <<EOF
+#!/usr/bin/env bash
+VERSION=$payload
+EOF
+    else
+        grep -qF 'ACD_STEP_VERSION: ${{ steps.version.outputs.version }}' "$wf"
+        cat > "$WORK_DIR/exploit.sh" <<'EOF'
+#!/usr/bin/env bash
+VERSION=$ACD_STEP_VERSION
+EOF
+    fi
+    ACD_STEP_VERSION="$payload" bash "$WORK_DIR/exploit.sh" >/dev/null 2>&1 || true
+    [ ! -f "$WORK_DIR/pwned" ]
+}
+
+@test "exploit: l0-release-assets.yml 'github.event.inputs.tag_name' allows quote-breaking injection before hardening (RED, elevated review -- contents: write)" {
+    wf="$L0_ROOT/.github/workflows/l0-release-assets.yml"
+    payload=$(printf 'x"; touch "%s/pwned"; echo "' "$WORK_DIR")
+    if run_block_expression_text "$wf" | grep -qF 'github.event.inputs.tag_name'; then
+        cat > "$WORK_DIR/exploit.sh" <<EOF
+#!/usr/bin/env bash
+echo -n "$payload" > /dev/null
+EOF
+    else
+        grep -qF 'ACD_INPUT_TAG_NAME: ${{ github.event.inputs.tag_name }}' "$wf"
+        cat > "$WORK_DIR/exploit.sh" <<'EOF'
+#!/usr/bin/env bash
+echo -n "$ACD_INPUT_TAG_NAME" > /dev/null
+EOF
+    fi
+    ACD_INPUT_TAG_NAME="$payload" bash "$WORK_DIR/exploit.sh" >/dev/null 2>&1 || true
+    [ ! -f "$WORK_DIR/pwned" ]
+}
+
+@test "exploit: reusable-audit-report.yml 'status' step-output allows JS string-literal breakout before hardening (RED, JS-context/github-script surface, privileged PR-comment API)" {
+    wf="$L0_ROOT/.github/workflows/reusable-audit-report.yml"
+
+    # node is a native Windows binary on this platform and does not apply
+    # Git-Bash's argv/cwd path translation to a path baked into JS source
+    # text -- only cygpath -m (forward slashes, no JS-string escaping
+    # needed) makes the sentinel path resolve to the same file bats' own
+    # `[ -f ... ]` check below sees. No-op on Linux/macOS (no cygpath).
+    sentinel_path="$WORK_DIR/pwned"
+    if command -v cygpath >/dev/null 2>&1; then
+        sentinel_path="$(cygpath -m "$sentinel_path")"
+    fi
+
+    payload="x'; require('fs').writeFileSync(process.env.SENTINEL,'1'); //"
+    if script_block_expression_text "$wf" | grep -qF 'steps.audit.outputs.status'; then
+        cat > "$WORK_DIR/exploit.js" <<EOF
+process.env.SENTINEL = "$sentinel_path";
+const health = '$payload';
+EOF
+    else
+        grep -qF 'ACD_STEP_STATUS: ${{ steps.audit.outputs.status }}' "$wf"
+        grep -qF 'process.env.ACD_STEP_STATUS' "$wf"
+        cat > "$WORK_DIR/exploit.js" <<EOF
+process.env.SENTINEL = "$sentinel_path";
+const health = process.env.ACD_STEP_STATUS;
+EOF
+    fi
+    ACD_STEP_STATUS="$payload" node "$WORK_DIR/exploit.js" >/dev/null 2>&1 || true
+    [ ! -f "$WORK_DIR/pwned" ]
+}
+
+# ============================================================
+# Section: l0-auto-sync.yml (Amendment 1, Path Manifest #10)
+# (setup/templates/workflows/l0-auto-sync.yml -- a /setup W5 template copied
+# into every L1/L2 consumer project, not a live workflow in this repo;
+# elevated review: contents:write + pull-requests:write + a cross-repo
+# repository_dispatch client_payload.* trust boundary. RED-only, mirrors
+# the sections above but adds a 4th taint class -- github.event.client_payload
+# -> ACD_PAYLOAD_<UPPER_SNAKE(X)> -- and a job-level vs per-step env: split.)
+# ============================================================
+
+@test "input-fence: l0-auto-sync.yml has no raw input/step/event-input/client-payload interpolation inside run: blocks (elevated review -- contents:write + pull-requests:write, cross-repo repository_dispatch boundary, template propagated to every L1/L2 consumer; steps.sync.outputs.added/updated excluded per Scope Decision C -- sanitized via \\K\\d+-only regex extraction, not a gate item)" {
+    wf="$L0_ROOT/setup/templates/workflows/l0-auto-sync.yml"
+    run_block_expression_absent "$wf" '\$\{\{(inputs(\.|\[)|github(\[|\.event\.(inputs|client_payload)\.)|steps(\[|\.manifest\.|\.check\.outputs\.needed|\.sync\.outputs\.changes))'
+}
+
+@test "input-fence: l0-auto-sync.yml job-level env-maps force, source_layer, and l0_commit (available at job start -- job-level env:, not per-step)" {
+    wf="$L0_ROOT/setup/templates/workflows/l0-auto-sync.yml"
+    grep -q 'ACD_INPUT_FORCE: ${{ github.event.inputs.force }}' "$wf"
+    grep -q 'ACD_PAYLOAD_SOURCE_LAYER: ${{ github.event.client_payload.source_layer }}' "$wf"
+    grep -q 'ACD_PAYLOAD_L0_COMMIT: ${{ github.event.client_payload.l0_commit }}' "$wf"
+}
+
+@test "input-fence: l0-auto-sync.yml per-step env-maps sources (x3, one per consuming step), last_commit, needed, and changes (steps.*.outputs.* cannot use job-level env: -- not available until partway through the job)" {
+    wf="$L0_ROOT/setup/templates/workflows/l0-auto-sync.yml"
+    sources_mappings=$(grep -cF 'ACD_STEP_SOURCES: ${{ steps.manifest.outputs.sources }}' "$wf" || true)
+    [ "${sources_mappings:-0}" -eq 3 ]
+    grep -qF 'ACD_STEP_LAST_COMMIT: ${{ steps.manifest.outputs.last_commit }}' "$wf"
+    grep -qF 'ACD_STEP_NEEDED: ${{ steps.check.outputs.needed }}' "$wf"
+    grep -qF 'ACD_STEP_CHANGES: ${{ steps.sync.outputs.changes }}' "$wf"
+}
+
+@test "input-fence: l0-auto-sync.yml sanitizing boundary for added/updated stays intact (Scope Decision C -- digit-only \K\d+ regex extraction; loosening this reopens added/updated as taint sources and must trigger a re-evaluation of the exclusion)" {
+    wf="$L0_ROOT/setup/templates/workflows/l0-auto-sync.yml"
+    grep -qF "grep -oP 'Added:\s+\K\d+'" "$wf"
+    grep -qF "grep -oP 'Updated:\s+\K\d+'" "$wf"
+}
+
+@test "correctness: l0-auto-sync.yml FORCE boolean coercion treats only the literal string 'true' as force-on (true/false/empty all behave as documented today -- guards the upcoming ACD_INPUT_FORCE env-projection refactor against a boolean-handling regression; github.event.inputs.* is always string-typed regardless of declared type: boolean, so this is a correctness check, not a security one)" {
+    wf="$L0_ROOT/setup/templates/workflows/l0-auto-sync.yml"
+    run_block_lines "$wf" | grep -qF 'if [ "$FORCE" = "true" ]'
+
+    FORCE="true"
+    [ "$FORCE" = "true" ] && force_on="yes" || force_on="no"
+    [ "$force_on" = "yes" ]
+
+    FORCE="false"
+    [ "$FORCE" = "true" ] && force_on="yes" || force_on="no"
+    [ "$force_on" = "no" ]
+
+    FORCE=""
+    [ "$FORCE" = "true" ] && force_on="yes" || force_on="no"
+    [ "$force_on" = "no" ]
+}
+
+@test "exploit: l0-auto-sync.yml 'source_layer' client_payload allows single-quote-breakout injection before hardening (RED, HIGH tier -- cross-repo repository_dispatch boundary)" {
+    wf="$L0_ROOT/setup/templates/workflows/l0-auto-sync.yml"
+    payload=$(printf "L0'; touch \"%s/pwned\"; SOURCE_LAYER='" "$WORK_DIR")
+    if run_block_expression_text "$wf" | grep -qF 'github.event.client_payload.source_layer'; then
+        cat > "$WORK_DIR/exploit.sh" <<EOF
+#!/usr/bin/env bash
+SOURCE_LAYER='$payload'
+EOF
+    else
+        grep -qF 'ACD_PAYLOAD_SOURCE_LAYER: ${{ github.event.client_payload.source_layer }}' "$wf"
+        cat > "$WORK_DIR/exploit.sh" <<'EOF'
+#!/usr/bin/env bash
+SOURCE_LAYER="${ACD_PAYLOAD_SOURCE_LAYER:-L0}"
+EOF
+    fi
+    ACD_PAYLOAD_SOURCE_LAYER="$payload" bash "$WORK_DIR/exploit.sh" >/dev/null 2>&1 || true
+    [ ! -f "$WORK_DIR/pwned" ]
+}
+
+@test "exploit: l0-auto-sync.yml 'l0_commit' client_payload allows single-quote-breakout injection before hardening (RED, HIGH tier -- cross-repo repository_dispatch boundary)" {
+    wf="$L0_ROOT/setup/templates/workflows/l0-auto-sync.yml"
+    payload=$(printf "sched'; touch \"%s/pwned\"; SOURCE_COMMIT='" "$WORK_DIR")
+    if run_block_expression_text "$wf" | grep -qF 'github.event.client_payload.l0_commit'; then
+        cat > "$WORK_DIR/exploit.sh" <<EOF
+#!/usr/bin/env bash
+SOURCE_COMMIT='$payload'
+EOF
+    else
+        grep -qF 'ACD_PAYLOAD_L0_COMMIT: ${{ github.event.client_payload.l0_commit }}' "$wf"
+        cat > "$WORK_DIR/exploit.sh" <<'EOF'
+#!/usr/bin/env bash
+SOURCE_COMMIT="${ACD_PAYLOAD_L0_COMMIT:-scheduled}"
+EOF
+    fi
+    ACD_PAYLOAD_L0_COMMIT="$payload" bash "$WORK_DIR/exploit.sh" >/dev/null 2>&1 || true
+    [ ! -f "$WORK_DIR/pwned" ]
+}
+
+@test "input-fence: l0-auto-sync.yml admits only canonical source layers and commit identifiers" {
+    wf="$L0_ROOT/setup/templates/workflows/l0-auto-sync.yml"
+    grep -qF 'case "$SOURCE_LAYER" in' "$wf"
+    grep -qF 'L0|L1|L2)' "$wf"
+    grep -qF 'if [[ "$SOURCE_COMMIT" != "scheduled" && ! "$SOURCE_COMMIT" =~ ^[0-9A-Fa-f]{7,64}$ ]]; then' "$wf"
+
+    run bash -c 'value=$1; case "$value" in L0|L1|L2) exit 0;; *) exit 2;; esac' _ 'L2'
+    [ "$status" -eq 0 ]
+    run bash -c 'value=$1; case "$value" in L0|L1|L2) exit 0;; *) exit 2;; esac' _ $'L0\nInjected text'
+    [ "$status" -eq 2 ]
+    run bash -c 'value=$1; [[ "$value" == "scheduled" || "$value" =~ ^[0-9A-Fa-f]{7,64}$ ]]' _ 'b5d7ed46'
+    [ "$status" -eq 0 ]
+    run bash -c 'value=$1; [[ "$value" == "scheduled" || "$value" =~ ^[0-9A-Fa-f]{7,64}$ ]]' _ $'deadbee\nInjected text'
+    [ "$status" -ne 0 ]
+}
+
+@test "exploit: l0-auto-sync.yml 'force' input allows single-quote-breakout injection before hardening (RED, HIGH tier)" {
+    wf="$L0_ROOT/setup/templates/workflows/l0-auto-sync.yml"
+    payload=$(printf "false'; touch \"%s/pwned\"; FORCE='" "$WORK_DIR")
+    if run_block_expression_text "$wf" | grep -qF 'github.event.inputs.force'; then
+        cat > "$WORK_DIR/exploit.sh" <<EOF
+#!/usr/bin/env bash
+FORCE='$payload'
+EOF
+    else
+        grep -qF 'ACD_INPUT_FORCE: ${{ github.event.inputs.force }}' "$wf"
+        cat > "$WORK_DIR/exploit.sh" <<'EOF'
+#!/usr/bin/env bash
+FORCE="$ACD_INPUT_FORCE"
+EOF
+    fi
+    ACD_INPUT_FORCE="$payload" bash "$WORK_DIR/exploit.sh" >/dev/null 2>&1 || true
+    [ ! -f "$WORK_DIR/pwned" ]
+}
+
+@test "exploit: l0-auto-sync.yml 'sources' step-output allows single-quote-breakout injection before hardening (RED, LOW/defense-in-depth tier -- repo-file-derived, not PR-reachable)" {
+    wf="$L0_ROOT/setup/templates/workflows/l0-auto-sync.yml"
+    payload=$(printf "[]'; touch \"%s/pwned\"; SOURCES='" "$WORK_DIR")
+    if run_block_expression_text "$wf" | grep -qF 'steps.manifest.outputs.sources'; then
+        cat > "$WORK_DIR/exploit.sh" <<EOF
+#!/usr/bin/env bash
+SOURCES='$payload'
+EOF
+    else
+        grep -qF 'ACD_STEP_SOURCES: ${{ steps.manifest.outputs.sources }}' "$wf"
+        cat > "$WORK_DIR/exploit.sh" <<'EOF'
+#!/usr/bin/env bash
+SOURCES="$ACD_STEP_SOURCES"
+EOF
+    fi
+    ACD_STEP_SOURCES="$payload" bash "$WORK_DIR/exploit.sh" >/dev/null 2>&1 || true
+    [ ! -f "$WORK_DIR/pwned" ]
+}

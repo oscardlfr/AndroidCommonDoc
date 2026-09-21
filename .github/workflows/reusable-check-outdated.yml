@@ -47,6 +47,9 @@ on:
         type: string
         default: "master"
 
+permissions:
+  contents: read
+
 jobs:
   check-outdated:
     name: "Check Outdated Dependencies"
@@ -74,12 +77,29 @@ jobs:
 
       - name: Check dependency freshness
         id: check
+        env:
+          ACD_INPUT_PROJECT_ROOT: ${{ inputs.project_root }}
+          ACD_INPUT_FORMAT: ${{ inputs.format }}
+          ACD_INPUT_MAX_AGE: ${{ inputs.max_age }}
         run: |
+          if [[ -z "$ACD_INPUT_PROJECT_ROOT" || "$ACD_INPUT_PROJECT_ROOT" == -* || "$ACD_INPUT_PROJECT_ROOT" == *$'\n'* || "$ACD_INPUT_PROJECT_ROOT" == *$'\r'* ]]; then
+            echo "::error::project_root must be one non-empty path and must not begin with '-'" >&2
+            exit 2
+          fi
+          case "$ACD_INPUT_FORMAT" in
+            summary|json) ;;
+            *) echo "::error::format must be summary or json" >&2; exit 2 ;;
+          esac
+          if [[ ! "$ACD_INPUT_MAX_AGE" =~ ^[0-9]+$ ]]; then
+            echo "::error::max_age must be a non-negative integer number of hours" >&2
+            exit 2
+          fi
+
           EXIT_CODE=0
           node .l0-tooling/mcp-server/build/cli/check-outdated.js \
-            "${{ inputs.project_root }}" \
-            --format "${{ inputs.format }}" \
-            --max-age "${{ inputs.max_age }}" | tee /tmp/check-outdated-output.txt || EXIT_CODE=$?
+            "$ACD_INPUT_PROJECT_ROOT" \
+            --format "$ACD_INPUT_FORMAT" \
+            --max-age "$ACD_INPUT_MAX_AGE" | tee /tmp/check-outdated-output.txt || EXIT_CODE=$?
 
           echo "exit_code=$EXIT_CODE" >> "$GITHUB_OUTPUT"
 

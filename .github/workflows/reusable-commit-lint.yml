@@ -36,6 +36,9 @@ on:
         type: boolean
         default: false
 
+permissions:
+  contents: read
+
 jobs:
   commit-lint:
     name: "🔤 Commit Lint"
@@ -49,9 +52,12 @@ jobs:
         env:
           SQUASH_MERGE: ${{ inputs.squash_merge }}
           PR_TITLE: ${{ github.event.pull_request.title }}
+          ACD_INPUT_VALID_TYPES: ${{ inputs.valid_types }}
+          ACD_INPUT_VALID_SCOPES: ${{ inputs.valid_scopes }}
+          ACD_INPUT_MAX_SUBJECT_LENGTH: ${{ inputs.max_subject_length }}
         run: |
-          VALID_TYPES="${{ inputs.valid_types }}"
-          VALID_SCOPES="${{ inputs.valid_scopes }}"
+          VALID_TYPES="$ACD_INPUT_VALID_TYPES"
+          VALID_SCOPES="$ACD_INPUT_VALID_SCOPES"
 
           # Override VALID_SCOPES from .commitlintrc.json if present (F4 single source of truth)
           if [ -f ".commitlintrc.json" ]; then
@@ -60,7 +66,7 @@ jobs:
               VALID_SCOPES="$FILE_SCOPES"
             fi
           fi
-          MAX_LEN="${{ inputs.max_subject_length }}"
+          MAX_LEN="$ACD_INPUT_MAX_SUBJECT_LENGTH"
 
           # Build type pattern
           TYPE_PATTERN=$(echo "$VALID_TYPES" | tr ',' '|')

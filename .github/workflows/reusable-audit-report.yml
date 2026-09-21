@@ -45,10 +45,17 @@ on:
         type: string
         default: "."
 
+permissions:
+  contents: read
+  pull-requests: write
+
 jobs:
   audit-report:
     name: "📊 Quality Audit Report"
     runs-on: ubuntu-latest
+    env:
+      ACD_INPUT_PROJECT_ROOT: ${{ inputs.project_root }}
+      ACD_INPUT_WEEKS_LOOKBACK: ${{ inputs.weeks_lookback }}
     steps:
       - uses: actions/checkout@v5
         with:
@@ -72,8 +79,8 @@ jobs:
       - name: Generate audit report
         id: audit
         run: |
-          PROJECT_ROOT="${{ inputs.project_root }}"
-          WEEKS="${{ inputs.weeks_lookback }}"
+          PROJECT_ROOT="$ACD_INPUT_PROJECT_ROOT"
+          WEEKS="$ACD_INPUT_WEEKS_LOOKBACK"
           LOG_FILE="$PROJECT_ROOT/.androidcommondoc/audit-log.jsonl"
 
           if [[ ! -f "$LOG_FILE" ]]; then
@@ -88,8 +95,9 @@ jobs:
           echo "Audit log found. Generating report for $WEEKS weeks..."
 
           # Generate report via Node.js script (avoids full MCP server startup)
-          node - <<'EOF' > /tmp/audit-report.json
-          import { readFileSync, createReadStream } from 'node:fs';
+          LOG_FILE="$LOG_FILE" WEEKS="$WEEKS" PROJECT_ROOT="$PROJECT_ROOT" \
+            node --input-type=module - <<'EOF' > /tmp/audit-data.json
+          import { createReadStream } from 'node:fs';
           import { createInterface } from 'node:readline';
           import path from 'node:path';
 
@@ -126,12 +134,15 @@ jobs:
             console.log(JSON.stringify({ latest, health, total: entries.length, recent: recent.length }));
           });
           EOF
-          LOG_FILE="$LOG_FILE" WEEKS="$WEEKS" PROJECT_ROOT="$PROJECT_ROOT" node --input-type=module < /tmp/audit-report.json 2>/dev/null > /tmp/audit-data.json || echo '{}' > /tmp/audit-data.json
 
           HEALTH=$(python3 -c "import json; d=json.load(open('/tmp/audit-data.json')); print(d.get('health','UNKNOWN'))" 2>/dev/null || echo "UNKNOWN")
           COVERAGE=$(python3 -c "import json; d=json.load(open('/tmp/audit-data.json')); print(d.get('latest',{}).get('coverage_pct','—'))" 2>/dev/null || echo "—")
           DETEKT=$(python3 -c "import json; d=json.load(open('/tmp/audit-data.json')); print(d.get('latest',{}).get('detekt_violations','—'))" 2>/dev/null || echo "—")
           CVE_C=$(python3 -c "import json; d=json.load(open('/tmp/audit-data.json')); print(d.get('latest',{}).get('cve_critical','—'))" 2>/dev/null || echo "—")
+
+          [[ "$COVERAGE" =~ ^[0-9]+(\.[0-9]+)?$ || "$COVERAGE" == "—" ]] || COVERAGE="invalid"
+          [[ "$DETEKT" =~ ^[0-9]+(\.[0-9]+)?$ || "$DETEKT" == "—" ]] || DETEKT="invalid"
+          [[ "$CVE_C" =~ ^[0-9]+(\.[0-9]+)?$ || "$CVE_C" == "—" ]] || CVE_C="invalid"
 
           echo "status=$HEALTH" >> "$GITHUB_OUTPUT"
           echo "coverage=$COVERAGE" >> "$GITHUB_OUTPUT"
@@ -157,12 +168,12 @@ jobs:
       - name: Generate HTML report
         if: inputs.generate_html && steps.audit.outputs.status != 'no_data'
         run: |
-          LOG="${{ inputs.project_root }}/.androidcommondoc/audit-log.jsonl"
-          python3 - <<PYEOF > /tmp/audit-report.html
-          import json, sys, datetime
+          LOG="$ACD_INPUT_PROJECT_ROOT/.androidcommondoc/audit-log.jsonl"
+          ACD_AUDIT_LOG_PATH="$LOG" python3 - <<'PYEOF' > /tmp/audit-report.html
+          import json, sys, datetime, os
 
           try:
-              entries = [json.loads(l) for l in open("$LOG") if l.strip()]
+              entries = [json.loads(l) for l in open(os.environ['ACD_AUDIT_LOG_PATH']) if l.strip()]
           except:
               entries = []
 
@@ -266,13 +277,18 @@ jobs:
       - name: Post PR comment
         if: inputs.post_pr_comment && github.event_name == 'pull_request' && steps.audit.outputs.status != 'no_data'
         uses: actions/github-script@v7
+        env:
+          ACD_STEP_STATUS: ${{ steps.audit.outputs.status }}
+          ACD_STEP_COVERAGE: ${{ steps.audit.outputs.coverage }}
+          ACD_STEP_DETEKT: ${{ steps.audit.outputs.detekt }}
+          ACD_STEP_CVE_CRITICAL: ${{ steps.audit.outputs.cve_critical }}
         with:
           script: |
-            const health = '${{ steps.audit.outputs.status }}';
+            const health = process.env.ACD_STEP_STATUS;
             const emoji = health === 'HEALTHY' ? '🟢' : health === 'WARNING' ? '🟡' : '🔴';
-            const coverage = '${{ steps.audit.outputs.coverage }}';
-            const detekt = '${{ steps.audit.outputs.detekt }}';
-            const cve = '${{ steps.audit.outputs.cve_critical }}';
+            const coverage = process.env.ACD_STEP_COVERAGE;
+            const detekt = process.env.ACD_STEP_DETEKT;
+            const cve = process.env.ACD_STEP_CVE_CRITICAL;
             const body = [
               `## ${emoji} Quality Audit — ${health}`,
               '',

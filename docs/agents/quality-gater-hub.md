@@ -13,7 +13,7 @@ description: "quality-gater extended-protocol hub: per-step detail sub-docs (Ste
 
 Extended-protocol detail for the [quality-gater](../../setup/agent-templates/quality-gater.md) agent (the Phase 3 QG owner). The main template keeps the step skeleton concise; heavier per-step procedures and references live in the sub-docs below.
 
-## Step detail sub-docs
+## Sub-documents
 
 | Document | Step | Description |
 |----------|------|-------------|
@@ -23,6 +23,7 @@ Extended-protocol detail for the [quality-gater](../../setup/agent-templates/qua
 | [quality-gater-freshness-gate](quality-gater-freshness-gate.md) | Step Z | Report Freshness Gate (REQUIRED pre-mint) — runs qg-report-freshness.sh; blocks mint (exit 1) on stale step reasons; structured carry contract |
 | [quality-gater-secret-scan](quality-gater-secret-scan.md) | Secret Scan (REQUIRED — pre-mint) | Fail-closed QG secret scan — runs secret-scan-report.sh; absent/erroring scanner = FAIL; never SKIPPED; blocks mint on non-PASS |
 | [quality-gater-artifact-binding](quality-gater-artifact-binding.md) | Step 8 | Artifact-binding contract — mint's generic binding loop (`{secret-scan, doc-validator-parity}`), `mint_rederived` marker, derived-artifact (Option B) model, `manifest-evidence-drift`, `pre_pr_coverage` managed-key contract, and the `rule_id` requirement for `discovered_rules[]` |
+| [quality-gate-local-ci-reproduction](quality-gate-local-ci-reproduction.md) | Local acceptance | Normative `ci-linux-equivalent`, `qg-linux-canonical`, and `windows-native` profiles plus invalid-evidence rules |
 
 ## Protocol & push-gate references
 

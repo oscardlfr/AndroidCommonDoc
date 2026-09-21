@@ -21,6 +21,9 @@ on:
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
+permissions:
+  contents: read
+
 jobs:
   audit:
     runs-on: ubuntu-latest
@@ -41,12 +44,18 @@ jobs:
       - run: npm run build
 
       - name: Run documentation audit
+        env:
+          ACD_INPUT_LAYER: ${{ inputs.layer }}
+          ACD_INPUT_WAVES: ${{ inputs.waves }}
+          ACD_INPUT_WITH_UPSTREAM: ${{ inputs.with_upstream }}
         run: |
+          EXTRA_ARGS=()
+          [ "$ACD_INPUT_WITH_UPSTREAM" = "true" ] && EXTRA_ARGS+=(--with-upstream)
           node build/cli/audit-docs.js \
             --project-root "${{ github.workspace }}" \
-            --layer "${{ inputs.layer || 'L0' }}" \
-            --waves "${{ inputs.waves || '1,2' }}" \
-            ${{ inputs.with_upstream == 'true' && '--with-upstream' || '' }}
+            --layer "${ACD_INPUT_LAYER:-L0}" \
+            --waves "${ACD_INPUT_WAVES:-1,2}" \
+            "${EXTRA_ARGS[@]}"
 
       - name: Upload audit report on failure
         if: failure()

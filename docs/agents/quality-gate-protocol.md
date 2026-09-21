@@ -8,8 +8,8 @@ layer: L0
 parent: agents-hub
 category: agents
 description: "Quality gate protocol: sequential verification (frontmatter → tests → coverage → benchmarks → pre-pr) after architect APPROVE, before commit"
-version: 4
-last_updated: "2026-07-11"
+version: 5
+last_updated: "2026-09-20"
 assumes_read: autonomous-multi-agent-workflow, context-rotation-guide
 token_budget: 1500
 ---
@@ -258,8 +258,15 @@ This invariant is enforced by `scripts/tests/ci-bats-parity.bats` (C4, this wave
 asserts the yml contains all four logic patterns. Reciprocal comments in both files
 document the keep-in-parity requirement.
 
-**Local-green ⇒ CI-green** by construction when this invariant holds.
+**Local-green ⇒ CI-green** only when both the logical guard and the execution profile
+below match. The four-part TAP predicate alone does not make WSL, MSYS, a root
+container, or a partially prepared checkout equivalent to GitHub Actions.
 
+### Local CI Reproduction Contract
+
+Every local acceptance result MUST name `ci-linux-equivalent`, `qg-linux-canonical`,
+or `windows-native`; an unlabeled green claim is not evidence. The complete normative
+profiles and rejection rules live in [Local CI Reproduction](quality-gate-local-ci-reproduction.md).
 ---
 
 ---

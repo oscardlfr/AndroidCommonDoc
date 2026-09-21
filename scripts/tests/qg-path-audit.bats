@@ -290,3 +290,199 @@ PLANEOF
   # `|| return 1`: defensive against the non-final-[[ ]] bats/bash abort quirk.
   [[ "$output" == *"out-of-manifest"* ]] || return 1
 }
+
+# ── PA-13+ canonical-plan compatibility ─────────────────────────────────────
+
+@test "PA-13 PASS: H2 Wave Class heading is accepted without weakening section anchoring" {
+  write_class "HARNESS"
+  cat > "$WAVE_DIR/PLAN.md" <<'PLANEOF'
+## Wave Class
+
+- **Class**: HARNESS
+
+### Path-Manifest
+
+- scripts/sh/pre-commit-hook.sh
+
+### Spawn Table
+PLANEOF
+  touch_file "scripts/sh/pre-commit-hook.sh"
+
+  run bash "$SCRIPT" --wave-dir "$WAVE_DIR" --plan "$WAVE_DIR/PLAN.md" --base "$BASE"
+  [ "$status" -eq 0 ]
+}
+
+@test "PA-14 PASS: space-separated Path Manifest heading and numbered table rows are accepted" {
+  write_class "HARNESS"
+  cat > "$WAVE_DIR/PLAN.md" <<'PLANEOF'
+### Wave Class
+
+- **Class**: HARNESS
+
+### Path Manifest
+
+| # | File | Reason |
+|---|---|---|
+| 1 | `scripts/sh/pre-commit-hook.sh` | hook |
+| 2 | `scripts/tests/qg-path-audit.bats` | tests |
+
+### Spawn Table
+PLANEOF
+  touch_file "scripts/sh/pre-commit-hook.sh"
+  touch_file "scripts/tests/qg-path-audit.bats"
+
+  run bash "$SCRIPT" --wave-dir "$WAVE_DIR" --plan "$WAVE_DIR/PLAN.md" --base "$BASE"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Manifest has 2 entries."* ]] || return 1
+}
+
+@test "PA-15 PASS: hyphenated Path-Manifest also accepts numbered table rows" {
+  write_class "HARNESS"
+  cat > "$WAVE_DIR/PLAN.md" <<'PLANEOF'
+### Wave Class
+
+- **Class**: HARNESS
+
+### Path-Manifest
+
+| # | File | Reason |
+|---|---|---|
+| 1 | `scripts/sh/pre-commit-hook.sh` | hook |
+
+### Spawn Table
+PLANEOF
+  touch_file "scripts/sh/pre-commit-hook.sh"
+
+  run bash "$SCRIPT" --wave-dir "$WAVE_DIR" --plan "$WAVE_DIR/PLAN.md" --base "$BASE"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Manifest has 1 entries."* ]] || return 1
+}
+
+@test "PA-16 FAIL: table rows without a numeric manifest index are not accepted as paths" {
+  write_class "HARNESS"
+  cat > "$WAVE_DIR/PLAN.md" <<'PLANEOF'
+### Wave Class
+
+- **Class**: HARNESS
+
+### Path Manifest
+
+| # | File | Reason |
+|---|---|---|
+| example | `scripts/sh/not-authorized.sh` | prose decoy |
+| 1 | `scripts/sh/pre-commit-hook.sh` | real entry |
+
+### Spawn Table
+PLANEOF
+  touch_file "scripts/sh/not-authorized.sh"
+
+  run bash "$SCRIPT" --wave-dir "$WAVE_DIR" --plan "$WAVE_DIR/PLAN.md" --base "$BASE"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"out-of-manifest"* ]] || return 1
+}
+
+@test "PA-17 PASS: an annotated Class line compares only the canonical class token" {
+  write_class "HARNESS"
+  cat > "$WAVE_DIR/PLAN.md" <<'PLANEOF'
+### Wave Class
+
+- **Class**: HARNESS (the parenthetical text is explanatory, not part of the class token)
+
+### Path Manifest
+
+| # | File | Reason |
+|---|---|---|
+| 1 | `scripts/sh/pre-commit-hook.sh` | hook |
+
+### Spawn Table
+PLANEOF
+  touch_file "scripts/sh/pre-commit-hook.sh"
+
+  run bash "$SCRIPT" --wave-dir "$WAVE_DIR" --plan "$WAVE_DIR/PLAN.md" --base "$BASE"
+  [ "$status" -eq 0 ]
+}
+
+@test "PA-18 ERROR: a git diff enumeration failure cannot pass as zero touched files" {
+  write_class "HARNESS"
+  write_plan "HARNESS" "- scripts/sh/pre-commit-hook.sh"
+
+  run bash "$SCRIPT" \
+    --wave-dir "$WAVE_DIR" \
+    --plan "$WAVE_DIR/PLAN.md" \
+    --base "refs/heads/definitely-missing-qg-base"
+
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"could not enumerate touched files"* ]] || return 1
+}
+
+@test "PA-19 PASS: a table path may have explanatory prose after its inline-code token" {
+  write_class "HARNESS"
+  cat > "$WAVE_DIR/PLAN.md" <<'PLANEOF'
+### Wave Class
+
+- **Class**: HARNESS
+
+### Path Manifest
+
+| # | File | Reason |
+|---|---|---|
+| 1 | `scripts/sh/pre-commit-hook.sh` (supporting gate used by every wave) | hook |
+
+### Spawn Table
+PLANEOF
+  touch_file "scripts/sh/pre-commit-hook.sh"
+
+  run bash "$SCRIPT" --wave-dir "$WAVE_DIR" --plan "$WAVE_DIR/PLAN.md" --base "$BASE"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Manifest has 1 entries."* ]] || return 1
+}
+
+@test "PA-20 FAIL: prose before an inline-code token cannot smuggle a path into the manifest" {
+  write_class "HARNESS"
+  cat > "$WAVE_DIR/PLAN.md" <<'PLANEOF'
+### Wave Class
+
+- **Class**: HARNESS
+
+### Path Manifest
+
+| # | File | Reason |
+|---|---|---|
+| 1 | decoy prose `scripts/sh/not-authorized.sh` | must not count |
+| 2 | `scripts/sh/pre-commit-hook.sh` | real entry |
+
+### Spawn Table
+PLANEOF
+  touch_file "scripts/sh/not-authorized.sh"
+
+  run bash "$SCRIPT" --wave-dir "$WAVE_DIR" --plan "$WAVE_DIR/PLAN.md" --base "$BASE"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"out-of-manifest"* ]] || return 1
+}
+
+@test "PA-21 FAIL: renaming an out-of-manifest source into an allowed destination cannot hide the source deletion" {
+  write_class "HARNESS"
+  write_plan "HARNESS" "- allowed/secret.txt"
+
+  # The source must exist at the comparison base.  Without --no-renames, Git
+  # reports only the allowed destination for this exact-content move.
+  touch_file "outside/secret.txt"
+  BASE="$(git -C "$PROJ" rev-parse HEAD)"
+  mkdir -p "$PROJ/allowed"
+  git -C "$PROJ" mv "outside/secret.txt" "allowed/secret.txt"
+  git -C "$PROJ" commit -q -m "move secret into allowed path"
+
+  run bash "$SCRIPT" --wave-dir "$WAVE_DIR" --plan "$WAVE_DIR/PLAN.md" --base "$BASE"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"outside/secret.txt"* ]] || return 1
+}
+
+@test "PA-22 ERROR: internal whitespace in CLASS is rejected rather than normalized into authority" {
+  write_class "H A R N E S S"
+  write_plan "HARNESS" "- scripts/sh/pre-commit-hook.sh"
+  touch_file "scripts/sh/pre-commit-hook.sh"
+
+  run bash "$SCRIPT" --wave-dir "$WAVE_DIR" --plan "$WAVE_DIR/PLAN.md" --base "$BASE"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"one canonical token"* ]] || return 1
+}

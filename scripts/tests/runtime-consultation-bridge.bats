@@ -1801,6 +1801,7 @@ _inject_action_scan_decoys() {
   _start_bridge_bg "$argv_json" BG_OUT
   owner_file="$(_wait_for_owner_file verifier)"
   [ -n "$owner_file" ]
+  _wait_for_role_state verifier "$action_json" READY >/dev/null
   local original
   original="$(cat "$owner_file")"
 
@@ -3034,6 +3035,7 @@ _set_ready_timeout_seconds() {
   _start_bridge_bg "$argv_json" BG_OUT
   owner_file="$(_wait_for_owner_file verifier)"
   [ -n "$owner_file" ]
+  _wait_for_role_state verifier "$action_json" READY >/dev/null
 
   # Tamper the record to carry an EXTRA, unexpected key while leaving the
   # two instance ids (the ONLY thing the pre-correction cleanup checked)
@@ -3075,6 +3077,7 @@ _set_ready_timeout_seconds() {
   _start_bridge_bg "$argv_json" BG_OUT
   owner_file="$(_wait_for_owner_file verifier)"
   [ -n "$owner_file" ]
+  _wait_for_role_state verifier "$action_json" READY >/dev/null
 
   node -e '
     const fs = require("fs");
@@ -3109,6 +3112,7 @@ _set_ready_timeout_seconds() {
   _start_bridge_bg "$argv_json" BG_OUT
   owner_file="$(_wait_for_owner_file verifier)"
   [ -n "$owner_file" ]
+  _wait_for_role_state verifier "$action_json" READY >/dev/null
 
   # Tamper ONLY pid_identity -- every other field (including both instance
   # ids, which the ORIGINAL point-6 fix already checked) is left untouched.
@@ -3446,6 +3450,7 @@ _set_ready_timeout_seconds() {
   _start_bridge_bg "$argv_json" BG_OUT
   owner_file="$(_wait_for_owner_file verifier)"
   [ -n "$owner_file" ]
+  _wait_for_role_state verifier "$action_json" READY >/dev/null
 
   # Tamper ONLY supervisor_instance_id to a CORRUPTED, non-hex-shaped value
   # (uppercase + punctuation) -- necessarily also DIFFERENT from what this
@@ -3507,6 +3512,7 @@ _set_ready_timeout_seconds() {
   _start_bridge_bg "$argv_json" BG_OUT
   owner_file="$(_wait_for_owner_file verifier)"
   [ -n "$owner_file" ]
+  _wait_for_role_state verifier "$action_json" READY >/dev/null
 
   # Tamper coordination_root_id to well-formed hex, but 40 characters --
   # neither the correct 64-hex digest this call expects NOR a plausible
@@ -10499,19 +10505,25 @@ _set_ready_timeout_seconds() {
 
   local owner_file; owner_file="$(_wait_for_owner_file verifier)"
   [ -n "$owner_file" ] && [ -f "$owner_file" ]
-  sleep 1   # bounded settle window for the (fake, near-instant) initialize handshake to complete.
 
-  local complete_count
-  complete_count="$(node -e '
-    const fs = require("fs");
-    const path = require("path");
-    const rll = require(process.argv[1]);
-    const action = JSON.parse(process.argv[2]);
-    const dir = path.join(rll.registryRepoDir({ repoId: action.repo_id }), "root-provisioning");
-    let files = [];
-    try { files = fs.readdirSync(dir).filter((f) => f.endsWith(".complete.json")); } catch (e) { /* directory may not even exist -- also fine, count is 0 */ }
-    process.stdout.write(String(files.length));
-  ' "$RLL" "$action")"
+  # Owner publication precedes asynchronous initialization. Poll the artifact
+  # this test asserts instead of relying on scheduler luck from a fixed sleep.
+  local complete_count=0 complete_waited=0
+  while [ "$complete_waited" -lt 100 ]; do
+    complete_count="$(node -e '
+      const fs = require("fs");
+      const path = require("path");
+      const rll = require(process.argv[1]);
+      const action = JSON.parse(process.argv[2]);
+      const dir = path.join(rll.registryRepoDir({ repoId: action.repo_id }), "root-provisioning");
+      let files = [];
+      try { files = fs.readdirSync(dir).filter((f) => f.endsWith(".complete.json")); } catch (e) { /* directory may not even exist -- also fine, count is 0 */ }
+      process.stdout.write(String(files.length));
+    ' "$RLL" "$action")"
+    [ "$complete_count" -gt 0 ] && break
+    sleep 0.1
+    complete_waited=$((complete_waited + 1))
+  done
 
   kill -TERM "$BG_PID" 2>/dev/null || true; wait "$BG_PID" 2>/dev/null; BG_PID=""
 

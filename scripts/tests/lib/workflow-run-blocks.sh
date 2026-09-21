@@ -1,70 +1,136 @@
 #!/usr/bin/env bash
-# Extracts the body lines of every `run:` block in a GitHub Actions workflow
-# YAML file, so callers can grep the SHELL TEXT for raw `${{ inputs. }}`
-# interpolation without false-matching legitimate `env:` / `if:` / `with:`
-# usage (those are evaluated by the Actions engine, not the shell -- only
-# text inside a `run:` block is ever handed to the shell verbatim).
+# Extract the semantic string values of every `run` or `script` key in a
+# GitHub Actions workflow. Security fences must inspect the YAML GitHub will
+# execute, not a spelling-specific approximation: valid workflows may use
+# quoted/explicit/flow keys, anchors, tags, indentation indicators, folded
+# blocks, or multiline scalars.
 #
-# Usage in bats:
-#   source "$BATS_TEST_DIRNAME/lib/workflow-run-blocks.sh"
-#   run_block_lines "$wf" | grep -q '${{ inputs\.'
-#
-# Awk indentation state machine over the workflow YAML:
-#   - Enters "in block" on a `run:` key line whose remainder (after `run:`)
-#     is empty, or is only a block-scalar indicator (|, >, |-, |+, >-, >+),
-#     optionally followed by a `#comment`.
-#   - While in a block, emits every subsequent line indented deeper than the
-#     `run:` key itself. A BLANK line mid-block does NOT end the block --
-#     only the first NON-BLANK line indented <= the key's own indent does.
-#   - A single-line `run: <cmd>` (no block-scalar indicator) is NOT treated
-#     as a block: the remainder after `run:` is emitted directly as that
-#     line's body. Without this, a naive implementation would flip into
-#     block-tracking mode expecting a continuation, then immediately exit on
-#     the next step with nothing ever emitted -- making a future single-line
-#     `run: ... ${{ inputs.X }} ...` invisible to this extractor.
-#   - Deliberately awk-only (no yq path): yq is not guaranteed present in
-#     every runner and this project does not install tools mid-wave, so
-#     making the fence's correctness depend on an environment-conditional
-#     code path would undermine the guarantee this helper exists to provide.
-#   - Pure POSIX-portable awk: 2-arg match() + RSTART/RLENGTH for indent
-#     length, no gawk-only 3-arg match(str, regex, array) capture-group
-#     extraction (a sibling script in this repo, scripts/sh/list-valid-commit-tokens.sh,
-#     fails under bare BSD awk on exactly that gawk-only form).
-#
-# Usage: run_block_lines <workflow-file>
-run_block_lines() {
+# The repository already pins the `yaml` package in mcp-server. A missing
+# dependency, malformed YAML, duplicate key, alias overflow, or non-string
+# runtime body is an extraction error and returns non-zero (fail closed).
+
+_workflow_root() {
+    if [[ -n "${L0_ROOT:-}" ]]; then
+        printf '%s\n' "$L0_ROOT"
+    else
+        cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd
+    fi
+}
+
+_yaml_block_lines() {
     local wf="$1"
-    awk '
-    {
-        line = $0
-        sub(/\r$/, "", line)
-        match(line, /^[ ]*/)
-        indent = RLENGTH
-        stripped = line
-        sub(/^[ ]*/, "", stripped)
-        is_blank = (stripped == "")
+    local key="$2"
+    local root yaml_module
+    root="$(_workflow_root)" || return
+    yaml_module="$root/mcp-server/node_modules/yaml"
 
-        if (in_block) {
-            if (is_blank) {
-                next
-            }
-            if (indent > key_indent) {
-                print line
-                next
-            }
-            in_block = 0
-        }
+    ACD_WORKFLOW_YAML_MODULE="$yaml_module" node - "$wf" "$key" <<'NODE'
+const fs = require('node:fs');
 
-        if (!is_blank && stripped ~ /^run:/) {
-            remainder = stripped
-            sub(/^run:[ \t]*/, "", remainder)
-            if (remainder == "" || remainder ~ /^[|>][-+]?[ \t]*(#.*)?$/) {
-                in_block = 1
-                key_indent = indent
-            } else {
-                print remainder
-            }
-        }
+const workflowPath = process.argv[2];
+const runtimeKey = process.argv[3];
+const yamlModule = process.env.ACD_WORKFLOW_YAML_MODULE;
+
+let YAML;
+try {
+  YAML = require(yamlModule);
+} catch (error) {
+  console.error(`[workflow-run-blocks] cannot load pinned YAML parser at ${yamlModule}: ${error.message}`);
+  process.exit(2);
+}
+
+let document;
+try {
+  document = YAML.parseDocument(fs.readFileSync(workflowPath, 'utf8'), {
+    strict: true,
+    uniqueKeys: true,
+  });
+} catch (error) {
+  console.error(`[workflow-run-blocks] cannot read/parse ${workflowPath}: ${error.message}`);
+  process.exit(2);
+}
+
+if (document.errors.length > 0) {
+  for (const error of document.errors) {
+    console.error(`[workflow-run-blocks] invalid YAML in ${workflowPath}: ${error.message}`);
+  }
+  process.exit(2);
+}
+
+let workflow;
+try {
+  workflow = document.toJS({ maxAliasCount: 100, mapAsMap: false });
+} catch (error) {
+  console.error(`[workflow-run-blocks] cannot materialize ${workflowPath}: ${error.message}`);
+  process.exit(2);
+}
+
+const visited = new WeakSet();
+function visit(value) {
+  if (value === null || typeof value !== 'object') return;
+  if (visited.has(value)) return;
+  visited.add(value);
+
+  if (Array.isArray(value)) {
+    for (const item of value) visit(item);
+    return;
+  }
+
+  if (Object.prototype.hasOwnProperty.call(value, runtimeKey)) {
+    const body = value[runtimeKey];
+    const isRunDefaults = runtimeKey === 'run' && body !== null && typeof body === 'object' &&
+      !Array.isArray(body) && Object.keys(body).every(key => key === 'shell' || key === 'working-directory');
+    if (typeof body === 'string') {
+      process.stdout.write(`${body}\n`);
+    } else if (!isRunDefaults) {
+      console.error(`[workflow-run-blocks] ${runtimeKey} in ${workflowPath} is not a string`);
+      process.exit(2);
     }
-    ' "$wf"
+  }
+
+  for (const child of Object.values(value)) visit(child);
+}
+
+visit(workflow);
+NODE
+}
+
+run_block_lines() {
+    _yaml_block_lines "$1" "run"
+}
+
+script_block_lines() {
+    _yaml_block_lines "$1" "script"
+}
+
+# Canonicalize expression spelling for security assertions. GitHub accepts
+# whitespace-free/multiline expressions and bracket dereferences (for example
+# `${{inputs['x']}}`) as equivalents of dot notation. Joining lines and
+# canonicalizing simple quoted keys gives every fence one spelling to inspect.
+_normalized_block_expression_text() {
+    tr -d '[:space:]' | sed -E "s/\[['\"]([A-Za-z_][A-Za-z0-9_-]*)['\"]\]/.\1/g"
+}
+
+run_block_expression_text() {
+    local extracted
+    extracted="$(run_block_lines "$1")" || return
+    printf '%s' "$extracted" | _normalized_block_expression_text
+}
+
+script_block_expression_text() {
+    local extracted
+    extracted="$(script_block_lines "$1")" || return
+    printf '%s' "$extracted" | _normalized_block_expression_text
+}
+
+run_block_expression_absent() {
+    local normalized
+    normalized="$(run_block_expression_text "$1")" || return
+    ! grep -qiE "$2" <<< "$normalized"
+}
+
+script_block_expression_absent() {
+    local normalized
+    normalized="$(script_block_expression_text "$1")" || return
+    ! grep -qiE "$2" <<< "$normalized"
 }

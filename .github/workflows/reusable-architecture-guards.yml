@@ -43,6 +43,9 @@ on:
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
+permissions:
+  contents: read
+
 jobs:
   architecture-guards:
     name: "🏛️ Architecture Guards"
@@ -58,7 +61,14 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
 
       - name: Run architecture guards
-        run: ./gradlew ${{ inputs.gradle_task }} --no-daemon
+        env:
+          ACD_INPUT_GRADLE_TASK: ${{ inputs.gradle_task }}
+        run: |
+          if [[ ! "$ACD_INPUT_GRADLE_TASK" =~ ^:?[A-Za-z0-9_][A-Za-z0-9_.-]*(:[A-Za-z0-9_][A-Za-z0-9_.-]*)*$ ]]; then
+            echo "::error::gradle_task must contain exactly one Gradle task path" >&2
+            exit 2
+          fi
+          ./gradlew "$ACD_INPUT_GRADLE_TASK" --no-daemon
 
       - name: Upload guard results
         uses: actions/upload-artifact@v5

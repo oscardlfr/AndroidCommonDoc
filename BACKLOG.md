@@ -1,15 +1,15 @@
 # AndroidCommonDoc Backlog
 
-> **Last updated**: 2026-09-13
+> **Last updated**: 2026-09-20
 > **Roadmap baseline**: `develop@0704ddf` (PR #244; PR #245 at `619d9a7` is its confirmed ancestor). **H1 and G0 — Reusable Workflow Input Boundary Hardening are SHIPPED.**
-> **Current delivery**: **Wave 1 — IN REVIEW in PR #246.** Wave 2 remains blocked until Wave 1 merges and its mandatory post-wave qualification completes.
+> **Current delivery**: **Wave 1 — SHIPPED** (PR #246 `1b3eebe5`, PR #247 `2a98bc17`, PR #248 `b5d7ed46`, all merged to `develop`; current HEAD `b5d7ed46`). **Mandatory post-Wave-1 Agent & Skill Behavioral Restoration Qualification checkpoint COMPLETE** — see memory `project_post_wave1_agent_skill_behavioral_qualification.md`. **Wave 2 — Workflow Expression & Input Boundary Audit is IN EXECUTION** (plan at `.planning/wave-workflow-input-boundary-audit/PLAN.md`, digest `596e1314707c7823b8c0e56dbd162743fd99f617d931b568d029f8a40ac3632d`).
 > **Source of truth**: this file owns ordering and scope. `git log`, merged PRs, and `project_*shipped.md` memory entries own historical detail.
 
 ## Operating contract
 
 - The load-bearing portability floor is **validated disk artifacts**. Runtime messaging is an optional acceleration layer.
 - Adapter delivery, message text, an MCP return value, or a live peer saying “GO” is never evidence. Only a valid, correlated result artifact counts as a protocol-valid consultation answer; phase and push authorization still require their own contracts.
-- Execute Waves 1-7 in order. Wave 1 is in review; its mandatory read-only qualification is a promotion checkpoint, not an eighth wave. Do not promote Wave 2 before that checkpoint or split routine implementation details into extra micro-waves.
+- Execute Waves 1-7 in order. Wave 1 is shipped and its mandatory read-only qualification checkpoint is complete; Wave 2 may proceed without splitting routine implementation details into extra micro-waves.
 - Re-audit observations and file counts at each wave's starting HEAD. Post-G0 counts below were recorded by PR #245 at `619d9a7`; they are a planning baseline, not permanent truth.
 - Each wave must have one frozen scope, explicit no-go boundaries, proportional tests, and a shipped memory entry before the backlog advances.
 - Rich runtimes may add `SendMessage`, persistent peers, MCP invocation, app-server threads, or wakeups; failure or absence of those capabilities must not invalidate the disk floor.
@@ -45,9 +45,9 @@
 
 | Order | Professional name | Primary outcome | State |
 |---:|---|---|---|
-| 1 | Portable Runtime Collaboration & Persistent Role Lifecycle | Persistent canonical support roles plus portable consultation and user-gated documentation ingestion | **IN REVIEW** |
-| — | Agent & Skill Behavioral Restoration Qualification | Mandatory read-only qualification before Wave 2 | REQUIRED CHECKPOINT |
-| 2 | Workflow Expression & Input Boundary Audit | Repository-wide control of untrusted workflow inputs crossing into shell | QUEUED |
+| 1 | Portable Runtime Collaboration & Persistent Role Lifecycle | Persistent canonical support roles plus portable consultation and user-gated documentation ingestion | **SHIPPED** |
+| — | Agent & Skill Behavioral Restoration Qualification | Mandatory read-only qualification before Wave 2 | **COMPLETE** |
+| 2 | Workflow Expression & Input Boundary Audit | Repository-wide control of untrusted workflow inputs crossing into shell | **IN EXECUTION** |
 | 3 | Structured Verdict Evidence Contract | Verdicts become strictly parsed, correlated, evidence-backed records | QUEUED |
 | 4 | Reproducible Evidence & Bats Provenance | Independent runs and handoffs become comparable and fail closed | QUEUED |
 | 5 | Native Push Authority & Peer Authorization Policy | Git-layer push authority, robust intent detection, explicit actor policy | QUEUED |
@@ -59,6 +59,8 @@
 ## Wave 1 — Portable Runtime Collaboration & Persistent Role Lifecycle
 
 **Class**: HARNESS
+
+**Status**: SHIPPED — MERGED to `develop@b5d7ed46`. PR #246 (`1b3eebe5`, "portable mixed-host consultation and consumer sync"), PR #247 (`2a98bc17`, macOS stabilization: F-24 per-platform host-certificate coexistence, symlink-identity and TMPDIR path-budget fixes), PR #248 (`b5d7ed46`, macOS follow-ups: ctimeNs identity-check gap, config.toml parse hardening, parallel Bats orchestrator, zombie-process liveness fix for `S16-HOSTBRIDGE-LIVENESS-NO-SAME-TICK-STALE-01`). Windows live qualification (P4/P5/P6) recorded in memory `project_portable_runtime_p4_qualified_p5_p6_blocked.md` and `project_portable_runtime_p5_five_attempts_exhausted.md`; full ship record in memory `project_wave_portable_runtime_collaboration_lifecycle_shipped.md`. A real, non-blocking Wave-1 fast-follow was found during the post-Wave-1 checkpoint: the documented `planner → context-provider` bootstrap-only consultation edge (this section, above) does not exist in the shipped role-authority policy (`scripts/lib/runtime-consultation/protocol/request.cjs:76-80`'s `assertRolePolicy` only allows `arch-*`-prefixed source roles to target `context-provider`) — tracked in memory `project_post_wave1_agent_skill_behavioral_qualification.md`, needs an owner decision between extending the code or correcting this section's text. R33 native remains `PENDING_EXTERNAL_RELEASE` (unchanged, out of Wave 1 scope).
 
 ### Objective
 
@@ -362,6 +364,8 @@ In the capability-proven persistent default profile, lifecycle acceptance additi
 
 **Kind**: read-only program qualification; this is not an implementation wave.
 
+**Status**: COMPLETE (2026-09-20). Zero P0/P1 Wave-1 lifecycle/consultation/authority/ingestion defects found — the Wave-1 stabilization batch was not triggered. One non-blocking Wave-1 fast-follow was found (planner→context-provider bootstrap-edge gap, see Wave 1 section Status line above). Full behavior matrix, skill/command disposition census, and routing decisions recorded in memory `project_post_wave1_agent_skill_behavioral_qualification.md`. This unblocks the Wave 2 promotion below.
+
 **Promotion gate**: Wave 2 cannot become NEXT until this checkpoint completes and every finding has an owner. A P0/P1 Wave-1 defect in consultation, lifecycle, disk authority, or ingestion returns to one bounded Wave-1 stabilization batch; it must not create a chain of micro-waves.
 
 **Objective**: prove on AndroidCommonDoc and a representative KMP consumer that the restored collaboration behaves as intended, then reconcile observed behavior against git history, merged plans/PRs, README, agent documentation, skills, commands, adapters, MCP surfaces, tests, and durable memory.
@@ -438,6 +442,8 @@ Any merge/deprecate/delete requires: no unique outcome; replacement parity acros
 **Verification expected**: parser/extractor fixtures for scalar, multiline, folded, nested, and allowed `if:`/`with:` contexts; shell tests for hostile values; actionlint/YAML validation; focused workflow tests; required CI; manual review of every write-capable workflow.
 
 **Backlog entries**: closes the broader reusable/workflow input-handling audit created by G0; records any unrelated release hardening as separately justified residual rather than expanding this wave.
+
+**Explicit residual (P2, separately owned)**: `reusable-audit-report.yml`'s downloadable HTML interpolates raw `project`, `layer`, and `cve_high` values from the audit JSONL. This is a pre-existing HTML-escaping gap, not a shell or privileged-operation boundary introduced by Wave 2. A bounded follow-up must escape rendered text with `html.escape(..., quote=True)` and prove hostile tags are absent from generated HTML; it is not silently claimed as fixed by this wave.
 
 **Memory on ship**: link the final G0 shipped record; create `project_wave_workflow_input_boundary_audit_shipped.md` with the complete inventory, allowed patterns, elevated-permission review, and residuals.
 
@@ -691,6 +697,7 @@ This tracked roadmap update changes `BACKLOG.md` only; the current Wave-1 execut
 
 ## Shipped (recent)
 
+- **Wave 1 — Portable Runtime Collaboration & Persistent Role Lifecycle** — MERGED `develop@b5d7ed46` (2026-09-19). PR #246 `1b3eebe5` (2026-09-15, portable mixed-host consultation + consumer sync, 204 internal CommonJS modules across the 3 stable facades), PR #247 `2a98bc17` (2026-09-19, macOS stabilization: per-platform host-certificate coexistence, symlink-identity and TMPDIR-path-budget fixes), PR #248 `b5d7ed46` (2026-09-19, macOS follow-ups: ctimeNs identity gap, config.toml parse hardening, parallel Bats orchestrator, zombie-liveness fix). Windows live qualification: P4 QUALIFIED, P5 LIVE_QUALIFIED (attempt N13), P6 QUALIFIED (attempt 3). Mandatory post-Wave-1 qualification checkpoint COMPLETE, zero P0/P1 findings (one non-blocking fast-follow: planner→context-provider bootstrap-edge gap); full record in memory `project_wave_portable_runtime_collaboration_lifecycle_shipped.md` and `project_post_wave1_agent_skill_behavioral_qualification.md`. R33 native stays `PENDING_EXTERNAL_RELEASE`.
 - **G0 — Reusable Workflow Input Boundary Hardening** — MERGED `619d9a7`, PR #245 (2026-07-12). Closed the four targeted reusable workflows with namespaced environment boundaries, quoted shell consumption, checkout hardening, a run-block extractor, and a 13-test regression fence; owner-recorded final QG at `c7ba941` was 2,042 Bats / 2,607 Vitest before squash. Broader workflow, release `tag_name`, README, grep-portability, and documentation-precision findings remain explicitly deferred above.
 - **H1 — Push Authority Bootstrap** — MERGED `1e0be41`, PR #243 (2026-07-11). Installed-hook identity is required by the QG mint and Claude push gate; in-JS proof fallback removed. Command detector intentionally deferred to Wave 5.
 - **Portable Ingestion + Wave 38 Content** — MERGED `0db5773`, PR #242 (2026-07-11).

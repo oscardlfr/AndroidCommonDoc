@@ -48,6 +48,10 @@ jobs:
     permissions:
       contents: write
       pull-requests: write
+    env:
+      ACD_INPUT_FORCE: ${{ github.event.inputs.force }}
+      ACD_PAYLOAD_SOURCE_LAYER: ${{ github.event.client_payload.source_layer }}
+      ACD_PAYLOAD_L0_COMMIT: ${{ github.event.client_payload.l0_commit }}
 
     steps:
       - name: Checkout this repo
@@ -86,8 +90,11 @@ jobs:
 
       - name: Checkout upstream sources
         if: steps.manifest.outputs.skip != 'true'
+        env:
+          ACD_STEP_SOURCES: ${{ steps.manifest.outputs.sources }}
+          GIT_TOKEN: ${{ secrets.UPSTREAM_ACCESS_TOKEN || github.token }}
         run: |
-          SOURCES='${{ steps.manifest.outputs.sources }}'
+          SOURCES="$ACD_STEP_SOURCES"
           echo "$SOURCES" | jq -r '.[]' | while read -r REL_PATH; do
             # Resolve the repo name from the relative path
             # Convention: ../RepoName or ../../RepoName → same org
@@ -98,7 +105,7 @@ jobs:
             echo "Cloning $OWNER/$REPO_NAME into $TARGET_DIR..."
             mkdir -p "$(dirname "$TARGET_DIR")"
             git clone --depth=1 \
-              "https://x-access-token:${{ secrets.UPSTREAM_ACCESS_TOKEN || github.token }}@github.com/$OWNER/$REPO_NAME.git" \
+              "https://x-access-token:${GIT_TOKEN}@github.com/$OWNER/$REPO_NAME.git" \
               "$TARGET_DIR" 2>/dev/null \
             || git clone --depth=1 \
               "https://github.com/$OWNER/$REPO_NAME.git" \
@@ -111,9 +118,12 @@ jobs:
       - name: Check if sync needed
         id: check
         if: steps.manifest.outputs.skip != 'true'
+        env:
+          ACD_STEP_LAST_COMMIT: ${{ steps.manifest.outputs.last_commit }}
+          ACD_STEP_SOURCES: ${{ steps.manifest.outputs.sources }}
         run: |
-          LAST='${{ steps.manifest.outputs.last_commit }}'
-          FORCE='${{ github.event.inputs.force || false }}'
+          LAST="$ACD_STEP_LAST_COMMIT"
+          FORCE="$ACD_INPUT_FORCE"
           EVENT='${{ github.event_name }}'
 
           # repository_dispatch always syncs (upstream told us something changed)
@@ -131,7 +141,7 @@ jobs:
           fi
 
           # Scheduled: compare commits
-          SOURCES='${{ steps.manifest.outputs.sources }}'
+          SOURCES="$ACD_STEP_SOURCES"
           FIRST_SOURCE=$(echo "$SOURCES" | jq -r '.[0]')
           if [ -d "$FIRST_SOURCE" ]; then
             UPSTREAM_HEAD=$(git -C "$FIRST_SOURCE" rev-parse --short HEAD)
@@ -155,9 +165,11 @@ jobs:
 
       - name: Build sync CLI
         if: steps.check.outputs.needed == 'true'
+        env:
+          ACD_STEP_SOURCES: ${{ steps.manifest.outputs.sources }}
         run: |
           # The sync-l0 CLI lives in the L0 source
-          SOURCES='${{ steps.manifest.outputs.sources }}'
+          SOURCES="$ACD_STEP_SOURCES"
           L0_PATH=$(echo "$SOURCES" | jq -r '.[0]')
           cd "$L0_PATH/mcp-server"
           npm ci --ignore-scripts
@@ -189,8 +201,20 @@ jobs:
           BRANCH="auto-sync/l0-update"
           ADDED='${{ steps.sync.outputs.added }}'
           UPDATED='${{ steps.sync.outputs.updated }}'
-          SOURCE_LAYER='${{ github.event.client_payload.source_layer || 'L0' }}'
-          SOURCE_COMMIT='${{ github.event.client_payload.l0_commit || 'scheduled' }}'
+          SOURCE_LAYER="${ACD_PAYLOAD_SOURCE_LAYER:-L0}"
+          SOURCE_COMMIT="${ACD_PAYLOAD_L0_COMMIT:-scheduled}"
+
+          case "$SOURCE_LAYER" in
+            L0|L1|L2) ;;
+            *)
+              echo "::error::source_layer must be one of L0, L1, or L2" >&2
+              exit 2
+              ;;
+          esac
+          if [[ "$SOURCE_COMMIT" != "scheduled" && ! "$SOURCE_COMMIT" =~ ^[0-9A-Fa-f]{7,64}$ ]]; then
+            echo "::error::l0_commit must be 'scheduled' or a 7-64 character hexadecimal commit id" >&2
+            exit 2
+          fi
 
           # Configure git
           git config user.name "github-actions[bot]"
@@ -247,7 +271,6 @@ jobs:
           if [ -f ".github/downstream-repos.json" ]; then
             COMMIT=$(git rev-parse --short HEAD)
             # Determine our layer from manifest
-            SOURCES='${{ steps.manifest.outputs.sources }}'
             OUR_LAYER=$(jq -r '.sources[-1].layer // "L0"' l0-manifest.json 2>/dev/null || echo "L0")
 
             jq -r '.[]' .github/downstream-repos.json | while read -r REPO; do
@@ -266,9 +289,12 @@ jobs:
 
       - name: Summary
         if: always() && steps.manifest.outputs.skip != 'true'
+        env:
+          ACD_STEP_NEEDED: ${{ steps.check.outputs.needed }}
+          ACD_STEP_CHANGES: ${{ steps.sync.outputs.changes }}
         run: |
-          NEEDED='${{ steps.check.outputs.needed }}'
-          CHANGES='${{ steps.sync.outputs.changes || 0 }}'
+          NEEDED="$ACD_STEP_NEEDED"
+          CHANGES="${ACD_STEP_CHANGES:-0}"
 
           if [ "$NEEDED" != "true" ]; then
             echo "### ⏭️ Auto-sync skipped" >> "$GITHUB_STEP_SUMMARY"
