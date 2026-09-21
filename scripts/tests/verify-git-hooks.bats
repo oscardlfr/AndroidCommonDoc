@@ -288,3 +288,34 @@ write_lone_cr_hook() {
   [ "$status" -ne 0 ]
   [[ "$output" == *"hook-drifted"* ]] || return 1
 }
+
+@test "VGH-10 PASS: drive-letter absolute --git-path is not prefixed with repo root" {
+  provide_canonical_source
+
+  local raw_hook_path hook_path run_cwd stub_dir
+  if command -v cygpath >/dev/null 2>&1; then
+    hook_path="$BATS_TEST_TMPDIR/windows-drive-hook/pre-push"
+    raw_hook_path="$(cygpath -m "$hook_path")"
+    run_cwd="$BATS_TEST_TMPDIR"
+  else
+    raw_hook_path="C:/windows-drive-hook/pre-push"
+    hook_path="$BATS_TEST_TMPDIR/$raw_hook_path"
+    run_cwd="$BATS_TEST_TMPDIR"
+  fi
+
+  mkdir -p "$(dirname "$hook_path")"
+  cp "$CANONICAL_SRC" "$hook_path"
+  chmod +x "$hook_path"
+
+  stub_dir="$BATS_TEST_TMPDIR/git-stub"
+  mkdir -p "$stub_dir"
+  cat > "$stub_dir/git" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' "$VGH_RAW_HOOK_PATH"
+EOF
+  chmod +x "$stub_dir/git"
+
+  run env VGH_RAW_HOOK_PATH="$raw_hook_path" PATH="$stub_dir:$PATH" \
+    bash -c "cd '$run_cwd' && bash '$SCRIPT' --repo-root '$REPO'"
+  [ "$status" -eq 0 ]
+}

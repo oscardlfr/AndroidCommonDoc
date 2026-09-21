@@ -125,7 +125,7 @@ raw_git_path="$(git -C "$REPO_ROOT" rev-parse --git-path hooks/pre-push 2>/dev/n
   || fail "hook-absent" "could not resolve hooks path via git -C \"$REPO_ROOT\" rev-parse --git-path hooks/pre-push (not a git repository?)"
 
 case "$raw_git_path" in
-  /*) HOOK_PATH="$raw_git_path" ;;
+  /*|[A-Za-z]:/*) HOOK_PATH="$raw_git_path" ;;
   *)  HOOK_PATH="$REPO_ROOT/$raw_git_path" ;;
 esac
 
