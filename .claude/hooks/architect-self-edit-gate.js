@@ -18,6 +18,10 @@ process.stdin.on('end', () => {
     if (!agentType.startsWith('arch-')) process.exit(0);
 
     // Exempt: verdict + cross-verify files (.planning/wave{slug}/[pr\d+-]arch-*-{verdict,cross-verify}.md)
+    // NOT exempt (intentional): arch-*-verdict-prep.json / arch-*-verdict-verify-final.json
+    // (wave structured-verdict-evidence-contract, PLAN.md sec 3.1/3.6) — the regex below is
+    // .md-only by construction, so Write/Edit against the new JSON verdict paths is already
+    // blocked, unchanged; write-verdict.sh is the only sanctioned writer. No logic change.
     if (/[\\/]\.planning[\\/]wave[\w.-]+[\\/](?:pr\d+-)?arch-[^/\\]+-(?:verdict|cross-verify)\.md$/.test(filePath)) {
       process.exit(0);
     }

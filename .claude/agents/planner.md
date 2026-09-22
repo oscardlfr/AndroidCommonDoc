@@ -187,9 +187,9 @@ Also write the CLASS sentinel in Pass B: `Write(".planning/wave-{slug}/CLASS", c
 
 **Why**: The disk artifact is the load-bearing contract. The orchestrator consumes `.planning/wave-<slug>/PLAN.md` directly — never via message delivery — so the plan survives any unreliable/absent peer channel.
 
-### Verdict Filename (MANDATORY)
+### Verdict Targets (MANDATORY)
 
-When the orchestrator's dispatch specifies a `verdict_target` path, use it verbatim. The canonical arch-platform verdict filename is **`arch-platform-verdict.md`** — NOT `arch-platform-prep.md` or any other variant. The gate at `.claude/hooks/premature-execution-gate.js` (line 77) enforces this: any file not matching `arch-platform-verdict.md` will block EXECUTE phase. Do NOT invent filenames.
+Plans name required architect roles, never ad-hoc verdict filenames. The orchestrator creates one immutable `verdict-request/v1` per role and phase; the corresponding canonical targets are `arch-<role>-verdict-prep.json` and `arch-<role>-verdict-verify-final.json`. Legacy Markdown verdicts and invented variants are non-authoritative.
 
 ## AMEND Protocol (MANDATORY)
 

@@ -47,7 +47,7 @@ node mcp-server/build/cli/monitor-sources.js --project-root /path/to/l1 --layer 
 7. **Navigation:** State-driven -- never Channel-based.
 8. **No platform deps in ViewModels:** No `Context`, `Resources`, `UIKit` imports.
 
-## Available Skills (61)
+## Available Skills (62)
 
 Skills are defined canonically in `skills/*/SKILL.md`. Adapters generate tool-specific files.
 
@@ -81,6 +81,7 @@ Skills are defined canonically in `skills/*/SKILL.md`. Adapters generate tool-sp
 | `sbom-scan` | Scan SBOM for known CVE vulnerabilities using Trivy |
 | `sbom-analyze` | Analyze SBOM for dependency statistics, licenses, and concerns |
 | `pre-pr` | Run all pre-PR checks locally before opening a pull request |
+| `quality-gate` | Validate structured verdicts and agreeing evidence, then mint current push authority |
 | `lint-resources` | Validate string resource naming conventions (snake_case, prefixes, duplicates) |
 | `full-audit` | Run unified audit across all quality dimensions |
 | `audit` | Generate quality audit report from audit-log.jsonl |
@@ -142,16 +143,16 @@ Skills are defined canonically in `skills/*/SKILL.md`. Adapters generate tool-sp
 | `web-quality-audit` | Comprehensive web quality audit across all dimensions |
 | `material-3` | Implement Google's Material Design 3 (Compose, Flutter, web) — components, theming, layout, scaffold (third-party, MIT) |
 
-## MCP Tools (46)
+## MCP Tools (47)
 
 Programmatic access via Model Context Protocol server (`mcp-server/`):
 
 | Tool | Description |
 |------|-------------|
 | `validate-all` | Run all validation scripts with structured output |
-| `verify-kmp` | Validate KMP source sets and imports |
+| `verify-kmp-packages` | Validate KMP source sets and imports |
 | `check-version-sync` | Check version alignment between projects |
-| `check-freshness` | Check upstream doc sources for staleness |
+| `check-doc-freshness` | Backward-compatible freshness check alias for `monitor-sources` |
 | `script-parity` | Compare PS1 and SH script behavior |
 | `setup-check` | Verify toolkit installation in a project |
 | `find-pattern` | Search pattern registry by query terms |
@@ -194,6 +195,7 @@ Programmatic access via Model Context Protocol server (`mcp-server/`):
 | `scan-secrets` | Run TruffleHog on a project directory to detect verified secret leaks |
 | `search-patterns` | Semantic pattern search backed by a Chroma vector database |
 | `tool-use-analytics` | Usage dashboard from tool-use-log.jsonl — top tools, dead tools, MCP/skill breakdown, per-agent stats |
+| `rate-limit-status` | Show current MCP shared rate-limit counters and reset timing |
 
 ## Quality Gate Agents (5)
 

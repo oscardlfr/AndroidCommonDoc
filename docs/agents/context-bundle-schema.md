@@ -16,6 +16,8 @@ token_budget: 1500
 
 # Context Bundle Schema
 
+Context bundles are informative inputs, not authority artifacts. A bundle digest may be cited as verdict evidence, but advancing a phase still requires a `verdict/v1` bound to its immutable request, PLAN, HEAD, role, phase, and independently validated evidence files.
+
 File-based context bundles are the **primary contract** for handing structured context to context-exhausted or freshly respawned agents. They are plain markdown files — portable to any model/CLI that can read files. Hook-based injection (`SubagentStart` `additionalContext`) is an optional future adapter, never the carrier of this invariant.
 
 ## Storage & Naming
@@ -64,7 +66,7 @@ schema_version: 1
 - pending on you: error-case test; READY-FOR-REVIEW message to team-lead
 
 ## Architect Addendum   <!-- architect-role bundles ONLY -->
-- verdict state: APPROVED-PREP emitted (wave-{slug}/arch-platform-verdict.md); VERIFY-FINAL pending
+- verdict state: request-bound PREP approval published (`arch-platform-verdict-prep.json`); VERIFY-FINAL pending
 - in-flight findings: F2 (MED) script arg validation unreviewed
 - pending dispatches: toolkit-specialist awaiting C2 re-review
 ```

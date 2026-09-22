@@ -17,14 +17,9 @@
 //
 // Fail-open: catch(e) -> exit 0 (never block due to script error)
 
-const fs = require('fs');
-const path = require('path');
 const { getWaveSlug } = require('./hook-control-plane-utils');
-
-function getSentinelPath(projectRoot, slug) {
-  // FIND-17 fix: sentinel is now in tracked .claude/wave-quality-gates/ dir
-  return path.join(projectRoot, '.claude', 'wave-quality-gates', slug + '.md');
-}
+const { hasIntent } = require('../../scripts/lib/shell-command-intent.cjs');
+const waveControl = require('../../scripts/lib/wave-control-plane.cjs');
 
 let input = '';
 const t = setTimeout(() => process.exit(0), 5000);
@@ -41,27 +36,28 @@ process.stdin.on('end', () => {
     if (toolName === 'Bash') {
       const command = data.tool_input?.command || '';
       if (process.env.WAVE_PHASE_GATE_BYPASS === '1') process.exit(0);
-      function isGatedCommand(cmd) {
-        const stripped = cmd.trim()
-          .replace(/^(?:[A-Z_][A-Z0-9_]*=[^\s]+\s+)+/, "")
-          .replace(/^rtk\s+/, "")
-          .replace(/^sudo\s+/, "");
-        return /^git\s+push\b/.test(stripped) || /^gh\s+pr\s+create\b/.test(stripped);
-      }
-      if (!isGatedCommand(command)) process.exit(0);
+      if (!hasIntent(command, 'git-push') && !hasIntent(command, 'gh-pr-create')) process.exit(0);
 
       const slug = getWaveSlug(projectRoot, { protectedEnvReturnsNull: true });
-      if (!slug) process.exit(0); // cannot determine wave context — fail-open
-
-      const sentinelPath = getSentinelPath(projectRoot, slug);
-
-      if (!fs.existsSync(sentinelPath)) {
+      if (!slug) {
         process.stdout.write(JSON.stringify({
           decision: 'block',
-          reason: '[wave-phase-gate] Rule A: quality-gate sentinel missing for wave "' + slug + '".\n'
-            + 'Expected: .claude/wave-quality-gates/' + slug + '.md\n'
-            + 'Create the quality-gate sentinel before pushing or creating a PR.\n'
-            + '(Sentinel moved from gitignored .planning/wave-' + slug + '/quality-gate.md — FIND-17 fix)'
+          reason: '[wave-phase-gate] Rule A: active wave context cannot be resolved; push/PR intent fails closed.'
+        }));
+        process.exit(2);
+      }
+
+      let phaseState;
+      try { phaseState = waveControl.status(projectRoot, slug); } catch (error) {
+        process.stdout.write(JSON.stringify({
+          decision: 'block', reason: '[wave-phase-gate] Rule A: phase state invalid for wave "' + slug + '": ' + error.message,
+        }));
+        process.exit(2);
+      }
+      if (!phaseState.current || phaseState.phase !== 'COMPLETE') {
+        process.stdout.write(JSON.stringify({
+          decision: 'block', reason: '[wave-phase-gate] Rule A: wave "' + slug + '" is at phase '
+            + phaseState.phase + '; COMPLETE with current PLAN/HEAD binding is required.',
         }));
         process.exit(2);
       }
@@ -78,15 +74,18 @@ process.stdin.on('end', () => {
     const slug = getWaveSlug(projectRoot, { protectedEnvReturnsNull: true });
     if (!slug) process.exit(0); // cannot determine wave context — fail-open
 
-    const waveDir = path.join(projectRoot, '.planning', `wave-${slug}`);
-    const planPath = path.join(waveDir, 'PLAN.md');
-
-    if (!fs.existsSync(planPath)) {
+    let phaseState;
+    try { phaseState = waveControl.status(projectRoot, slug); } catch (error) {
       process.stdout.write(JSON.stringify({
         decision: 'block',
-        reason: '[wave-phase-gate] Rule B: PLAN.md missing for wave "' + slug + '".\n'
-          + 'Expected: .planning/wave-' + slug + '/PLAN.md\n'
-          + 'Create the PLAN.md before dispatching to arch-* agents.'
+        reason: '[wave-phase-gate] Rule B: phase state invalid for wave "' + slug + '": ' + error.message,
+      }));
+      process.exit(2);
+    }
+    if (!['PREP', 'VERIFY_FINAL'].includes(phaseState.phase) || !phaseState.required_roles.includes(subagentType)) {
+      process.stdout.write(JSON.stringify({
+        decision: 'block', reason: '[wave-phase-gate] Rule B: role "' + subagentType
+          + '" is not required in phase ' + phaseState.phase + ' for class ' + phaseState.wave_class + '.',
       }));
       process.exit(2);
     }

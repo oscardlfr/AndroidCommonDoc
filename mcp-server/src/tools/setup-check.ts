@@ -203,7 +203,7 @@ export function registerSetupCheckTool(server: McpServer, limiter?: RateLimiter)
             ? `pre-push hook is not installed/canonical (${reasonCode}) -- run 'make install-git-hooks' to fix`
             : "verify-git-hooks.sh could not be run (missing script or spawn failure) -- run 'make install-git-hooks' to fix";
         }
-        // Q6 (settled -- see arch-platform-verdict.md Item 6): WARN, never
+  // Setup-policy ruling (now carried by the structured architect verdict): WARN, never
         // failCount++. A fresh, never-bootstrapped clone is an expected,
         // recoverable state with a documented one-line fix -- categorically
         // closer to Check 1's WARN (env-var, recoverable/informational) than

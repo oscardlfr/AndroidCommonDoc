@@ -215,7 +215,7 @@ describe("search-docs tool", () => {
 
   it("rate limiting returns error after burst", async () => {
     // Make many rapid calls — the server uses a rate limiter.
-    // We cannot easily exhaust it in tests (30/min), but we can verify
+    // We cannot cheaply exhaust it in tests (45/min), but we can verify
     // that a valid call returns proper structure (not a rate limit error).
     const result = await client.callTool({
       name: "search-docs",

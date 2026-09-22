@@ -67,6 +67,20 @@ setup() {
   cp "$SCRIPTS_SRC/sh/emit-rule-inventory.sh"        "$REPO/scripts/sh/"
   cp "$SCRIPTS_SRC/sh/emit-pre-pr-report.sh"         "$REPO/scripts/sh/"
 
+  # structured-verdict-evidence-contract (P3 consumer migration): the migrated
+  # verdict-head-binding block now shells out to `node .../verdict-evidence-
+  # contract-cli.cjs validate` with cwd=repo_root -- mirror the exact same
+  # scripts/lib/ layout into the isolated $REPO so that subprocess can resolve
+  # its own require() chain (cli -> contract -> runtime-role-lifecycle/
+  # structural-validators.cjs; cli -> store, Node built-ins only -- confirmed
+  # by direct read of all three files' own require() statements, not assumed).
+  mkdir -p "$REPO/scripts/lib/runtime-role-lifecycle"
+  cp "$SCRIPTS_SRC/lib/verdict-evidence-contract-cli.cjs" "$REPO/scripts/lib/"
+  cp "$SCRIPTS_SRC/lib/verdict-evidence-contract.cjs"     "$REPO/scripts/lib/"
+  cp "$SCRIPTS_SRC/lib/verdict-artifact-store.cjs"        "$REPO/scripts/lib/"
+  cp "$SCRIPTS_SRC/lib/runtime-role-lifecycle/structural-validators.cjs" \
+     "$REPO/scripts/lib/runtime-role-lifecycle/"
+
   # H1 (push-authority-bootstrap): do NOT copy install-git-hooks.sh into the
   # fixture — its own SCRIPT_DIR-relative transitive deps (pre-commit-hook.sh,
   # lib/wave-slug.sh, commit-msg-hook.sh) are not staged here, so a copied
@@ -109,14 +123,41 @@ teardown() {
 # further after setup(). generated_at is captured after the caller's own started_at
 # timestamp, satisfying select_bats_handoff's --since floor (real wall-clock ordering
 # only moves forward within one test).
+write_bats_provenance() {
+  local path="$1" log_digest="$2" plan_path wave_slug plan_digest run_id
+  run_id="$(grep '^BATS_RUN_ID=' "$path" | cut -d= -f2-)"
+  plan_path="$(find "$REPO/.planning" -mindepth 2 -maxdepth 2 -name PLAN.md -print -quit 2>/dev/null || true)"
+  if [[ -n "$plan_path" ]]; then
+    wave_slug="$(basename "$(dirname "$plan_path")")"; wave_slug="${wave_slug#wave-}"
+    plan_digest="$(node -e 'const fs=require("fs"),c=require("crypto");process.stdout.write(c.createHash("sha256").update(fs.readFileSync(process.argv[1])).digest("hex"))' "$plan_path")"
+  else
+    wave_slug="none"; plan_digest="none"
+  fi
+  {
+    printf 'BATS_TARGET_DIGEST=%s\n' 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb'
+    printf 'BATS_ENV_FINGERPRINT=%s\n' 'dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd'
+    printf 'BATS_WAVE_SLUG=%s\n' "$wave_slug"
+    printf 'BATS_PLAN_DIGEST=%s\n' "$plan_digest"
+    printf 'BATS_STARTED_AT=%s\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+    printf 'BATS_FINISHED_AT=%s\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+    printf 'BATS_LOG_DIGEST=%s\n' "$log_digest"
+    printf 'BATS_LOG_IDENTITY=%s\n' "$(node -e 'const c=require("crypto");process.stdout.write(c.createHash("sha256").update(process.argv[1]+"|artifact").digest("hex"))' "$run_id")"
+    printf 'BATS_TOOL_VERSIONS=%s\n' 'node-v24_bats-1.12'
+  } >> "$path"
+}
+
 write_valid_bats_handoff() {
   local head
   head="$(git -C "$REPO" rev-parse HEAD)"
   local generated_at
   generated_at="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
-  local run_id="wave-a-fixture-$$-${RANDOM}"
   mkdir -p "$ACDOC"
-  {
+  local suffix digest run_id path
+  for suffix in a b; do
+    run_id="wave-a-fixture-$$-${RANDOM}-${suffix}"
+    path="$ACDOC/bats-result.${run_id}.env"
+    if [[ "$suffix" == a ]]; then digest="cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"; else digest="eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"; fi
+    {
     printf 'BATS_OK=%s\n'           "42"
     printf 'BATS_NOT_OK=%s\n'       "0"
     printf 'BATS_EXPECTED=%s\n'     "42"
@@ -128,7 +169,9 @@ write_valid_bats_handoff() {
     printf 'BATS_RUN_ID=%s\n'       "$run_id"
     printf 'BATS_GENERATED_AT=%s\n' "$generated_at"
     printf 'BATS_SCOPE=%s\n'        "full"
-  } > "$ACDOC/bats-result.${run_id}.env"
+    } > "$path"
+    write_bats_provenance "$path" "$digest"
+  done
 }
 
 # write_custom_bats_handoff <head> <generated_at> <ok> <not_ok> <expected> <complete>
@@ -140,7 +183,12 @@ write_custom_bats_handoff() {
   local complete="$6" verdict="$7" scope="$8" run_id="${9:-custom-$$-${RANDOM}}"
   local total=$(( ok + not_ok ))
   mkdir -p "$ACDOC"
-  {
+  local suffix digest actual_id path
+  for suffix in a b; do
+    actual_id="${run_id}-${suffix}"
+    path="$ACDOC/bats-result.${actual_id}.env"
+    if [[ "$suffix" == a ]]; then digest="cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"; else digest="eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"; fi
+    {
     printf 'BATS_OK=%s\n'           "$ok"
     printf 'BATS_NOT_OK=%s\n'       "$not_ok"
     printf 'BATS_EXPECTED=%s\n'     "$expected"
@@ -149,10 +197,12 @@ write_custom_bats_handoff() {
     printf 'BATS_VERDICT=%s\n'      "$verdict"
     printf 'BATS_LOG=%s\n'          "/dev/null"
     printf 'BATS_HEAD=%s\n'         "$head"
-    printf 'BATS_RUN_ID=%s\n'       "$run_id"
+    printf 'BATS_RUN_ID=%s\n'       "$actual_id"
     printf 'BATS_GENERATED_AT=%s\n' "$generated_at"
     printf 'BATS_SCOPE=%s\n'        "$scope"
-  } > "$ACDOC/bats-result.${run_id}.env"
+    } > "$path"
+    write_bats_provenance "$path" "$digest"
+  done
 }
 
 # clear_handoffs — removes every handoff written so far (including the default golden
@@ -316,7 +366,7 @@ write_quality_gate_report() {
   fi
   python3 - "$ACDOC/quality-gate-report.json" "$REPO/quality-gate-manifest.json" \
       "${extra_steps}" "${override_deliberation}" "$started_at" "$report_head" <<'PYEOF'
-import json, sys
+import json, os, sys
 
 report_path         = sys.argv[1]
 manifest_path       = sys.argv[2]
@@ -326,6 +376,7 @@ started_at          = sys.argv[5]
 report_head         = sys.argv[6]
 
 manifest = json.load(open(manifest_path, encoding='utf-8'))
+repo_root = os.path.dirname(manifest_path)
 
 # Build required steps all PASS
 steps = []
@@ -335,10 +386,28 @@ for rs in manifest.get('required_steps', []):
 # Build conditional steps.
 # production-file-verify must be PASS because the fixture commit includes .sh scripts
 # (task_is_code_changes=TRUE fires for non-doc, non-yaml files like .sh).
-# All other conditional steps default to SKIP with reason.
+#
+# structured-verdict-evidence-contract (P3 consumer migration): path-manifest-audit's
+# own predicate (wave_plan_present) is now UNAVOIDABLY true for the file's own default
+# "test-slug" fixture wave the moment write_arch_verdicts() runs, because genuine JSON
+# verdict minting itself hard-requires PLAN.md to exist (write-verdict-request.sh) and
+# the migrated verdict-head-binding check separately re-requires it too -- PLAN.md
+# existing is the correct, unavoidable consequence of switching to real minted
+# verdicts, not a bug to route around (arch-integration ruling, 2026-09-21). So this
+# helper's own default must mirror that reality instead of assuming SKIP is still
+# legitimate: if .planning/wave-test-slug/PLAN.md genuinely exists on disk, default to
+# a genuine PASS here too (same shape as production-file-verify's own unconditional
+# default) -- callers needing the OLD "wave_plan_present genuinely false" behavior
+# (e.g. a nonexistent/invalid slug that never calls write_arch_verdicts for
+# "test-slug" at all) still get the SKIP+reason default below, since the file
+# existence check below then correctly returns false for them.
+_plan_present = os.path.isfile(os.path.join(repo_root, '.planning', 'wave-test-slug', 'PLAN.md'))
 for cs in manifest.get('conditional_steps', []):
     if cs['id'] == 'production-file-verify':
         steps.append({"step": cs['id'], "ran": True, "result": "PASS"})
+    elif cs['id'] == 'path-manifest-audit' and _plan_present:
+        steps.append({"step": cs['id'], "ran": True, "result": "PASS",
+                      "reason": "All touched files in manifest. CLASS=HARNESS matches PLAN.md."})
     else:
         steps.append({"step": cs['id'], "ran": False, "result": "SKIP",
                       "reason": "predicate false in isolated test repo"})
@@ -392,29 +461,68 @@ PYEOF
   write_valid_artifact_receipts
 }
 
-# write_arch_verdicts — writes APPROVED-VERIFY-FINAL + HEAD-bound verdicts for all 3
-# required roles into .planning/wave-<slug>/
-# $1=slug, $2=head_sha (default HEAD_SHA)
+# _patch_json_field <json-path> <field> <value> -- rewrites one top-level field
+# on an otherwise genuinely-produced record in place (canonical 2-space
+# pretty-print preserved). Negative-test-only field patch, mirroring this same
+# file's own override_artifact_receipt_field pattern -- never a hand-authored
+# fixture; only used to force ONE field to a deliberately-wrong value on top of
+# a record the real writer already produced correctly.
+_patch_json_field() {
+  local json_path="$1" field="$2" value="$3"
+  node -e '
+    const fs = require("fs");
+    const [p, f, v] = process.argv.slice(1);
+    const record = JSON.parse(fs.readFileSync(p, "utf8"));
+    record[f] = v;
+    fs.writeFileSync(p, JSON.stringify(record, null, 2) + "\n");
+  ' "$json_path" "$field" "$value"
+}
+
+# write_arch_verdicts — publishes GENUINE arch-<role>-verdict-prep.json AND
+# arch-<role>-verdict-verify-final.json (authorizes=true, verdict/v1) for all 3
+# required roles into .planning/wave-<slug>/ via the real
+# write-verdict-request.sh + write-verdict.sh --decision approve flow (never
+# hand-authored Markdown/JSON) -- structured-verdict-evidence-contract P3
+# consumer migration, arch-integration dispatch 2026-09-21T17:55:38Z.
+# write-verdict.sh requires an existing PREP before verify-final publishes
+# (WV-21) -- each role's PREP is seeded first, mirroring RT-22's/JSON-PREP-1's
+# own real-script-call pattern (premature-execution-gate.bats ~line 1011).
+# $1=slug, $2=head_sha (default HEAD_SHA) -- no existing caller in this file
+# overrides $2 away from the repo's actual current HEAD; if a future caller
+# ever does, the verify-final verdict's own head field is patched post-hoc via
+# _patch_json_field, since the real writer always binds head to whatever HEAD
+# genuinely was at request time, never an arbitrary caller-chosen value.
 write_arch_verdicts() {
   local slug="$1"
   local head="${2:-$HEAD_SHA}"
   local wave_dir="$REPO/.planning/wave-$slug"
   mkdir -p "$wave_dir"
+  [ -f "$wave_dir/PLAN.md" ] || printf '### Wave Class\n\n- **Class**: HARNESS\n\n### Spawn Table\n\n| Role | Count | Reason |\n|---|---|---|\n| arch-platform | 1 | fixture |\n' > "$wave_dir/PLAN.md"
+  local wvr_script="$SCRIPTS_SRC/sh/write-verdict-request.sh"
+  local wv_script="$SCRIPTS_SRC/sh/write-verdict.sh"
+  # Evidence file MUST live under the gitignored .planning/wave*/ tree (not
+  # directly under $REPO) -- an untracked file anywhere else trips run-qg's own
+  # clean-tree assertion (Part 4A), which is exactly what broke #WP4 empirically.
+  local ev="$wave_dir/.vhb-evidence"
+  [ -f "$ev" ] || printf 'evidence\n' > "$ev"
   for role in arch-testing arch-platform arch-integration; do
-    cat > "$wave_dir/$role-verdict.md" <<EOF
-# $role verdict — wave-$slug
+    local prep_req_out prep_req_path prep_req_sha256
+    prep_req_out="$(cd "$REPO" && CLAUDE_WAVE_SLUG="$slug" bash "$wvr_script" --role "$role" --phase prep --slug "$slug")"
+    prep_req_path="$(printf '%s' "$prep_req_out" | awk '{print $1}')"
+    prep_req_sha256="$(printf '%s' "$prep_req_out" | awk '{print $2}')"
+    bash -c "cd '$REPO' && printf 'reviewed and approved' | CLAUDE_WAVE_SLUG='$slug' bash '$wv_script' --role '$role' --phase prep --slug '$slug' --request '$prep_req_path' --request-sha256 '$prep_req_sha256' --decision approve" >/dev/null 2>&1
 
-**Phase**: PREP
-**Timestamp**: 2026-06-14T00:00:00Z
-**Status**: APPROVED-PREP
+    local vf_req_out vf_req_path vf_req_sha256
+    vf_req_out="$(cd "$REPO" && CLAUDE_WAVE_SLUG="$slug" bash "$wvr_script" --role "$role" --phase verify-final --slug "$slug")"
+    vf_req_path="$(printf '%s' "$vf_req_out" | awk '{print $1}')"
+    vf_req_sha256="$(printf '%s' "$vf_req_out" | awk '{print $2}')"
+    bash -c "cd '$REPO' && printf 'reviewed and approved' | CLAUDE_WAVE_SLUG='$slug' bash '$wv_script' --role '$role' --phase verify-final --slug '$slug' --request '$vf_req_path' --request-sha256 '$vf_req_sha256' --decision approve --evidence-file '$ev'" >/dev/null 2>&1
 
----
-
-**HEAD**: $head
-**Phase**: VERIFY-FINAL
-**Timestamp**: 2026-06-14T00:00:00Z
-**Status**: APPROVED-VERIFY-FINAL
-EOF
+    local vf_path="$wave_dir/arch-${role#arch-}-verdict-verify-final.json"
+    local current_head; current_head="$(git -C "$REPO" rev-parse HEAD)"
+    if [[ "$head" != "$current_head" ]]; then
+      _patch_json_field "$vf_path" head "$head"
+    fi
   done
 }
 
@@ -444,19 +552,35 @@ write_plan() {
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
-# #WP2  predicate FALSE + path-manifest-audit SKIP+reason → PASS
+# #WP2 (predicate layer)  predicate FALSE + path-manifest-audit SKIP+reason → valid;
+# run fails LATER for an unrelated reason, never inconsistent-skip.
 # No .planning/wave-nonexistent-slug/PLAN.md → wave_plan_present=FALSE.
-# SKIP+reason is legitimate when predicate is FALSE.
-# Expect: exit 0.
-# TDD: RED until Part A lands — currently SKIP without enforcement passes trivially
-# but the predicate logic may not exist yet to confirm FALSE → allowed.
+# SKIP+reason is legitimate when predicate is FALSE -- that IS this test's
+# load-bearing assertion, same framing as #WP5 below.
+#
+# structured-verdict-evidence-contract (P3 consumer migration, arch-integration
+# ruling 2026-09-21): redesigned from an original full-exit-0 proof. Genuine JSON
+# verdict minting itself now hard-requires PLAN.md to exist (write-verdict-
+# request.sh fails closed without it), and the migrated verdict-head-binding
+# check separately re-requires the SAME file -- so a slug can no longer both (a)
+# have zero PLAN.md (this test's own wave_plan_present=FALSE premise) and (b)
+# reach a full end-to-end mint. PLAN.md existing is the correct, unavoidable
+# consequence of using real minted verdicts elsewhere in this file, not a bug to
+# route around here specifically. This test already has its own precedent for
+# exactly this shape in the same file -- #WP5 below already proves "predicate
+# correctly evaluated FALSE, SKIP+reason not flagged inconsistent" via a run that
+# fails later rather than a full PASS; this case now follows that identical
+# pattern instead of inventing a new one.
 # ─────────────────────────────────────────────────────────────────────────────
-@test "#WP2 PASS: wave_plan_present FALSE + path-manifest-audit SKIP+reason is valid (exit 0)" {
-  # No write_plan — .planning/wave-nonexistent-slug/PLAN.md does not exist
-  write_arch_verdicts "nonexistent-slug"
+@test "#WP2 PASS (predicate layer): wave_plan_present FALSE + path-manifest-audit SKIP+reason valid; run fails later at verdict-head-binding, never inconsistent-skip" {
+  # Deliberately no write_plan, no write_arch_verdicts -- .planning/wave-nonexistent-slug
+  # does not exist at all, proving the slug genuinely has no PLAN.md (not merely
+  # that this test forgot to create verdicts).
   write_quality_gate_report '[{"step":"path-manifest-audit","ran":false,"result":"SKIP","reason":"No active wave PLAN.md found"}]'
   run bash -c "CLAUDE_WAVE_SLUG='nonexistent-slug' bash '$EMITTER' --subcommand run-qg --repo-root '$REPO'"
-  [ "$status" -eq 0 ]
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"test-suite-evidence-provenance"* ]]
+  [[ "$output" != *"inconsistent-skip"* ]]
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -554,7 +678,7 @@ PYEOF
   write_quality_gate_report '[{"step":"path-manifest-audit","ran":false,"result":"SKIP","reason":"No active wave PLAN.md found"}]'
   run bash -c "CLAUDE_WAVE_SLUG='../evil' bash '$EMITTER' --subcommand run-qg --repo-root '$REPO'"
   [ "$status" -eq 2 ]
-  [[ "$output" == *"verdict-head-binding"* ]]
+  [[ "$output" == *"test-suite-evidence-provenance"* ]]
   [[ "$output" != *"inconsistent-skip"* ]]
 }
 
@@ -1409,23 +1533,44 @@ PYEOF
   [ -f "$ACDOC/push-proof.json" ]
 }
 
+# structured-verdict-evidence-contract (P3 consumer migration, arch-integration
+# dispatch 2026-09-21T17:55:38Z): the three CANONICAL-* regression guards below now
+# target arch-integration-verdict-verify-final.json (verdict/v1, canonical CLI
+# `validate`), not the legacy .md file -- write_arch_verdicts already publishes a
+# GENUINE, valid one for all 3 roles; each case then breaks exactly the ONE thing
+# its own name says (revert-one-prove-red), on top of that otherwise-real baseline.
+
 @test "#EP-VHB-CANONICAL-MISSING BLOCK: one of the three REQUIRED canonical verdict files absent entirely still fails (regression guard for the narrowed per-role check)" {
   # No write_plan -- see #EP-VHB-HISTORICAL-STALE's own comment above.
   write_arch_verdicts "test-slug"
   write_quality_gate_report
-  rm -f "$REPO/.planning/wave-test-slug/arch-integration-verdict.md"
+  rm -f "$REPO/.planning/wave-test-slug/arch-integration-verdict-verify-final.json"
   run bash -c "CLAUDE_WAVE_SLUG='test-slug' bash '$EMITTER' --subcommand run-qg --repo-root '$REPO'"
   [ "$status" -eq 2 ]
-  [[ "$output" == *"arch-integration-verdict.md"* ]] || [[ "$output" == *"deliberation-role-incomplete"* ]] || [[ "$output" == *"verdict-head-binding"* ]]
+  [[ "$output" == *"arch-integration-verdict-verify-final.json"* ]] || [[ "$output" == *"deliberation-role-incomplete"* ]] || [[ "$output" == *"verdict-head-binding"* ]]
   [ ! -f "$ACDOC/push-proof.json" ]
 }
 
-@test "#EP-VHB-CANONICAL-MALFORMED BLOCK: a REQUIRED canonical verdict file missing APPROVED-VERIFY-FINAL still fails (regression guard)" {
+@test "#EP-VHB-CANONICAL-MALFORMED BLOCK: a REQUIRED canonical verdict file that is well-formed but non-authorizing (decision=escalate) still fails (regression guard)" {
   # No write_plan -- see #EP-VHB-HISTORICAL-STALE's own comment above.
   write_arch_verdicts "test-slug"
   write_quality_gate_report
-  printf '# arch-integration verdict\n\n**Status**: APPROVED-PREP\n' \
-    > "$REPO/.planning/wave-test-slug/arch-integration-verdict.md"
+  # Rebind arch-integration's verify-final to a fresh request with decision=escalate
+  # (PLAN.md sec 3.6: rebind requires a fresh request, never the same one) -- a
+  # well-formed, request-bound, non-authorizing record, mirroring the old test's
+  # "file exists but doesn't show the right status" intent under the new contract.
+  local vf_path="$REPO/.planning/wave-test-slug/arch-integration-verdict-verify-final.json"
+  local current_sha256; current_sha256="$(sha256sum "$vf_path" | awk '{print $1}')"
+  local wvr_script="$SCRIPTS_SRC/sh/write-verdict-request.sh"
+  local wv_script="$SCRIPTS_SRC/sh/write-verdict.sh"
+  local req_out req_path req_sha256
+  req_out="$(cd "$REPO" && CLAUDE_WAVE_SLUG='test-slug' bash "$wvr_script" --role arch-integration --phase verify-final --slug test-slug)"
+  req_path="$(printf '%s' "$req_out" | awk '{print $1}')"
+  req_sha256="$(printf '%s' "$req_out" | awk '{print $2}')"
+  # Reuse the same gitignored evidence file write_arch_verdicts already created
+  # (an untracked file directly under $REPO trips run-qg's clean-tree assertion).
+  local ev="$REPO/.planning/wave-test-slug/.vhb-evidence"
+  bash -c "cd '$REPO' && printf 'escalating' | CLAUDE_WAVE_SLUG='test-slug' bash '$wv_script' --role arch-integration --phase verify-final --slug test-slug --request '$req_path' --request-sha256 '$req_sha256' --decision escalate --reason-code other --evidence-file '$ev' --supersede --expected-current-sha256 '$current_sha256'" >/dev/null 2>&1
   run bash -c "CLAUDE_WAVE_SLUG='test-slug' bash '$EMITTER' --subcommand run-qg --repo-root '$REPO'"
   [ "$status" -eq 2 ]
   [[ "$output" == *"verdict-head-binding"* ]]
@@ -1436,8 +1581,11 @@ PYEOF
   # No write_plan -- see #EP-VHB-HISTORICAL-STALE's own comment above.
   write_arch_verdicts "test-slug"
   write_quality_gate_report
-  printf '# arch-integration verdict\n\n**Status**: APPROVED-PREP\n\n**HEAD**: deadbeefdeadbeefdeadbeefdeadbeefdeadbeef\n**Status**: APPROVED-VERIFY-FINAL\n' \
-    > "$REPO/.planning/wave-test-slug/arch-integration-verdict.md"
+  # Negative-test-only field patch on top of the otherwise genuinely-produced verify-
+  # final record (mirrors override_artifact_receipt_field's established pattern in this
+  # same file) -- the real writer always binds head to the repo's actual current HEAD.
+  _patch_json_field "$REPO/.planning/wave-test-slug/arch-integration-verdict-verify-final.json" \
+    head "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef"
   run bash -c "CLAUDE_WAVE_SLUG='test-slug' bash '$EMITTER' --subcommand run-qg --repo-root '$REPO'"
   [ "$status" -eq 2 ]
   [[ "$output" == *"verdict-head-binding"* ]]

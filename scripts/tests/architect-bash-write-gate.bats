@@ -183,6 +183,19 @@ EOF" 'arch-integration'
   [ "$status" -eq 0 ]
 }
 
+@test "P3 (structured-verdict-evidence-contract): blocks heredoc redirect to a canonical JSON PREP path — the new JSON verdict paths are never exempted" {
+  # No production logic change here (regression lock, not a bugfix proof): the
+  # exempt regex is .md$-anchored, so arch-<role>-verdict-prep.json was already
+  # correctly blocked before this wave; this pins that it stays blocked now
+  # that a real JSON PREP file exists at this same directory convention.
+  make_input 'cat > .planning/wave-bl-w43/arch-platform-verdict-prep.json <<EOF
+{"schema":"verdict/v1"}
+EOF' 'arch-platform'
+  run_hook
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"heredoc redirect"* ]]
+}
+
 @test "allows append to .androidcommondoc/audit-log.jsonl" {
   make_input "echo '{\"event\":\"x\"}' >> .androidcommondoc/audit-log.jsonl" 'arch-testing'
   run_hook

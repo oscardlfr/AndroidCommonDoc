@@ -1,141 +1,59 @@
 ---
 scope: L0
-sources: [setup/agent-templates/arch-testing.md, setup/agent-templates/arch-platform.md, setup/agent-templates/arch-integration.md]
-targets: [.planning/wave{N}/]
+sources: [scripts/lib/verdict-evidence-contract.cjs, scripts/lib/verdict-artifact-store.cjs, scripts/sh/write-verdict-request.sh, scripts/sh/write-verdict.sh]
+targets: [.planning/wave-*/]
 slug: agent-verdict-protocol
 category: agents
 parent: agents-hub
 status: active
 layer: L0
-description: "Architect verdict format + disk-write + 1-liner DM protocol. Keeps team-lead context narrow while preserving full audit trail."
-version: 2
-last_updated: "2026-06"
+description: "Request-bound structured architect verdict publication and validation protocol."
+version: 3
+last_updated: "2026-09-21"
 ---
 
 # Agent Verdict Protocol
 
-Architects write a full verdict block to disk and send a 1-liner DM to team-lead. This keeps the team-lead's context window narrow (~1-liner) while preserving a full audit trail on disk.
+Architect phase authority is a machine-validated JSON exchange. A conversational `APPROVE`, a Markdown verdict, or an `APPROVED-*` substring never authorizes PREP or VERIFY-FINAL.
 
-## Disk-Write + 1-Liner DM Pattern (MANDATORY for all arch-* agents)
+## Artifact flow
 
-After completing review for wave `{N}`:
+1. Before dispatch, create an immutable `verdict-request/v1` under `.planning/wave-<slug>/verdict-requests/` with `write-verdict-request.sh`.
+2. Give the architect the exact request path and SHA-256. The role reviews only the requested phase and subject.
+3. The architect publishes one deterministic `verdict/v1` using `write-verdict.sh`. Direct Write/Edit and ad-hoc heredocs are not supported publication channels.
+4. Consumers call `verdict-evidence-contract-cli.cjs validate` and require `authorizes:true` for the expected role, phase, wave, PLAN, HEAD, request, filename, and evidence set.
+5. The architect may send a compact notification after publication. Delivery is a hint to read the artifact, not evidence itself.
 
-1. **Write verdict to** `.planning/wave-{slug}/arch-{role}-verdict.md` using `write-verdict.sh` — this is the canonical mechanism. Write/Edit are denied by `architect-self-edit-gate.js`; Bash is the only path, and `write-verdict.sh` is the required tool.
+## Canonical paths
 
-   **Unavailable-peer handling.** If an architect peer is unavailable, read its validated on-disk verdict (`APPROVED-PREP`/`APPROVED-VERIFY-FINAL` marker + HEAD-binding + freshness) or dispatch a fresh single-use instance to re-verify. The orchestrator NEVER authors or forges a verdict on an architect's behalf — `write-verdict.sh` is the sole sanctioned write channel for verdict files. Note: this is currently a **doctrinal** constraint, not a mechanically-enforced one for the orchestrator — `architect-self-edit-gate.js` and `architect-verdict-presence-gate.js` scope to `arch-*` agent types only and never fire for the orchestrator's empty `agent_type` (unlike `plan-md-write-gate.js`, which does block orchestrator writes to `PLAN.md`); mechanizing an equivalent orchestrator-scoped verdict-write gate is open follow-on work (BL-W4-12).
-
-   **PREP phase** (after completing analysis, before EXECUTE):
-   ```bash
-   bash scripts/sh/write-verdict.sh --role arch-{role} --phase prep
-   ```
-
-   PREP verdicts append `**PREP-HEAD**` (current HEAD) and `**PLAN_SHA256**` (hash of the wave's `PLAN.md`), binding the approval to this wave's exact HEAD + PLAN content — consumed by the specialist dispatch gate. See [specialist-dispatch-protocol.md](specialist-dispatch-protocol.md).
-
-   **VERIFY-FINAL phase** (after all specialist work is confirmed done):
-   ```bash
-   bash scripts/sh/write-verdict.sh --role arch-{role} --phase verify-final
-   ```
-
-   **Re-emit after a commit lands** (REPLACES the stale VERIFY-FINAL block):
-   ```bash
-   bash scripts/sh/write-verdict.sh --role arch-{role} --phase verify-final --supersede
-   ```
-
-   VERIFY-FINAL verdicts include a `**HEAD**:` field containing the sha from `git rev-parse HEAD` at emit time. The QG-proof emitter (`emit-push-proof.sh run-qg`) requires that each arch verdict's `**HEAD**:` value equals the final pushed HEAD — a verdict approved at commit A does NOT satisfy a proof at commit B. If any commit lands after VERIFY-FINAL is written, re-run `--phase verify-final --supersede` before pushing. The `--supersede` flag REPLACES the prior VERIFY-FINAL block with one bound to the current HEAD; re-running at the same HEAD is an idempotent no-op. Without `--supersede`, a second verify-final invocation is blocked by the dual-token replay guard. PREP verdicts do **not** include this field.
-
-   - `{role}` = `arch-platform`, `arch-testing`, or `arch-integration` (full name, with `arch-` prefix)
-   - Wave slug is resolved automatically from the git branch name: **last path-segment** (`${branch##*/}` / `branch.split('/').pop()`), so `feature/payment-api` → `payment-api` and `codex/api-redesign` → `api-redesign`. Override with `--slug <value>` if needed. `develop`, `master`, `main`, `HEAD`, and empty values are rejected.
-   - The script enforces two-phase integrity: PREP creates the file (fails if already exists), VERIFY-FINAL appends (fails if no PREP file found, fails if both tokens already present).
-   - Anti-traversal confinement: verdict path is always confined to `.planning/<wave-slug>/arch-{role}-verdict.md` within repo root.
-
-   team-lead MUST verify file presence before TaskUpdate (see `tl-verification-gates.md`).
-
-   **Legacy heredoc path**: the old `cat <<'EOF' >` heredoc route to verdict files emits a WARN on stderr (detected by `architect-bash-write-gate.js` dual-token detector). It will BLOCK with `VERDICT_CHANNEL_ENFORCE=1` in the next wave. Use `write-verdict.sh` exclusively.
-
-   **Why the heredoc was replaced**: on Windows, Bash interprets `\<octal-digits>` inside absolute paths as octal escape characters, corrupting the destination filename. `write-verdict.sh` handles path construction internally and is path-safe on all platforms.
-
-2. **SendMessage** to `team-lead`:
-   - `"APPROVE"` — clean pass
-   - `"ESCALATE: <1-sentence reason>"` — team-lead must decide
-   - NEVER include the full verdict block in the DM — team-lead reads the file if needed.
-
-## arch-platform Verdict Block
-
-```
-## Architect Verdict: Platform
-
-**Verdict: APPROVE / ESCALATE**
-
-### MCP Tool Results
-- verify-kmp-packages: {PASS/FAIL — details}
-- dependency-graph: {cycles: none/found}
-- gradle-config-lint: {PASS/FAIL}
-
-### Issues Found & Resolved
-| # | Violation | Action Taken | Result |
-|---|-----------|-------------|--------|
-| 1 | android.* import in commonMain | Moved to androidMain | Fixed |
-
-### Escalated (if any)
-- {violation}: {why it's beyond scope}
-
-### Cross-Architect Checks
-- arch-testing: {PASS/FAIL} — tests after fixes
-- arch-integration: {PASS/FAIL} — build after fixes
+```text
+.planning/wave-<slug>/verdict-requests/<request-id>.json
+.planning/wave-<slug>/arch-<role>-verdict-prep.json
+.planning/wave-<slug>/arch-<role>-verdict-verify-final.json
 ```
 
-## arch-testing Verdict Block
+Legacy `.md` verdicts remain historical and are never a fallback.
 
-```
-## Architect Verdict: Testing
+## Decisions
 
-**Verdict: APPROVE / ESCALATE**
+`approve` authorizes only when every binding validates. `escalate` is a valid, durable, non-authorizing response and must include a closed reason code. Empty rationale, unknown fields/enums, wrong role or phase, request replay, stale PLAN/HEAD, and invalid evidence all reject.
 
-### Modules Tested
-- {module}: {PASS/FAIL} — {test count} tests
+PREP retains the planned ancestry rule where the consumer explicitly requests it; VERIFY-FINAL binds the exact final HEAD. The Wave Control Plane resolves which architect roles are required for the wave class.
 
-### Issues Found & Resolved
-| # | Issue | Action Taken | Result |
-|---|-------|-------------|--------|
-| 1 | Missing regression test for {fix} | Delegated to test-specialist | Test written + passes |
+## Evidence
 
-### Escalated (if any)
-- {issue}: {why it's beyond scope}
+Evidence entries are either confined `opaque-file` byte digests or `json-record` digests with an expected schema. Validation rejects traversal, symlinks/reparse points, unstable identity, oversize content, digest drift, and schema mismatch. Consultation results may be cited as evidence but are not themselves phase verdicts.
 
-### Cross-Architect Checks
-- arch-platform: {called/not needed} — {result}
-- arch-integration: {called/not needed} — {result}
+## Publication and supersession
 
-### Evidence
-- Test output: {summary}
-- MCP code-metrics: {if used}
-```
+`verdict-artifact-store.cjs` owns confined reads, sibling locking, fsync, atomic same-volume replacement, first-write no-clobber, and compare-and-swap supersession. Rebinding requires a fresh request plus `--supersede --expected-current-sha256 <digest>`. Delete-and-recreate and silent overwrite are forbidden.
 
-## arch-integration Verdict Block
+## Role output
 
-```
-## Architect Verdict: Integration
+All three architect roles use the same outer contract and place discipline-specific detail in `rationale` and evidence:
 
-**Verdict: APPROVE / ESCALATE**
+- `arch-platform`: architecture, source sets, platform and policy boundaries.
+- `arch-testing`: RED/GREEN quality, regression protection, coverage and mutation evidence.
+- `arch-integration`: compilation, wiring, installation, consumer and end-to-end behavior.
 
-### Build Status
-- Compilation: {PASS/FAIL}
-- Platform: {desktopMain/androidMain/commonMain}
-
-### Wiring Verification
-| Component | Type | DI Registered | Nav Wired | Called from UI |
-|-----------|------|---------------|-----------|----------------|
-| FooVM     | ViewModel | appModule:42 | App.kt:89 | FooScreen:12 |
-
-### Issues Found & Resolved
-| # | Issue | Action Taken | Result |
-|---|-------|-------------|--------|
-| 1 | BarUseCase not in Koin | Added to appModule | Build passes |
-
-### Escalated (if any)
-- {issue}: {why it's beyond scope}
-
-### Cross-Architect Checks
-- arch-testing: {PASS/FAIL} — tests after fixes
-- arch-platform: {PASS/FAIL} — patterns after fixes
-```
+Public audit or verification skills may report conversational PASS/FAIL, but only the structured architect channel can authorize a phase transition.

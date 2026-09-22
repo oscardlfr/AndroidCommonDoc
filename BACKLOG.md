@@ -1,15 +1,15 @@
 # AndroidCommonDoc Backlog
 
-> **Last updated**: 2026-09-20
+> **Last updated**: 2026-09-22
 > **Roadmap baseline**: `develop@0704ddf` (PR #244; PR #245 at `619d9a7` is its confirmed ancestor). **H1 and G0 — Reusable Workflow Input Boundary Hardening are SHIPPED.**
-> **Current delivery**: **Wave 1 — SHIPPED** (PR #246 `1b3eebe5`, PR #247 `2a98bc17`, PR #248 `b5d7ed46`, all merged to `develop`; current HEAD `b5d7ed46`). **Mandatory post-Wave-1 Agent & Skill Behavioral Restoration Qualification checkpoint COMPLETE** — see memory `project_post_wave1_agent_skill_behavioral_qualification.md`. **Wave 2 — Workflow Expression & Input Boundary Audit is IN EXECUTION** (plan at `.planning/wave-workflow-input-boundary-audit/PLAN.md`, digest `596e1314707c7823b8c0e56dbd162743fd99f617d931b568d029f8a40ac3632d`).
+> **Current delivery**: **Waves 1–2 are SHIPPED**. **Waves 3–7 are COMMITTED AND LOCALLY VERIFIED** on `codex/waves3-7-authority-contracts`; they are not yet published, reviewed, or merged, so they are not labelled SHIPPED. The sealed Wave-3 PLAN remains the historical design input; the user's later direct instruction authorized the ordered Waves 3–7 implementation. **R33 remains deferred.** See `docs/agents/waves-3-7-implementation-closeout.md` for the frozen-source evidence.
 > **Source of truth**: this file owns ordering and scope. `git log`, merged PRs, and `project_*shipped.md` memory entries own historical detail.
 
 ## Operating contract
 
 - The load-bearing portability floor is **validated disk artifacts**. Runtime messaging is an optional acceleration layer.
 - Adapter delivery, message text, an MCP return value, or a live peer saying “GO” is never evidence. Only a valid, correlated result artifact counts as a protocol-valid consultation answer; phase and push authorization still require their own contracts.
-- Execute Waves 1-7 in order. Wave 1 is shipped and its mandatory read-only qualification checkpoint is complete; Wave 2 may proceed without splitting routine implementation details into extra micro-waves.
+- Execute Waves 1-7 in order. Waves 1 and 2 are shipped; Waves 3–7 have now been implemented in order and share one final local acceptance campaign before integration.
 - Re-audit observations and file counts at each wave's starting HEAD. Post-G0 counts below were recorded by PR #245 at `619d9a7`; they are a planning baseline, not permanent truth.
 - Each wave must have one frozen scope, explicit no-go boundaries, proportional tests, and a shipped memory entry before the backlog advances.
 - Rich runtimes may add `SendMessage`, persistent peers, MCP invocation, app-server threads, or wakeups; failure or absence of those capabilities must not invalidate the disk floor.
@@ -47,12 +47,12 @@
 |---:|---|---|---|
 | 1 | Portable Runtime Collaboration & Persistent Role Lifecycle | Persistent canonical support roles plus portable consultation and user-gated documentation ingestion | **SHIPPED** |
 | — | Agent & Skill Behavioral Restoration Qualification | Mandatory read-only qualification before Wave 2 | **COMPLETE** |
-| 2 | Workflow Expression & Input Boundary Audit | Repository-wide control of untrusted workflow inputs crossing into shell | **IN EXECUTION** |
-| 3 | Structured Verdict Evidence Contract | Verdicts become strictly parsed, correlated, evidence-backed records | QUEUED |
-| 4 | Reproducible Evidence & Bats Provenance | Independent runs and handoffs become comparable and fail closed | QUEUED |
-| 5 | Native Push Authority & Peer Authorization Policy | Git-layer push authority, robust intent detection, explicit actor policy | QUEUED |
-| 6 | Class-Aware Phase, Topology & Skill Orchestration Control Plane | Mechanized wave lifecycle and one runtime-neutral skill/entrypoint control plane | QUEUED |
-| 7 | Documentation & Operational Baseline Closure | README, agents, skills, MCP, ADRs, memory, and catalogs describe demonstrated behavior | QUEUED |
+| 2 | Workflow Expression & Input Boundary Audit | Repository-wide control of untrusted workflow inputs crossing into shell | **SHIPPED** |
+| 3 | Structured Verdict Evidence Contract | Verdicts become strictly parsed, correlated, evidence-backed records | **IMPLEMENTED — LOCAL ACCEPTANCE** |
+| 4 | Reproducible Evidence & Bats Provenance | Independent runs and handoffs become comparable and fail closed | **IMPLEMENTED — LOCAL ACCEPTANCE** |
+| 5 | Native Push Authority & Peer Authorization Policy | Git-layer push authority, robust intent detection, explicit actor policy | **IMPLEMENTED — LOCAL ACCEPTANCE** |
+| 6 | Class-Aware Phase, Topology & Skill Orchestration Control Plane | Mechanized wave lifecycle and one runtime-neutral skill/entrypoint control plane | **IMPLEMENTED — LOCAL ACCEPTANCE** |
+| 7 | Documentation & Operational Baseline Closure | README, agents, skills, MCP, ADRs, memory, and catalogs describe demonstrated behavior | **IMPLEMENTED — LOCAL ACCEPTANCE** |
 
 ---
 
@@ -422,6 +422,8 @@ Any merge/deprecate/delete requires: no unique outcome; replacement parity acros
 
 **Class**: SECURITY / HARNESS
 
+**Status**: SHIPPED — MERGED to `develop@fa7f6cf8` (2026-09-21). PR #249 (`fa7f6cf8`, "fix(ci): harden workflow input boundaries"), squash-merged; merge tree byte-identical to the approved PR head tree `7e634353`. 30/30 required checks passed, 0 unresolved review threads, CLEAN merge state before merge; PLAN digest `8f5e1849f42af77b4c0fcffa3e2f884c70adf6c1e564b261203ce3611cd50a05`. Scope matches the ten audited workflows/templates recorded in `CHANGELOG.md` (the eight-workflow census below plus `l0-release-assets.yml` and `setup/templates/workflows/l0-auto-sync.yml`), together with `qg-path-audit.sh` H2/H3/table-form parser hardening and the new `docs/agents/quality-gate-local-ci-reproduction.md`. Evidence: full Bats 3391/3391 (`qg-linux-canonical` six-shard profile), MCP Vitest 2665/2665, ESLint 0 errors, documentation/registry/secret-scan/path-manifest validation PASS, three independent architect VERIFY-FINAL verdicts APPROVE. Local/CI reproduction now documents three distinct profiles — `ci-linux-equivalent` (four-shard), `qg-linux-canonical` (six-shard), `windows-native` — never conflate them; macOS remains intentionally skipped for `develop`-targeted PRs. Full record in memory `project_wave_workflow_input_boundary_audit_shipped.md`. R33 native remains `PENDING_EXTERNAL_RELEASE` (unchanged, out of Wave 2 scope). The HTML-escaping residual below remains open and separately owned — not closed by this status.
+
 **Objective**: inventory and harden every untrusted GitHub Actions value that crosses into a shell or privileged workflow operation, extending G0 from its focused fix to a repository-wide trust-boundary contract.
 
 **Why second**: G0 established the corrected targeted pattern. Wave 1 then gives this broad security audit portable Claude/Codex review paths. The audit precedes new evidence and push machinery so later waves build on trustworthy CI inputs.
@@ -453,6 +455,10 @@ Any merge/deprecate/delete requires: no unique outcome; replacement parity acros
 
 **Class**: HARNESS / EVIDENCE
 
+**Status**: COMMITTED + LOCALLY VERIFIED — review/publication/merge remain.
+
+**Plan**: `.planning/wave-structured-verdict-evidence-contract/PLAN.md`, current raw-byte SHA-256 `aac4ad96d2b7c8fb947df7591996ccc33504b667860d2d5420a9ec01800d2240` (the digest bound by the final local acceptance). Its planning-only header records the pre-execution state; the later direct user instruction authorized implementation without treating that header as current execution authority.
+
 **Objective**: replace substring/token-based PREP and VERIFY-FINAL acceptance with a strict, correlated verdict record whose decision, rationale, evidence references/digests, role, PLAN, and HEAD are machine-validated.
 
 **Why third**: Wave 1 establishes correlated role results and Wave 2 secures CI inputs. Verdicts can then reuse the correlation/freshness primitives instead of inventing a second messaging protocol.
@@ -480,6 +486,8 @@ Any merge/deprecate/delete requires: no unique outcome; replacement parity acros
 ## Wave 4 — Reproducible Evidence & Bats Provenance
 
 **Class**: HARNESS / EVIDENCE
+
+**Status**: COMMITTED + LOCALLY VERIFIED — review/publication/merge remain.
 
 **Objective**: make test and quality-gate evidence independently reproducible, comparable across runs, and fail closed when handoff selection, metadata, target, environment, or counts disagree.
 
@@ -510,6 +518,8 @@ Any merge/deprecate/delete requires: no unique outcome; replacement parity acros
 
 **Class**: SECURITY / HARNESS
 
+**Status**: COMMITTED + LOCALLY VERIFIED — review/publication/merge remain.
+
 **Objective**: make the installed git `pre-push` hook the sole portable push authority, redesign advisory runtime push-intent detection, and define what runtime-specific controls can honestly restrict which peer may request or perform a push.
 
 **Why fifth**: H1 bootstrapped the git authority but intentionally left command detection open. This redesign should consume the structured verdict and reproducible evidence contracts from Waves 3-4 rather than encode their old weak forms.
@@ -537,6 +547,8 @@ Any merge/deprecate/delete requires: no unique outcome; replacement parity acros
 ## Wave 6 — Class-Aware Phase, Topology & Skill Orchestration Control Plane
 
 **Class**: HARNESS
+
+**Status**: COMMITTED + LOCALLY VERIFIED — review/publication/merge remain.
 
 **Objective**: mechanize the PREP → EXECUTE → VERIFY-FINAL → QG lifecycle, derive required roles from wave class, and make every orchestration entrypoint and skill route through one runtime-neutral lifecycle/control plane.
 
@@ -570,6 +582,8 @@ Any merge/deprecate/delete requires: no unique outcome; replacement parity acros
 ## Wave 7 — Documentation & Operational Baseline Closure
 
 **Class**: DOC / GOVERNANCE
+
+**Status**: COMMITTED + LOCALLY VERIFIED — review/publication/merge remain.
 
 **Objective**: reconcile every public and operational description of the harness with behavior demonstrated by Waves 1–6 and establish one trustworthy post-program documentation baseline.
 
@@ -605,22 +619,22 @@ Historical text below is not an instruction to execute old wave plans literally.
 | Finding / historical entry | Current disposition | Roadmap home |
 |---|---|---|
 | Agent-team completion notification drop | Upstream/runtime report remains optional; local liveness/consultation behavior belongs here | Wave 1; upstream report independent |
-| Portable Coordination Artifacts have no general consumer/wakeup/result loop | Open | Wave 1; qualification proves operational closure |
-| BL-W4-12 orchestrator can forge architect-shaped verdict path | Open; spans result authorship, verdict evidence, and honest actor policy | Waves 1, 3, 5 |
-| Broad workflow input/expression inventory after targeted H1 follow-up | Open | Wave 2 |
-| Wave A unbacked `APPROVED-PREP` / weak VERIFY-FINAL substring acceptance | Open | Wave 3 |
-| Wave A evidence reproducibility / rerun-until-green concern | Open | Wave 4 |
-| Bats unsafe project-root and stale protocol metadata prose | Open | Wave 4 |
-| H1 command-string push detector | Explicitly deferred by H1 | Wave 5 |
-| BL-W4-10 class-aware phase mechanization | Open | Wave 6 |
-| BL-W4-11 README + `/work` + `/init-session` fixed-roster drift | Lifecycle-critical entrypoints start in Wave 1; full skill/topology behavior and global prose/catalog are separate | Waves 1, 6, 7 |
-| BL-W47 Topology Pilot / Wave 39 topology debt | Re-audit; do not replay old TeamCreate assumptions | Wave 6 |
-| BL-W4-8 Bats test-authoring hygiene (three small doc/test naming issues) | Behavioral matcher/test mechanics and documentation have separate owners; no cleanup wave | Wave 6 behavior; Wave 7 wording/cites |
+| Portable Coordination Artifacts have no general consumer/wakeup/result loop | Closed by shipped Wave 1 runtime and its Windows/macOS qualification | Wave 1 |
+| BL-W4-12 orchestrator can forge architect-shaped verdict path | Portable policy/evidence boundary locally closed by Waves 3 and 5; true human/OS actor authentication remains explicitly out of contract | Waves 1, 3, 5 |
+| Broad workflow input/expression inventory after targeted H1 follow-up | Closed by shipped Wave 2 | Wave 2 |
+| Wave A unbacked `APPROVED-PREP` / weak VERIFY-FINAL substring acceptance | Locally closed by request-bound `verdict/v1`; ships on this integration | Wave 3 |
+| Wave A evidence reproducibility / rerun-until-green concern | Locally closed by provenance-bound agreement selection and two-run acceptance | Wave 4 |
+| Bats unsafe project-root and stale protocol metadata prose | Locally closed and covered by portable project-root/provenance tests | Wave 4 |
+| H1 command-string push detector | Locally replaced by parsed advisory intent plus Git-hook-owned enforcement | Wave 5 |
+| BL-W4-10 class-aware phase mechanization | Locally closed by the persisted wave control plane | Wave 6 |
+| BL-W4-11 README + `/work` + `/init-session` fixed-roster drift | Locally closed by class-aware routing, qualified surfaces, and reconciled docs/catalog | Waves 1, 6, 7 |
+| BL-W47 Topology Pilot / Wave 39 topology debt | Completed with measured class-policy result; no old TeamCreate assumption revived | Wave 6 |
+| BL-W4-8 Bats test-authoring hygiene (three small doc/test naming issues) | Closed where behavioral/documentation ownership applied; no standalone cleanup wave created | Wave 6 behavior; Wave 7 wording/cites |
 | BL-W36-04 stash/baseline methodology | Re-audit against current diff/baseline tooling | Wave 4 if still reproducible |
 | BL-W32-04 context-provider zombie observation | Reproduce during Wave 1 and mandatory qualification; Wave-1 defect gets one stabilization batch, topology-only residual routes onward | Wave 1 + qualification; conditionally Wave 6 |
 | Historical collaboration/documentation behavior drift | Reconstruct expected vs observed behavior; do not treat old prose as authority or silently lose useful semantics | Mandatory post-Wave-1 qualification; findings route to Waves 1–7 |
 | Skill/command overlap, aliases, hard-coded runtime calls, dead-skill candidates | Telemetry currently lacks reliable per-skill attribution; zero deletion decisions now | Qualification census → Wave 6 behavior/migration → Wave 7 catalog |
-| README/AGENTS/doc index audit revalidated at `619d9a7` | Open; 21 findings (0 HIGH, 15 MEDIUM, 6 LOW) cover 12 missing script rows, four misclassified library rows, count drift, and hub coverage | Wave 7 global closure; no standalone cleanup wave |
+| README/AGENTS/doc index audit revalidated at `619d9a7` | Superseded and locally closed by Wave 7: README audit 0 findings; generated operational catalog and surface qualification pass | Wave 7 global closure |
 
 ## Independent / incubator backlog
 
@@ -681,7 +695,7 @@ The following are historical, not executable backlog items:
 
 ## Memory ledger update plan
 
-This tracked roadmap update changes `BACKLOG.md` only; the current Wave-1 execution plan remains gitignored PREP state. Shipped history is factual; queued-wave memory must be updated by the owning implementation wave or checkpoint, not speculatively marked shipped here.
+This tracked roadmap update changes `BACKLOG.md` only. Wave 2's shipped history is factual; Wave 3's gitignored PLAN is planning state and authorizes no implementation. Queued-wave memory must be updated by the owning implementation wave or checkpoint, not speculatively marked shipped here.
 
 | Milestone | Required memory action |
 |---|---|
@@ -697,6 +711,7 @@ This tracked roadmap update changes `BACKLOG.md` only; the current Wave-1 execut
 
 ## Shipped (recent)
 
+- **Wave 2 — Workflow Expression & Input Boundary Audit** — MERGED `develop@fa7f6cf8` (2026-09-21), PR #249 (`fa7f6cf8`, "fix(ci): harden workflow input boundaries"); merge tree byte-identical to the approved PR head tree `7e634353`. Hardened raw untrusted GitHub expression interpolation across the ten audited workflows/templates (shell and `github-script` bodies routed through `env:` boundaries, quoted at consumption) plus `qg-path-audit.sh` H2/H3/table-form parser hardening. 30/30 required checks passed, 0 unresolved review threads, CLEAN merge state; full Bats 3391/3391 (`qg-linux-canonical` six-shard profile), MCP Vitest 2665/2665, ESLint 0 errors, three independent architect VERIFY-FINAL verdicts APPROVE. PLAN digest `8f5e1849f42af77b4c0fcffa3e2f884c70adf6c1e564b261203ce3611cd50a05`; full record in memory `project_wave_workflow_input_boundary_audit_shipped.md`. Explicit residual remains open and separately owned: `reusable-audit-report.yml` downloadable-HTML escaping (`html.escape(..., quote=True)`, not yet applied). R33 native stays `PENDING_EXTERNAL_RELEASE`.
 - **Wave 1 — Portable Runtime Collaboration & Persistent Role Lifecycle** — MERGED `develop@b5d7ed46` (2026-09-19). PR #246 `1b3eebe5` (2026-09-15, portable mixed-host consultation + consumer sync, 204 internal CommonJS modules across the 3 stable facades), PR #247 `2a98bc17` (2026-09-19, macOS stabilization: per-platform host-certificate coexistence, symlink-identity and TMPDIR-path-budget fixes), PR #248 `b5d7ed46` (2026-09-19, macOS follow-ups: ctimeNs identity gap, config.toml parse hardening, parallel Bats orchestrator, zombie-liveness fix). Windows live qualification: P4 QUALIFIED, P5 LIVE_QUALIFIED (attempt N13), P6 QUALIFIED (attempt 3). Mandatory post-Wave-1 qualification checkpoint COMPLETE, zero P0/P1 findings (one non-blocking fast-follow: planner→context-provider bootstrap-edge gap); full record in memory `project_wave_portable_runtime_collaboration_lifecycle_shipped.md` and `project_post_wave1_agent_skill_behavioral_qualification.md`. R33 native stays `PENDING_EXTERNAL_RELEASE`.
 - **G0 — Reusable Workflow Input Boundary Hardening** — MERGED `619d9a7`, PR #245 (2026-07-12). Closed the four targeted reusable workflows with namespaced environment boundaries, quoted shell consumption, checkout hardening, a run-block extractor, and a 13-test regression fence; owner-recorded final QG at `c7ba941` was 2,042 Bats / 2,607 Vitest before squash. Broader workflow, release `tag_name`, README, grep-portability, and documentation-precision findings remain explicitly deferred above.
 - **H1 — Push Authority Bootstrap** — MERGED `1e0be41`, PR #243 (2026-07-11). Installed-hook identity is required by the QG mint and Claude push gate; in-JS proof fallback removed. Command detector intentionally deferred to Wave 5.
@@ -709,8 +724,8 @@ For full history use `git log` and the corresponding `project_*shipped.md` memor
 
 ## How to use this document
 
-1. Start with Wave 1, the first row marked **NEXT**, and re-audit its mapped findings at current `develop`.
-2. After Wave 1 ships, run the mandatory Agent & Skill Behavioral Restoration Qualification. Do not promote Wave 2 while any Wave-1 P0/P1 lifecycle, consultation, authority, or ingestion defect remains unresolved.
+1. Start with the first row marked **NEXT** — currently Wave 3 — and re-audit its mapped findings at current `develop` after its PLAN is explicitly accepted.
+2. Treat the post-Wave-1 Agent & Skill Behavioral Restoration Qualification as completed historical evidence; Wave 2 is already shipped and must not be reopened implicitly.
 3. After the checkpoint, and after each later shipment, promote exactly one subsequent numbered wave to **NEXT**; do not reopen G0 or execute historical entries literally.
 4. Freeze one plan/path manifest, preserve the wave's no-go boundary, and avoid standalone micro-waves for routine cleanup.
 5. On completion, record final PR/commit/tests in memory, move the wave to Shipped, and promote the next eligible row.

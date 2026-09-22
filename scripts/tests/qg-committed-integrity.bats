@@ -20,6 +20,8 @@ bats_require_minimum_version 1.5.0
 EMITTER="$BATS_TEST_DIRNAME/../sh/emit-push-proof.sh"
 MANIFEST_SRC="$BATS_TEST_DIRNAME/../../quality-gate-manifest.json"
 SCRIPTS_SRC="$BATS_TEST_DIRNAME/.."
+REPO_ROOT_SRC="$BATS_TEST_DIRNAME/../.."
+source "$BATS_TEST_DIRNAME/lib/verdict-fixtures.bash"
 
 setup() {
     REPO="$(mktemp -d)"
@@ -129,23 +131,7 @@ teardown() {
 write_valid_bats_handoff() {
     local head
     head="$(git -C "$REPO" rev-parse HEAD)"
-    local generated_at
-    generated_at="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
-    local run_id="wave-a-fixture-$$-${RANDOM}"
-    mkdir -p "$ACDOC"
-    {
-        printf 'BATS_OK=%s\n'           "42"
-        printf 'BATS_NOT_OK=%s\n'       "0"
-        printf 'BATS_EXPECTED=%s\n'     "42"
-        printf 'BATS_TOTAL=%s\n'        "42"
-        printf 'BATS_COMPLETE=%s\n'     "true"
-        printf 'BATS_VERDICT=%s\n'      "pass"
-        printf 'BATS_LOG=%s\n'          "/dev/null"
-        printf 'BATS_HEAD=%s\n'         "$head"
-        printf 'BATS_RUN_ID=%s\n'       "$run_id"
-        printf 'BATS_GENERATED_AT=%s\n' "$generated_at"
-        printf 'BATS_SCOPE=%s\n'        "full"
-    } > "$ACDOC/bats-result.${run_id}.env"
+    write_two_agreeing_bats_handoffs "$REPO" "$ACDOC" "ci-integrity-test" "$head"
 }
 
 # write_valid_artifact_receipts — writes HEAD-bound, fresh, status:PASS
@@ -208,7 +194,7 @@ for cs in manifest.get('conditional_steps', []):
     # Default: SKIP all conditional steps with reason.
     # production-file-verify must be PASS because task_is_code_changes is TRUE
     # (the fixture commit includes .sh script files which are code changes).
-    if cs['id'] == 'production-file-verify':
+    if cs['id'] in ('production-file-verify', 'path-manifest-audit'):
         steps.append({"step": cs['id'], "ran": True, "result": "PASS"})
     else:
         steps.append({"step": cs['id'], "ran": False, "result": "SKIP",

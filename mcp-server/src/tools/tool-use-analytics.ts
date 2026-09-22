@@ -67,8 +67,14 @@ interface ToolUseReport {
   our_mcp_calls: number;
   cp_bypass_blocked: number;
   by_agent: Record<string, number>;
-  by_skill: SkillUsage[]; // Wave 25 Level A: skill_name aggregation (top N used)
-  dead_skills: string[]; // Wave 25 Level A: skills/ directory entries with 0 invocations in window
+  by_skill: SkillUsage[]; // Explicit skill_name aggregation only (top N observed).
+  dead_skills: string[]; // Reserved for a future complete census; never inferred from partial telemetry.
+  unobserved_skills: string[]; // Declared skills absent from this incomplete observation window.
+  skill_telemetry: {
+    complete: false;
+    authoritative_for_disuse: false;
+    reason: string;
+  };
   user_invokable_skills: string[]; // Wave 25 Level A: user-only skills (disable-model-invocation: true) — excluded from dead-skill alert
 }
 
@@ -195,7 +201,8 @@ export function computeToolUseReport(
     }));
 
   // Dead skills: declared in skills/ but 0 invocations in window
-  let deadSkills: string[] = [];
+  const deadSkills: string[] = [];
+  let unobservedSkills: string[] = [];
   let userInvokable: string[] = [];
   if (projectRoot) {
     try {
@@ -218,9 +225,9 @@ export function computeToolUseReport(
         } catch {
           // skill without SKILL.md — treat as dead
         }
-        deadSkills.push(s);
+        unobservedSkills.push(s);
       }
-      deadSkills.sort();
+      unobservedSkills.sort();
       userInvokable.sort();
     } catch {
       // skills/ not found or unreadable — leave arrays empty
@@ -244,6 +251,13 @@ export function computeToolUseReport(
     by_agent: byAgent,
     by_skill: bySkill,
     dead_skills: deadSkills,
+    unobserved_skills: unobservedSkills,
+    skill_telemetry: {
+      complete: false,
+      authoritative_for_disuse: false,
+      reason:
+        "tool-use-log records observed Skill calls but has no completeness sentinel; absence is not evidence of disuse",
+    },
     user_invokable_skills: userInvokable,
   };
 }
@@ -305,9 +319,9 @@ export function renderToolUseMarkdown(report: ToolUseReport): string {
     lines.push("");
   }
 
-  // Wave 25 Level A: skill usage section
-  if (report.by_skill.length > 0 || report.dead_skills.length > 0) {
-    lines.push("### Skill Usage (Wave 25 Level A)");
+  // Incomplete observation window: report invocations without inferring disuse.
+  if (report.by_skill.length > 0 || report.unobserved_skills.length > 0) {
+    lines.push("### Observed Skill Usage");
     if (report.by_skill.length > 0) {
       lines.push("");
       lines.push("**Top skills by invocation:**");
@@ -317,15 +331,15 @@ export function renderToolUseMarkdown(report: ToolUseReport): string {
         lines.push(`| ${s.skill_name} | ${s.calls} | ${s.last_used.split("T")[0]} |`);
       }
     }
-    if (report.dead_skills.length > 0) {
+    if (report.unobserved_skills.length > 0) {
       lines.push("");
       lines.push(
-        `**⚠ Dead skills** (declared in \`skills/\` but 0 invocations in window, and NOT user-invokable): ${report.dead_skills.length} of ${report.dead_skills.length + report.by_skill.length + report.user_invokable_skills.length}`,
+        `**Unobserved skills** (declared in \`skills/\` but absent from this incomplete telemetry window; not proven unused): ${report.unobserved_skills.length}`,
       );
-      lines.push(`> ${report.dead_skills.join(", ")}`);
+      lines.push(`> ${report.unobserved_skills.join(", ")}`);
       lines.push("");
       lines.push(
-        "Fix: either wire into an agent's `skills:` frontmatter / slash command, or document as historical and prune.",
+        `Telemetry is non-authoritative for disuse: ${report.skill_telemetry.reason}.`,
       );
     }
     if (report.user_invokable_skills.length > 0) {
@@ -353,7 +367,7 @@ export function registerToolUseAnalyticsTool(
 ): void {
   server.tool(
     "tool-use-analytics",
-    "Read tool-use-log.jsonl to produce a usage dashboard: top tools by call count, dead tools, MCP/skill/context7 breakdown, CP bypass count, and per-agent stats.",
+    "Read tool-use-log.jsonl to produce a usage dashboard: top tools, observed skill calls, MCP/context7 breakdown, CP bypass count, and per-agent stats. Missing skill calls are reported as unobserved, never inferred dead.",
     {
       project_root: z.string().describe("Absolute path to the project root"),
       weeks_lookback: z

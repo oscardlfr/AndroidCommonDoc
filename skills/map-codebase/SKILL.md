@@ -23,12 +23,11 @@ Structured codebase analysis using the `codebase-mapper` agent.
 
 ### Mode: --inventory (default)
 
-1. Spawn the codebase-mapper agent with inventory prompt:
+1. Ask the shared lifecycle/control plane to ensure `codebase-mapper`, then
+   dispatch this runtime-neutral inventory task through the selected connector:
 
 ```
-Agent(
-  subagent_type="codebase-mapper",
-  prompt="Generate a MODULE_MAP.md for this project at {cwd}.
+Generate a MODULE_MAP.md for this project at {cwd}.
 
 Scan all modules (build.gradle.kts files) and for each module:
 - Module name (Gradle path)
@@ -48,9 +47,7 @@ Write MODULE_MAP.md to the project root with this format:
 - Need X? → module-name
 - Need Y? → module-name
 
-Keep it under 100 lines. Focus on REUSABLE modules, skip app/test modules.",
-  description="Generate MODULE_MAP.md"
-)
+Keep it under 100 lines. Focus on REUSABLE modules, skip app/test modules.
 ```
 
 2. Verify MODULE_MAP.md was created at project root
@@ -59,15 +56,10 @@ Keep it under 100 lines. Focus on REUSABLE modules, skip app/test modules.",
 
 1. Parse focus area from arguments (default to `arch`)
 2. Focus areas: `tech`, `arch`, `quality`, `concerns`
-3. Spawn the codebase-mapper agent:
-
-```
-Agent(
-  subagent_type="codebase-mapper",
-  prompt="Analyze this codebase with focus: {focus}\n\nProject root: {cwd}\nWrite a structured analysis document.",
-  description="Map codebase: {focus}"
-)
-```
+3. Ask the control plane to ensure `codebase-mapper`, then dispatch the
+   runtime-neutral task `Analyze this codebase with focus: {focus}` with `{cwd}`
+   and a structured-analysis output requirement. The runtime connector owns the
+   concrete dispatch primitive.
 
 4. Present the analysis to the user
 

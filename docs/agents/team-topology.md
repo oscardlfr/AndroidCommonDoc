@@ -7,9 +7,9 @@ status: active
 layer: L0
 parent: agents-hub
 category: agents
-description: "3-phase model with disk-artifact contract. Orchestrator fans out concurrent Agent subagents (+ optional background peers). Load-bearing results live on disk — PLAN.md, arch-*-verdict.md, QG artifacts. Planning → Execution → Quality Gate."
-version: 7
-last_updated: "2026-08"
+description: "Three human workflow stages mapped onto the persisted five-phase control plane and request-bound evidence."
+version: 8
+last_updated: "2026-09-22"
 assumes_read: autonomous-multi-agent-workflow, context-rotation-guide
 token_budget: 1600
 ---
@@ -18,7 +18,9 @@ token_budget: 1600
 
 Three sequential phases, each lightweight. The harness is **multi-agent capable**: the orchestrator fans out to concurrent `Agent` subagents, and **background peers + `Task*`/`SendMessage` coordination remain a fully-supported optional accelerator** when the runtime offers them.
 
-**Load-bearing contract (authoritative):** disk artifacts — `PLAN.md`, `arch-*-verdict.md` (HEAD-bound), `quality-gate.stamp`, `quality-gate-report.json`, `push-proof.json`. Orchestrator reads these; correctness is decided here. This contract is runtime-agnostic and survives unreliable or absent messaging.
+These three human workflow stages map mechanically to five persisted states: planning concludes at `PREP`, implementation is `EXECUTE`, architect re-review is `VERIFY_FINAL`, automated qualification is `QG`, and accepted closure is `COMPLETE`. The three-stage narrative never bypasses a persisted transition.
+
+**Load-bearing contract (authoritative):** `PLAN.md`; persisted `PREP → EXECUTE → VERIFY_FINAL → QG → COMPLETE` state; phase-specific request-bound `verdict/v1` JSON; provenance-bound evidence; and current QG/push artifacts. Orchestrator reads these; correctness is decided here.
 
 **Execution / accelerator (supported, not required):** multi-agent fan-out, background peers with `run_in_background`, `Task*`/`SendMessage` coordination. These are progressive enhancements over the disk contract, never a completion dependency.
 
@@ -30,7 +32,7 @@ The project slug is derived from the project directory name (lowercased, hyphens
 
 | Layer | What | Status |
 |-------|------|--------|
-| **Load-bearing contract (T1/T2)** | Disk artifacts: `PLAN.md`, `arch-*-verdict.md` (HEAD-bound), stamps, `quality-gate-report.json`, `push-proof.json`, git/CI. Orchestrator reads these; correctness is decided here. | **Authoritative.** Runtime-agnostic. |
+| **Load-bearing contract (T1/T2)** | PLAN, persisted phase, structured architect verdicts, evidence records, stamps, report, proof, git/CI. | **Authoritative.** Runtime-agnostic. |
 | **Execution / accelerator (T3)** | Orchestrator fans out to concurrent `Agent` subagents (default). Background peers + `Task*`/`SendMessage` coordination remain supported when the runtime offers them. | **Supported & encouraged, but never load-bearing.** |
 
 Rules: (a) any multi-agent path MUST land its load-bearing result as a disk artifact; (b) gates verify those artifacts, not who/how many agents were spawned; (c) `TeamCreate`/`team_name`/named-team dirs are not required — a runtime that offers them may use them, but the harness does not depend on them; (d) messaging is progressive enhancement, never a completion dependency.
@@ -56,9 +58,9 @@ The **persistent support plane** (`arch-platform`, `arch-testing`, `arch-integra
 |-------|------|-------|
 | context-provider | On-demand oracle: patterns, docs, rules, external library docs (Context7) | All |
 | doc-updater | CHANGELOG, docs, KDoc | Phase 2, 3 |
-| arch-testing | Test strategy, coverage, test gaming — writes `arch-testing-verdict.md` | Phase 2, 3 |
-| arch-platform | Source sets, Gradle, platform boundaries — writes `arch-platform-verdict.md` | Phase 2, 3 |
-| arch-integration | Cross-module deps, DI, API contracts — writes `arch-integration-verdict.md` | Phase 2, 3 |
+| arch-testing | Test strategy, coverage, test gaming — publishes request-bound PREP/VERIFY-FINAL verdicts | Phase 2, 3 |
+| arch-platform | Source sets, Gradle, platform boundaries — publishes request-bound PREP/VERIFY-FINAL verdicts | Phase 2, 3 |
+| arch-integration | Cross-module deps, DI, API contracts — publishes request-bound PREP/VERIFY-FINAL verdicts | Phase 2, 3 |
 | test-specialist | Test compliance, generation, TDD | Phase 2 |
 | ui-specialist | Compose UI, accessibility, Material3 | Phase 2 |
 | domain-model-specialist | Domain model, sealed hierarchies, mappers | Phase 2 |
@@ -120,7 +122,7 @@ Phase 2 — Execution (architects dispatched per plan)
   orchestrator dispatches arch-testing/platform/integration with plan assignments
   architects query context-provider for patterns/rules
   architects assign work to specialists via SendMessage or disk spec
-  each arch writes arch-{role}-verdict.md (HEAD-bound) to disk
+  each required architect publishes arch-{role}-verdict-verify-final.json to disk
   doc-updater dispatched after work
   All 3 verdicts on disk + APPROVE → phase complete
 
@@ -165,7 +167,7 @@ Phase 3 — Quality Gate (quality-gater subagent)
 4. Architects assign tasks to core specialists via SendMessage or by writing a disk spec
 5. For overflow: orchestrator spawns extra specialist subagents on architect request
 6. Architects cross-verify via SendMessage
-7. Each architect writes `arch-{role}-verdict.md` (HEAD-bound) to disk
+7. Each required architect publishes its request-bound VERIFY-FINAL JSON with digest-backed evidence
 8. After work: orchestrator dispatches doc-updater to update CHANGELOG/docs
 9. All 3 verdicts on disk + APPROVE status → phase complete
 10. Any ESCALATE → orchestrator re-plans (never codes the fix)
@@ -184,7 +186,7 @@ Phase 3 — Quality Gate (quality-gater subagent)
 
 **Flow**:
 1. Orchestrator spawns quality-gater: `Agent(subagent_type="quality-gater", ...)` — no `team_name` required
-2. **Architect Deliberation** — quality-gater consults all 3 architects by reading their `arch-*-verdict.md` files, and optionally via SendMessage if architects are live background peers:
+2. **Architect Deliberation** — quality-gater validates every class-required `arch-*-verdict-verify-final.json`, and may additionally consult live peers:
    - arch-testing — what was tested, known gaps, coverage concerns
    - arch-platform — source set changes, platform boundary risks
    - arch-integration — cross-module impacts, DI wiring, API changes
@@ -204,8 +206,8 @@ See [Quality Gate Protocol](quality-gate-protocol.md) for step details.
 
 - **Orchestrator is sole Agent() spawner** — background peers cannot use Agent() in in-process mode (#31977)
 - **Architects**: Read, Grep, Glob, Bash, SendMessage (NO Write/Edit/Agent)
-- **Disk artifacts are authoritative** — `arch-*-verdict.md` (HEAD-bound), `quality-gate-report.json`, `push-proof.json`. Gates verify these files, not who/how many agents were spawned.
-- **Phase 3 deliberation is mandatory** — quality-gater MUST read all 3 arch-*-verdict.md files (and optionally SendMessage live architects) before running automated checks. Skipping deliberation voids the gate.
+- **Disk artifacts are authoritative** — request-bound structured verdicts, provenance evidence, `quality-gate-report.json`, and `push-proof.json`. Gates verify these files, not who/how many agents were spawned.
+- **Phase 3 deliberation is mandatory** — quality-gater MUST validate every architect required by the wave class/PLAN before automated checks. Live messages are optional context only.
 - **Specialists dispatched selectively at execution start** — the orchestrator dispatches the specialists the wave's CLASS floor requires when execution begins (not a fixed set of five). For long sessions with background peers (5+ waves), rotate kill-then-respawn (canonical name; see [context-rotation-guide](context-rotation-guide.md) §3).
 - **Pattern validation chain** — specialists NEVER contact context-provider directly; architect is the quality gate.
 - **Project-specific agents MUST be in routing table** — guardians, validators, domain specialists. If the routing table doesn't list a domain, architects can't request specialists for it.

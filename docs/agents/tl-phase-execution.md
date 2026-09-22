@@ -7,9 +7,9 @@ status: active
 layer: L0
 parent: agents-hub
 category: agents
-description: "Team Lead's 3-phase execution protocol: phase transitions, triggers, anti-patterns, execution checklist. What team-lead does in each phase (complements team-topology.md which describes team structure)."
-version: 2
-last_updated: "2026-04"
+description: "Three human workflow stages mapped to the persisted PREP/EXECUTE/VERIFY_FINAL/QG/COMPLETE control plane."
+version: 3
+last_updated: "2026-09-22"
 assumes_read: team-topology, multi-agent-patterns
 token_budget: 1200
 ---
@@ -17,6 +17,8 @@ token_budget: 1200
 # team-lead Phase Execution Protocol
 
 This doc defines the Team Lead's execution protocol across the 3-phase model. See [Team Topology](team-topology.md) for the team structure and peer roster.
+
+The three human stages map to five persisted states: planning concludes in `PREP`, implementation is `EXECUTE`, architect re-review is `VERIFY_FINAL`, automated qualification is `QG`, and accepted closure is `COMPLETE`. State comes only from `wave-control-plane.cjs`, never chat or task presence.
 
 ## 3-Phase Execution Model
 
@@ -40,26 +42,26 @@ Shortcutting to spawn planner later while dispatching architects → **FORBIDDEN
 Dispatch architects as concurrent subagents (or SendMessage to background peers if already alive):
 ```
 // Single-use concurrent dispatch (default):
-Agent(subagent_type="arch-testing", prompt="scope_doc_path: .planning/wave-<slug>/PLAN.md\nmode: EXECUTE\n...")
-Agent(subagent_type="arch-platform", prompt="scope_doc_path: .planning/wave-<slug>/PLAN.md\nmode: EXECUTE\n...")
-Agent(subagent_type="arch-integration", prompt="scope_doc_path: .planning/wave-<slug>/PLAN.md\nmode: EXECUTE\n...")
+Agent(subagent_type="arch-testing", prompt="scope_doc_path: .planning/wave-<slug>/PLAN.md\nmode: VERIFY_FINAL\nverdict_request_path: ...")
+Agent(subagent_type="arch-platform", prompt="scope_doc_path: .planning/wave-<slug>/PLAN.md\nmode: VERIFY_FINAL\nverdict_request_path: ...")
+Agent(subagent_type="arch-integration", prompt="scope_doc_path: .planning/wave-<slug>/PLAN.md\nmode: VERIFY_FINAL\nverdict_request_path: ...")
 
 // Background peer dispatch (optional accelerator):
-SendMessage(to="arch-testing", summary="phase 2 start", message="scope_doc_path: .planning/wave-<slug>/PLAN.md\nmode: EXECUTE\n{plan + scope}")
+SendMessage(to="arch-testing", summary="verify final", message="scope_doc_path: .planning/wave-<slug>/PLAN.md\nmode: VERIFY_FINAL\nverdict_request_path: ...")
 ```
 1. Architects use context-provider for patterns/rules (via SendMessage or as subagent)
 2. Architects investigate → request specialists from orchestrator via SendMessage or disk spec
 3. **Orchestrator IMMEDIATELY spawns specialists** via Agent() — first writing a disk dispatch artifact scoping the specialist's authorized `files[]` (see [specialist-dispatch-protocol.md](specialist-dispatch-protocol.md))
 4. Orchestrator relays specialist results back to requesting architect
 5. After work: orchestrator dispatches doc-updater to update CHANGELOG/docs
-6. Each architect writes `arch-{role}-verdict.md` (HEAD-bound) to disk
-7. All 3 verdict files on disk + APPROVE status → **IMMEDIATELY proceed to Phase 3** (do NOT ask user, do NOT commit yet)
+6. Each required architect publishes `arch-{short-role}-verdict-verify-final.json` through `write-verdict.sh`, bound to a fresh request and digest-backed evidence
+7. Every class-required verdict validates as authorizing → **IMMEDIATELY proceed to Phase 3** (do NOT ask user, do NOT commit yet)
 
 **Phase 3 — Quality Gate (MANDATORY before any commit)**:
 ```
 Agent(subagent_type="quality-gater", prompt="{phase 2 verdicts summary and context}")
 ```
-quality-gater reads arch-*-verdict.md files from disk and optionally SendMessages live background peer architects. Uses context-provider for project rules. Writes `quality-gate-report.json` + stamps + `push-proof.json` + `qg-result.json` to disk.
+quality-gater validates the class-required structured VERIFY-FINAL verdicts and may additionally consult live peers. It writes `quality-gate-report.json` + stamps + `push-proof.json` + `qg-result.json` to disk.
 
 **Orchestrator polls `qg-result.json`** at `.planning/wave-<slug>/qg-result.json` — three DISTINCT branches:
 
@@ -76,7 +78,7 @@ HEAD-match check: `qg-result.json ".head"` must equal `git rev-parse HEAD`. A re
 **PHASE TRANSITIONS ARE AUTOMATIC — never ask the user between phases:**
 ```
 Plan approved → IMMEDIATELY dispatch architects (Phase 2)
-All arch-*-verdict.md on disk + APPROVE → IMMEDIATELY spawn quality-gater (Phase 3)
+All required VERIFY-FINAL `verdict/v1` records authorize → IMMEDIATELY spawn quality-gater (Phase 3)
 qg-result.json status:pass (HEAD-matched) → IMMEDIATELY proceed to commit (authorized by push-proof.json + stamps + verify-proof, not by qg-result itself)
 qg-result.json status:fail (HEAD-matched) → IMMEDIATELY back to architect dispatch (Phase 2 retry)
 ```

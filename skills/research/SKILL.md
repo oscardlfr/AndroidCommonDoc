@@ -18,15 +18,10 @@ Ad-hoc technical research before implementation.
 ## Steps
 
 1. Parse topic from `$ARGUMENTS`
-2. Spawn the researcher agent:
-
-```
-Agent(
-  subagent_type="researcher",
-  prompt="Research this topic: $ARGUMENTS\n\nProject context: {cwd}\nProvide structured findings with sources.",
-  description="Research: $ARGUMENTS"
-)
-```
+2. Ask the shared lifecycle/control plane to ensure `researcher`, then dispatch
+   the runtime-neutral task `Research this topic: $ARGUMENTS` with `{cwd}` and
+   a structured, sourced findings requirement. The selected runtime connector
+   owns its concrete dispatch primitive.
 
 3. Present findings to the user
 

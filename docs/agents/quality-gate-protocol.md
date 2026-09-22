@@ -9,23 +9,22 @@ parent: agents-hub
 category: agents
 description: "Quality gate protocol: sequential verification (frontmatter → tests → coverage → benchmarks → pre-pr) after architect APPROVE, before commit"
 version: 5
-last_updated: "2026-09-20"
+last_updated: "2026-09-22"
 assumes_read: autonomous-multi-agent-workflow, context-rotation-guide
 token_budget: 1500
 ---
 
 # Quality Gate Protocol
 
-Sequential verification that runs AFTER all 3 architects APPROVE and BEFORE commit. Starts with architect deliberation for Phase 2 context, then automated gates. Each step blocks -- failures must be investigated, not bypassed.
-
----
+## Current phase and evidence contract
+The entrypoint runs only in persisted `QG`, after every class-required architect publishes an authorizing VERIFY-FINAL `verdict/v1`. Bats mint evidence requires two distinct, complete, provenance-matching full runs. Successful minting permits `QG -> COMPLETE`; Git pre-push independently enforces the current proof. Every step blocks on failure.
 
 ## When This Runs
 
 ```
-Architects detect → team-lead dispatches devs → devs implement → architects verify
+Applicable architects review → orchestrator dispatches specialists → specialists implement
   ↓
-All 3 architects: APPROVE
+Every class-required architect: authorizing VERIFY-FINAL verdict/v1
   ↓
 Quality Gate (this protocol)
   Step 0: Architect Deliberation (consult persistent architects)
@@ -39,7 +38,7 @@ Any fail → investigate → fix → re-run
 
 ## Step 0: Architect Deliberation
 
-**Before any automated check**, the quality-gater consults all 3 persistent architects who participated in Phase 2. They hold execution context that no automated tool can infer.
+**Before any automated check**, the quality-gater validates and deliberates with every architect required by the wave class/PLAN. HARNESS normally requires all three architects; DOC uses its declared subset; FAST-PATH has no architect floor. A live persistent peer may add context, but the request-bound verdict on disk is the authority.
 
 | Architect | quality-gater asks | Example insight |
 |-----------|-------------------|-----------------|
@@ -52,7 +51,7 @@ The quality-gater records deliberation findings and uses them to:
 - **Avoid false positives** (e.g., coverage drop is expected because code moved between modules)
 - **Catch gaps** that pass automated checks but fail in practice (e.g., shallow tests, missing DI wiring)
 
-Deliberation is **mandatory**. Skipping it voids the gate.
+Deliberation with every required architect is **mandatory**. A class with no architect floor records that fact rather than fabricating deliberation.
 
 ---
 
@@ -107,7 +106,7 @@ The quality-gater does NOT use a hardcoded checklist. It discovers each project'
 
 After Steps 0-9 pass, the quality-gater calls `emit-push-proof.sh --subcommand run-qg`. This mints `push-proof.json` in `.androidcommondoc/` by:
 - Re-validating `quality-gate-manifest.json` protocol_digest (manifest-drift check)
-- Verifying verdict→HEAD binding: each `arch-*-verdict.md` must carry `APPROVED-VERIFY-FINAL` and a `**HEAD**:` field matching the current HEAD
+- Validating every class-required `arch-<role>-verdict-verify-final.json` as an authorizing `verdict/v1` bound to its immutable request, exact HEAD, PLAN digest, role, wave, phase, and evidence
 - Recording `steps_executed`, `report_digest` (sha256 of `quality-gate-report.json`), and `artifact_digests`
 - Persisting `bats_evidence` (9 keys as of wave `qg-artifact-binding`, W7 — adds `complete`/`total` to the original 7) so the three equal-rigor push-time verifiers re-derive the same bats completeness predicate, not just presence + HEAD match
 
@@ -217,6 +216,9 @@ re-reading the shared log may capture an intermediate, not the authoritative sin
 | `BATS_HEAD` | `git rev-parse HEAD` at run time |
 | `BATS_RUN_ID` | Unique per invocation (timestamp+pid+rand) |
 | `BATS_GENERATED_AT` | Sortable UTC timestamp (same format as `qg-result.json` `started_at`) |
+| `BATS_PLAN_DIGEST` / `BATS_WAVE_SLUG` / `BATS_TARGET_DIGEST` | Planning authority and sorted target set |
+| `BATS_ENV_FINGERPRINT` / `BATS_TOOL_VERSIONS` / start-finish timestamps | Environment, tools and interval |
+| `BATS_LOG_DIGEST` | SHA-256 of the retained TAP log |
 
 **emit-qg-result.sh discovery algorithm** (final mode):
 
@@ -227,11 +229,9 @@ re-reading the shared log may capture an intermediate, not the authoritative sin
    - `BATS_RUN_ID` non-empty
    - `BATS_GENERATED_AT >= started_at` (produced during THIS QG run, not a leftover)
    - All completeness fields present and well-formed
-3. If ≥1 valid: select MAX `BATS_GENERATED_AT` (deterministic, not a bare cross-time
-   "latest"); source `suite_summary` from it; bats verdict = `BATS_COMPLETE==true AND
-   BATS_VERDICT==pass AND BATS_NOT_OK==0`, else `status: fail`.
-4. If 0 valid: fallback — re-grep the TAP log with the same 4-part completeness assertion.
-   Incomplete / empty log → `status: fail`.
+3. Partition by complete provenance/count signature; any disagreement rejects and recency cannot select around it.
+4. Push-proof minting needs two distinct run ids in one agreeing full-run set; otherwise reject as `insufficient-agreement` or `provenance-mismatch`.
+5. Select a representative only after agreement; security-critical minting has no shared-log fallback.
 
 **Key invariant**: a handoff from a PREVIOUS QG on the same HEAD is REJECTED by the
 `BATS_GENERATED_AT >= started_at` guard. `started_at` and `BATS_GENERATED_AT` MUST share

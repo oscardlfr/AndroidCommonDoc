@@ -289,13 +289,15 @@ describe("Wave 25: declared MCP tools match registered callable names", () => {
 // ---------------------------------------------------------------------------
 
 describe("Wave 25 Level A: tool-use-analytics computes by_skill", () => {
-  it("ToolUseReport type has by_skill, dead_skills, user_invokable_skills fields", () => {
+  it("ToolUseReport separates observations from authoritative disuse", () => {
     const src = fs.readFileSync(
       path.join(ROOT, "mcp-server/src/tools/tool-use-analytics.ts"),
       "utf-8",
     );
     expect(src).toMatch(/by_skill:\s*SkillUsage\[\]/);
     expect(src).toMatch(/dead_skills:\s*string\[\]/);
+    expect(src).toMatch(/unobserved_skills:\s*string\[\]/);
+    expect(src).toMatch(/authoritative_for_disuse:\s*false/);
     expect(src).toMatch(/user_invokable_skills:\s*string\[\]/);
   });
 
@@ -308,13 +310,14 @@ describe("Wave 25 Level A: tool-use-analytics computes by_skill", () => {
     expect(src).toMatch(/projectRoot\?:\s*string/);
   });
 
-  it("markdown renderer includes 'Skill Usage' section and 'Dead skills' heading", () => {
+  it("markdown renderer labels absent skills as unobserved, not dead", () => {
     const src = fs.readFileSync(
       path.join(ROOT, "mcp-server/src/tools/tool-use-analytics.ts"),
       "utf-8",
     );
     expect(src).toMatch(/Skill Usage/);
-    expect(src).toMatch(/Dead skills/);
+    expect(src).toMatch(/Unobserved skills/);
+    expect(src).not.toMatch(/\*\*⚠ Dead skills\*\*/);
   });
 });
 

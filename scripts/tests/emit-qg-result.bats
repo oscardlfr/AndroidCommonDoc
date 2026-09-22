@@ -50,7 +50,9 @@ SCRIPT="$BATS_TEST_DIRNAME/../sh/emit-qg-result.sh"
 EMITTER="$BATS_TEST_DIRNAME/../sh/emit-push-proof.sh"
 MANIFEST_SRC="$BATS_TEST_DIRNAME/../../quality-gate-manifest.json"
 SCRIPTS_SRC="$BATS_TEST_DIRNAME/.."
+REPO_ROOT_SRC="$BATS_TEST_DIRNAME/../.."
 FRESHNESS_LIB="$BATS_TEST_DIRNAME/../sh/lib/qg-report-freshness.sh"
+source "$BATS_TEST_DIRNAME/lib/verdict-fixtures.bash"
 
 setup() {
     REPO="$(mktemp -d)"
@@ -416,6 +418,7 @@ PYEOF
     # emit-pre-pr-report.sh, mint-internal, after the registry re-run.
     cp "$SCRIPTS_SRC/sh/emit-rule-inventory.sh"         "$REPO/scripts/sh/"
     cp "$SCRIPTS_SRC/sh/emit-pre-pr-report.sh"          "$REPO/scripts/sh/"
+    install_verdict_contract_runtime "$REPO_ROOT_SRC" "$REPO"
 
     # H1 (push-authority-bootstrap) W-B2: install the canonical pre-push hook so
     # emit-push-proof.sh's Part-4 precondition (hook-drift check) passes. Mirrors
@@ -433,27 +436,10 @@ PYEOF
     local wave_dir="$REPO/.planning/wave-$slug"
     mkdir -p "$wave_dir"
 
-    # Write arch verdicts for the slug
-    for role in arch-testing arch-platform arch-integration; do
-        cat > "$wave_dir/$role-verdict.md" << EOF
-# $role verdict
-
-**Phase**: PREP
-**Timestamp**: 2026-06-21T00:00:00Z
-**Status**: APPROVED-PREP
-
----
-
-**HEAD**: $HEAD_SHA
-**Phase**: VERIFY-FINAL
-**Timestamp**: 2026-06-21T00:00:00Z
-**Status**: APPROVED-VERIFY-FINAL
-EOF
-    done
-
     # Write PLAN.md (needed by wave_plan_present predicate)
     printf '### Wave Class\n- **Class**: HARNESS\n### Spawn Table\n| Role | Count | Reason |\n|---|---|---|\n| arch-testing | 1 | test |\n' \
         > "$wave_dir/PLAN.md"
+    write_structured_arch_verdicts "$REPO" "$slug" "$HEAD_SHA"
 
     # Production order: --init FIRST (resets REPORT_PATH scratch), THEN build the report.
     # This matches the quality-gater template sequence: --init → steps populate report → mint.
@@ -501,10 +487,7 @@ rpt['pre_pr_coverage'] = dict(rpt.get('pre_pr_coverage') or {},
 with open(rpt_path, 'w', encoding='utf-8') as f:
     json.dump(rpt, f, indent=2); f.write('\n')
 PYEOF
-    local qr6_run_id="qr6-fixture-$$-${RANDOM}"
-    printf 'BATS_OK=%s\nBATS_NOT_OK=%s\nBATS_EXPECTED=%s\nBATS_TOTAL=%s\nBATS_COMPLETE=%s\nBATS_VERDICT=%s\nBATS_LOG=%s\nBATS_HEAD=%s\nBATS_RUN_ID=%s\nBATS_GENERATED_AT=%s\nBATS_SCOPE=%s\n' \
-        42 0 42 42 true pass /dev/null "$qr6_head" "$qr6_run_id" "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" full \
-        > "$ACDOC/bats-result.${qr6_run_id}.env"
+    write_two_agreeing_bats_handoffs "$REPO" "$ACDOC" "$slug" "$qr6_head"
 
     # wave qg-artifact-binding (W1): stage the two required_steps[] loop members
     # (secret-scan, doc-validator-parity) — else run-qg dies artifact-binding-absent
@@ -551,6 +534,7 @@ PYEOF
     # emit-pre-pr-report.sh, mint-internal, after the registry re-run.
     cp "$SCRIPTS_SRC/sh/emit-rule-inventory.sh"         "$REPO/scripts/sh/"
     cp "$SCRIPTS_SRC/sh/emit-pre-pr-report.sh"          "$REPO/scripts/sh/"
+    install_verdict_contract_runtime "$REPO_ROOT_SRC" "$REPO"
 
     # H1 (push-authority-bootstrap) W-B2: install the canonical pre-push hook so
     # emit-push-proof.sh's Part-4 precondition (hook-drift check) passes. Mirrors
@@ -566,25 +550,9 @@ PYEOF
     local slug="test-slug"
     local wave_dir="$REPO/.planning/wave-$slug"
     mkdir -p "$wave_dir"
-    for role in arch-testing arch-platform arch-integration; do
-        cat > "$wave_dir/$role-verdict.md" << EOF
-# $role verdict
-
-**Phase**: PREP
-**Timestamp**: 2026-06-21T00:00:00Z
-**Status**: APPROVED-PREP
-
----
-
-**HEAD**: $HEAD_SHA
-**Phase**: VERIFY-FINAL
-**Timestamp**: 2026-06-21T00:00:00Z
-**Status**: APPROVED-VERIFY-FINAL
-EOF
-    done
-
     printf '### Wave Class\n- **Class**: HARNESS\n### Spawn Table\n| Role | Count | Reason |\n|---|---|---|\n| arch-testing | 1 | test |\n' \
         > "$wave_dir/PLAN.md"
+    write_structured_arch_verdicts "$REPO" "$slug" "$HEAD_SHA"
 
     # Production order: --init FIRST (resets REPORT_PATH scratch), THEN build the report.
     # C1 made --init reset quality-gate-report.json; --init must precede report-building so
@@ -620,10 +588,7 @@ rpt['pre_pr_coverage'] = dict(rpt.get('pre_pr_coverage') or {},
 with open(rpt_path, 'w', encoding='utf-8') as f:
     json.dump(rpt, f, indent=2); f.write('\n')
 PYEOF
-    local qr7_run_id="qr7-fixture-$$-${RANDOM}"
-    printf 'BATS_OK=%s\nBATS_NOT_OK=%s\nBATS_EXPECTED=%s\nBATS_TOTAL=%s\nBATS_COMPLETE=%s\nBATS_VERDICT=%s\nBATS_LOG=%s\nBATS_HEAD=%s\nBATS_RUN_ID=%s\nBATS_GENERATED_AT=%s\nBATS_SCOPE=%s\n' \
-        42 0 42 42 true pass /dev/null "$HEAD_SHA" "$qr7_run_id" "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" full \
-        > "$ACDOC/bats-result.${qr7_run_id}.env"
+    write_two_agreeing_bats_handoffs "$REPO" "$ACDOC" "$slug" "$HEAD_SHA"
 
     # wave qg-artifact-binding (W1): stage the two required_steps[] loop members.
     printf '{"status":"PASS","reason_code":"OK","tool":"trufflehog","version":"test","count":0,"head":"%s","generated_at":"%s"}\n' \
@@ -771,6 +736,15 @@ write_handoff() {
     printf 'BATS_RUN_ID=%s\n'       "$run_id"        >> "$path"
     printf 'BATS_GENERATED_AT=%s\n' "$generated_at"  >> "$path"
     printf 'BATS_SCOPE=%s\n'        "$scope"         >> "$path"
+    printf 'BATS_PLAN_DIGEST=%064d\n' 0               >> "$path"
+    printf 'BATS_WAVE_SLUG=%s\n'    "test-slug"      >> "$path"
+    printf 'BATS_TARGET_DIGEST=%040d\n' 0             >> "$path"
+    printf 'BATS_ENV_FINGERPRINT=%064d\n' 0           >> "$path"
+    printf 'BATS_STARTED_AT=%s\n'   "$generated_at"  >> "$path"
+    printf 'BATS_FINISHED_AT=%s\n'  "$generated_at"  >> "$path"
+    printf 'BATS_LOG_DIGEST=%s\n'   "$(python3 -c 'import hashlib,sys;print(hashlib.sha256(sys.argv[1].encode()).hexdigest())' "$run_id")" >> "$path"
+    printf 'BATS_LOG_IDENTITY=%s\n' "$(python3 -c 'import hashlib,sys;print(hashlib.sha256((sys.argv[1]+"|artifact").encode()).hexdigest())' "$run_id")" >> "$path"
+    printf 'BATS_TOOL_VERSIONS=%s\n' "fixture"        >> "$path"
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1611,6 +1585,7 @@ print(d.get('suite_summary', {}).get('bats_verdict', 'MISSING'))
     # emit-pre-pr-report.sh, mint-internal, after the registry re-run.
     cp "$SCRIPTS_SRC/sh/emit-rule-inventory.sh"         "$REPO/scripts/sh/"
     cp "$SCRIPTS_SRC/sh/emit-pre-pr-report.sh"          "$REPO/scripts/sh/"
+    install_verdict_contract_runtime "$REPO_ROOT_SRC" "$REPO"
 
     # H1 (push-authority-bootstrap) W-B2: install the canonical pre-push hook so
     # emit-push-proof.sh's Part-4 precondition (hook-drift check) passes. Mirrors
@@ -1626,24 +1601,9 @@ print(d.get('suite_summary', {}).get('bats_verdict', 'MISSING'))
     local slug="test-slug"
     local wave_dir="$REPO/.planning/wave-$slug"
     mkdir -p "$wave_dir"
-    for role in arch-testing arch-platform arch-integration; do
-        cat > "$wave_dir/$role-verdict.md" << EOF
-# $role verdict
-
-**Phase**: PREP
-**Timestamp**: 2026-06-21T00:00:00Z
-**Status**: APPROVED-PREP
-
----
-
-**HEAD**: $HEAD_SHA
-**Phase**: VERIFY-FINAL
-**Timestamp**: 2026-06-21T00:00:00Z
-**Status**: APPROVED-VERIFY-FINAL
-EOF
-    done
     printf '### Wave Class\n- **Class**: HARNESS\n### Spawn Table\n| Role | Count | Reason |\n|---|---|---|\n| arch-testing | 1 | test |\n' \
         > "$wave_dir/PLAN.md"
+    write_structured_arch_verdicts "$REPO" "$slug" "$HEAD_SHA"
 
     local qg_out="$wave_dir/qg-result.json"
     run bash "$SCRIPT" --init --out "$qg_out" --project-root "$REPO" --slug "$slug"
@@ -1670,10 +1630,7 @@ rpt['pre_pr_coverage'] = dict(rpt.get('pre_pr_coverage') or {},
 with open(rpt_path, 'w', encoding='utf-8') as f:
     json.dump(rpt, f, indent=2); f.write('\n')
 PYEOF
-    local qr31_run_id="qr31-fixture-$$-${RANDOM}"
-    printf 'BATS_OK=%s\nBATS_NOT_OK=%s\nBATS_EXPECTED=%s\nBATS_TOTAL=%s\nBATS_COMPLETE=%s\nBATS_VERDICT=%s\nBATS_LOG=%s\nBATS_HEAD=%s\nBATS_RUN_ID=%s\nBATS_GENERATED_AT=%s\nBATS_SCOPE=%s\n' \
-        42 0 42 42 true pass /dev/null "$HEAD_SHA" "$qr31_run_id" "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" full \
-        > "$ACDOC/bats-result.${qr31_run_id}.env"
+    write_two_agreeing_bats_handoffs "$REPO" "$ACDOC" "$slug" "$HEAD_SHA"
 
     # wave qg-artifact-binding (W1): stage the two required_steps[] loop members.
     printf '{"status":"PASS","reason_code":"OK","tool":"trufflehog","version":"test","count":0,"head":"%s","generated_at":"%s"}\n' \

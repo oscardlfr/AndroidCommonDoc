@@ -14,6 +14,10 @@ category: agents
 
 # L0 Hook Manifest
 
+## Authority composition
+
+Hooks are defense-in-depth around four canonical contracts: structured verdict validation, provenance agreement, parsed shell intent, and persisted wave phase. Hooks may deny a malformed request early, but they do not replace the durable authority: verdict JSON controls phase approval, the Git `pre-push` hook controls transport, and the Wave-1 lifecycle controls peers. See [Verdict Evidence Schema](verdict-evidence-schema.md), [Evidence Provenance Contract](evidence-provenance-contract.md), [Push Authority Policy](push-authority-policy.md), and [Wave Control Plane](wave-control-plane.md).
+
 Reference classification for all 39 hook files in `.claude/hooks/`. Consumers use this to reconcile their `settings.json` against the full L0 hook set.
 
 > **CI-enforced** — the `hook-manifest-coverage` job in `.github/workflows/drift-audit.yml` fails the build if the hook table below drifts from `.claude/hooks/` (a missing, phantom, or duplicated hook). The table is the source of truth for coverage.
@@ -71,7 +75,7 @@ This subsection documents verification methodology only; it does not assert that
 | `agent-spawn-execution-gate.js` | consumer-required | Topology: PreToolUse gate on the `Agent` tool, main-orchestrator context only. Before a real `Agent()` call executes for a genuine role-lifecycle action ("owning" call — some pending action truly exists for the exact `subagent_type` named), atomically reserves that action via a no-clobber execution-claim record, revalidating binding/PLAN/session/role/expiry fresh. Every other `Agent()` call ("non-owning" — the overwhelming majority of ordinary ad-hoc specialist/architect dispatch) is silent pass-through with zero side effects, governed only by other hooks (`agent-spawn-validator.js` etc.) — see [runtime-messaging-drivers](runtime-messaging-drivers.md) |
 | `hook-control-plane-utils.js` | l0-internal | Shared CommonJS runtime dependency for propagated hooks; copy with importing hooks, never register in `settings.json` |
 | `coordination-artifact.js` | l0-internal | Shared CommonJS runtime dependency for propagated hooks (read/validate coordination artifacts — consult/result/request/approval/stop/message; writes are owned by `write-coordination-artifact.sh`, not this module); copy with importing hooks, never register in `settings.json` — see [coordination-artifact-schema](coordination-artifact-schema.md) |
-| `premature-execution-gate.js` | consumer-required | Gating: blocks specialist Write/Edit/Bash before APPROVED-PREP verdict |
+| `premature-execution-gate.js` | consumer-required | Gating: blocks specialist Write/Edit/Bash before a current request-bound PREP approval and bounded specialist dispatch |
 | `branch-guard.js` | consumer-required | Branch protection: blocks write-git ops on develop/master — see [branch-guard](branch-guard.md) |
 | `git-amend-gate.js` | consumer-required | Amend discipline: blocks `git commit --amend` without explicit authorization |
 | `addressee-liveness-gate.js` | consumer-required | Agent safety: blocks SendMessage to shutdown or unresponsive peers |
@@ -79,9 +83,9 @@ This subsection documents verification methodology only; it does not assert that
 | `wave-phase-gate.js` | consumer-optional | Wave model: blocks push without QG sentinel; blocks arch spawn without PLAN.md |
 | `team-completeness-gate.js` | consumer-optional | RETIRED — named-team roster floor obsolete; no-op tombstone, unregistered from settings.json |
 | `team-topology-gate.js` | consumer-optional | RETIRED — named-team roster floor obsolete; no-op tombstone, unregistered from settings.json |
-| `architect-verdict-presence-gate.js` | consumer-optional | Verdict files: blocks arch-* APPROVE without verdict file on disk |
+| `architect-verdict-presence-gate.js` | consumer-optional | Verdict records: blocks architect approval claims unless the canonical structured record validates |
 | `commit-scope-validation-gate.js` | consumer-optional | Commit lint: blocks commit if scope not in `.commitlintrc.json` |
-| `push-authorization-gate.js` | consumer-required | Push gate: **best-effort early-block** of peer/subagent `git push` — catches direct `git push`, `rtk git push`, compound commands, and common shell-exec wrappers (`sh -c`, `eval`, `$(…)`); string-parsing cannot be exhaustive (ANSI-C escapes, variable indirection, language interpreters remain). **Primary enforcement is the git-layer `pre-push` hook** (see Git-Layer Hooks below) — fires on every actual push via `emit-push-proof.sh verify-proof`, but only once bootstrapped per clone via `install-git-hooks.sh`/`make install-git-hooks` (git never auto-installs hooks — see [qg-proof-push-gate](qg-proof-push-gate.md)). For the main orchestrator, this Claude-layer hook delegates to `scripts/sh/verify-git-hooks.sh` and BLOCKS (fail-closed) when that git-layer hook is absent, non-executable, unmarked, or drifted from canonical — it does **not** fall back to any in-JS proof re-verification (wave `push-authority-bootstrap` removed that ~205-LOC fallback entirely). Honest contract: no **normal branch** push without proof the canonical QG ran for real over HEAD (the pre-push hook exempts branch deletions, tags, protected-branch merge refs, and `SKIP_PUSH_GATE=1`) — NOT peer-identity enforcement; identity-aware provenance enforcement is deferred to a future harness gate. Replaces legacy `pre-push-pre-pr-gate.js` + `quality-gate-pre-push.sh` |
+| `push-authorization-gate.js` | consumer-required | Advisory early block using the shared parsed shell-intent module, including wrappers/chains/substitutions without treating harmless text as a push. The installed Git `pre-push` hook remains the sole portable authority and verifies current proof artifacts. Actor-name policy is defense-in-depth unless a runtime supplies a non-spoofable capability. See [push-authority-policy](push-authority-policy.md). |
 | `subagent-start-context-bundle.js` | consumer-optional | SubagentStart adapter: injects context bundle as additionalContext on teammate spawn/wake; absent or stale bundle → fail-open silently |
 | `knowledge-currency-gate.js` | consumer-optional | KMP gating: blocks arch-platform/arch-testing KMP claims without CP marker — see [knowledge-currency-gate](knowledge-currency-gate.md) |
 | `agent-delegation-reminder.js` | consumer-optional | Advisory: reminder when Composable .kt edited without ui-specialist |
@@ -111,7 +115,7 @@ This subsection documents verification methodology only; it does not assert that
 
 ## Verdict Canal Script (NOT in this manifest)
 
-`scripts/sh/write-verdict.sh` — verdict canal script; invoked by architects via Bash to write PREP and VERIFY-FINAL verdicts to `.planning/wave-{slug}/arch-{role}-verdict.md`. Not a git hook and not a Claude Code hook. Not included in the CI hook-manifest-coverage count. See [agent-verdict-protocol](agent-verdict-protocol.md) for invocation details.
+`scripts/sh/write-verdict.sh` — canonical structured verdict publisher; writes phase-specific JSON beneath the active wave through the confined no-clobber/CAS store. It is not a hook and is excluded from hook-manifest counts. See [agent-verdict-protocol](agent-verdict-protocol.md).
 
 ## Git-Layer Hooks (NOT in this manifest)
 

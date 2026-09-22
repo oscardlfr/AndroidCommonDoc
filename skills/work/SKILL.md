@@ -17,9 +17,9 @@ Route one validated task through the shared runtime collaboration owner. This sk
 
 ## Canonical Runtime Entrypoint
 
-1. Resolve one role supported by the production work router. Repository task execution uses `toolkit-specialist`; support-plane consultations use one of the five persistent support roles.
+1. If a wave is active, include `wave_slug` in the runtime intent. The shared entrypoint reads the persisted control-plane state and rejects stale/illegal state before routing. Resolve one role supported by the production work router and compatible with the returned wave class/phase. Repository task execution uses `toolkit-specialist`; support-plane consultations remain owned by the Wave-1 lifecycle manager.
 2. For a read-only repository task, use the core-authored empty-scope manifest bytes `{"schema":"coordination/subject-bundle-manifest/v1","entries":[]}` and their exact reference `subject:090b9779a46f94e328cb61bf5e78d5a64a15337a6e9279090837647a87f2ff7a`. The runtime core materializes this manifest; do not search for or hand-write a bundle file.
-3. Encode a canonical JSON object with exactly `role`, `subject_ref`, and `task`. The `task` value is the complete, non-empty text supplied after `/work`, preserved verbatim; never replace it with an example or a fixed sentence.
+3. Encode a canonical JSON object with exactly `role`, `subject_ref`, and `task`, plus `wave_slug` only when a wave is active. The `task` value is the complete, non-empty text supplied after `/work`, preserved verbatim; never replace it with an example or a fixed sentence.
 4. Invoke:
 
 ```bash
@@ -28,7 +28,7 @@ Route one validated task through the shared runtime collaboration owner. This sk
 
 The Bash call must be one standalone direct Node command. For L0, both roots are the current repository. For a runtime consumer, derive `toolkit-root` only from the single local `layer=L0, role=tooling` manifest source and keep `consumer-root` as the literal absolute application repository. Use the resolved Node executable; do not use environment fallbacks, command substitution, wrappers, pipes, redirects, or command separators.
 
-The decoded intent must contain `role:"toolkit-specialist"`, the exact fixed `subject_ref` above, and `task` byte-for-byte equal to the current `/work` task description. A repeated task resumes its existing transaction; a genuinely different task creates a distinct intent and must not reuse a prior terminal action.
+The decoded intent must contain `role:"toolkit-specialist"`, the exact fixed `subject_ref` above, `task` byte-for-byte equal to the current `/work` task description, and the exact active `wave_slug` when present. A repeated task resumes its existing transaction; a genuinely different task creates a distinct intent and must not reuse a prior terminal action.
 
 ## Status Handling
 
@@ -70,7 +70,7 @@ When no deterministic row matches, frontmatter discovery may identify a register
 
 ## Invariants
 
-- The persistent support plane is exactly `arch-platform`, `arch-testing`, `arch-integration`, `context-provider`, and `doc-updater`; `quality-gater` remains phase-scoped.
+- Wave roles are class-aware and resolved from the shared control plane. The project support plane remains a runtime capability, not a fixed per-wave spawn roster; `quality-gater` remains phase-scoped.
 - Lifecycle reuse, recovery, action execution, and completion evidence are owned by the shared runtime modules.
 - No direct host-native dispatch exists in this skill.
 - No message or action-success text is completion evidence.

@@ -1013,12 +1013,12 @@ teardown() {
     done
 }
 
-@test "skills: agent-invoking skills reference correct agents" {
-    grep -q 'subagent_type="debugger"' "$L0_ROOT/skills/debug/SKILL.md"
-    grep -q 'subagent_type="researcher"' "$L0_ROOT/skills/research/SKILL.md"
-    grep -q 'subagent_type="codebase-mapper"' "$L0_ROOT/skills/map-codebase/SKILL.md"
-    grep -q 'subagent_type="verifier"' "$L0_ROOT/skills/verify/SKILL.md"
-    grep -q 'subagent_type="advisor"' "$L0_ROOT/skills/decide/SKILL.md"
+@test "skills: agent-invoking skills route the correct roles through the control plane" {
+    grep -q 'control plane.*debugger\|debugger.*control plane' "$L0_ROOT/skills/debug/SKILL.md"
+    grep -q 'control plane.*researcher\|researcher.*control plane' "$L0_ROOT/skills/research/SKILL.md"
+    grep -q 'control plane.*codebase-mapper\|codebase-mapper.*control plane' "$L0_ROOT/skills/map-codebase/SKILL.md"
+    grep -q 'control plane.*verifier\|verifier.*control plane' "$L0_ROOT/skills/verify/SKILL.md"
+    grep -q 'control plane.*advisor\|advisor.*control plane' "$L0_ROOT/skills/decide/SKILL.md"
 }
 
 @test "agents: test-specialist knows benchmark skill" {
@@ -1174,9 +1174,9 @@ assert d['profiles']['advanced']['overrides'].get('debugger') == 'opus', 'debugg
     grep -q "ALLOWED" "$L0_ROOT/docs/agents/main-agent-orchestration-guide.md"
 }
 
-@test "templates: team-lead NEVER writes code" {
-    # BL-W45 hub-split: content may be in tl-* sub-docs
-    orchestration_guide_grep -q "NEVER write code\|NEVER writes code\|NEVER write code yourself"
+@test "templates: main agent is the orchestrator and retired team-lead is not spawned" {
+    grep -q "main agent IS the team lead" "$L0_ROOT/docs/agents/main-agent-orchestration-guide.md"
+    grep -q "retired template is not spawned" "$L0_ROOT/docs/agents/claude-code-workflow.md"
 }
 
 @test "templates: team-lead has agent roster with team roles" {
@@ -1227,20 +1227,16 @@ assert d['profiles']['advanced']['overrides'].get('debugger') == 'opus', 'debugg
     done
 }
 
-@test "templates: team-lead has architect verification gate" {
-    # BL-W45 hub-split: use cat_orchestration_guide for all content checks
-    orchestration_guide_grep -qE "Architect Verification"
-    orchestration_guide_grep -q "arch-testing"
-    orchestration_guide_grep -q "arch-platform"
-    orchestration_guide_grep -q "arch-integration"
-    orchestration_guide_grep -q "NEVER write code\|NEVER write code yourself"
+@test "templates: main orchestrator has request-bound architect verification gate" {
+    grep -q "request-bound VERIFY-FINAL JSON approvals" "$L0_ROOT/docs/agents/main-agent-orchestration-guide.md"
+    grep -q "arch-testing" "$L0_ROOT/docs/agents/claude-code-workflow.md"
+    grep -q "arch-platform" "$L0_ROOT/docs/agents/claude-code-workflow.md"
+    grep -q "arch-integration" "$L0_ROOT/docs/agents/claude-code-workflow.md"
 }
 
-@test "templates: team-lead has planning delegation" {
-    # BL-W45 hub-split: content may be in tl-* sub-docs
-    # Wave 25: "Planning Delegation" section title became "Planning Phase (EnterPlanMode gate)"
-    orchestration_guide_grep -qE "Planning Phase|Planning Delegation"
-    orchestration_guide_grep -q "planner"
+@test "templates: main orchestrator has planning delegation" {
+    grep -q "planner subagent" "$L0_ROOT/docs/agents/main-agent-orchestration-guide.md"
+    grep -q 'Agent(subagent_type="planner")' "$L0_ROOT/docs/agents/main-agent-orchestration-guide.md"
 }
 
 @test "templates: team-lead has TDD-first for bug fixes" {
@@ -1403,9 +1399,8 @@ assert d['profiles']['advanced']['overrides'].get('debugger') == 'opus', 'debugg
     ! grep -q "Write feature code" "$L0_ROOT/docs/agents/main-agent-orchestration-guide.md" || grep -q "MUST delegate" "$L0_ROOT/docs/agents/main-agent-orchestration-guide.md"
 }
 
-@test "arch: PM assigns to architects (not devs directly)" {
-    # BL-W45 hub-split: content may be in tl-* sub-docs
-    orchestration_guide_grep -qE "assigns.*architects|assign.*work.*architects"
+@test "arch: main orchestrator dispatches class-required architects and specialists" {
+    grep -q "orchestrator → class-required architects/specialists" "$L0_ROOT/docs/agents/spec-driven-workflow.md"
 }
 
 @test "arch: all architects have CUSTOMIZE markers for project guardians" {
@@ -1428,13 +1423,13 @@ assert d['profiles']['advanced']['overrides'].get('debugger') == 'opus', 'debugg
     grep -q "team-lead" "$L0_ROOT/docs/agents/agents-hub.md"
 }
 
-@test "arch: claude-code-workflow PM model has no codes inline" {
-    grep -q "Team Lead" "$L0_ROOT/docs/agents/claude-code-workflow.md"
-    ! grep -q "Codes inline" "$L0_ROOT/docs/agents/claude-code-workflow.md"
+@test "arch: claude-code-workflow uses the main conversation as orchestrator" {
+    grep -q "main conversation as the primary workflow coordinator" "$L0_ROOT/docs/agents/claude-code-workflow.md"
+    grep -q "Delegate to specialists with Write" "$L0_ROOT/docs/agents/claude-code-workflow.md"
 }
 
-@test "arch: spec-driven-workflow shows PM assigns to architects" {
-    grep -q "team-lead" "$L0_ROOT/docs/agents/spec-driven-workflow.md"
+@test "arch: spec-driven-workflow shows orchestrator dispatching architects" {
+    grep -q "Architects detect → orchestrator dispatches specialists" "$L0_ROOT/docs/agents/spec-driven-workflow.md"
 }
 
 @test "arch: claude-md-template examples use team-lead" {
@@ -1445,9 +1440,8 @@ assert d['profiles']['advanced']['overrides'].get('debugger') == 'opus', 'debugg
     grep -q "team-lead" "$L0_ROOT/docs/agents/multi-agent-patterns.md"
 }
 
-@test "arch: PM template forbids Bash+CLI spawning" {
-    # BL-W45 hub-split: content may be in tl-* sub-docs
-    orchestration_guide_grep -qE "FORBIDDEN.*Bash.*cli|Spawning agents via Bash"
+@test "arch: public entrypoints forbid shell-launching runtime CLIs" {
+    grep -q "Public entrypoints never shell-launch a runtime CLI" "$L0_ROOT/docs/agents/spec-driven-workflow.md"
 }
 
 @test "arch: architects are read-only (no Write/Edit, have SendMessage)" {
@@ -1459,7 +1453,8 @@ assert d['profiles']['advanced']['overrides'].get('debugger') == 'opus', 'debugg
 }
 
 @test "arch: claude-code-workflow forbids Bash spawning" {
-    grep -q "Agent Tool Only\|Never spawn.*Bash" "$L0_ROOT/docs/agents/claude-code-workflow.md"
+    grep -q "never shell-launch a retired.*team-lead.*template" "$L0_ROOT/docs/agents/claude-code-workflow.md"
+    grep -q 'WRONG: `Bash' "$L0_ROOT/docs/agents/claude-code-workflow.md"
 }
 
 @test "arch: /work skill routes to team-lead" {

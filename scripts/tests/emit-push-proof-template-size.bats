@@ -50,6 +50,7 @@ EMITTER_PS1="$BATS_TEST_DIRNAME/../ps1/emit-push-proof.ps1"
 MANIFEST_SRC="$BATS_TEST_DIRNAME/../../quality-gate-manifest.json"
 SCRIPTS_SRC="$BATS_TEST_DIRNAME/.."
 REPO_ROOT_SRC="$BATS_TEST_DIRNAME/../.."
+source "$BATS_TEST_DIRNAME/lib/verdict-fixtures.bash"
 
 setup() {
   if command -v wslpath >/dev/null 2>&1 \
@@ -91,6 +92,7 @@ setup() {
   cp "$SCRIPTS_SRC/sh/rehash-registry.sh"         "$REPO/scripts/sh/"
   cp "$SCRIPTS_SRC/sh/emit-rule-inventory.sh"     "$REPO/scripts/sh/"
   cp "$SCRIPTS_SRC/sh/emit-pre-pr-report.sh"      "$REPO/scripts/sh/"
+  install_verdict_contract_runtime "$REPO_ROOT_SRC" "$REPO"
 
   # H1 (push-authority-bootstrap) W-B2: install the canonical pre-push hook so
   # emit-push-proof.sh's Part-4 precondition (hook-drift check) passes. Mirrors
@@ -132,24 +134,7 @@ teardown() {
 write_arch_verdicts() {
   local slug="$1"
   local head="${2:-$HEAD_SHA}"
-  local wave_dir="$REPO/.planning/wave-$slug"
-  mkdir -p "$wave_dir"
-  for role in arch-testing arch-platform arch-integration; do
-    cat > "$wave_dir/$role-verdict.md" <<EOF
-# $role verdict -- wave-$slug
-
-**Phase**: PREP
-**Timestamp**: 2026-06-14T00:00:00Z
-**Status**: APPROVED-PREP
-
----
-
-**HEAD**: $head
-**Phase**: VERIFY-FINAL
-**Timestamp**: 2026-06-14T00:00:00Z
-**Status**: APPROVED-VERIFY-FINAL
-EOF
-  done
+  write_structured_arch_verdicts "$REPO" "$slug" "$head"
 }
 
 # write_valid_bats_handoff -- writes a well-formed, full-scope, HEAD-bound bats
@@ -161,23 +146,7 @@ EOF
 write_valid_bats_handoff() {
   local head
   head="$(git -C "$REPO" rev-parse HEAD)"
-  local generated_at
-  generated_at="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
-  local run_id="wave-a-fixture-$$-${RANDOM}"
-  mkdir -p "$ACDOC"
-  {
-    printf 'BATS_OK=%s\n'           "42"
-    printf 'BATS_NOT_OK=%s\n'       "0"
-    printf 'BATS_EXPECTED=%s\n'     "42"
-    printf 'BATS_TOTAL=%s\n'        "42"
-    printf 'BATS_COMPLETE=%s\n'     "true"
-    printf 'BATS_VERDICT=%s\n'      "pass"
-    printf 'BATS_LOG=%s\n'          "/dev/null"
-    printf 'BATS_HEAD=%s\n'         "$head"
-    printf 'BATS_RUN_ID=%s\n'       "$run_id"
-    printf 'BATS_GENERATED_AT=%s\n' "$generated_at"
-    printf 'BATS_SCOPE=%s\n'        "full"
-  } > "$ACDOC/bats-result.${run_id}.env"
+  write_two_agreeing_bats_handoffs "$REPO" "$ACDOC" "test-slug" "$head"
 }
 
 # write_valid_artifact_receipts -- writes HEAD-bound, fresh, status:PASS
@@ -225,7 +194,7 @@ steps = []
 for rs in manifest.get('required_steps', []):
     steps.append({"step": rs['id'], "ran": True, "result": "PASS"})
 for cs in manifest.get('conditional_steps', []):
-    if cs['id'] == 'production-file-verify':
+    if cs['id'] in ('production-file-verify', 'path-manifest-audit'):
         steps.append({"step": cs['id'], "ran": True, "result": "PASS"})
     else:
         steps.append({"step": cs['id'], "ran": False, "result": "SKIP",

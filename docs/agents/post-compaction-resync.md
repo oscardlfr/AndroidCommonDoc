@@ -22,7 +22,7 @@ You may need re-sync if you observe:
 ## Re-Sync Steps (ordered)
 
 1. **Ask team-lead for a snapshot**: `SendMessage(to="team-lead", summary="post-compaction re-sync", message="Need state for {topic} — I may have lost context. Please confirm current status.")` — team-lead has the session-level view.
-2. **Read verdict files directly**: for any architect verdict you're working from, read `.planning/<wave>/arch-*-pr<N>-verdict.md` directly rather than relying on remembered state.
+2. **Read authority through the validator**: inspect the phase-specific `verdict/v1` JSON and its immutable request/evidence; never infer state from remembered prose or a legacy Markdown verdict.
 3. **Check git log**: `git log --oneline -10` for committed state — what actually landed is authoritative.
 4. **Re-read recent inbox**: review the most recent SendMessage exchanges in your context to verify nothing dropped between steps.
 

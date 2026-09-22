@@ -1,12 +1,26 @@
 # AndroidCommonDoc
 
+## Harness authority model
+
+The collaboration harness has one portable authority per concern:
+
+| Concern | Canonical authority |
+|---|---|
+| Peer lifecycle and reuse | Wave-1 runtime lifecycle and connectors |
+| PREP/VERIFY-FINAL approval | Request-bound `verdict/v1` JSON |
+| Test/QG evidence | Provenance-bound run records; two agreeing full Bats runs for push minting |
+| Phase sequencing | Persisted class-aware `PREP -> EXECUTE -> VERIFY_FINAL -> QG -> COMPLETE` control plane |
+| Push enforcement | Installed Git `pre-push` hook validating current stamps/proof |
+
+Conversational text, agent names, the newest evidence file, and runtime command-string hooks are not portable authority. See [Verdict Evidence Schema](docs/agents/verdict-evidence-schema.md), [Evidence Provenance Contract](docs/agents/evidence-provenance-contract.md), [Push Authority Policy](docs/agents/push-authority-policy.md), and [Wave Control Plane](docs/agents/wave-control-plane.md).
+
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey.svg)]()
 [![Agents](https://img.shields.io/badge/AI_Agents-Claude_Code%20%7C%20GitHub_Copilot-blueviolet.svg)]()
 
 **Centralized developer toolkit for Android and Kotlin Multiplatform projects.**
 
-Cross-platform scripts, AI agent skills (Claude Code + GitHub Copilot), 28 custom Detekt architecture rules, convention plugins for one-line adoption (KMP and Android-only), real-time enforcement hooks, an MCP server with 46 tools wired into agent frontmatter (Wave 25: 20 core agents — team-lead, 79 architects, context-provider, doc-updater, doc-alignment, codebase-mapper, beta-readiness, l0-coherence-auditor, verifier — now declare MCP tools explicitly so the harness loads their schemas), a unified audit system with finding deduplication, multi-layer knowledge cascade (L0→L1→L2) for chain topology, extensible agent routing with domain+intent frontmatter, 3-phase team model (Planning → Execution → Quality Gate), 40 agent templates for dev workflow orchestration, and doc intelligence with upstream monitoring and user-gated ingestion loop (context-provider → team-lead approval → doc-updater → `ingest-content` MCP tool) -- designed for solo developers and small teams managing multiple Android/KMP projects from a single source of truth.
+Cross-platform scripts, AI agent skills (Claude Code + GitHub Copilot), 28 custom Detekt architecture rules, convention plugins for one-line adoption (KMP and Android-only), real-time enforcement hooks, an MCP server with 47 tools, a unified audit system with finding deduplication, multi-layer knowledge cascade (L0→L1→L2), extensible agent routing, a persisted class-aware wave control plane, 39 agent templates, and doc intelligence with upstream monitoring and a user-gated ingestion loop -- designed for solo developers and small teams managing multiple Android/KMP projects from a single source of truth.
 
 > **Start here:** `/work` (smart task routing), `/init-session` (project context dashboard), `/resume-work` (CEO-level session resume). These three entry points discover your agents, skills, and modules automatically.
 
@@ -19,7 +33,7 @@ Cross-platform scripts, AI agent skills (Claude Code + GitHub Copilot), 28 custo
 Managing multiple Android/KMP projects means duplicated scripts, inconsistent patterns, and coverage blind spots. AndroidCommonDoc solves this by centralizing:
 
 - **Scripts** that run identically on Windows (PowerShell) and macOS/Linux (Bash) -- 45 cross-platform pairs + 18 Bash-only utilities + 1 PS1-only (`verify-push-proof.ps1`)
-- **AI agent skills** for Claude Code and GitHub Copilot -- 61 canonical skill definitions in `skills/`, distributed to downstream projects via registry + manifest + sync engine
+- **AI agent skills** for Claude Code and GitHub Copilot -- 62 canonical skill definitions in `skills/`, distributed to downstream projects via registry + manifest + sync engine
 - **Pattern docs** that encode architecture decisions once, reference everywhere
 - **Detekt rules** that enforce architecture patterns at build time -- 23 hand-written + 5 generated AST-only rules (28 total) covering state exposure, coroutine safety, ViewModel boundaries, KMP time safety, navigation contracts, security patterns, and testing anti-patterns
 - **Convention plugins** for one-line Gradle adoption: `KmpLibraryConventionPlugin` (AGP 9.0+ / KMP) and `AndroidLibraryConventionPlugin` (AGP 8.x / Android-only)
@@ -27,13 +41,13 @@ Managing multiple Android/KMP projects means duplicated scripts, inconsistent pa
 - **[kmp-test-runner](https://github.com/oscardlfr/kmp-test-runner)** — npm CLI (`@oscardlfr/kmp-test-runner` v0.14.0) that owns Gradle test orchestration. Invoked by `/test`, `/coverage`, `/test-full-parallel`, `/test-changed` skills via the `gradle-run.sh` (Linux/macOS, in `scripts/sh/`) or `gradle-run.ps1` (Windows, in `scripts/ps1/`) thin wrappers. Standalone repo, Apache-2.0.
 - **Claude Code hooks** that catch violations in real-time during AI-assisted development
 - **Coverage tooling** with auto-detection (JaCoCo or Kover — checks build files, convention plugins, and version catalogs), kover task fallback recovery, `--exclude-coverage` for test utilities, parallel execution, and gap analysis
-- **MCP server** with 46 tools for programmatic validation, pattern discovery, vault sync, module health, dependency analysis, code metrics, findings reports, doc intelligence, and doc search/suggestions. **Wave 25 fix**: all 46 tools are now callable by the 20 core agents (previously prose-only — agents described MCP usage but the harness never loaded the schemas). One tool is intentionally L2-only (`android-cli-bridge`, for L2 consumer apps)
+- **MCP server** with 47 tools for programmatic validation, pattern discovery, vault sync, module health, dependency analysis, code metrics, findings reports, doc intelligence, and doc search/suggestions. One tool is intentionally L2-only (`android-cli-bridge`, for L2 consumer apps)
 - **Unified audit system** (`/full-audit`) with wave-based parallel execution, 3-pass finding deduplication, severity normalization, and resolution tracking
 - **Doc monitoring** with tiered upstream source checking, review state tracking, and CI integration
 - **Detekt rule generation** from pattern doc frontmatter (auto-generate Kotlin rules from documentation)
 - **Reusable CI workflows** (`workflow_call`) for commit-lint, resource naming, safety checks, architecture guards, and dependency freshness
 - **39 specialized agents** with domain+intent frontmatter for extensible routing -- quality gates, release readiness, cross-platform validation, privacy auditing, unified audit orchestration, and spec-driven workflows (debugger, verifier, advisor, researcher, codebase-mapper)
-- **40 agent templates** governing the workflow (canonical pattern: main agent IS team-lead, no separate `team-lead` subagent — see `docs/agents/main-agent-orchestration-guide.md`). Roster: 3 architects, 5 core specialists (domain/data/ui/test + toolkit-specialist), 1 context-provider, 4 orchestrators (planner, quality-gater, full-audit-orchestrator, quality-gate-orchestrator), 5 validators, 7 auditors, 8 tool-class agents (codebase-mapper, researcher, advisor, debugger, verifier, etc.), 2 doc owners, 1 domain-specialist scaffold, 5 L1/L2 marketing/product templates. Manifest at `.claude/registry/agents.manifest.yaml` is the source of truth (PR #71); CI WARN-mode validator surfaces drift (PR #72). Add a new agent with `domain:` and `intent:` frontmatter and `/work` discovers it automatically
+- **39 canonical agent templates** producing 39 installed agent definitions. The canonical pattern is that the main agent owns orchestration; see `docs/agents/main-agent-orchestration-guide.md`. `.claude/registry/agents.manifest.yaml` is the source of truth and the generated operational catalog reports the current public surfaces.
 
 Install once, use across all your projects.
 
@@ -97,7 +111,7 @@ Development history beyond the CHANGELOG — summarized from memory + commit log
 | 28 | 2026-04-22 | [#62](https://github.com/oscardlfr/AndroidCommonDoc/pull/62) | L0 housekeeping pre-W29: BL-W27-01..04 + W17 HIGH findings #1, #3-#5 |
 | 27 | 2026-04-22 | [#61](https://github.com/oscardlfr/AndroidCommonDoc/pull/61) | BL-W26-06 rollback W25 pattern-search MCP wiring; codified dev → arch → CP chain |
 | 26 | 2026-04-21 | [#60](https://github.com/oscardlfr/AndroidCommonDoc/pull/60) | BL-W26-01a MCP wiring for 4 agents + Bug #8 topology activation gate post-ExitPlanMode |
-| 25 | 2026-04-21 | [#59](https://github.com/oscardlfr/AndroidCommonDoc/pull/59) | MCP wiring fix across 10 agents; context-provider v3.0 pattern pre-cache; ingestion loop closed (context-provider → team-lead approval → doc-updater → `ingest-content`) |
+| Wave 25 | 2026-04-21 | [#59](https://github.com/oscardlfr/AndroidCommonDoc/pull/59) | MCP wiring fix across 10 agents; context-provider v3.0 pattern pre-cache; ingestion loop closed (context-provider → team-lead approval → doc-updater → `ingest-content`) |
 | 24 | 2026-04-20 | [#58](https://github.com/oscardlfr/AndroidCommonDoc/pull/58) | Bug #3 session teardown (`TeamDelete` before `TeamCreate`); P4 17 agent mirrors; team-lead 5.17.0 |
 | 23 | 2026-04-20 | [#57](https://github.com/oscardlfr/AndroidCommonDoc/pull/57) | S8 token meter + scope_doc_path + PREP/EXECUTE architect dispatch modes |
 | 22 | 2026-04-20 | [#56](https://github.com/oscardlfr/AndroidCommonDoc/pull/56) | Token topology S1–S7: team-lead → sonnet, spawn-prompt diet, RTK prefix, verdict-to-disk |
@@ -187,10 +201,10 @@ When you run `/sync-l0` or merge an auto-sync PR, these assets are materialized 
 
 | What | Destination | Count |
 |------|-------------|-------|
-| Skills | `.claude/skills/*/SKILL.md` | 61 |
+| Skills | `.claude/skills/*/SKILL.md` | 62 |
 | Agents | `.claude/agents/*.md` | 39 |
-| Commands | `.claude/commands/*.md` | 59 |
-| **Total** | | **159 entries** |
+| Commands | `.claude/commands/*.md` | 60 |
+| **Total** | | **161 entries** |
 
 **Not synced:** scripts (invoked at runtime from L0 path), Detekt rules (consumed via JAR), docs (reference only), MCP tools (server runs from L0).
 
@@ -198,7 +212,7 @@ When you run `/sync-l0` or merge an auto-sync PR, these assets are materialized 
 
 Downstream projects maintain local copies of L0 skills via the **registry + manifest + sync engine**:
 
-1. **Registry** (`skills/registry.json`) -- catalogs all 162 L0 entries with SHA-256 hashes
+1. **Registry** (`skills/registry.json`) -- catalogs all 161 synchronized skill, agent, and command entries with SHA-256 hashes
 2. **Manifest** (`l0-manifest.json` in each project) -- declares which L0 entries to sync, tracks checksums, and lists source layers for chain topology
 3. **Sync engine** (`/sync-l0` skill) -- materializes copies with `l0_source` / `l0_hash` headers for drift detection. Additive by default (never removes files); use `--prune` to clean orphans. Resolves paths via git toplevel for worktree safety. In chain mode, `syncMultiSource()` merges registries from all sources before syncing.
 
@@ -532,13 +546,13 @@ Real-time pattern enforcement and context injection during AI-assisted developme
 | `doc-freshness-alert.js` | Session start | Warns when pattern docs are stale relative to upstream sources |
 | `agent-delegation-reminder.js` | Task start | Nudges the agent to delegate to specialized agents instead of doing everything inline |
 | `registry-pre-commit.sh` | PreToolUse (git commit) | Validates registry.json hashes before commit |
-| `push-authorization-gate.js` | PreToolUse (Bash — push) | Best-effort, Claude-only, evadable push detector; blocks peer/subagent pushes outright, and for the main orchestrator delegates to `verify-git-hooks.sh` to confirm the git-layer pre-push hook is installed and canonical (no longer validates quality-gate/pre-pr stamps — that fallback was removed, wave `push-authority-bootstrap`) |
+| `push-authorization-gate.js` | PreToolUse (Bash — push) | Parsed-intent runtime defense-in-depth; blocks peer/subagent push performance and verifies the canonical installed Git hook. Git `pre-push` remains authoritative. |
 
 ---
 
 ## Skills Reference
 
-61 canonical skills in `skills/`, surfaced as user-invocable slash commands (59 total under `.claude/commands/`). Invoke via Claude Code (`/skill-name` placeholder — substitute the actual skill slug) or Copilot Chat. All skills are synced to downstream projects via `/sync-l0`.
+62 canonical skills in `skills/`, surfaced as user-invocable slash commands (60 total under `.claude/commands/`). Invoke via Claude Code (`/skill-name` placeholder — substitute the actual skill slug) or Copilot Chat. All skills are synced to downstream projects via `/sync-l0`.
 
 > Skills marked **[KMP only]** are not useful for Android-only projects and are deselected by default in the `/setup` wizard when an Android-only project is detected.
 
@@ -576,6 +590,7 @@ These are the skills that get materialized to your `.claude/skills/` directory v
 | `/git-flow` | start/merge/release/hotfix branch management |
 | `/lint-resources` | Enforce string resource naming conventions |
 | `/pre-pr` | Orchestrate all pre-merge checks: lint, tests, commit format, summary table |
+| `/quality-gate` | Validate class-required verdicts and agreeing evidence, then mint push authority |
 
 #### Architecture & Maintenance
 
@@ -656,19 +671,19 @@ Skills primarily useful when working on AndroidCommonDoc (L0) itself:
 
 ## 3-Phase Team Model
 
-Every non-trivial task flows through three sequential phases. The orchestrator fans out to concurrent `Agent` subagents; **background peers with `run_in_background` remain a supported optional accelerator**. The load-bearing contract is **disk artifacts** — `PLAN.md`, `arch-*-verdict.md` (HEAD-bound), `quality-gate-report.json`, `push-proof.json` — not named-team membership.
+Every non-trivial wave flows through the persisted `PREP → EXECUTE → VERIFY_FINAL → QG → COMPLETE` control plane. The orchestrator may fan out to concurrent subagents; **background peers remain an optional, class-selected accelerator**. The load-bearing contract is **disk artifacts** — `PLAN.md`, request-bound `verdict/v1` JSON, provenance-bound evidence, `quality-gate-report.json`, and `push-proof.json` — not named-team membership.
 
 ```
-Session start: dispatch 6 core subagents (no TeamCreate required)
-  context-provider, doc-updater, arch-testing, arch-platform, arch-integration, quality-gater
-Phase 2 start: +5 core specialists dispatched
-  test-specialist, ui-specialist, domain-model-specialist, data-layer-specialist, toolkit-specialist
+Session start: resolve the wave CLASS and only its lifecycle-role floor
+  HARNESS = 3 architects + context-provider + doc-updater (persistent)
+  DOC = context-provider + doc-updater (ephemeral); FAST-PATH = disk-only
+Execution: dispatch only the specialists required by declared scope
 
 Phase 1 — Planning               Phase 2 — Execution                Phase 3 — Quality Gate
 ┌─────────────────────┐          ┌──────────────────────────┐       ┌───────────────────────┐
 │ planner subagent     │          │ concurrent arch subagents │       │ quality-gater subagent │
-│ consults             │  ──→    │   write arch-*-verdict.md │  ──→ │   reads verdicts       │
-│   context-provider   │          │   (HEAD-bound) to disk    │       │   from disk            │
+│ consults             │  ──→    │   write verdict/v1 JSON   │  ──→ │   validates verdicts   │
+│   context-provider   │          │   request + HEAD bound    │       │   via contract CLI      │
 │                      │          │ Orchestrator dispatches   │       │ Output: QG report +    │
 │ Output: PLAN.md      │          │   specialists on request  │       │   stamps + push-proof  │
 │   to disk            │          │ doc-updater dispatched    │       │   on disk              │
@@ -681,16 +696,16 @@ Phase 1 — Planning               Phase 2 — Execution                Phase 3 
 
 ### Agent Topology
 
-Core roles (dispatched at session start):
+Available orchestration roles (selected by the wave class and declared scope):
 - `context-provider` — reads project state, answers queries (single-use or background peer)
 - `doc-updater` — updates docs on orchestrator dispatch
-- `arch-testing` — verifies test quality, TDD compliance, coverage; writes `arch-testing-verdict.md`
-- `arch-platform` — verifies KMP patterns, source sets, expect/actual; writes `arch-platform-verdict.md`
-- `arch-integration` — verifies DI wiring, navigation, compilation; writes `arch-integration-verdict.md`
+- `arch-testing` — verifies test quality, TDD compliance, and coverage; publishes phase-specific `verdict/v1` JSON
+- `arch-platform` — verifies KMP patterns, source sets, and expect/actual; publishes phase-specific `verdict/v1` JSON
+- `arch-integration` — verifies DI wiring, navigation, and compilation; publishes phase-specific `verdict/v1` JSON
 
-Core specialists (test-specialist, ui-specialist, domain-model-specialist, data-layer-specialist, toolkit-specialist) dispatched at Phase 2 start — as background peers (accumulate context across waves) or single-use subagents. Extra specialists are disposable — dispatched by orchestrator on architect request, execute, return result, dismissed.
+Core specialists (`test-specialist`, `ui-specialist`, `domain-model-specialist`, `data-layer-specialist`, `toolkit-specialist`) are dispatched only when declared scope requires them, as persistent peers for continuity-sensitive HARNESS work or as bounded single-use subagents. Extra specialists are disposable: dispatch, execute, return evidence, dismiss.
 
-Quality gate: `quality-gater` deliberates with all 3 architects by reading their verdict files (and optionally via SendMessage to live background peers) before running automated checks. Pattern validation chain: specialist → architect → context-provider ensures architects gate every pattern query.
+Quality gate: `quality-gater` validates every architect required by the wave class/PLAN by reading its structured verdict (and may additionally consult a live background peer) before running automated checks. Pattern validation chain: specialist → architect → context-provider keeps pattern queries behind the applicable architect.
 
 ### Context Provider Flow
 
@@ -708,7 +723,7 @@ Different work types run in separate Claude Code sessions with dedicated leads:
 
 | Session | Command | Lead | Team |
 |---------|---------|------|------|
-| Development | `claude --agent team-lead` | team-lead | architects, specialists, guardians |
+| Development | `claude` | main agent/orchestrator | class-selected architects, specialists, guardians |
 | Marketing | `claude --agent marketing-lead` | ML | content-creator, landing-page-strategist |
 | Product | `claude --agent product-lead` | PL | product-strategist |
 
@@ -718,11 +733,11 @@ All departments share context via `context-provider` and sync documentation via 
 
 | Category | Role | Examples |
 |----------|------|---------|
-| **Orchestrators** | Plan and delegate, NEVER code | team-lead, marketing-lead, product-lead |
+| **Orchestrators** | Plan and delegate, NEVER code | main agent, marketing-lead, product-lead |
 | **Architects** | Verify and manage specialists (Read-only + SendMessage) | arch-testing, arch-platform, arch-integration |
 | **Specialists** | Write code (spawned on demand as sub-agents) | test-specialist, ui-specialist, data-layer-specialist |
 | **Guardians** | Read-only auditors | release-guardian, cross-platform-validator, privacy-auditor |
-| **Shared Services** | Mandatory in every team | context-provider, doc-updater |
+| **Shared Services** | Selected by the wave-class lifecycle floor | context-provider, doc-updater |
 | **Sporadic** | Created on demand, dissolved after | doc-migrator, quality-gater, planner |
 
 See [Team Topology](docs/agents/team-topology.md) for full details.
@@ -731,7 +746,7 @@ See [Team Topology](docs/agents/team-topology.md) for full details.
 
 ## Agents
 
-39 specialized agents in `.claude/agents/` + 40 agent templates in `setup/agent-templates/`. All synced to downstream projects. Each agent declares `domain:` and `intent:` in YAML frontmatter for **extensible routing** -- `/work` dispatches tasks automatically.
+39 specialized agents in `.claude/agents/` + 39 canonical templates in `setup/agent-templates/`. All synced to downstream projects. Each agent declares `domain:` and `intent:` in YAML frontmatter for **extensible routing** -- `/work` dispatches tasks automatically.
 
 ### Production Agents (synced via /sync-l0)
 
@@ -763,9 +778,9 @@ See [Team Topology](docs/agents/team-topology.md) for full details.
 
 ### Agent Templates (for L1/L2 projects)
 
-16 templates in `setup/agent-templates/` — copy to your project's `.claude/agents/` and customize.
+39 templates in `setup/agent-templates/` — copy the applicable templates to your project's `.claude/agents/` and customize.
 
-**Team Core (used in every 3-phase workflow):**
+**Reusable orchestration core (selected by class/scope):**
 
 | Template | Phase | Role |
 |----------|-------|------|
@@ -853,7 +868,7 @@ This eliminates the "agent explores for 5 minutes before planning" problem. The 
 
 ## MCP Server
 
-46 tools with shared rate limiting (45 calls/min). Start with `cd mcp-server && npm start`.
+47 tools with shared rate limiting (45 calls/min). Start with `cd mcp-server && npm start`.
 
 **23 tools** work in any project. **17 tools** are for AndroidCommonDoc development (doc intelligence, vault sync, toolkit validation).
 
@@ -874,11 +889,11 @@ This eliminates the "agent explores for 5 minutes before planning" problem. The 
 | `module-health` | Analysis | Per-module health dashboard: LOC, test count, deps, coverage |
 | `proguard-validator` | Validation | Validate ProGuard references exist and recommend keep rules by library |
 | `setup-check` | Setup | Verify toolkit installation in a project |
-| `skill-usage-analytics` | Analytics | Toolkit usage stats: run counts, common findings, per-skill trends |
+| `skill-usage-analytics` | Analytics | Explicit `skill_name` telemetry plus separately labelled audit-source activity; absence never proves disuse |
 | `string-completeness` | Analysis | Compare base strings.xml vs locale variants, report missing translations |
 | `unused-resources` | Analysis | Detect orphan strings/drawables not referenced in source code |
 | `validate-all` | Validation | Run all validation scripts with structured output |
-| `verify-kmp` | Validation | Validate KMP source sets and imports |
+| `verify-kmp-packages` | Validation | Validate KMP source sets and imports |
 | `check-outdated` | Dependency | Check `libs.versions.toml` against Maven Central for outdated dependencies |
 | `kdoc-coverage` | Documentation | Measure KDoc coverage on public Kotlin APIs per module |
 | `rate-limit-status` | Utility | Show current MCP rate-limit counters and reset time |
@@ -891,7 +906,7 @@ These tools operate on AndroidCommonDoc's own documentation, vault, and toolkit 
 
 | Tool | Category | What It Does |
 |------|----------|-------------|
-| `check-freshness` | Monitoring | Alias for monitor-sources (backward compatible) |
+| `check-doc-freshness` | Monitoring | Alias for monitor-sources (backward compatible) |
 | `generate-detekt-rules` | Generation | Generate Kotlin Detekt rules from pattern doc frontmatter |
 | `ingest-content` | Ingestion | Fetch and analyze external content against pattern metadata |
 | `l0-diff` | Sync | Compare L0 registry vs downstream manifest to preview sync delta |
@@ -1027,6 +1042,20 @@ See `setup/github-workflows/ci-template.yml` for a full consumer project templat
 | `agentskills-validate` | Local parity check for agentskills-pilot CI step — validates skills ref for every `skills/*/` dir (WARN-only, Bash-only) |
 | `list-valid-commit-tokens` | Lists valid commit types and scopes from `.github/workflows/reusable-commit-lint.yml` (Bash-only) |
 | `write-bundle` | Context-bundle writer: YAML header + stdin body to `.planning/wave-{slug}/context-bundles/{role}.md` (Bash-only) |
+| `emit-pre-pr-report` | Compose the HEAD-bound pre-PR receipt used by quality-gate proof minting |
+| `emit-push-proof` | Verify the full quality-gate contract and mint or validate push proof |
+| `emit-qg-result` | Publish the normalized quality-gate result and Bats evidence classification |
+| `emit-rule-inventory` | Generate the deterministic project-rule inventory consumed by the quality gate |
+| `qg-doc-validators` | Run and bind documentation parity, structure, and hub-reachability checks |
+| `qg-path-audit` | Validate the PLAN path manifest against the actual change set |
+| `qg-registry-integrity` | Recompute and verify agent, skill, command, and template registry integrity |
+| `run-bats` | Run the canonical Bats roster and publish a provenance-bound handoff |
+| `runtime-consultation` | Portable consultation CLI over the shared runtime and disk protocol |
+| `secret-scan-report` | Produce the HEAD-bound secret-scan receipt consumed by the quality gate |
+| `write-coordination-artifact` | Publish confined coordination protocol artifacts |
+| `write-specialist-dispatch` | Publish the bounded specialist dispatch authority record |
+| `write-verdict` | Publish request-bound structured PREP or VERIFY-FINAL verdicts |
+| `write-verdict-request` | Create immutable architect verdict requests before dispatch |
 
 ### Shared Libraries
 
@@ -1041,7 +1070,7 @@ See `setup/github-workflows/ci-template.yml` for a full consumer project templat
 
 ## Documentation
 
-17 domain hubs, 97 sub-docs, 28 guides, 52 agent workflow docs -- all with YAML frontmatter for registry scanning, upstream monitoring, and Detekt rule generation. 19 approved categories including `api` for auto-generated API docs.
+17 domain hubs, 102 sub-docs, 29 guides, 83 agent workflow docs -- all with YAML frontmatter for registry scanning, upstream monitoring, and Detekt rule generation. 19 approved categories including `api` for auto-generated API docs.
 
 ### Doc Integrity System
 
@@ -1134,7 +1163,7 @@ Layer 3: ENFORCEMENT (quality gate Step 0.5)
                    |  +----------+    +------------------+   |
                    |  | skills/  |    | skills/          |   |
                    |  | */       |--->| registry.json    |   |
-                   |  | SKILL.md |    | (151 entries,    |   |
+                   |  | SKILL.md |    | (161 entries,    |   |
                    |  | (canon.) |    |  SHA-256 hashes) |   |
                    |  +----------+    +--------+---------+   |
                    |                           |              |
@@ -1161,31 +1190,31 @@ Layer 3: ENFORCEMENT (quality gate Step 0.5)
 ```
 AndroidCommonDoc/
 +-- .claude/
-|   +-- commands/           # 59 Claude Code slash commands
+|   +-- commands/           # 60 Claude Code slash commands
 |   +-- agents/             # 39 specialized agents
-|   +-- hooks/              # Real-time enforcement hooks (28 on disk / 36 wired)
+|   +-- hooks/              # 39 real-time enforcement hook files
 |   +-- model-profiles.json # Agent model tier config (budget/balanced/advanced/quality)
 +-- skills/
-|   +-- */SKILL.md          # 61 canonical skill definitions
-|   +-- registry.json       # L0 registry (162 entries, SHA-256 hashes)
+|   +-- */SKILL.md          # 62 canonical skill definitions
+|   +-- registry.json       # L0 registry (161 entries, SHA-256 hashes)
 |   +-- params.json         # Parameter manifest
 |   +-- params.schema.json  # JSON Schema for parameter validation
 +-- scripts/
-|   +-- ps1/                # PowerShell (Windows) -- 39 scripts
-|   +-- sh/                 # Bash (macOS/Linux) -- 50 scripts
+|   +-- ps1/                # PowerShell (Windows) -- 47 scripts
+|   +-- sh/                 # Bash (macOS/Linux) -- 65 scripts
 |   |   +-- lib/            # Shared libraries (audit-append, findings-append, coverage-detect, script-utils)
 |   +-- lib/                # Shared Python tools (parse-coverage-xml.py)
 |   +-- tests/              # bats shell test suite
-+-- mcp-server/             # MCP server (46 tools, 3 prompts, dynamic resources)
++-- mcp-server/             # MCP server (47 tools, 3 prompts, dynamic resources)
 |   +-- src/
-|   |   +-- tools/          # 46 tools: validation, analysis, metrics, audit, sync, vault, doc integrity
+|   |   +-- tools/          # 47 tools: validation, analysis, metrics, audit, sync, vault, doc integrity
 |   |   +-- types/          # Shared types (ValidationResult, AuditFinding, FindingsReport)
 |   |   +-- utils/          # Utilities (rate-limiter, jsonl-reader, gradle-parser, xml-report-reader, finding-dedup, logger, doc-scoring)
 |   |   +-- generation/     # Detekt rule parser, emitters, config-emitter
 |   |   +-- registry/       # Pattern registry: scanner, resolver, frontmatter
 |   |   +-- vault/          # Obsidian vault sync engine
 |   |   +-- cli/            # CLI entrypoints: check-outdated (dependency freshness, exit 0/1/2), CI monitoring
-|   +-- tests/              # 99 test files -- vitest unit + integration (1634 tests)
+|   +-- tests/              # 139 test files -- 2666 tests (Vitest)
 +-- detekt-rules/
 |   +-- src/main/kotlin/    # 23 hand-written + 5 generated AST-only Detekt rules (28 total)
 |   +-- src/main/resources/
@@ -1197,9 +1226,9 @@ AndroidCommonDoc/
 +-- konsist-tests/          # Konsist architecture verification tests
 +-- setup/
 |   +-- setup-toolkit.sh    # Unified full-toolkit installer
-|   +-- copilot-templates/  # 44 Copilot prompt templates (generated from skills)
-|   +-- copilot-agent-templates/ # 4 Copilot agent templates (generated from agent-templates)
-|   +-- agent-templates/    # 16 agent templates: planner, quality-gater, 3 architects, context-provider, doc-updater, doc-migrator, business leads, domain specialists
+|   +-- copilot-templates/  # 46 Copilot prompt templates (generated from skills)
+|   +-- copilot-agent-templates/ # 39 Copilot agent templates (generated from canonical agents)
+|   +-- agent-templates/    # 39 canonical templates: planner, quality-gater, architects, support roles, specialists, guardians, and business agents
 |   +-- doc-templates/
 |   |   +-- business/       # 5 business doc templates (PRODUCT_SPEC, MARKETING, PRICING, COMPETITIVE, LANDING_PAGES)
 |   +-- github-workflows/   # CI template + PR template for consumer projects
@@ -1225,7 +1254,7 @@ AndroidCommonDoc/
 |   +-- reusable-shell-tests.yml             # workflow_call: bats shell script tests
 |   +-- reusable-check-outdated.yml         # workflow_call: dependency freshness check
 |   +-- reusable-copilot-parity.yml         # workflow_call: verify copilot prompt/skill sync
-+-- docs/                   # 17 domain hubs, 97 sub-docs, 28 guides, 52 agent workflow docs
++-- docs/                   # 17 domain hubs, 102 sub-docs, 29 guides, 83 agent workflow docs
 |   +-- agents/          +-- architecture/  +-- compose/    +-- di/
 |   +-- error-handling/     +-- gradle/     +-- guides/
 |   +-- navigation/         +-- network/    +-- offline-first/ +-- resources/

@@ -15,6 +15,10 @@ assumes_read: quality-gate-protocol, agent-verdict-protocol
 
 # QG-Proof Push Gate
 
+## Portable authority boundary
+
+The installed Git `pre-push` hook is the sole portable enforcement point. Runtime command-intent and peer checks are advisory defense-in-depth. Proof minting consumes validated structured verdicts and two agreeing full-run Bats handoffs; newest-wins selection and legacy Markdown tokens are rejected. See [Push Authority Policy](push-authority-policy.md) and [Evidence Provenance Contract](evidence-provenance-contract.md).
+
 The QG-proof push gate closes the loop between the quality-gater (Phase 3) and the git layer (pre-push hook). The quality-gater mints a cryptographically-bound proof after completing Steps 0-9; the pre-push hook verifies that proof before allowing any push.
 
 **Honest contract**: no **normal branch** push without proof the canonical QG ran for real over HEAD (the pre-push hook exempts branch deletions, tags, protected-branch merge refs, and `SKIP_PUSH_GATE=1`), backed by a real bats evidence handoff for that same HEAD (Wave A) — not just an asserted `test-suite: PASS`. This is NOT peer-identity enforcement — identity-aware provenance enforcement is deferred to a future harness gate.
@@ -52,7 +56,7 @@ Runs in sequence, failing CLOSED on any integrity violation:
 
 1. **Manifest-drift check**: recomputes `canonical_digest(quality-gate-manifest.json)` and compares to the stored `protocol_digest`. Drift → exit 2.
 2. **Load + validate report**: reads `quality-gate-report.json`. Validates required steps, conditional step structure + named-predicate enforcement, deliberation evidence, pre-PR coverage, discovered rules with `verified_by`. **Evidence binding (Wave A)** — six additional named checks, all fail-closed (exit 2), identified by name not number (never call any of these "check 5" — see the naming discipline in [quality-gate-protocol](quality-gate-protocol.md)): `invalid-step-result` (every `steps[].result` ∈ `{PASS,FAIL,SKIP}`); `duplicate-step-id` (no two entries share a step id — closes a last-write-wins overwrite); `unknown-step-id` (every step id ∈ `required_steps` ∪ `conditional_steps` ∪ `informational_steps`); `report-started-at-*` (see "QG-Session Freshness" below); `report-head-*` (see "QG-Session Freshness" below); `test-suite-evidence-*` (see "Evidence Binding" below).
-3. **Verdict→HEAD binding**: reads every `arch-*-verdict.md` in `.planning/wave-<slug>/`. Each file must contain `APPROVED-VERIFY-FINAL` and a `**HEAD**:` field matching `git rev-parse HEAD`. Missing field or HEAD mismatch → exit 2. Digests each file (sha256, CRLF→LF) into `artifact_digests`. See [agent-verdict-protocol](agent-verdict-protocol.md).
+3. **Verdict→HEAD binding**: validates every class-required `arch-<role>-verdict-verify-final.json` as an authorizing `verdict/v1` bound to its immutable request, role, phase, wave, PLAN digest, exact current HEAD, and evidence. Digests each validated file into `artifact_digests`. See [agent-verdict-protocol](agent-verdict-protocol.md).
 4. **Committed-tree integrity** (fail-CLOSED — all four parts run after verdict→HEAD binding):
    - **Part 1 — Clean-tree assertion**: `git status --porcelain` must be empty except paths matching `^\.claude/wave-quality-gates/`. Any other modified/untracked tracked path → exit 2: `[emit-push-proof] ERROR: tracked artifact drift detected; commit regenerated artifact, re-seal verdicts, rerun QG.` Note: `.planning/wave*/` and `.androidcommondoc/` are gitignored → invisible to `git status` → naturally excluded. The allowlist is exactly ONE narrow entry.
    - **Part 2 — Registry integrity**: calls `qg-registry-integrity.sh --project-root .` (plus `--require-registry` when `skills/` exists). Recomputes registry hashes against the committed tree and compares to stored hashes, replicating CI's `skill-registry` job. Drift → exit 2: `[emit-push-proof] ERROR: derived artifact drift detected; commit regenerated artifact, re-seal verdicts, rerun QG.` Writes `.androidcommondoc/registry-hash-report.json` with `result`: `clean` / `drift` / `n/a`. The `n/a` escape (no `registry.json`) is only valid when `--require-registry` is NOT passed — i.e., genuinely-minimal repos without `skills/`. See [quality-gater-registry-integrity](quality-gater-registry-integrity.md).
@@ -115,11 +119,11 @@ All three verifiers implement this same 8-check contract at equivalent rigor: th
   "steps_executed":   [{"step": "<id>", "result": "PASS|SKIP", "ran": true|false}],
   "report_digest":    "<sha256 hex>",
   "artifact_digests": {
-    "arch-<role>-verdict.md": "<sha256 hex>",
+    "arch-<role>-verdict-verify-final.json": "<sha256 hex>",
     "skills/registry.json":   "<sha256 hex, CRLF→LF, record-only>"
   },
   "bats_evidence": {
-    "run_id":       "<the selected handoff's BATS_RUN_ID>",
+    "run_id":       "<representative BATS_RUN_ID after agreement>",
     "head":         "<40-char sha; re-checked against the pushed SHA at verify time>",
     "ok":           0,
     "not_ok":       0,
@@ -127,16 +131,23 @@ All three verifiers implement this same 8-check contract at equivalent rigor: th
     "scope":        "full",
     "generated_at": "<ISO-8601 UTC, the handoff's own timestamp>",
     "complete":     true,
-    "total":        0
+    "total":        0,
+    "plan_digest":  "<PLAN sha256 or none>",
+    "wave_slug":    "<wave slug>",
+    "target_digest": "<sorted target-set digest>",
+    "environment_fingerprint": "<effective environment>",
+    "tool_versions": "<effective tool versions>",
+    "agreement_count": 2,
+    "run_ids": "<two or more distinct agreeing ids>"
   }
 }
 ```
 
 `artifact_digests` carries two kinds of entries (additive, `schema_version` stays 1):
-- **`arch-*-verdict.md`**: VERIFY-FINAL verdict files; bound at step 3 (verdict→HEAD binding). Digest mismatch after post-mint tampering → `report_digest` cascade blocks push.
+- **`arch-*-verdict-verify-final.json`**: validated structured VERIFY-FINAL verdict files, bound at step 3. Post-mint tampering invalidates the proof.
 - **`skills/registry.json`**: sha256 (CRLF→LF) of the committed registry file, recorded for audit. `verify-proof` does NOT re-evaluate this digest — the committed-tree integrity check (step 4) already ran at mint time; the digest is a post-hoc record. `schema_version` stays 1.
 
-`bats_evidence` (additive, Wave A + W7; `schema_version` stays 1): the bats handoff selected by `lib/bats-handoff.sh select --since report.started_at --require-scope full` at mint time (see "Evidence Binding" above), carried into the proof for re-binding at verify time. No filesystem paths — the selector never emits one in its JSON payload. `complete`/`total` (W7) are additive fields alongside the original 7 keys. Unlike `artifact_digests`, **`verify-proof` DOES re-check this object at verify time** — not just `bats_evidence.head == pushed SHA`, but the full W7 completeness predicate (`not_ok==0 && scope=='full' && complete==True && total==expected && ok>0`), so a proof minted at commit A cannot authorize a push at commit B, and a partial/dirty/inconsistent run cannot authorize any push at all (see check 8 below). Mirrored identically by `verify-push-proof.ps1` and the in-JS fallback in `push-authorization-gate.js`.
+`bats_evidence` is the agreeing set selected by `lib/bats-handoff.sh select --since report.started_at --require-scope full --require-agreeing 2`. No filesystem paths are stored. `verify-proof` rechecks HEAD, full completeness, zero failures, count equality, at least two distinct run ids, and the persisted provenance fields; a newest or disagreeing run cannot displace the set. The Git hook remains the portable enforcement point.
 
 ---
 

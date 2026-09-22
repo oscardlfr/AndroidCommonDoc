@@ -54,8 +54,8 @@ Each wave declares a class in `PLAN.md ### Wave Class` (and the `.planning/wave-
 
 | Class | Required disk artifacts |
 |-------|------------------------|
-| HARNESS | `PLAN.md` (declared CLASS + parseable path-manifest) + all three `arch-*-verdict.md` (HEAD-bound) + `quality-gate.stamp` + `quality-gate-report.json` + `push-proof.json` |
-| DOC | `PLAN.md` (with `**Required-Architects**: <role>[, <role>…]` line) + declared arch-*-verdict.md (HEAD-bound) + QG artifacts |
+| HARNESS | `PLAN.md` + all three request-bound `arch-*-verdict-verify-final.json` approvals + current QG report/stamps/proof |
+| DOC | `PLAN.md` with declared architects + their request-bound VERIFY-FINAL JSON approvals + current QG artifacts |
 | FAST-PATH | `quality-gate.stamp` + `quality-gate-report.json` + `push-proof.json` only |
 
 Gates verify **files on disk**, not who/how many agents were spawned. Missing `CLASS` → fail-safe to HARNESS (strictest). The planner writes the CLASS sentinel; the `premature-execution-gate.js` T2 and `emit-push-proof.sh` enforce it mechanically. See `tl-session-start.md` Phase 2 Topology Activation Gate for dispatch instructions.

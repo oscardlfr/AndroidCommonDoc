@@ -8,7 +8,8 @@
 #
 # Usage:
 #   run-bats.sh [--log <path>] [--eval-only] [--project-root <path>]
-#               [--expected <N>] [--cross-check-count] [<bats-targets...>]
+#               [--expected <N>] [--cross-check-count]
+#               [--wave-slug <slug>] [--plan <path>] [<bats-targets...>]
 #
 # Options:
 #   --log <path>           Log file path (default: .androidcommondoc/suite-bats.log)
@@ -17,6 +18,8 @@
 #   --expected <N>         Assert that the plan line 1..N equals N (optional override)
 #   --cross-check-count    Cross-check ok_ct against `npx bats --count` (full-run mode only;
 #                          skipped silently if bats is not resolvable; not valid with --eval-only)
+#   --wave-slug <slug>     Explicit evidence wave binding (`none` when no formal wave is active)
+#   --plan <path>          Canonical `.planning/wave-<slug>/PLAN.md` path; rejects any other path
 #   <bats-targets...>      Bats targets (default: scripts/tests directory)
 #
 # Rules (all four are complementary — none subsumes another; now recorded as fact
@@ -51,7 +54,7 @@
 #   BATS_SCOPE            full iff no positional target was given (quality-gater invokes
 #                         with no args); targeted otherwise.
 #   BATS_TARGET_DIGEST    git hash-object --stdin over the sorted target list.
-#   BATS_ENV_FINGERPRINT  advisory only — never gating, never a mint input.
+#   BATS_ENV_FINGERPRINT  SHA-256 of the effective OS/arch/bash identity; agreement-gated.
 #
 # No silent install: bats is invoked via `npx --no-install bats`, preceded by a
 # resolvability probe. If bats cannot be resolved without a network install, no install is
@@ -76,6 +79,8 @@ TARGETS=()
 EXPECTED_OVERRIDE=""
 CROSS_CHECK=false
 EXPLICIT_TARGETS=false
+WAVE_SLUG=""
+PLAN_PATH=""
 
 # ── Argument parsing ──────────────────────────────────────────────────────────
 while [[ $# -gt 0 ]]; do
@@ -100,6 +105,14 @@ while [[ $# -gt 0 ]]; do
             CROSS_CHECK=true
             shift
             ;;
+        --wave-slug)
+            WAVE_SLUG="$2"
+            shift 2
+            ;;
+        --plan)
+            PLAN_PATH="$2"
+            shift 2
+            ;;
         --help|-h)
             sed -n '2,/^$/p' "$0"
             exit 0
@@ -117,8 +130,16 @@ while [[ $# -gt 0 ]]; do
 done
 
 # ── Defaults (post-parse) ─────────────────────────────────────────────────────
+if ! ROOT="$(cd "$ROOT" 2>/dev/null && pwd -P)"; then
+    echo "[run-bats] ERROR: project root cannot be resolved canonically" >&2
+    exit 2
+fi
 if [[ -z "$LOG" ]]; then
     LOG="$ROOT/.androidcommondoc/suite-bats.log"
+fi
+if [[ -L "$LOG" ]]; then
+    echo "[run-bats] ERROR: log path must not be a symlink" >&2
+    exit 2
 fi
 
 if [[ "${#TARGETS[@]}" -eq 0 ]]; then
@@ -129,6 +150,7 @@ fi
 # Format: <UTC-timestamp>-<pid>-<random> — sortable + unique per invocation.
 # Used in the handoff filename and BATS_RUN_ID field (full-run mode only).
 BATS_RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)-$$-${RANDOM}"
+BATS_STARTED_AT="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 get_head() {
@@ -283,7 +305,41 @@ if [[ "$EXPLICIT_TARGETS" == "true" ]]; then
 fi
 
 BATS_TARGET_DIGEST="$(printf '%s\n' "${TARGETS[@]}" | sort | git hash-object --stdin 2>/dev/null || echo "")"
-BATS_ENV_FINGERPRINT="$(uname -s 2>/dev/null || echo unknown)-$(uname -m 2>/dev/null || echo unknown)-bash${BASH_VERSION:-unknown}"
+_BATS_ENV_SOURCE="$(uname -s 2>/dev/null || echo unknown)-$(uname -m 2>/dev/null || echo unknown)-bash${BASH_VERSION:-unknown}"
+BATS_ENV_FINGERPRINT="$(node -e "const c=require('crypto');process.stdout.write(c.createHash('sha256').update(process.argv[1]).digest('hex'))" "$_BATS_ENV_SOURCE")"
+if [[ -z "$WAVE_SLUG" ]]; then
+    WAVE_SLUG="$(get_wave_slug "$ROOT")"
+fi
+if [[ -z "$WAVE_SLUG" ]]; then
+    WAVE_SLUG="none"
+fi
+BATS_PLAN_DIGEST="none"
+if [[ ! "$WAVE_SLUG" =~ ^[A-Za-z0-9._-]+$ || "$WAVE_SLUG" == "." || "$WAVE_SLUG" == ".." ]]; then
+    echo "[run-bats] ERROR: invalid --wave-slug" >&2
+    exit 2
+fi
+_EXPECTED_PLAN=""
+if [[ "$WAVE_SLUG" != "none" ]]; then
+    _EXPECTED_PLAN="$ROOT/.planning/wave-${WAVE_SLUG}/PLAN.md"
+    if [[ -z "$PLAN_PATH" && -f "$_EXPECTED_PLAN" ]]; then PLAN_PATH="$_EXPECTED_PLAN"; fi
+fi
+if [[ -n "$PLAN_PATH" ]]; then
+    BATS_PLAN_DIGEST="$(node - "$ROOT" "$WAVE_SLUG" "$PLAN_PATH" <<'NODE'
+const crypto = require('crypto'), fs = require('fs'), path = require('path');
+const [rootArg, slug, planArg] = process.argv.slice(2);
+const root = fs.realpathSync(path.resolve(rootArg));
+const plan = path.resolve(planArg);
+const expected = path.join(root, '.planning', 'wave-' + slug, 'PLAN.md');
+const stat = fs.lstatSync(plan);
+if (slug === 'none' || plan !== expected || !stat.isFile() || stat.isSymbolicLink() || fs.realpathSync(plan) !== plan) {
+  process.stderr.write('[run-bats] ERROR: --plan is not the canonical regular PLAN.md for --wave-slug\n');
+  process.exit(2);
+}
+process.stdout.write(crypto.createHash('sha256').update(fs.readFileSync(plan)).digest('hex'));
+NODE
+)" || exit 2
+fi
+BATS_TOOL_VERSIONS="node-$(node --version 2>/dev/null || echo unavailable)_bats-$(_bats_resolvable && _bats_invoke --version 2>/dev/null | head -1 | tr ' ' '_' || echo unavailable)"
 
 # ── Fact variables (populated below; defaults are the "worst case" — no evidence) ────────
 FACT_BATS_UNRESOLVABLE=false
@@ -448,6 +504,14 @@ if [[ "$EVAL_ONLY" == "false" ]]; then
 
     BATS_HEAD="$(get_head)"
     BATS_GENERATED_AT="$(now_utc)"
+    BATS_FINISHED_AT="$BATS_GENERATED_AT"
+    BATS_LOG_DIGEST="none"
+    BATS_LOG_IDENTITY="none"
+    if [[ -f "$LOG" ]]; then
+        BATS_LOG_FACTS="$(node -e "const e=require(process.argv[1]),r=e.stableReadArtifact(process.argv[2]);process.stdout.write(r.sha256+':'+r.identity)" "$SCRIPT_DIR/../lib/evidence-run-record.cjs" "$LOG")" || BATS_LOG_FACTS="none:none"
+        BATS_LOG_DIGEST="${BATS_LOG_FACTS%%:*}"
+        BATS_LOG_IDENTITY="${BATS_LOG_FACTS#*:}"
+    fi
 
     # Write known keys via printf — no eval, no ambiguous shell expansion
     printf 'BATS_OK=%s\n'               "$FACT_OK"              >  "$HANDOFF_TMP"
@@ -463,6 +527,13 @@ if [[ "$EVAL_ONLY" == "false" ]]; then
     printf 'BATS_SCOPE=%s\n'            "$BATS_SCOPE"           >> "$HANDOFF_TMP"
     printf 'BATS_TARGET_DIGEST=%s\n'    "$BATS_TARGET_DIGEST"   >> "$HANDOFF_TMP"
     printf 'BATS_ENV_FINGERPRINT=%s\n'  "$BATS_ENV_FINGERPRINT" >> "$HANDOFF_TMP"
+    printf 'BATS_WAVE_SLUG=%s\n'        "${WAVE_SLUG:-none}"    >> "$HANDOFF_TMP"
+    printf 'BATS_PLAN_DIGEST=%s\n'      "$BATS_PLAN_DIGEST"     >> "$HANDOFF_TMP"
+    printf 'BATS_STARTED_AT=%s\n'       "$BATS_STARTED_AT"      >> "$HANDOFF_TMP"
+    printf 'BATS_FINISHED_AT=%s\n'      "$BATS_FINISHED_AT"     >> "$HANDOFF_TMP"
+    printf 'BATS_LOG_DIGEST=%s\n'       "$BATS_LOG_DIGEST"      >> "$HANDOFF_TMP"
+    printf 'BATS_LOG_IDENTITY=%s\n'     "$BATS_LOG_IDENTITY"    >> "$HANDOFF_TMP"
+    printf 'BATS_TOOL_VERSIONS=%s\n'    "$BATS_TOOL_VERSIONS"   >> "$HANDOFF_TMP"
 
     mv "$HANDOFF_TMP" "$HANDOFF_PATH"
     echo "[run-bats] handoff written: $HANDOFF_PATH (verdict=$BATS_VERDICT complete=$FACT_COMPLETE)" >&2

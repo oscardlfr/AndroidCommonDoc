@@ -30,6 +30,16 @@ echo "ok 1 fake"
 FAKE
   chmod 0755 "$FAKEBIN/bats"
 
+  # The production wrapper probes npm-managed bats before the plain PATH
+  # fallback. Force that first probe to fail deterministically so these tests
+  # exercise the fake PATH bats declared above rather than a host-global npm
+  # installation that happens to be present on the runner.
+  cat > "$FAKEBIN/npx" <<'FAKE'
+#!/usr/bin/env bash
+exit 1
+FAKE
+  chmod 0755 "$FAKEBIN/npx"
+
   # BSD-shaped mktemp: rejects --version exactly like /usr/bin/mktemp does.
   cat > "$FAKEBIN/mktemp" <<'FAKE'
 #!/usr/bin/env bash
@@ -45,6 +55,10 @@ FAKE
   : > "$TMPDIR_WITNESS"
   export FAKE_BATS_TMPDIR_WITNESS="$TMPDIR_WITNESS"
   LOG="$BATS_TEST_TMPDIR/out.log"
+  # setup-node installs Node outside /usr/bin on GitHub-hosted runners. Keep the
+  # real Node directory in the deliberately restricted child PATH while the
+  # fake directory still wins for bats, npx, and mktemp.
+  NODE_BIN_DIR="$(dirname "$(command -v node)")"
   SHIMS_BEFORE="$(_shim_snapshot)"
   BUDGET_SCOPED_TMPDIR=""
 }
@@ -81,7 +95,7 @@ _assert_no_new_shim() {  # $1 = snapshot taken before the inner run
 }
 
 _run_runbats() {
-  PATH="$FAKEBIN:/usr/bin:/bin" run bash "$RUNBATS" --project-root "$PROJ" --log "$LOG" "$@"
+  PATH="$FAKEBIN:$NODE_BIN_DIR:/usr/bin:/bin" run bash "$RUNBATS" --project-root "$PROJ" --log "$LOG" "$@"
 }
 
 @test "GNU-MKTEMP-01 native GNU mktemp runs the suite directly and builds no shim" {
@@ -143,7 +157,7 @@ FAKE
 @test "GNU-MKTEMP-06 --eval-only needs no GNU mktemp and builds no shim" {
   printf '1..1\nok 1 prior\n' > "$LOG"
   # Neither a GNU mktemp nor a gmktemp exists here.
-  PATH="$FAKEBIN:/usr/bin:/bin" run bash "$RUNBATS" --project-root "$PROJ" --log "$LOG" --eval-only
+  PATH="$FAKEBIN:$NODE_BIN_DIR:/usr/bin:/bin" run bash "$RUNBATS" --project-root "$PROJ" --log "$LOG" --eval-only
   [ "$status" -eq 0 ]
   [[ "$output" != *"GNU coreutils required"* ]]
   _assert_no_new_shim "$SHIMS_BEFORE"

@@ -6,7 +6,9 @@ sources: ['docs/agents/main-agent-orchestration-guide.md']
 targets: ['L0', 'L1', 'L2']
 status: active
 layer: L0
-description: "READ FIRST at every session start: T-BUG-010 critical block, session gates, FORBIDDEN/ALLOWED operating mode, Phase 0 spawn blocks, pre-flight checklist, two-pass planner bootstrap, planning phase gate."
+description: "READ FIRST: session gates, two-pass planning, shared lifecycle, and persisted wave-control authority."
+version: 4
+last_updated: "2026-09-22"
 ---
 
 # Session Start — Operating Mode + Phase 0
@@ -23,7 +25,7 @@ The main agent (when orchestrating a session) orchestrates the project: plan sco
 >
 > **FORBIDDEN**: `Agent(name="team-lead", ...)` — creates a redundant subagent that cannot reliably spawn architects (see memory: `feedback_agent_depth_limit.md` — "team-lead as subagent can't spawn sub-agents reliably. User=team-lead, launch architects directly.").
 >
-> **CORRECT MODEL**: the main agent reads this guide → becomes orchestrator/team-lead → dispatches architects as concurrent `Agent` subagents (or background peers if the runtime supports them) → reads their `arch-*-verdict.md` files from disk.
+> **CORRECT MODEL**: the main agent reads this guide → becomes orchestrator/team-lead → routes class-required roles through the shared lifecycle → validates their request-bound PREP/VERIFY-FINAL JSON from disk.
 >
 > **IF you were spawned AS a subagent named `team-lead`**: respond once with `"team-lead-peer spawn detected — orchestrator should act as team-lead directly per T-BUG-010. Exiting."` and exit. Do NOT attempt architect spawns from inside a subagent — spawn depth is unreliable.
 >
@@ -83,7 +85,7 @@ You are FORBIDDEN from doing these things directly:
 1. **Read** plan files, memory, CLAUDE.md, and project docs (NOT source code)
 2. **Agent()** to dispatch architects and specialists as concurrent subagents (default) or background peers
 3. **SendMessage** to coordinate with live background peers (supported optional accelerator)
-4. **Read disk artifacts** — `arch-*-verdict.md`, `quality-gate-report.json`, `push-proof.json` (authoritative results)
+4. **Read disk artifacts** — persisted wave state, `arch-*-verdict-<phase>.json`, provenance evidence, QG report/stamps and push proof
 5. **Report** results to the user
 6. **Decide** on escalations: re-plan or report blocked
 
@@ -132,6 +134,20 @@ Why: An L2 consumer session (2026-04-18) — the main agent dispatched grep work
 
 **Project slug**: derive from the project root directory name, lowercased with hyphens. Examples: `my-app`, `my-kmp-libs`, `androidcommondoc`. The slug determines the wave artifact directory (`.planning/wave-{slug}/`).
 
+### Canonical bootstrap checklist
+
+The **main conversation agent is the orchestrator**; do not create a redundant team-lead role.
+
+1. **Canonicalize repository/worktree** and fail closed if the resolved worktree is not the intended repository.
+2. **Read repository instructions, BACKLOG, active PLAN, and current Git status** before claiming lifecycle state.
+3. **Resolve the wave through the canonical slug helper**; never infer an artifact directory from display text.
+4. **Initialize/read the wave control plane** and treat its persisted state as the phase-transition authority.
+5. **Resolve class-required roles** from the topology and the wave class instead of launching a fixed roster.
+6. **Execute returned lifecycle actions through the canonical `runtime-role-lifecycle`** entrypoint; do not reproduce lifecycle logic in prompts.
+7. **Architect authority is request-bound JSON** whose scope, phase, digests, nonce, and freshness validate against the active request.
+8. **Push authority is the installed Git hook** consuming current structured evidence and proof; prose never substitutes for it.
+9. **Stop only owned processes** whose identity and ownership are proven by the runtime; never sweep unrelated host processes.
+
 ### Session Start: Non-Lifecycle Setup Only
 
 **FIRST thing when session starts** — before ANY planning or Agent() call that claims lifecycle state:
@@ -164,9 +180,9 @@ See [tl-dispatch-topology](tl-dispatch-topology.md) for pre-dispatch gate (5 che
 See [tl-verification-gates](tl-verification-gates.md) for architect verdicts, post-verdict broadcast protocol, and post-wave team integrity check.
 
 ### 3-Phase Execution Model
-**Phase 1 (Plan)**: `EnterPlanMode()` → two-pass planner bootstrap (Pass A draft → ensure support plane → Pass B accepted CP result → finalize) → user approves → `ExitPlanMode()`
-**Phase 2 (Execute)**: SendMessage architects → specialist waves → collect APPROVE/ESCALATE
-**Phase 3 (Quality Gate)**: quality-gater validates → PASS → commit
+**Phase 1 (Plan/PREP)**: two-pass planner bootstrap → final PLAN → immutable PREP requests → every class-required approval validates
+**Phase 2 (EXECUTE/VERIFY_FINAL)**: bounded specialist dispatch → freeze final HEAD → fresh architect requests → evidence-backed verdicts
+**Phase 3 (QG/COMPLETE)**: one consolidated quality campaign → current stamps/proof → mechanical COMPLETE transition
 
 See [tl-phase-execution](tl-phase-execution.md) for phase transitions, triggers, anti-patterns, context management, and the execution checklist.
 
@@ -177,7 +193,7 @@ See [tl-quality-doc-pipeline](tl-quality-doc-pipeline.md) for quality-gater retr
 See [tl-model-profiles](tl-model-profiles.md) for `.claude/model-profiles.json` structure, the four profiles (budget/balanced/advanced/quality), and the team-lead semantic gap (template `model: sonnet` but profile override to opus at runtime).
 
 ### Architect Dispatch Modes (MANDATORY — Bug #5 + Bug #6 fix)
-Every architect dispatch MUST include `scope_doc_path: .planning/wave-<slug>/PLAN.md` and `mode: PREP` or `mode: EXECUTE`. Never hardcode `.planning/PLAN.md`. Full protocol: [arch-dispatch-modes](arch-dispatch-modes.md). Dispatch format: [tl-dispatch-topology § Architect Dispatch](tl-dispatch-topology.md#architect-dispatch--scope_doc_path--prepexecute-mode-wave-23).
+Every architect dispatch MUST include `scope_doc_path`, `mode: PREP|VERIFY_FINAL`, and the immutable verdict request path/digest. Never hardcode `.planning/PLAN.md` or infer authority from prose. Full protocol: [arch-dispatch-modes](arch-dispatch-modes.md).
 
 ### Token Meter + Retrospective (MANDATORY at wave end)
 At the end of every wave, team-lead MUST: (1) estimate token spend as `dispatched-message-count × avg-tokens-per-message` (order-of-magnitude; no precision needed), (2) write `.planning/wave-<slug>/retrospective.md` with wave number, steps completed, token estimate, and verdict outcomes (APPROVE/ESCALATE counts per architect). Threshold: if estimate >80% of model context window → flag to user and propose wave split. Full spec: [tl-verification-gates § Token Meter Gate](tl-verification-gates.md#token-meter-gate).
@@ -213,11 +229,11 @@ For non-trivial tasks, planner bootstrap is a bounded **two-pass** sequence — 
 7. Present plan summary to user as text output (team-lead needs no file writes during planning)
 8. **On user approval**: call `ExitPlanMode()`
 9. **⛔ MANDATORY Phase 2 Topology Activation Gate (Bug #8 — Wave 26 regression fix)**: AFTER `ExitPlanMode()` and BEFORE any architect EXECUTE dispatch:
-   - **Dispatch the roles listed in the PLAN.md Spawn Table**, satisfying the wave class artifact floor (HARNESS requires 3 arch-*-verdict.md + QG artifacts; DOC requires declared-arch verdicts + QG artifacts; FAST-PATH requires QG artifacts only). See `docs/agents/main-agent-orchestration-guide.md` for the class floor table.
+   - **Dispatch the roles listed in the PLAN**, satisfying the wave class artifact floor (HARNESS requires three structured architect verdicts; DOC requires its declared subset; FAST-PATH has no architect floor). See `docs/agents/main-agent-orchestration-guide.md`.
    - **Architect EXECUTE dispatches MUST include the mandate**: `"Your EXECUTE output is SendMessage-to-specialist with edit spec. You MUST NOT use Write or Edit on source/template/test files yourself. If you self-edit, the wave is rolled back."`
    - **Verification after architect APPROVE**: The main agent runs `rtk git log --format='%an' <commit-range>` and confirms commits are authored by the specialist layer (per SendMessage ownership trail), not exclusively by the architect layer. If architects self-edited: STOP, reset, re-dispatch through specialists, update `feedback_plan_mode_exit_topology.md` memory with the violation details.
    - Why this gate exists: Wave 26 BL-W26-01a shipped with 100% architect-authored edits and 0 specialists dispatched. User flagged: "no devs are working and all work has been done by the architects" (literal quote preserved — "devs" was the user's term at the time). Architects hold `Read` + mediation tools only; they do NOT self-implement.
-10. **Only then** SendMessage architects to start Phase 2 (PREP → EXECUTE → APPROVE cycles).
+10. **Only then** execute the control-plane sequence `PREP → EXECUTE → VERIFY_FINAL → QG → COMPLETE`; messages accelerate delivery but never advance state.
 
 **Hook enforcement (BL-W31.7-12)**: The hook `.claude/hooks/plan-mode-spawn-planner.js` mechanically blocks `ExitPlanMode` if planner has not been spawned via `Agent(subagent_type="planner")` during the current plan-mode session (Pass A satisfies this; Pass B is the same subagent_type, spawned again). Sentinel: `.planning/.plan-mode-planner-required`. Escape hatch: `CLAUDE_SKIP_PLANNER=1` env var (set BEFORE `EnterPlanMode`) for genuinely trivial work.
 

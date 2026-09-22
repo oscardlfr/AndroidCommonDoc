@@ -8,6 +8,8 @@ targets: [setup/agent-templates/arch-platform.md, .claude/agents/arch-platform.m
 
 # Section H Authoring Rule (MANDATORY -- BL-W41)
 
+This narrative rule documents cross-file consequences; it is not phase authority. PREP and VERIFY-FINAL authorization comes only from a validated request-bound `verdict/v1` artifact. Section H may cite that artifact but cannot replace it.
+
 Applies to: arch-platform verdict authoring. Referenced from: setup/agent-templates/arch-platform.md.
 
 ## Rule 1 -- Manifest yaml required when versions bump
@@ -45,7 +47,7 @@ Correct form:
    skills/registry.json, MIGRATIONS.json, and the template .md) MUST appear in section H
    as literal paths.
 2. Is there a MIGRATIONS.json entry drafted for each bumped template_version?
-   If NO -> draft the entry before emitting APPROVED-PREP.
+   If NO -> draft the entry before publishing the PREP approval.
 3. Are ALL section H entries literal paths with recognized file extensions?
    If NO -> replace with literal paths before proceeding.
 

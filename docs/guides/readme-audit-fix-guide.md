@@ -110,12 +110,12 @@ Work through this list after `--fix` to clear residual findings. Each item maps 
 3. **Script drift** — edit `README.md`. Under `## Scripts`, add rows for missing scripts. Remove rows for scripts flagged `misplaced` — they live in `scripts/sh/lib/` and are helpers, not standalone scripts.
 4. **Guide hub drift** — edit `docs/guides/guides-hub.md`. Under `## Documents`, append the following row for each flagged guide (replace `<slug>` and `<frontmatter description>`):
    ```
-   | [<slug>](<slug>.md) | <frontmatter description> |
+   | <a href="<slug>.md"><slug></a> | <frontmatter description> |
    ```
    This also prevents the audit from re-flagging the guide you just wrote as a phantom link.
 5. **Documentation hub drift** — edit `README.md`. Under `## Documentation`, append the following row for each flagged hub (replace `<hub-name>`, `<N>`, and `<purpose>`):
    ```
-   | [<hub-name>](docs/<hub-name>/<hub-name>-hub.md) | <N> sub-docs | <purpose> |
+   | <a href="docs/<hub-name>/<hub-name>-hub.md"><hub-name></a> | <N> sub-docs | <purpose> |
    ```
 6. **Sub-doc count mismatch** — edit the offending `docs/<hub-name>/<hub-name>-hub.md`. Update the count claim in the description or intro line. Alternatively, add the missing sub-doc links to the hub's `## Documents` table.
 7. **Project tree drift** — edit `README.md`. Find the project tree code block. Add missing directory lines (e.g., `setup/agent-templates/`, `setup/copilot-agent-templates/`). Fix count comments manually — the tree is not grammar-safe for substring replace.

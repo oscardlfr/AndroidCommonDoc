@@ -9,6 +9,8 @@ Run coherence audit on any L0/L1/L2 layer root. Checks hub doc presence, line li
 
 ## Instructions
 
+> **Authority boundary:** this skill's conversational PASS/FAIL or generated report is not a phase verdict. PREP and VERIFY-FINAL authority exists only as a request-bound, evidence-backed `verdict/v1` record accepted by the canonical validator.
+
 ## Usage Examples
 
 ```

@@ -32,6 +32,8 @@ HOOK="$BATS_TEST_DIRNAME/../sh/pre-push-hook.sh"
 WRITE_VERDICT="$BATS_TEST_DIRNAME/../sh/write-verdict.sh"
 MANIFEST_SRC="$BATS_TEST_DIRNAME/../../quality-gate-manifest.json"
 SCRIPTS_SRC="$BATS_TEST_DIRNAME/.."
+REPO_ROOT_SRC="$BATS_TEST_DIRNAME/../.."
+source "$BATS_TEST_DIRNAME/lib/verdict-fixtures.bash"
 
 setup() {
   # Canonical (symlink-resolved) path: fixtures store $REPO as the proof's
@@ -74,6 +76,7 @@ setup() {
   cp "$SCRIPTS_SRC/sh/rehash-registry.sh"            "$REPO/scripts/sh/"
   cp "$SCRIPTS_SRC/sh/emit-rule-inventory.sh"        "$REPO/scripts/sh/"
   cp "$SCRIPTS_SRC/sh/emit-pre-pr-report.sh"         "$REPO/scripts/sh/"
+  install_verdict_contract_runtime "$REPO_ROOT_SRC" "$REPO"
 
   # H1 (push-authority-bootstrap) W-B2: install the canonical pre-push hook so
   # emit-push-proof.sh's Part-4 precondition (hook-drift check) passes. Mirrors
@@ -140,23 +143,7 @@ PYEOF
 write_valid_bats_handoff() {
   local head
   head="$(git -C "$REPO" rev-parse HEAD)"
-  local generated_at
-  generated_at="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
-  local run_id="wave-a-fixture-$$-${RANDOM}"
-  mkdir -p "$ACDOC"
-  {
-    printf 'BATS_OK=%s\n'           "42"
-    printf 'BATS_NOT_OK=%s\n'       "0"
-    printf 'BATS_EXPECTED=%s\n'     "42"
-    printf 'BATS_TOTAL=%s\n'        "42"
-    printf 'BATS_COMPLETE=%s\n'     "true"
-    printf 'BATS_VERDICT=%s\n'      "pass"
-    printf 'BATS_LOG=%s\n'          "/dev/null"
-    printf 'BATS_HEAD=%s\n'         "$head"
-    printf 'BATS_RUN_ID=%s\n'       "$run_id"
-    printf 'BATS_GENERATED_AT=%s\n' "$generated_at"
-    printf 'BATS_SCOPE=%s\n'        "full"
-  } > "$ACDOC/bats-result.${run_id}.env"
+  write_two_agreeing_bats_handoffs "$REPO" "$ACDOC" "test-push-proof" "$head"
 }
 
 # write_valid_artifact_receipts — writes HEAD-bound, fresh, status:PASS
@@ -227,7 +214,7 @@ for rs in manifest.get('required_steps', []):
 # (task_is_code_changes=TRUE fires for non-doc, non-yaml files like .sh).
 # All other conditional steps default to SKIP with reason.
 for cs in manifest.get('conditional_steps', []):
-    if cs['id'] == 'production-file-verify':
+    if cs['id'] in ('production-file-verify', 'path-manifest-audit'):
         steps.append({"step": cs['id'], "ran": True, "result": "PASS"})
     else:
         steps.append({"step": cs['id'], "ran": False, "result": "SKIP",
@@ -344,6 +331,9 @@ proof = {
         "run_id": "canonical-run", "head": head_sha, "ok": 10, "not_ok": 0,
         "expected": 10, "scope": "full", "generated_at": ts,
         "complete": True, "total": 10,
+        "agreement_count": 2,
+        "run_ids": "canonical-run-a,canonical-run-b",
+        "log_digests": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa,bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
     },
 }
 with open(proof_path, "w", encoding="utf-8") as f:
@@ -371,52 +361,17 @@ with open(path, 'w', encoding='utf-8') as f:
 PYEOF
 }
 
-# write_arch_verdict — writes a valid arch-testing-verdict.md into the isolated repo.
-# $1=head_sha (default HEAD_SHA) — the **HEAD**: field value to embed.
-# Creates .planning/wave-test-push-proof/ and the verdict file with APPROVED-VERIFY-FINAL.
+# write_arch_verdict — writes a valid structured arch-testing VERIFY-FINAL verdict.
 write_arch_verdict() {
   local head="${1:-$HEAD_SHA}"
-  local wave_dir="$REPO/.planning/wave-test-push-proof"
-  mkdir -p "$wave_dir"
-  cat > "$wave_dir/arch-testing-verdict.md" <<EOF
-# arch-testing verdict — wave-test-push-proof
-
-**Phase**: PREP
-**Timestamp**: 2026-06-14T00:00:00Z
-**Status**: APPROVED-PREP
-
----
-
-**HEAD**: $head
-**Phase**: VERIFY-FINAL
-**Timestamp**: 2026-06-14T00:00:00Z
-**Status**: APPROVED-VERIFY-FINAL
-EOF
+  write_structured_arch_verdicts "$REPO" "test-push-proof" "$head" arch-testing
 }
 
-# write_all_arch_verdicts — writes APPROVED-VERIFY-FINAL+HEAD-bound verdicts for all 3
-# required roles (arch-platform, arch-testing, arch-integration).
+# write_all_arch_verdicts — writes structured, request-bound VERIFY-FINAL verdicts.
 # $1=head_sha (default HEAD_SHA)
 write_all_arch_verdicts() {
   local head="${1:-$HEAD_SHA}"
-  local wave_dir="$REPO/.planning/wave-test-push-proof"
-  mkdir -p "$wave_dir"
-  for role in arch-testing arch-platform arch-integration; do
-    cat > "$wave_dir/$role-verdict.md" <<EOF
-# $role verdict — wave-test-push-proof
-
-**Phase**: PREP
-**Timestamp**: 2026-06-14T00:00:00Z
-**Status**: APPROVED-PREP
-
----
-
-**HEAD**: $head
-**Phase**: VERIFY-FINAL
-**Timestamp**: 2026-06-14T00:00:00Z
-**Status**: APPROVED-VERIFY-FINAL
-EOF
-  done
+  write_structured_arch_verdicts "$REPO" "test-push-proof" "$head"
 }
 
 # ── Hook runner ───────────────────────────────────────────────────────────────
@@ -565,25 +520,14 @@ PYEOF
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
-# #5b verdict_head_binding_blocked — mode (b): PREP-only verdict
-# run-qg emitter requires APPROVED-VERIFY-FINAL in every arch verdict (emitter L352).
-# A PREP-only verdict (no APPROVED-VERIFY-FINAL, no **HEAD**:) → exit 2.
+# #5b verdict_head_binding_blocked — mode (b): no canonical VERIFY-FINAL verdict
 # ─────────────────────────────────────────────────────────────────────────────
-@test "#5b BLOCK: verdict-head-binding — PREP-only verdict (no APPROVED-VERIFY-FINAL)" {
-  # Write arch-platform and arch-integration as valid VERIFY-FINAL verdicts.
-  # Write arch-testing as PREP-only (no APPROVED-VERIFY-FINAL, no **HEAD**:).
-  # The emitter globs all 3 files; the PREP-only arch-testing file triggers verdict-head-binding
-  # (L365: "does not contain APPROVED-VERIFY-FINAL") before reaching the per-role loop.
+@test "#5b BLOCK: verdict-head-binding — PREP-only artifact cannot replace VERIFY-FINAL" {
   local wave_dir="$REPO/.planning/wave-test-push-proof"
   write_all_arch_verdicts "$HEAD_SHA"
-  # Overwrite arch-testing with PREP-only (no VERIFY-FINAL section).
-  printf '%s\n' \
-    "# arch-testing verdict — wave-test-push-proof" \
-    "" \
-    "**Phase**: PREP" \
-    "**Timestamp**: 2026-06-14T00:00:00Z" \
-    "**Status**: APPROVED-PREP" \
-    > "$wave_dir/arch-testing-verdict.md"
+  rm "$wave_dir/arch-testing-verdict-verify-final.json"
+  printf '{"schema":"verdict/v1","role":"arch-testing","phase":"prep"}\n' \
+    > "$wave_dir/arch-testing-verdict-prep.json"
   write_quality_gate_report \
     '' \
     '{"architects_consulted":["arch-platform","arch-testing","arch-integration"]}'
@@ -823,35 +767,16 @@ PYEOF
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
-# #19  write_verdict_verify_final_has_head
-# write-verdict.sh verify-final appends **HEAD**: <sha> field (T1 regression).
+# #19  structured_verify_final_has_head
+# The structured VERIFY-FINAL record carries the exact final HEAD binding.
 # ─────────────────────────────────────────────────────────────────────────────
-@test "#19 PASS: write-verdict verify-final stamps **HEAD**: field" {
-  local WAVE_SLUG="test-push-proof"
-  mkdir -p "$REPO/.planning/wave-$WAVE_SLUG"
-  # write-verdict.sh --phase prep now requires the wave PLAN.md to exist (fail-closed
-  # PREP binding). Seed a minimal PLAN.md so prep can hash it.
-  printf '# PLAN\n' > "$REPO/.planning/wave-$WAVE_SLUG/PLAN.md"
-
-  # Phase prep first
-  run bash -c "cd '$REPO' && CLAUDE_WAVE_SLUG='$WAVE_SLUG' bash '$WRITE_VERDICT' \
-    --role arch-testing --phase prep"
-  [ "$status" -eq 0 ]
-
-  local verdict_file="$REPO/.planning/wave-$WAVE_SLUG/arch-testing-verdict.md"
+@test "#19 PASS: structured VERIFY-FINAL verdict carries exact HEAD" {
+  write_arch_verdict "$HEAD_SHA"
+  local verdict_file="$REPO/.planning/wave-test-push-proof/arch-testing-verdict-verify-final.json"
   [ -f "$verdict_file" ]
-
-  # Phase verify-final (pipe empty stdin)
-  run bash -c "cd '$REPO' && printf '' | CLAUDE_WAVE_SLUG='$WAVE_SLUG' bash '$WRITE_VERDICT' \
-    --role arch-testing --phase verify-final"
+  run node -e 'const fs=require("fs");const v=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));process.stdout.write(v.head)' "$verdict_file"
   [ "$status" -eq 0 ]
-
-  # Must contain **HEAD**: followed by 40-char sha
-  local head_sha
-  head_sha="$(git -C "$REPO" rev-parse HEAD)"
-  run bash -c "grep '\\*\\*HEAD\\*\\*:' '$verdict_file'"
-  [ "$status" -eq 0 ]
-  [[ "$output" =~ "$head_sha" ]]
+  [ "$output" = "$HEAD_SHA" ]
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1006,25 +931,9 @@ PYEOF
   write_quality_gate_report \
     '' \
     '{"architects_consulted":["arch-platform","arch-testing","arch-integration"]}'
-  # Write only arch-testing and arch-platform; omit arch-integration-verdict.md.
-  local wave_dir="$REPO/.planning/wave-test-push-proof"
-  mkdir -p "$wave_dir"
-  for role in arch-testing arch-platform; do
-    cat > "$wave_dir/$role-verdict.md" <<EOF
-# $role verdict — wave-test-push-proof
-
-**Phase**: PREP
-**Timestamp**: 2026-06-14T00:00:00Z
-**Status**: APPROVED-PREP
-
----
-
-**HEAD**: $HEAD_SHA
-**Phase**: VERIFY-FINAL
-**Timestamp**: 2026-06-14T00:00:00Z
-**Status**: APPROVED-VERIFY-FINAL
-EOF
-  done
+  # Write only arch-testing and arch-platform; omit arch-integration.
+  write_structured_arch_verdicts "$REPO" "test-push-proof" "$HEAD_SHA" \
+    arch-testing arch-platform
   run_emitter --subcommand run-qg
   [ "$status" -eq 2 ]
   [[ "$output" =~ "verdict-head-binding" ]]

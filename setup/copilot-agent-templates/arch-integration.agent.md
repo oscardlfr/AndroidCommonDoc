@@ -368,26 +368,27 @@ Escalate to the orchestrator when:
 ### Disk-Write + 1-Liner DM (MANDATORY)
 
 After completing review:
-1. Write the verdict block to `.planning/wave{N}/arch-integration-verdict.md` using `write-verdict.sh` (Write/Edit denied; see `scripts/sh/write-verdict.sh --help` and `docs/agents/agent-verdict-protocol.md`):
+1. The orchestrator must create an immutable `verdict-request/v1` before dispatch. Publish the response as `verdict/v1` with its exact request binding:
 
    ```bash
-   # PREP phase
-   bash scripts/sh/write-verdict.sh --role arch-integration --phase prep
+   bash scripts/sh/write-verdict.sh --role arch-integration --phase prep \
+     --request <request.json> --request-sha256 <sha256> --decision <approve|escalate> \
+     [--reason-code <closed-enum>] --evidence-file <path>
 
-   # VERIFY-FINAL phase
-   bash scripts/sh/write-verdict.sh --role arch-integration --phase verify-final
+   bash scripts/sh/write-verdict.sh --role arch-integration --phase verify-final \
+     --request <request.json> --request-sha256 <sha256> --decision <approve|escalate> \
+     [--reason-code <closed-enum>] --evidence-file <path>
    ```
 2. The verdict on disk is the load-bearing signal. When running live you may DM the orchestrator: `SendMessage(to="orchestrator", message="APPROVE")` or `SendMessage(to="orchestrator", message="ESCALATE: <1-sentence reason>")`.
    NEVER include the full verdict block in the DM — the orchestrator reads the file.
 
 Full protocol: `docs/agents/agent-verdict-protocol.md`
 
-### CRITICAL: APPEND for EXECUTE, OVERWRITE for PREP (BL-bump-ktr-01)
+### Structured authority boundary
 
-- **PREP phase initial write**: use `write-verdict.sh --phase prep` — creates file; fails exit 2 if APPROVED-PREP already present (duplicate guard).
-- **EXECUTE phase verdict write**: use `write-verdict.sh --phase verify-final` — APPENDS to the existing PREP verdict file; fails exit 2 if APPROVED-PREP is absent or dual-token replay detected. Never overwrite the PREP file directly: destroying the `APPROVED-PREP` literal token causes `premature-execution-gate` to block merge.
-- **Lesson**: PR #166 cost 1 fix-forward when arch-platform overwrote PREP verdict during EXECUTE phase. APPROVED-PREP token erased, gate triggered.
-- **Token asymmetry**: `APPROVED-PREP` is gate-enforced (premature-execution-gate blocks merge if absent); `APPROVED-VERDICT` is record-only (post-execution audit trail, not checked by any hook).
+- Prose tokens and Markdown verdict blocks are conversational output only and authorize nothing.
+- The canonical validator binds role, phase, wave, PLAN, HEAD, request, decision and evidence digests. Only `authorizes:true` advances the phase.
+- Superseding a verdict requires the exact compare-and-swap digest; never append, overwrite or reuse a request.
 
 ## Official Skills (use when available)
 - `webapp-testing` — Integration test patterns (Playwright, navigation e2e)

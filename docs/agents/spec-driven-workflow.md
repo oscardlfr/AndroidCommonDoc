@@ -1,7 +1,7 @@
 ---
 scope: workflow
 sources: [claude-code, agents, skills]
-targets: [CLAUDE.md, team-lead]
+targets: [CLAUDE.md, main-orchestrator]
 category: agents
 slug: spec-driven-workflow
 description: Native Claude Code workflow for spec-driven development without GSD dependency
@@ -15,7 +15,7 @@ Native Claude Code workflow using agents, skills, Plan Mode, and worktrees.
 
 | Session | Command | Orchestrator |
 |---------|---------|-------------|
-| Development | `claude --agent team-lead` | team-lead → architects → devs + guardians |
+| Development | main conversation via `/work` | orchestrator → class-required architects/specialists → quality gates |
 | Marketing | `claude --agent marketing-lead` | ML → content-creator, landing-page |
 | Product | `claude --agent product-lead` | PL → product-strategist, prioritizer |
 
@@ -24,21 +24,18 @@ All sessions share context via `context-provider` agent and sync documentation v
 ## How to Start Work
 
 ```bash
-# Option 1: /work routes to team-lead automatically
+# /work routes through the shared lifecycle/control plane
 /work implement feature X from the spec
-
-# Option 2: Direct team-lead invocation
-@team-lead implement feature X per SPEC.md
 ```
 
-All delegation uses the `Agent` tool. Never Bash + `claude` CLI.
+Public entrypoints never shell-launch a runtime CLI. Runtime-specific delegation stays inside the declared connector.
 
 ## The Flow (3-Phase Model)
 
 ```
 1. Human writes SPEC.md / ROADMAP.md (goals + success criteria)
-2. Human asks Claude: "/work implement feature X" or "@team-lead ..."
-3. Orchestrator (main agent / team-lead) runs 3 sequential phases per task:
+2. Human asks the main conversation: `/work implement feature X`.
+3. The main orchestrator runs the persisted phase lifecycle for the task:
 
    Session start: orchestrator dispatches the core roles the wave's CLASS floor
      requires — selectively, skipping roles with no work (Claude-rich mode MAY
@@ -53,15 +50,15 @@ All delegation uses the `Agent` tool. Never Bash + `claude` CLI.
 
    Phase 2 — Execution (concurrent Agent subagents, optional background peers):
      Architects detect → orchestrator dispatches specialists → architects cross-verify
-     Each architect writes arch-{role}-verdict.md (HEAD-bound) to disk
+     Each architect answers an immutable request with a phase-specific `verdict/v1` JSON record
      Core specialists dispatched selectively when Phase 2 starts, per the wave's
        CLASS/scope (available: test-specialist, ui-specialist, domain-model-specialist,
        data-layer-specialist, toolkit-specialist)
-     The required architects' verdicts on disk + APPROVE → proceed to Phase 3
+     The required architects' validated VERIFY-FINAL approvals → proceed to Phase 3
        (HARNESS: all 3; DOC: the declared architects; FAST-PATH: none)
 
    Phase 3 — Quality Gate (quality-gater subagent):
-     quality-gater reads verdicts from disk, optionally SendMessages live architect peers
+     quality-gater validates the canonical JSON verdicts and may optionally notify live peers
      quality-gater runs: frontmatter → KDoc → tests → coverage → benchmarks → pre-pr → prod-files → UI tests
      quality-gater writes quality-gate-report.json + stamps + push-proof.json to disk
      PASS (on disk) → orchestrator commits. FAIL → back to Phase 2
@@ -109,7 +106,7 @@ See [Team Topology](team-topology.md) for full details on each phase.
 
 | Template | Layer | Role |
 |----------|-------|------|
-| `team-lead` | L1/L2 | Orchestrator — assigns code to devs, launches gates |
+| Main orchestrator (logical role) | L1/L2 | Coordinates specialists and launches class-aware gates through the control plane |
 | `platform-auditor` | L1 | Cross-module architecture |
 | `module-lifecycle` | L1 | Module creation/deprecation |
 | `product-strategist` | L2 | Feature prioritization (ICE) |

@@ -158,9 +158,9 @@ describe("skill-usage-analytics tool", () => {
 
   it("computes usage stats from audit log entries", async () => {
     writeAuditLog([
-      { ts: recentTs(1), event: "coverage", data: { run_id: "run-1" } },
-      { ts: recentTs(2), event: "coverage", data: { run_id: "run-2" } },
-      { ts: recentTs(3), event: "sbom_scan", data: { run_id: "run-3" } },
+      { ts: recentTs(1), event: "audit_completed", data: { run_id: "run-1", skill_name: "coverage" } },
+      { ts: recentTs(2), event: "audit_completed", data: { run_id: "run-2", skill_name: "coverage" } },
+      { ts: recentTs(3), event: "audit_completed", data: { run_id: "run-3", skill_name: "sbom_scan" } },
     ]);
 
     const result = await callTool({
@@ -238,7 +238,8 @@ describe("skill-usage-analytics tool", () => {
     const jsonStr = text.replace(/^```json\n/, "").replace(/\n```$/, "");
     const parsed = JSON.parse(jsonStr);
 
-    const detekt = parsed.skills.find(
+    expect(parsed.skills).toEqual([]);
+    const detekt = parsed.audit_sources.find(
       (s: { skill: string }) => s.skill === "detekt-agent",
     );
     expect(detekt).toBeDefined();
@@ -251,9 +252,9 @@ describe("skill-usage-analytics tool", () => {
   it("filters by weeks_lookback correctly", async () => {
     writeAuditLog([
       // Recent entry (within 4 weeks)
-      { ts: recentTs(7), event: "recent-skill", data: { run_id: "r1" } },
+      { ts: recentTs(7), event: "audit_completed", data: { run_id: "r1", skill_name: "recent-skill" } },
       // Old entry (beyond 4 weeks)
-      { ts: oldTs(5), event: "old-skill", data: { run_id: "r2" } },
+      { ts: oldTs(5), event: "audit_completed", data: { run_id: "r2", skill_name: "old-skill" } },
     ]);
 
     const result = await callTool({
@@ -273,7 +274,7 @@ describe("skill-usage-analytics tool", () => {
 
   it("markdown output has expected table structure", async () => {
     writeAuditLog([
-      { ts: recentTs(1), event: "coverage", data: { run_id: "r1" } },
+      { ts: recentTs(1), event: "audit_completed", data: { run_id: "r1", skill_name: "coverage" } },
     ]);
 
     writeFindingsLog([
@@ -298,8 +299,9 @@ describe("skill-usage-analytics tool", () => {
     });
 
     const text = extractText(result);
-    expect(text).toContain("## Skill Usage Analytics");
-    expect(text).toContain("| Skill |");
+    expect(text).toContain("## Skill Telemetry Analytics");
+    expect(text).toContain("| Explicit Skill |");
+    expect(text).toContain("Audit Sources (not skill invocations)");
     expect(text).toContain("Runs");
     expect(text).toContain("Last Run");
     expect(text).toContain("Findings");
@@ -309,7 +311,7 @@ describe("skill-usage-analytics tool", () => {
 
   it("both format returns json and markdown", async () => {
     writeAuditLog([
-      { ts: recentTs(1), event: "coverage", data: { run_id: "r1" } },
+      { ts: recentTs(1), event: "audit_completed", data: { run_id: "r1", skill_name: "coverage" } },
     ]);
 
     const result = await callTool({
@@ -321,12 +323,12 @@ describe("skill-usage-analytics tool", () => {
     const text = extractText(result);
     expect(text).toContain("```json");
     expect(text).toContain("---");
-    expect(text).toContain("## Skill Usage Analytics");
+    expect(text).toContain("## Skill Telemetry Analytics");
   });
 
   it("combines data from both audit and findings logs", async () => {
     writeAuditLog([
-      { ts: recentTs(1), event: "coverage", data: { run_id: "r1" } },
+      { ts: recentTs(1), event: "audit_completed", data: { run_id: "r1", skill_name: "coverage" } },
     ]);
 
     writeFindingsLog([
@@ -354,12 +356,33 @@ describe("skill-usage-analytics tool", () => {
     const jsonStr = text.replace(/^```json\n/, "").replace(/\n```$/, "");
     const parsed = JSON.parse(jsonStr);
 
-    // The "coverage" skill should appear once with combined data
+    // Findings sources are not silently merged into explicit skill telemetry.
     const coverage = parsed.skills.find(
       (s: { skill: string }) => s.skill === "coverage",
     );
     expect(coverage).toBeDefined();
-    expect(coverage.total_findings).toBe(1);
-    expect(coverage.most_common_checks).toContain("low-coverage");
+    expect(coverage.total_findings).toBe(0);
+    const coverageSource = parsed.audit_sources.find(
+      (s: { skill: string }) => s.skill === "coverage",
+    );
+    expect(coverageSource.total_findings).toBe(1);
+    expect(coverageSource.most_common_checks).toContain("low-coverage");
+    expect(parsed.telemetry.authoritative_for_disuse).toBe(false);
+  });
+
+  it("never treats an audit event name as a skill invocation", async () => {
+    writeAuditLog([
+      { ts: recentTs(1), event: "coverage", data: { run_id: "r1" } },
+    ]);
+
+    const result = await callTool({
+      project_root: PROJECT_ROOT,
+      weeks_lookback: 12,
+      format: "json",
+    });
+    const text = extractText(result);
+    const parsed = JSON.parse(text.replace(/^```json\n/, "").replace(/\n```$/, ""));
+    expect(parsed.skills).toEqual([]);
+    expect(parsed.audit_sources[0].skill).toBe("coverage");
   });
 });

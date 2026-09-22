@@ -1,28 +1,206 @@
 #!/usr/bin/env bats
 bats_require_minimum_version 1.5.0
 #
-# Tests for scripts/sh/write-verdict.sh (BL-W47-hook-surgery).
-# Canonical two-phase verdict writer: --role / --phase / --slug interface,
-# confinement to .planning/<wave-slug>/arch-<role>-verdict.md, and
-# integrity guards (traversal, duplicate, orphan-final, dual-token).
+# PORT (P2, wave structured-verdict-evidence-contract): scripts/sh/write-verdict.sh
+# moves from a mutable, delimiter-surgery Markdown writer to a thin wrapper around the
+# immutable-then-CAS-supersedable verdict/v1 JSON contract (PLAN.md sec 3.1-3.3, 3.6).
+# Read the CURRENT write-verdict.sh + this file's prior 49 cases in full before writing
+# anything below (both done: current script is 633 lines / 49 @test cases, confirmed by
+# direct count against PLAN.md's own "port the 49 existing writer cases" instruction).
 #
-# ★ = contract-mandated minimum cases (V1-V7 from PLAN)
+# Designed NEW interface (PLAN.md sec 3.8 names the requirement -- "retains its
+# familiar role/phase/slug/stdin surface, adds mandatory request path/digest,
+# decision/reason/evidence flags, and delegates all I/O to the CLI/store" -- but not
+# the exact flags; my design, flagged for review; evidence-flag shape below is
+# arch-platform's answer relayed via arch-testing, not my own guess):
+#   write-verdict.sh --role <role> --phase <prep|verify-final> [--slug <slug>]
+#     --request <path> --request-sha256 <64hex>
+#     --decision <approve|escalate> [--reason-code <code>]
+#     [--evidence-file <path> [--evidence-schema <name>]]...  (repeatable; the script
+#       computes each file's sha256 itself -- NEVER trust a caller-supplied digest --
+#       and derives kind from whether --evidence-schema was supplied for that entry:
+#       present -> json-record, omitted -> opaque-file. No separate --evidence-kind.)
+#     [--supersede --expected-current-sha256 <64hex>]
+#     [--publication-nonce <32-lower-hex>]  LEGACY COMPAT SHIM, PREP-phase only -- see
+#       the dedicated section near the end of this file. Present -> reproduces today's
+#       exact legacy markdown output verbatim for the out-of-manifest runtime-bridge-
+#       codex consumer (task tracker item, team-lead-approved); absent (the normal
+#       path, every other case in this file) -> full new JSON system, unaffected.
+#   (rationale read from stdin -- same "body comes from stdin" convention as before,
+#   just landing in the rationale field instead of free Markdown prose.)
+# "Delegates ALL I/O to the CLI/store" is read literally: write-verdict.sh gathers
+# flags+stdin, cross-checks the bound --request file's digest and role/phase/wave_slug
+# agreement (script-level, since it needs the request bytes anyway to build
+# request_ref), then hands the fully-assembled record to the CLI's publish-verdict
+# subcommand (backed by publishVerdict(), confirmed by toolkit-specialist to exist,
+# argv grammar not yet frozen -- P2's own job to pin, same caveat as
+# write-verdict-request.bats) -- shape validation, durability, locking, no-clobber/CAS
+# all happen THERE, not reimplemented here. Tests below therefore focus on: argument
+# parsing, slug resolution/confinement (script-level, unchanged from every sibling),
+# request-file/digest cross-checking (script-level, new), and correct delegation
+# (the right decision reaches the right store operation) -- not re-proving
+# no-clobber/CAS/durability mechanics themselves, which are already exhaustively
+# RED-tested directly against the store in verdict-artifact-store.test.cjs (P1).
 #
-# Invocation: bats scripts/tests/write-verdict.bats  (from repo root)
+# ══════════════════ FULL 49-CASE MAPPING (nothing silently dropped) ══════════════════
+# PORTED (equivalent JSON-contract case written below):
+#   ★V1(WV-1/2), ★V4(WV-8 no-clobber smoke), ★V5(WV-9 prep+verify-final coexist),
+#   V6x2(WV-3/4 traversal), invalid-role(WV-5), P2b-WIP/NF1/NF2/NF3(WV-6/7 slug
+#   resolution -- unchanged wave-slug.sh, ported as 2 representative cases not 4
+#   duplicates, since resolution logic itself is untouched and already exhaustively
+#   covered by write-verdict-request.bats's own WVR-9..13), VS-1(WV-10 CAS supersede
+#   replaces), VS-3(WV-11 no-clobber-without-supersede-flag smoke), VS-9(WV-12
+#   supersede-without-prior-target), WS2-1/WS2-2 REDESIGNED (WV-13/14: head/plan_sha256
+#   are now COPIED from the bound request, not independently re-resolved by this
+#   script -- see architecture note below), ★V2 (WV-21: kept as a workflow-sanity/
+#   fail-fast guard per arch-platform's explicit ruling relayed via arch-testing --
+#   NOT a hard security boundary, same framing as the old "No prep verdict found"
+#   message -- verify-final without a prior published prep for the same role/wave
+#   fails closed before ever attempting a write).
+# REPLACED (obsolete mechanism -> new no-clobber/CAS/request-binding equivalent, why):
+#   ★V3/VN-3/VN-6 (dual-token guard) -> already-exists (no-clobber), because PREP and
+#     VERIFY-FINAL are now SEPARATE FILES (arch-<role>-verdict-prep.json /
+#     -verify-final.json), not two token-blocks appended to one mutable file -- there
+#     is no shared file for a "dual token" to co-occupy. WV-8 exercises the no-clobber
+#     mechanism at the script level; the mechanism itself is P1-tested exhaustively.
+#   VS-4 (supersede HEAD-unresolvable) -> MOVED, not replaced: write-verdict.sh no
+#     longer independently resolves git HEAD at all (head is copied from the bound
+#     request -- see architecture note). The genuinely equivalent "HEAD unresolvable
+#     fails closed" case now lives where HEAD actually gets resolved for the first
+#     time: write-verdict-request.bats's WVR-15.
+#   WS2-3 (PREP fails closed when PLAN.md absent) -> MOVED to write-verdict-request.bats
+#     WVR-14, same architecture reason: plan_sha256 is copied from the request, this
+#     script never reads PLAN.md directly.
+#   WS2-4 (fails closed when HEAD unresolvable) -> MOVED to write-verdict-request.bats
+#     WVR-15, same reason as VS-4 above (duplicate listing intentional -- WS2-4 and
+#     VS-4 were the SAME underlying HEAD-resolution code path in the old single script;
+#     they collapse to the SAME one moved case here, not two).
+#   BL-W4-9 sibling (x2 behavioral) + Codex#2 fallback-chain (x2) confinement tests ->
+#     the durable WRITE's own confinement (T8) is now the STORE's job
+#     (assertConfinedAncestry, pure Node path.resolve/fs.lstatSync, zero dependency on
+#     realpath/python3 at all) -- already exhaustively RED-tested in
+#     verdict-artifact-store.test.cjs (P1), including the Windows-junction case the old
+#     realpath/python3-fallback-chain tests never covered. This script's OWN remaining
+#     confinement concern is narrower (the --slug value and --request path arguments
+#     it accepts before ever calling the store) -- ported as WV-3/WV-4 (slug) and a new
+#     WV-16 (a --request path escaping .planning/ is rejected before the store is ever
+#     invoked, proving the wrapper doesn't blindly forward an attacker-controlled path).
+#   BL-W4-9 sibling (x2 pure-bash-idiom-only, no script invocation) -> obsolete, these
+#     never tested write-verdict.sh at all (pure bash `[[ ]]` string-comparison
+#     idiom-correctness fixtures) -- superseded by the actual store's own
+#     lstat-walk-based confinement, which those two idiom tests were never modeling.
+#   V7 (legacy heredoc APPROVED-FINAL WARN) -> obsolete, no legacy-heredoc detection
+#     concept exists for a structured JSON writer; nothing analogous to port.
+#   VN-1/VN-2 (stdin body prepended with --- separator before token) -> obsolete
+#     Markdown-block shape; REPLACED by WV-15 (stdin content lands verbatim in the
+#     rationale JSON field, safely, regardless of what it contains -- see VS-7/VS-8
+#     replacement below for the "safely" part).
+#   VN-4 (prose mention doesn't false-positive-trigger dual-token scan) -> obsolete,
+#     no line-anchored token-scanning exists over structured JSON; nothing to
+#     false-positive on.
+#   VN-5/VN-7 (bare / bold-form APPROVED-PREP recognized as valid) -> obsolete, JSON's
+#     decision field is a strict closed-enum value written by this script itself, never
+#     scanned-and-pattern-matched back out of free text in multiple accepted spellings.
+#   VS-2 (supersede same HEAD = idempotent byte-identical no-op) -> BEHAVIOR CHANGE, not
+#     ported as originally shaped: verdict-artifact-store.cjs's publishSupersede (P1,
+#     read directly) performs a fresh temp-write + rename unconditionally -- it has no
+#     "new bytes equal old bytes, skip the write" short-circuit the way the old script's
+#     byte-identical-block comparison did. A supersede with content identical to current
+#     is still a REAL durable write (fresh inode), not a true no-op. This is intentional
+#     scope, not a bug this file should paper over: PLAN.md sec 3.6 requires "the store
+#     proves the current bytes match the expected digest" for CAS itself, and says
+#     nothing about short-circuiting when new==old -- ported as WV-17, asserting the
+#     ACTUAL new (changed) behavior explicitly rather than silently assuming the old
+#     contract still holds.
+#   VS-5 (supersede on PREP-only file with no prior verify-final) -> obsolete as
+#     originally shaped (no "PREP-only file" concept when prep/verify-final are
+#     separate files) -- the genuinely analogous case, "first publish of verify-final
+#     with a valid prep already published for the same role/wave," is exactly WV-9's
+#     coexistence case, not a distinct supersede scenario.
+#   VS-6 (legacy un-delimited fallback excision) -> obsolete, no delimiters/blocks/
+#     fallback-excision concept in JSON at all.
+#   VS-7 (body containing END-delimiter text doesn't break block structure) -> REPLACED
+#     by WV-15: rationale content containing JSON-special characters (quotes, braces,
+#     backslashes, embedded newlines) must round-trip safely without corrupting the
+#     record's own JSON structure -- analogous concern (attacker/accidental content
+#     breaking the container format), genuinely new mechanism (safe JSON string
+#     encoding, not delimiter-avoidance).
+#   VS-8/VS-14 (body **HEAD**: prose doesn't poison stored_head extraction / gets
+#     sanitized with a WARN) -> REPLACED by WV-15 too: rationale content containing
+#     text that LOOKS like a JSON field (e.g. a literal `"head":"aaaa..."` substring)
+#     must not affect the ACTUAL head field this script writes (which is copied from
+#     the bound request, never parsed back out of rationale) -- structurally impossible
+#     to poison by construction once head stops being extracted via text-scanning, but
+#     worth one explicit test proving the construction, not just asserting it in prose.
+#   VS-10 (legacy fallback WARN on content loss) -> obsolete, no legacy fallback exists
+#     to lose content in.
+#   VS-11 (BEGIN delimiter in PREP prose doesn't cause PREP excision) -> obsolete, no
+#     excision/blocks; PREP and VERIFY-FINAL are separate files, mutually inert.
+#   VS-12/VS-13 (multiple stale delimited blocks collapse to one current block) ->
+#     obsolete, a JSON file IS one record, not a sequence of appended blocks -- the
+#     "multiple blocks in one file" scenario is not constructible in this format.
+#   VS-15 (same-HEAD supersede must repair corrupt content, not silently no-op over it)
+#     -> obsolete BY CONSTRUCTION, not merely unnecessary: CAS requires
+#     --expected-current-sha256 to be the EXACT digest of the CURRENT bytes (P1,
+#     verdict-artifact-store.test.cjs's stale-CAS/one-hex-char-diff case), never a
+#     same-HEAD-only comparison -- a "corrupt" (i.e. digest-mismatched) file cannot
+#     silently pass CAS at all, closing this entire bug class structurally rather than
+#     needing a dedicated repair-test here.
+#   VS-16 (unterminated delimiter fails closed) -> obsolete, no delimiter-termination
+#     concept; a malformed/truncated JSON file is instead caught by the CLI's own
+#     decodeRecord+shape validation on read (contract-level, P1) or by this script's own
+#     request/digest cross-check on write, not by a bespoke delimiter-balance scan.
+#   PPB2-1/2/3 (publication-nonce field) -> RESOLVED, NOT obsolete (reversed from an
+#     earlier draft of this file/header): --publication-nonce has a LIVE out-of-
+#     manifest production consumer (runtime-bridge-codex's p2-prep-verdict.cjs,
+#     confirmed by direct read) that spawns write-verdict.sh with the CURRENT exact
+#     argv shape (--role --phase prep --slug --publication-nonce, none of the new P2
+#     flags) and validates the result against prep-publication-grammar.cjs's exact
+#     byte-for-byte 10-line legacy markdown grammar -- confirmed by direct read of both
+#     files, not assumed. team-lead approved a narrow compat shim (task tracker,
+#     relayed via arch-testing): --publication-nonce present -> reproduce today's exact
+#     markdown output verbatim at the SAME legacy path
+#     (.planning/wave-<slug>/arch-<role>-verdict.md, definitionally disjoint from the
+#     new arch-<role>-verdict-prep.json/-verify-final.json paths -- different
+#     extension, different pattern, no collision); absent -> full new JSON system,
+#     completely unaffected. Ported as the dedicated WV-COMPAT-1/2 section near the end
+#     of this file (golden-fixture regression + isolation proof), not as PPB2-1/2/3's
+#     original publication-nonce-as-a-JSON-field shape (there is no such field in
+#     verdict/v1 -- the shim is parallel/legacy, never integrated into the new schema).
+#
+# NEW cases with no analogue in the original 49 (request/decision/evidence flags are
+# entirely new surface PLAN.md sec 3.8 adds):
+#   WV-18: --request-sha256 mismatch against the actual request file's real digest
+#     fails closed before any write is attempted.
+#   WV-19: request.role/phase/wave_slug disagreeing with this invocation's own
+#     --role/--phase/resolved-slug fails closed before any write (the SAME class of
+#     cross-binding check the CLI's crossCheckBinding proves on READ, sanity-checked
+#     here on the WRITE side too so a self-inconsistent verdict is never even attempted).
+#   WV-20: --decision escalate without --reason-code fails closed (mirrors
+#     validateVerdictShape's own requirement, sanity-checked at the script boundary).
+#
+# ARCHITECTURE NOTE (read verdict-artifact-store.cjs + verdict-evidence-contract-
+# cli.cjs directly before writing any of the above -- confirmed, not assumed): the
+# NEW write-verdict.sh's head/plan_sha256 fields are COPIED from the bound --request
+# file's own head/plan_sha256 (PLAN.md sec 3.3: verdict.head is "exact request HEAD"),
+# never independently re-resolved via `git rev-parse HEAD` or re-hashed from PLAN.md by
+# this script itself. This is why WS2-3/WS2-4/VS-4 all collapse into
+# write-verdict-request.bats instead of staying here -- that is the ONE place HEAD and
+# PLAN.md actually get freshly resolved in the new architecture.
+#
+# Isolation mirrors write-verdict.bats's own historical convention + write-verdict-
+# request.bats exactly: mktemp -d PROJ, throwaway git init -q + one --allow-empty
+# commit, explicit per-invocation cd, unset CLAUDE_WAVE_SLUG in setup(). All sha256
+# values computed at test-run time -- never hardcoded (CORE NON-VACUITY MANDATE).
 
 SCRIPT="$BATS_TEST_DIRNAME/../sh/write-verdict.sh"
-WAVE_SLUG="bl-w47-hook-surgery-test"
+WAVE_SLUG="wv-test-wave"
 
 setup() {
   PROJ="$(mktemp -d)"
-  # Initialise a throwaway git repo so git rev-parse --show-toplevel resolves
-  # to PROJ, never the live repo.
   git -C "$PROJ" init -q 2>/dev/null
-  # Fix #5 (a62fe89): write-verdict.sh verify-final now fail-closes if HEAD is not a
-  # 40-hex SHA. Add an empty commit so HEAD resolves to a real SHA in verify-final tests.
   git -C "$PROJ" -c user.email=test@example.com -c user.name=test \
       commit -q --allow-empty -m init 2>/dev/null
-  # Prevent ambient CLAUDE_WAVE_SLUG from leaking into error-case tests.
   unset CLAUDE_WAVE_SLUG
 }
 
@@ -30,33 +208,6 @@ teardown() {
   rm -rf "$PROJ"
 }
 
-# Run the script from PROJ so git resolves there.
-# Usage: run_verdict [extra args...]
-# CLAUDE_WAVE_SLUG is passed inline per call to keep each test explicit.
-run_verdict() {
-  run bash -c "cd '$PROJ' && CLAUDE_WAVE_SLUG='$WAVE_SLUG' bash '$SCRIPT' $*"
-}
-
-# Variant: pass a custom slug inline (overrides the default WAVE_SLUG).
-run_verdict_slug() {
-  local slug="$1"
-  shift
-  run bash -c "cd '$PROJ' && CLAUDE_WAVE_SLUG='$slug' bash '$SCRIPT' $*"
-}
-
-# _seed_plan <slug> — writes a minimal PLAN.md at .planning/wave-<slug>/PLAN.md inside PROJ.
-# WS-2: run_prep() now requires PLAN.md to exist (PREP fails closed when the plan cannot be
-# resolved) — every REAL `--phase prep` test must seed one first.
-_seed_plan() {
-  local slug="$1"
-  mkdir -p "$PROJ/.planning/wave-$slug"
-  printf '# Plan\n\nSome plan content for %s.\n' "$slug" > "$PROJ/.planning/wave-$slug/PLAN.md"
-}
-
-# _real_sha256 <file> — portable sha256 (mirrors _sha256_file in write-verdict.sh).
-# CORE NON-VACUITY MANDATE: PREP-HEAD/PLAN_SHA256 assertions always compare against a value
-# derived from this helper (or a real `git rev-parse HEAD`) at test-run time, never a
-# hardcoded constant.
 _real_sha256() {
   if command -v sha256sum >/dev/null 2>&1; then
     sha256sum "$1" | awk '{print $1}'
@@ -65,1132 +216,624 @@ _real_sha256() {
   fi
 }
 
-# ── ★V1 PASS: prep creates verdict file at correct confinement path ───────────
+# _seed_request <phase> -> writes a real, well-formed request JSON under
+# $PROJ/.planning/wave-$WAVE_SLUG/verdict-requests/ and prints its absolute path.
+# Mirrors write-verdict-request.bats's own fixture shape exactly (same schema).
+_seed_request() {
+  local phase="$1"
+  local subject_kind="plan"; [ "$phase" = "verify-final" ] && subject_kind="source-manifest"
+  local wave_dir="$PROJ/.planning/wave-$WAVE_SLUG"
+  mkdir -p "$wave_dir/verdict-requests" "$wave_dir/source-manifests"
+  printf '# Plan\n\nSome plan content.\n' > "$wave_dir/PLAN.md"
+  local plan_sha256; plan_sha256="$(_real_sha256 "$wave_dir/PLAN.md")"
+  local head_sha; head_sha="$(git -C "$PROJ" rev-parse HEAD)"
+  local req_id; req_id="$(node -e "process.stdout.write(require('crypto').randomBytes(16).toString('hex'))")"
+  local subject_path="PLAN.md" subject_sha256="$plan_sha256"
+  if [ "$phase" = "verify-final" ]; then
+    subject_path="source-manifests/$req_id.json"
+    printf '{"schema":"source-manifest/v1","files":[]}\n' > "$wave_dir/$subject_path"
+    subject_sha256="$(_real_sha256 "$wave_dir/$subject_path")"
+  fi
+  local req_path="$wave_dir/verdict-requests/$req_id.json"
+  cat > "$req_path" <<EOF
+{"schema":"verdict-request/v1","request_id":"$req_id","role":"arch-testing","phase":"$phase","wave_slug":"$WAVE_SLUG","plan_sha256":"$plan_sha256","head":"$head_sha","subject":{"kind":"$subject_kind","path":"$subject_path","sha256":"$subject_sha256"},"created_at":"2026-09-21T00:00:00Z"}
+EOF
+  printf '%s' "$req_path"
+}
 
-@test "★V1 PASS: prep creates verdict file with APPROVED-PREP at correct path" {
-  _seed_plan "$WAVE_SLUG"
-  run_verdict --role arch-testing --phase prep --slug "$WAVE_SLUG"
+# ── WV-1/2 (ports ★V1): prep creates a well-formed verdict/v1 JSON at the correct path ──
+
+@test "WV-1 PASS: prep with --decision approve creates a well-formed verdict/v1 JSON bound to its request" {
+  local req req_sha256
+  req="$(_seed_request prep)"
+  req_sha256="$(_real_sha256 "$req")"
+  run bash -c "cd '$PROJ' && printf 'reviewed and approved\n' | CLAUDE_WAVE_SLUG='$WAVE_SLUG' \
+    bash '$SCRIPT' --role arch-testing --phase prep --slug '$WAVE_SLUG' \
+    --request '$req' --request-sha256 '$req_sha256' --decision approve"
   [ "$status" -eq 0 ]
-  [ -f "$PROJ/.planning/wave-$WAVE_SLUG/arch-testing-verdict.md" ]
-  grep -q "APPROVED-PREP" "$PROJ/.planning/wave-$WAVE_SLUG/arch-testing-verdict.md"
+  local verdict="$PROJ/.planning/wave-$WAVE_SLUG/arch-testing-verdict-prep.json"
+  [ -f "$verdict" ] || return 1
+  # Field-value greps below tolerate an optional space after the colon
+  # ([[:space:]]*) because publish-record now canonicalizes to 2-space
+  # pretty-printed JSON (PLAN.md sec 3.1) rather than the prior compact form.
+  grep -qE '"schema":[[:space:]]*"verdict/v1"' "$verdict" || return 1
+  grep -qE '"decision":[[:space:]]*"approve"' "$verdict" || return 1
+  grep -qE '"phase":[[:space:]]*"prep"' "$verdict" || return 1
 }
 
-# ── ★V2 FAIL: verify-final without prior prep file → exit 2 ──────────────────
-
-@test "★V2 FAIL: verify-final without prior prep file exits 2" {
-  run_verdict --role arch-testing --phase verify-final --slug "$WAVE_SLUG"
-  [ "$status" -eq 2 ]
-  [[ "$output" == *"No prep verdict found"* ]]
-}
-
-# ── ★V3 FAIL: dual-token in body → verify-final exits 2 (replay guard) ───────
-
-@test "★V3 FAIL: verify-final with both APPROVED-PREP and APPROVED-VERIFY-FINAL present exits 2" {
-  # dual-token guard scans for APPROVED-VERIFY-FINAL (4c51929 rename from APPROVED-FINAL)
-  mkdir -p "$PROJ/.planning/wave-$WAVE_SLUG"
-  printf '**Status**: APPROVED-PREP\n**Status**: APPROVED-VERIFY-FINAL\n' \
-    > "$PROJ/.planning/wave-$WAVE_SLUG/arch-testing-verdict.md"
-  run_verdict --role arch-testing --phase verify-final --slug "$WAVE_SLUG"
-  [ "$status" -eq 2 ]
-  [[ "$output" == *"dual-token"* ]]
-  [[ "$output" == *"APPROVED-VERIFY-FINAL"* ]]
-}
-
-# ── ★V4 FAIL: prep duplicate → exit 2 ────────────────────────────────────────
-
-@test "★V4 FAIL: duplicate prep exits 2 when verdict file already exists" {
-  mkdir -p "$PROJ/.planning/wave-$WAVE_SLUG"
-  printf '**Status**: APPROVED-PREP\n' \
-    > "$PROJ/.planning/wave-$WAVE_SLUG/arch-testing-verdict.md"
-  run_verdict --role arch-testing --phase prep --slug "$WAVE_SLUG"
-  [ "$status" -eq 2 ]
-  [[ "$output" == *"already exists"* ]]
-}
-
-# ── ★V5 PASS: verify-final appends without overwriting APPROVED-PREP ─────────
-
-@test "★V5 PASS: verify-final appends APPROVED-VERIFY-FINAL while preserving APPROVED-PREP" {
-  # Token renamed to APPROVED-VERIFY-FINAL in 4c51929
-  mkdir -p "$PROJ/.planning/wave-$WAVE_SLUG"
-  printf '**Status**: APPROVED-PREP\n' \
-    > "$PROJ/.planning/wave-$WAVE_SLUG/arch-testing-verdict.md"
-
-  run_verdict --role arch-testing --phase verify-final --slug "$WAVE_SLUG" < /dev/null
+@test "WV-2 PASS: --decision escalate creates a well-formed, non-authorizing verdict/v1 JSON (T10)" {
+  local req req_sha256
+  req="$(_seed_request prep)"
+  req_sha256="$(_real_sha256 "$req")"
+  run bash -c "cd '$PROJ' && printf 'scope conflict, escalating\n' | CLAUDE_WAVE_SLUG='$WAVE_SLUG' \
+    bash '$SCRIPT' --role arch-testing --phase prep --slug '$WAVE_SLUG' \
+    --request '$req' --request-sha256 '$req_sha256' --decision escalate --reason-code scope-conflict"
   [ "$status" -eq 0 ]
-
-  local verdict="$PROJ/.planning/wave-$WAVE_SLUG/arch-testing-verdict.md"
-  grep -q "APPROVED-VERIFY-FINAL" "$verdict"
-  grep -q "APPROVED-PREP"         "$verdict"
+  local verdict="$PROJ/.planning/wave-$WAVE_SLUG/arch-testing-verdict-prep.json"
+  grep -qE '"decision":[[:space:]]*"escalate"' "$verdict" || return 1
+  grep -qE '"reason_code":[[:space:]]*"scope-conflict"' "$verdict" || return 1
 }
 
-# ── V6: path traversal in slug → exit 2, nothing written ─────────────────────
+# ── WV-3/4 (ports V6 x2): slug traversal ────────────────────────────────────────────
 
-@test "V6 FAIL: slug with .. traversal exits 2 and writes nothing" {
-  run_verdict --role arch-testing --phase prep --slug "../evil"
+@test "WV-3 FAIL: slug with .. traversal exits 2 and writes nothing" {
+  local req req_sha256
+  req="$(_seed_request prep)"
+  req_sha256="$(_real_sha256 "$req")"
+  run bash -c "cd '$PROJ' && printf 'x\n' | bash '$SCRIPT' --role arch-testing --phase prep --slug '../evil' \
+    --request '$req' --request-sha256 '$req_sha256' --decision approve"
   [ "$status" -eq 2 ]
-  [[ "$output" == *"Traversal"* ]]
-  # Nothing should be written outside PROJ.
   [ ! -d "$PROJ/.planning/wave-../evil" ]
 }
 
-@test "V6 FAIL: slug with / traversal exits 2" {
-  run_verdict --role arch-testing --phase prep --slug "foo/bar"
-  [ "$status" -eq 2 ]
-  [[ "$output" == *"Traversal"* ]]
-}
-
-# ── V7: legacy heredoc dual-token → WARN on stderr, exit 0 ───────────────────
-
-@test "V7 WARN: APPROVED-FINAL without APPROVED-PREP emits WARN on stderr and exits 0" {
-  mkdir -p "$PROJ/.planning/wave-$WAVE_SLUG"
-  # Simulate a legacy heredoc write: APPROVED-FINAL present, no APPROVED-PREP.
-  printf '**Status**: APPROVED-FINAL\n' \
-    > "$PROJ/.planning/wave-$WAVE_SLUG/arch-platform-verdict.md"
-
-  run bash -c "cd '$PROJ' && CLAUDE_WAVE_SLUG='$WAVE_SLUG' bash '$SCRIPT' \
-    --role arch-platform --phase verify-final --slug '$WAVE_SLUG'"
-  # Must not block.
-  [ "$status" -eq 0 ]
-  # WARN and "legacy heredoc" must appear (bats captures stderr in $output).
-  [[ "$output" == *"WARN"* ]]
-  [[ "$output" == *"legacy heredoc"* ]]
-}
-
-# ── VN-1: stdin content prepended before closing block ───────────────────────
-
-@test "VN-1 PASS: verify-final prepends stdin content with separator before APPROVED-VERIFY-FINAL" {
-  mkdir -p "$PROJ/.planning/wave-$WAVE_SLUG"
-  printf '**Status**: APPROVED-PREP\n' \
-    > "$PROJ/.planning/wave-$WAVE_SLUG/arch-platform-verdict.md"
-
-  run bash -c "echo '## My verdict body' | cd '$PROJ' && CLAUDE_WAVE_SLUG='$WAVE_SLUG' \
-    bash '$SCRIPT' --role arch-platform --phase verify-final --slug '$WAVE_SLUG'"
-  # Direct pipe run — bypass run_verdict helper to control stdin
-  (
-    cd "$PROJ"
-    echo "## My verdict body" | CLAUDE_WAVE_SLUG="$WAVE_SLUG" \
-      bash "$SCRIPT" --role arch-platform --phase verify-final --slug "$WAVE_SLUG"
-  )
-  local verdict="$PROJ/.planning/wave-$WAVE_SLUG/arch-platform-verdict.md"
-  # stdin body appears before the closing token
-  grep -q "## My verdict body" "$verdict"
-  # separator line present between body and closing block
-  grep -q "^---$" "$verdict"
-  # closing token present
-  grep -q "APPROVED-VERIFY-FINAL" "$verdict"
-  # body must appear BEFORE the token (line number check)
-  local body_line token_line
-  body_line="$(grep -n "## My verdict body" "$verdict" | cut -d: -f1)"
-  token_line="$(grep -n "APPROVED-VERIFY-FINAL" "$verdict" | cut -d: -f1)"
-  [ "$body_line" -lt "$token_line" ]
-}
-
-# ── VN-2: no stdin (terminal redirect) → closing block only, no separator ────
-
-@test "VN-2 PASS: verify-final with no stdin emits APPROVED-VERIFY-FINAL but no separator" {
-  mkdir -p "$PROJ/.planning/wave-$WAVE_SLUG"
-  printf '**Status**: APPROVED-PREP\n' \
-    > "$PROJ/.planning/wave-$WAVE_SLUG/arch-platform-verdict.md"
-
-  # Redirect stdin from /dev/null — simulates no piped content (terminal detection fallback)
-  run bash -c "cd '$PROJ' && CLAUDE_WAVE_SLUG='$WAVE_SLUG' \
-    bash '$SCRIPT' --role arch-platform --phase verify-final --slug '$WAVE_SLUG' < /dev/null"
-  [ "$status" -eq 0 ]
-
-  local verdict="$PROJ/.planning/wave-$WAVE_SLUG/arch-platform-verdict.md"
-  grep -q "APPROVED-VERIFY-FINAL" "$verdict"
-  # No separator: stdin was empty so the '---' block should be absent
-  ! grep -q "^---$" "$verdict"
-}
-
-# ── VN-3: second verify-final (replay guard) → exit 2 ────────────────────────
-
-@test "VN-3 FAIL: second verify-final (replay guard) exits 2, stderr names APPROVED-VERIFY-FINAL" {
-  mkdir -p "$PROJ/.planning/wave-$WAVE_SLUG"
-  printf '**Status**: APPROVED-PREP\n' \
-    > "$PROJ/.planning/wave-$WAVE_SLUG/arch-platform-verdict.md"
-
-  # First verify-final — must succeed
-  (
-    cd "$PROJ"
-    echo "## First body" | CLAUDE_WAVE_SLUG="$WAVE_SLUG" \
-      bash "$SCRIPT" --role arch-platform --phase verify-final --slug "$WAVE_SLUG"
-  )
-
-  # Second verify-final — must be blocked by dual-token replay guard
-  run bash -c "cd '$PROJ' && echo 'body2' | CLAUDE_WAVE_SLUG='$WAVE_SLUG' \
-    bash '$SCRIPT' --role arch-platform --phase verify-final --slug '$WAVE_SLUG'"
-  [ "$status" -eq 2 ]
-  [[ "$output" == *"dual-token"* ]]
-  [[ "$output" == *"APPROVED-VERIFY-FINAL"* ]]
-}
-
-# ── VN-4: prose mentioning token in stdin body does NOT trigger dual-token guard
-
-@test "VN-4 PASS: APPROVED-VERIFY-FINAL in prose (mid-sentence) does not trigger guard" {
-  # Anchored grep (592a8b5): guard only fires when token is on its OWN line.
-  # A mention inside a sentence must not trigger exit 2.
-  mkdir -p "$PROJ/.planning/wave-$WAVE_SLUG"
-  printf '**Status**: APPROVED-PREP\n' \
-    > "$PROJ/.planning/wave-$WAVE_SLUG/arch-platform-verdict.md"
-
-  run bash -c "cd '$PROJ' && \
-    echo 'This supersedes the old APPROVED-VERIFY-FINAL block' | \
-    CLAUDE_WAVE_SLUG='$WAVE_SLUG' bash '$SCRIPT' \
-    --role arch-platform --phase verify-final --slug '$WAVE_SLUG'"
-  [ "$status" -eq 0 ]
-  local verdict="$PROJ/.planning/wave-$WAVE_SLUG/arch-platform-verdict.md"
-  grep -q "APPROVED-VERIFY-FINAL" "$verdict"
-}
-
-# ── VN-5: bare APPROVED-PREP line (no **Status**: prefix) recognized by prep check
-
-@test "VN-5 PASS: bare APPROVED-PREP line recognized as valid prep marker" {
-  # 592a8b5 added bare-line anchor to has_prep grep — manually written prep files
-  # without the **Status**: prefix must still be accepted.
-  mkdir -p "$PROJ/.planning/wave-$WAVE_SLUG"
-  printf 'APPROVED-PREP\n\nSome arch content here\n' \
-    > "$PROJ/.planning/wave-$WAVE_SLUG/arch-platform-verdict.md"
-
-  run bash -c "cd '$PROJ' && CLAUDE_WAVE_SLUG='$WAVE_SLUG' \
-    bash '$SCRIPT' --role arch-platform --phase verify-final --slug '$WAVE_SLUG' < /dev/null"
-  [ "$status" -eq 0 ]
-  local verdict="$PROJ/.planning/wave-$WAVE_SLUG/arch-platform-verdict.md"
-  grep -q "APPROVED-VERIFY-FINAL" "$verdict"
-}
-
-# ── VN-6: dual-token guard fires when APPROVED-VERIFY-FINAL is on its own line ─
-
-@test "VN-6 FAIL: dual-token guard fires when APPROVED-VERIFY-FINAL is on its own line" {
-  # Distinct from VN-3: explicitly plants bare APPROVED-VERIFY-FINAL line (not via script)
-  # to confirm the anchored guard catches both **Status**: form and bare-line form.
-  mkdir -p "$PROJ/.planning/wave-$WAVE_SLUG"
-  printf '**Status**: APPROVED-PREP\nAPPROVED-VERIFY-FINAL\n' \
-    > "$PROJ/.planning/wave-$WAVE_SLUG/arch-platform-verdict.md"
-
-  run bash -c "cd '$PROJ' && echo 'attempt' | CLAUDE_WAVE_SLUG='$WAVE_SLUG' \
-    bash '$SCRIPT' --role arch-platform --phase verify-final --slug '$WAVE_SLUG'"
-  [ "$status" -eq 2 ]
-  [[ "$output" == *"dual-token"* ]]
-}
-
-# ── VN-7: bold-verdict PREP form recognized as valid prep marker ─────────────
-
-@test "VN-7 PASS: bold-verdict APPROVED-PREP form recognized, no WARN emitted" {
-  # dd73cdf added bold form '**Verdict: APPROVED-PREP**' to the has_prep grep.
-  # When has_prep=1, the legacy-WARN branch (has_prep=0) must NOT fire.
-  mkdir -p "$PROJ/.planning/wave-$WAVE_SLUG"
-  printf '**Verdict: APPROVED-PREP**\n\nSome arch content\n' \
-    > "$PROJ/.planning/wave-$WAVE_SLUG/arch-platform-verdict.md"
-
-  # Capture combined stdout+stderr to assert WARN absent
-  run bash -c "cd '$PROJ' && CLAUDE_WAVE_SLUG='$WAVE_SLUG' \
-    bash '$SCRIPT' --role arch-platform --phase verify-final --slug '$WAVE_SLUG' \
-    < /dev/null 2>&1"
-  [ "$status" -eq 0 ]
-  [[ "$output" != *"WARN"* ]]
-  local verdict="$PROJ/.planning/wave-$WAVE_SLUG/arch-platform-verdict.md"
-  grep -q "APPROVED-VERIFY-FINAL" "$verdict"
-}
-
-# ── Extra: invalid role → exit 2 ─────────────────────────────────────────────
-
-@test "invalid role exits 2" {
-  run_verdict --role arch-bogus --phase prep --slug "$WAVE_SLUG"
-  [ "$status" -eq 2 ]
-  [[ "$output" == *"Invalid role"* ]]
-}
-
-# ── P2b: non-feature branch slug resolution ────────────────────────────────────
-# After the P2b fix, write-verdict.sh must accept a slug derived from a non-feature
-# branch last-segment. The --slug flag carries the pre-resolved slug, so the test
-# simply checks that a 'codex/bl-w47-demo'-derived slug (last-segment: 'bl-w47-demo')
-# is accepted and produces a verdict file.
-# The reject-list guard is also tested: develop/master slugs must exit non-zero.
-
-@test "P2b VWV-WIP PASS: wip branch (branch-detection path, no --slug) resolves to slug 'wip' (P2b regression)" {
-  # The P2b regression fires on the branch-detection path. write-verdict.sh resolve_slug()
-  # at line 124: `if [[ "$branch" == *"/"* ]]` — only strips the last segment when branch
-  # contains a slash. A bare 'wip' branch falls through to the ERROR exit at line 129.
-  # After fix: ${branch##*/} applied for any non-empty, non-protected branch name.
-  # NOTE: This test exercises the branch-detection path (no --slug, no CLAUDE_WAVE_SLUG).
-  git -C "$PROJ" checkout -b "wip" -q 2>/dev/null
-  _seed_plan "wip"
-  run bash -c "cd '$PROJ' && bash '$SCRIPT' --role arch-testing --phase prep"
-  [ "$status" -eq 0 ]
-  [ -f "$PROJ/.planning/wave-wip/arch-testing-verdict.md" ]
-  grep -q "APPROVED-PREP" "$PROJ/.planning/wave-wip/arch-testing-verdict.md"
-}
-
-@test "P2b VWV-NF1 PASS: non-feature slug 'bl-w47-demo' (from codex/bl-w47-demo) accepted by --slug" {
-  # write-verdict.sh receives the pre-resolved last-segment; this test confirms it works.
-  _seed_plan "bl-w47-demo"
-  run_verdict_slug "bl-w47-demo" --role arch-testing --phase prep --slug "bl-w47-demo"
-  [ "$status" -eq 0 ]
-  [ -f "$PROJ/.planning/wave-bl-w47-demo/arch-testing-verdict.md" ]
-  grep -q "APPROVED-PREP" "$PROJ/.planning/wave-bl-w47-demo/arch-testing-verdict.md"
-}
-
-@test "P2b VWV-NF2 BLOCK: reject-list slug 'develop' → exit 2 (exact)" {
-  # After the P2b fix, write-verdict.sh must reject the 'develop' slug with exit 2
-  # specifically (not just non-zero — exact code confirms deliberate rejection, not crash).
-  run_verdict_slug "" --role arch-testing --phase prep --slug "develop"
+@test "WV-4 FAIL: slug with / traversal exits 2" {
+  local req req_sha256
+  req="$(_seed_request prep)"
+  req_sha256="$(_real_sha256 "$req")"
+  run bash -c "cd '$PROJ' && printf 'x\n' | bash '$SCRIPT' --role arch-testing --phase prep --slug 'foo/bar' \
+    --request '$req' --request-sha256 '$req_sha256' --decision approve"
   [ "$status" -eq 2 ]
 }
 
-@test "P2b VWV-NF3 BLOCK: reject-list slug 'master' → exit 2 (exact)" {
-  # Same for master — exact exit 2 required.
-  run_verdict_slug "" --role arch-testing --phase prep --slug "master"
+# ── WV-5 (ports invalid-role) ────────────────────────────────────────────────────────
+
+@test "WV-5 FAIL: invalid role exits 2" {
+  local req req_sha256
+  req="$(_seed_request prep)"
+  req_sha256="$(_real_sha256 "$req")"
+  run bash -c "cd '$PROJ' && printf 'x\n' | CLAUDE_WAVE_SLUG='$WAVE_SLUG' bash '$SCRIPT' --role arch-bogus --phase prep --slug '$WAVE_SLUG' \
+    --request '$req' --request-sha256 '$req_sha256' --decision approve"
   [ "$status" -eq 2 ]
 }
 
-# ── VS-1: --supersede with different HEAD replaces old block ─────────────────
-#
-# Contract: PLAN.md §Strict Contract #2 + #3
-# Setup: prep → verify-final (first; HEAD=H1) → new commit (HEAD=H2) →
-#        verify-final --supersede
-# Expected: exit 0; EXACTLY ONE **HEAD**: line in file == H2; old H1 absent;
-#           APPROVED-PREP present; APPROVED-VERIFY-FINAL present.
+# ── WV-6/7 (ports P2b x4, representative pair -- resolution logic itself is unchanged ──
+# wave-slug.sh and already exhaustively covered by write-verdict-request.bats WVR-9..13)
 
-@test "VS-1 PASS: --supersede with different HEAD replaces old block, preserves PREP" {
-  _seed_plan "$WAVE_SLUG"
-  run_verdict --role arch-testing --phase prep --slug "$WAVE_SLUG"
-  [ "$status" -eq 0 ]
-
-  local verdict="$PROJ/.planning/wave-$WAVE_SLUG/arch-testing-verdict.md"
-
-  # First verify-final — captures H1
-  run bash -c "cd '$PROJ' && CLAUDE_WAVE_SLUG='$WAVE_SLUG' \
-    bash '$SCRIPT' --role arch-testing --phase verify-final --slug '$WAVE_SLUG' < /dev/null"
-  [ "$status" -eq 0 ]
-
-  # Capture H1 (the HEAD at first verify-final write)
-  local h1
-  h1="$(git -C "$PROJ" rev-parse HEAD)"
-
-  # Advance HEAD so H2 != H1
-  git -C "$PROJ" -c user.email=test@example.com -c user.name=test \
-      commit -q --allow-empty -m second 2>/dev/null
-  local h2
-  h2="$(git -C "$PROJ" rev-parse HEAD)"
-
-  # --supersede must succeed
-  run bash -c "cd '$PROJ' && CLAUDE_WAVE_SLUG='$WAVE_SLUG' \
-    bash '$SCRIPT' --role arch-testing --phase verify-final --supersede --slug '$WAVE_SLUG' < /dev/null"
-  [ "$status" -eq 0 ]
-
-  # Exactly ONE **HEAD**: line in the file
-  local head_count
-  head_count="$(grep -c '^\*\*HEAD\*\*:' "$verdict")"
-  [ "$head_count" -eq 1 ]
-
-  # That line must reference H2, not H1. Line-anchored to **HEAD**: specifically — h1 now
-  # legitimately also appears on the **PREP-HEAD**: line (WS-2), so a bare substring search
-  # for "$h1" would be a false positive. Only the **HEAD**: line matters here.
-  grep -q "^\*\*HEAD\*\*: $h2$" "$verdict"
-  ! grep -q "^\*\*HEAD\*\*: $h1$" "$verdict"
-
-  # Both required tokens present
-  grep -q "APPROVED-PREP" "$verdict"
-  grep -q "APPROVED-VERIFY-FINAL" "$verdict"
-}
-
-# ── VS-2: --supersede same HEAD — idempotent NO-OP ───────────────────────────
-#
-# Contract: PLAN.md §Strict Contract #2 (stored HEAD == current HEAD → NO-OP)
-# Setup: prep → verify-final → verify-final --supersede (no new commit between)
-# Expected: exit 0; file byte-identical to pre-supersede snapshot;
-#           EXACTLY ONE **HEAD**: line.
-
-@test "VS-2 PASS: --supersede same HEAD is idempotent — file unchanged" {
-  _seed_plan "$WAVE_SLUG"
-  run_verdict --role arch-testing --phase prep --slug "$WAVE_SLUG"
-  [ "$status" -eq 0 ]
-
-  local verdict="$PROJ/.planning/wave-$WAVE_SLUG/arch-testing-verdict.md"
-
-  # First verify-final
-  run bash -c "cd '$PROJ' && CLAUDE_WAVE_SLUG='$WAVE_SLUG' \
-    bash '$SCRIPT' --role arch-testing --phase verify-final --slug '$WAVE_SLUG' < /dev/null"
-  [ "$status" -eq 0 ]
-
-  # Snapshot the file content (byte-level)
-  local snapshot
-  snapshot="$(cat "$verdict")"
-
-  # --supersede with same HEAD — must be a NO-OP
-  run bash -c "cd '$PROJ' && CLAUDE_WAVE_SLUG='$WAVE_SLUG' \
-    bash '$SCRIPT' --role arch-testing --phase verify-final --supersede --slug '$WAVE_SLUG' < /dev/null"
-  [ "$status" -eq 0 ]
-
-  # File content must be byte-identical to pre-supersede snapshot
-  local after
-  after="$(cat "$verdict")"
-  [ "$snapshot" = "$after" ]
-
-  # Still exactly one **HEAD**: line (no duplicate block)
-  local head_count
-  head_count="$(grep -c '^\*\*HEAD\*\*:' "$verdict")"
-  [ "$head_count" -eq 1 ]
-}
-
-# ── VS-3: replay guard WITHOUT --supersede still fires ───────────────────────
-#
-# Contract: PLAN.md §Strict Contract #1 + §Test Matrix VS-3
-# --supersede is OPT-IN; without it the dual-token replay guard must be unchanged.
-# Setup: prep → verify-final → verify-final (no flag)
-# Expected: exit 2; "dual-token" in stderr; "APPROVED-VERIFY-FINAL" in stderr.
-# NOTE: This is a distinct case from VN-3 (VN-3 uses arch-platform; VS-3 adds
-#       explicit context that the absence of --supersede is what fires the guard).
-
-@test "VS-3 FAIL: replay guard fires on second verify-final without --supersede flag" {
-  _seed_plan "$WAVE_SLUG"
-  run_verdict --role arch-testing --phase prep --slug "$WAVE_SLUG"
-  [ "$status" -eq 0 ]
-
-  # First verify-final — must succeed
-  run bash -c "cd '$PROJ' && CLAUDE_WAVE_SLUG='$WAVE_SLUG' \
-    bash '$SCRIPT' --role arch-testing --phase verify-final --slug '$WAVE_SLUG' < /dev/null"
-  [ "$status" -eq 0 ]
-
-  # Second verify-final without --supersede — replay guard must fire
-  run bash -c "cd '$PROJ' && CLAUDE_WAVE_SLUG='$WAVE_SLUG' \
-    bash '$SCRIPT' --role arch-testing --phase verify-final --slug '$WAVE_SLUG' < /dev/null"
+@test "WV-6 BLOCK: reject-list slug 'develop' exits 2 (representative P2b case)" {
+  local req req_sha256
+  req="$(_seed_request prep)"
+  req_sha256="$(_real_sha256 "$req")"
+  run bash -c "cd '$PROJ' && printf 'x\n' | bash '$SCRIPT' --role arch-testing --phase prep --slug develop \
+    --request '$req' --request-sha256 '$req_sha256' --decision approve"
   [ "$status" -eq 2 ]
-  [[ "$output" == *"dual-token"* ]]
-  [[ "$output" == *"APPROVED-VERIFY-FINAL"* ]]
 }
 
-# ── VS-4: fail-closed when HEAD unresolvable ─────────────────────────────────
-#
-# Contract: PLAN.md §Strict Contract #2 (HEAD must resolve to 40-hex or ABORT)
-# Setup: SEPARATE fresh git init with NO seed commit (HEAD unresolvable).
-#        Hand-write a prep file so the script reaches the HEAD-resolution code.
-# Expected: exit 2; stderr names HEAD resolution failure.
-# NOTE: Must NOT reuse the setup() PROJ (which has a seed commit).
+@test "WV-7 PASS: CLAUDE_WAVE_SLUG env var resolves the slug when --slug is omitted (representative P2b case)" {
+  local req req_sha256
+  req="$(_seed_request prep)"
+  req_sha256="$(_real_sha256 "$req")"
+  run bash -c "cd '$PROJ' && printf 'x\n' | CLAUDE_WAVE_SLUG='$WAVE_SLUG' bash '$SCRIPT' --role arch-testing --phase prep \
+    --request '$req' --request-sha256 '$req_sha256' --decision approve"
+  [ "$status" -eq 0 ]
+  [ -f "$PROJ/.planning/wave-$WAVE_SLUG/arch-testing-verdict-prep.json" ]
+}
 
-@test "VS-4 FAIL: --supersede fails closed when HEAD is unresolvable" {
-  # Fresh repo with no commits — HEAD cannot be resolved to 40-hex
-  local empty_proj
-  empty_proj="$(mktemp -d)"
-  git -C "$empty_proj" init -q 2>/dev/null
+# ── WV-8 (ports ★V4/★V3/VN-3/VN-6, dual-token->no-clobber): duplicate prep exits non-zero ──
 
-  # Hand-write a prep verdict so the script reaches HEAD resolution
-  mkdir -p "$empty_proj/.planning/wave-$WAVE_SLUG"
-  printf '**Status**: APPROVED-PREP\n' \
-    > "$empty_proj/.planning/wave-$WAVE_SLUG/arch-testing-verdict.md"
+@test "WV-8 FAIL: a second prep for the same role/wave exits 2 (no-clobber, script-level smoke, not merely non-zero)" {
+  # -eq 2, not -ne 0, for the same vacuous-pass reason as WV-12/WV-21.
+  local req req_sha256
+  req="$(_seed_request prep)"
+  req_sha256="$(_real_sha256 "$req")"
+  bash -c "cd '$PROJ' && printf 'first\n' | CLAUDE_WAVE_SLUG='$WAVE_SLUG' bash '$SCRIPT' --role arch-testing --phase prep --slug '$WAVE_SLUG' \
+    --request '$req' --request-sha256 '$req_sha256' --decision approve" >/dev/null 2>&1
 
-  run bash -c "cd '$empty_proj' && CLAUDE_WAVE_SLUG='$WAVE_SLUG' \
-    bash '$SCRIPT' --role arch-testing --phase verify-final --supersede --slug '$WAVE_SLUG' < /dev/null"
+  run bash -c "cd '$PROJ' && printf 'second\n' | CLAUDE_WAVE_SLUG='$WAVE_SLUG' bash '$SCRIPT' --role arch-testing --phase prep --slug '$WAVE_SLUG' \
+    --request '$req' --request-sha256 '$req_sha256' --decision approve"
   [ "$status" -eq 2 ]
-  # stderr must name HEAD resolution failure
-  [[ "$output" == *"HEAD"* ]]
-
-  rm -rf "$empty_proj"
+  grep -qE '"rationale":[[:space:]]*"first' "$PROJ/.planning/wave-$WAVE_SLUG/arch-testing-verdict-prep.json" || return 1
 }
 
-# ── VS-5: --supersede on PREP-only file (no prior verify-final) ──────────────
-#
-# Contract: PLAN.md §Strict Contract #2 ("No existing VERIFY-FINAL block →
-#           behave like a normal first verify-final append (with delimiters)")
-# Setup: prep only (no prior verify-final), then verify-final --supersede
-# Expected: exit 0; APPROVED-PREP preserved; APPROVED-VERIFY-FINAL present;
-#           EXACTLY ONE **HEAD**: line.
+# ── WV-9 (ports ★V5): prep and verify-final coexist as separate files ──────────────
 
-@test "VS-5 PASS: --supersede on PREP-only file behaves like normal first append" {
-  _seed_plan "$WAVE_SLUG"
-  run_verdict --role arch-testing --phase prep --slug "$WAVE_SLUG"
+@test "WV-9 PASS: prep and verify-final for the same role/wave coexist as separate files, neither touches the other" {
+  local req_prep req_prep_sha256 req_vf req_vf_sha256
+  req_prep="$(_seed_request prep)"
+  req_prep_sha256="$(_real_sha256 "$req_prep")"
+  bash -c "cd '$PROJ' && printf 'prep body\n' | CLAUDE_WAVE_SLUG='$WAVE_SLUG' bash '$SCRIPT' --role arch-testing --phase prep --slug '$WAVE_SLUG' \
+    --request '$req_prep' --request-sha256 '$req_prep_sha256' --decision approve" >/dev/null 2>&1
+
+  req_vf="$(_seed_request verify-final)"
+  req_vf_sha256="$(_real_sha256 "$req_vf")"
+  local evidence_file="$PROJ/.planning/wave-$WAVE_SLUG/evidence.txt"
+  printf 'evidence\n' > "$evidence_file"
+  run bash -c "cd '$PROJ' && printf 'final body\n' | CLAUDE_WAVE_SLUG='$WAVE_SLUG' bash '$SCRIPT' --role arch-testing --phase verify-final --slug '$WAVE_SLUG' \
+    --request '$req_vf' --request-sha256 '$req_vf_sha256' --decision approve \
+    --evidence-file '$evidence_file'"
   [ "$status" -eq 0 ]
 
-  local verdict="$PROJ/.planning/wave-$WAVE_SLUG/arch-testing-verdict.md"
-
-  # --supersede on a file with only APPROVED-PREP (no verify-final block yet)
-  run bash -c "cd '$PROJ' && CLAUDE_WAVE_SLUG='$WAVE_SLUG' \
-    bash '$SCRIPT' --role arch-testing --phase verify-final --supersede --slug '$WAVE_SLUG' < /dev/null"
-  [ "$status" -eq 0 ]
-
-  # APPROVED-PREP must be preserved
-  grep -q "APPROVED-PREP" "$verdict"
-
-  # APPROVED-VERIFY-FINAL must be present
-  grep -q "APPROVED-VERIFY-FINAL" "$verdict"
-
-  # Exactly one **HEAD**: line
-  local head_count
-  head_count="$(grep -c '^\*\*HEAD\*\*:' "$verdict")"
-  [ "$head_count" -eq 1 ]
+  local prep_file="$PROJ/.planning/wave-$WAVE_SLUG/arch-testing-verdict-prep.json"
+  local vf_file="$PROJ/.planning/wave-$WAVE_SLUG/arch-testing-verdict-verify-final.json"
+  [ -f "$prep_file" ] || return 1
+  [ -f "$vf_file" ] || return 1
+  grep -qE '"rationale":[[:space:]]*"prep body' "$prep_file" || return 1
+  grep -qE '"rationale":[[:space:]]*"final body' "$vf_file" || return 1
 }
 
-# ── VS-6: legacy un-delimited VERIFY-FINAL fallback ──────────────────────────
-#
-# Contract: PLAN.md §Implementation Approach — "Belt-and-suspenders fallback:
-#           if --supersede finds an un-delimited (legacy) VERIFY-FINAL block
-#           (file written by the old script before this wave), fall back to
-#           excising from the first **HEAD**: line through EOF."
-# Setup: hand-write a prep file containing an OLD-style VERIFY-FINAL block:
-#        APPROVED-VERIFY-FINAL + a **HEAD**: line at a fake 40-hex SHA,
-#        NO <!-- BEGIN VERIFY-FINAL --> / <!-- END VERIFY-FINAL --> delimiters.
-#        Then call verify-final --supersede.
-# Expected: exit 0; old block excised (fake SHA absent); EXACTLY ONE **HEAD**:
-#           line == current HEAD; APPROVED-PREP preserved; APPROVED-VERIFY-FINAL
-#           present.
+# ── WV-10 (ports VS-1): --supersede with a fresh request + correct CAS digest replaces ──
 
-@test "VS-6 PASS: --supersede excises legacy un-delimited VERIFY-FINAL block via fallback" {
-  local old_fake_sha="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-  local verdict="$PROJ/.planning/wave-$WAVE_SLUG/arch-testing-verdict.md"
+@test "WV-10 PASS: --supersede with a fresh request and correct --expected-current-sha256 replaces the target" {
+  # Fixture fix (#24): seed a prep verdict first, mirroring WV-9's pattern -- without
+  # this, the FIRST (bare, non-`run`) verify-final write below trips write-verdict.sh's
+  # own "no prior PREP" guard (WV-21) and aborts the test under bats' `set -e` before
+  # the supersede behavior under test ever runs.
+  local req_prep req_prep_sha256
+  req_prep="$(_seed_request prep)"
+  req_prep_sha256="$(_real_sha256 "$req_prep")"
+  bash -c "cd '$PROJ' && printf 'prep body\n' | CLAUDE_WAVE_SLUG='$WAVE_SLUG' bash '$SCRIPT' --role arch-testing --phase prep --slug '$WAVE_SLUG' \
+    --request '$req_prep' --request-sha256 '$req_prep_sha256' --decision approve" >/dev/null 2>&1
 
-  # Hand-write a file that looks like it was produced by the pre-wave script:
-  # APPROVED-PREP block + old-style (un-delimited) VERIFY-FINAL block.
-  mkdir -p "$PROJ/.planning/wave-$WAVE_SLUG"
-  printf '**Status**: APPROVED-PREP\n\n**HEAD**: %s\n**Phase**: VERIFY-FINAL\n**Timestamp**: 2026-01-01T00:00:00Z\n**Status**: APPROVED-VERIFY-FINAL\n\n' \
-    "$old_fake_sha" > "$verdict"
+  local req1 req1_sha256
+  req1="$(_seed_request verify-final)"
+  req1_sha256="$(_real_sha256 "$req1")"
+  local ev="$PROJ/.planning/wave-$WAVE_SLUG/evidence.txt"; printf 'e\n' > "$ev"
+  bash -c "cd '$PROJ' && printf 'v1\n' | CLAUDE_WAVE_SLUG='$WAVE_SLUG' bash '$SCRIPT' --role arch-testing --phase verify-final --slug '$WAVE_SLUG' \
+    --request '$req1' --request-sha256 '$req1_sha256' --decision approve \
+    --evidence-file '$ev'" >/dev/null 2>&1
 
-  # Capture current HEAD (real SHA from setup() seed commit)
-  local current_head
-  current_head="$(git -C "$PROJ" rev-parse HEAD)"
+  local vf_file="$PROJ/.planning/wave-$WAVE_SLUG/arch-testing-verdict-verify-final.json"
+  local current_sha256; current_sha256="$(_real_sha256 "$vf_file")"
 
-  # --supersede must trigger the legacy fallback and succeed
-  run bash -c "cd '$PROJ' && CLAUDE_WAVE_SLUG='$WAVE_SLUG' \
-    bash '$SCRIPT' --role arch-testing --phase verify-final --supersede --slug '$WAVE_SLUG' < /dev/null"
+  # Fresh commit + fresh request for the rebind (PLAN.md sec 3.6: rebind requires a
+  # fresh request, never the same one -- also proves WV's own replay refusal doesn't
+  # false-positive on a genuine fresh rebind).
+  git -C "$PROJ" -c user.email=test@example.com -c user.name=test commit -q --allow-empty -m second 2>/dev/null
+  local req2 req2_sha256
+  req2="$(_seed_request verify-final)"
+  req2_sha256="$(_real_sha256 "$req2")"
+
+  run bash -c "cd '$PROJ' && printf 'v2\n' | CLAUDE_WAVE_SLUG='$WAVE_SLUG' bash '$SCRIPT' --role arch-testing --phase verify-final --slug '$WAVE_SLUG' \
+    --request '$req2' --request-sha256 '$req2_sha256' --decision approve \
+    --evidence-file '$ev' \
+    --supersede --expected-current-sha256 '$current_sha256'"
   [ "$status" -eq 0 ]
-
-  # Old fake SHA must be gone
-  ! grep -q "$old_fake_sha" "$verdict"
-
-  # Exactly ONE **HEAD**: line, pointing at the current HEAD
-  local head_count
-  head_count="$(grep -c '^\*\*HEAD\*\*:' "$verdict")"
-  [ "$head_count" -eq 1 ]
-  grep -q "^\*\*HEAD\*\*: $current_head$" "$verdict"
-
-  # APPROVED-PREP preserved
-  grep -q "APPROVED-PREP" "$verdict"
-
-  # APPROVED-VERIFY-FINAL present
-  grep -q "APPROVED-VERIFY-FINAL" "$verdict"
+  grep -qE '"rationale":[[:space:]]*"v2' "$vf_file" || return 1
 }
 
-# ── VS-7: stdin body with <!-- END VERIFY-FINAL --> closes block early ────────
-#
-# Contract: B1 — body line matching the closing delimiter must NOT close the
-# block early. After write: exactly ONE **HEAD**: == current HEAD.
+# ── WV-11 (ports VS-3): supersede without --supersede flag rejects (no-clobber smoke) ──
 
-@test "VS-7 FAIL: body containing <!-- END VERIFY-FINAL --> must not break block structure" {
-  _seed_plan "$WAVE_SLUG"
-  run_verdict --role arch-testing --phase prep --slug "$WAVE_SLUG"
-  [ "$status" -eq 0 ]
+@test "WV-11 FAIL: writing verify-final a second time WITHOUT --supersede exits 2 (not merely non-zero)" {
+  # -eq 2, not -ne 0, for the same vacuous-pass reason as WV-12/WV-21.
+  # Fixture fix (#24): seed a prep verdict first -- see WV-10's comment for why.
+  local req_prep req_prep_sha256
+  req_prep="$(_seed_request prep)"
+  req_prep_sha256="$(_real_sha256 "$req_prep")"
+  bash -c "cd '$PROJ' && printf 'prep body\n' | CLAUDE_WAVE_SLUG='$WAVE_SLUG' bash '$SCRIPT' --role arch-testing --phase prep --slug '$WAVE_SLUG' \
+    --request '$req_prep' --request-sha256 '$req_prep_sha256' --decision approve" >/dev/null 2>&1
 
-  local verdict="$PROJ/.planning/wave-$WAVE_SLUG/arch-testing-verdict.md"
-  local current_head
-  current_head="$(git -C "$PROJ" rev-parse HEAD)"
+  local req1 req1_sha256
+  req1="$(_seed_request verify-final)"
+  req1_sha256="$(_real_sha256 "$req1")"
+  local ev="$PROJ/.planning/wave-$WAVE_SLUG/evidence.txt"; printf 'e\n' > "$ev"
+  bash -c "cd '$PROJ' && printf 'v1\n' | CLAUDE_WAVE_SLUG='$WAVE_SLUG' bash '$SCRIPT' --role arch-testing --phase verify-final --slug '$WAVE_SLUG' \
+    --request '$req1' --request-sha256 '$req1_sha256' --decision approve \
+    --evidence-file '$ev'" >/dev/null 2>&1
 
-  run bash -c "cd '$PROJ' && printf '## verdict\n<!-- END VERIFY-FINAL -->\nsome prose\n' | \
-    CLAUDE_WAVE_SLUG='$WAVE_SLUG' bash '$SCRIPT' --role arch-testing --phase verify-final --slug '$WAVE_SLUG'"
-  [ "$status" -eq 0 ]
-
-  # Exactly ONE **HEAD**: line in the file
-  local head_count
-  head_count="$(grep -c '^\*\*HEAD\*\*:' "$verdict")"
-  [ "$head_count" -eq 1 ]
-
-  # That HEAD must be the current (script-authored) HEAD
-  grep -q "^\*\*HEAD\*\*: $current_head$" "$verdict"
-
-  # APPROVED-VERIFY-FINAL present
-  grep -q "APPROVED-VERIFY-FINAL" "$verdict"
-}
-
-# ── VS-8: stdin body with **HEAD**: prose line → stored_head must be script HEAD
-#
-# Contract: B1a — body-injected **HEAD**: line must NOT poison stored_head
-# extraction. Supersede called on same HEAD must be a NO-OP (idempotent),
-# not a replacement triggered by fake SHA.
-
-@test "VS-8 FAIL: body **HEAD**: prose line must not poison stored_head extraction" {
-  _seed_plan "$WAVE_SLUG"
-  run_verdict --role arch-testing --phase prep --slug "$WAVE_SLUG"
-  [ "$status" -eq 0 ]
-
-  local verdict="$PROJ/.planning/wave-$WAVE_SLUG/arch-testing-verdict.md"
-  local current_head
-  current_head="$(git -C "$PROJ" rev-parse HEAD)"
-
-  # First verify-final: pipe stdin containing a fake **HEAD**: prose line
-  run bash -c "cd '$PROJ' && printf '**HEAD**: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\nsome prose\n' | \
-    CLAUDE_WAVE_SLUG='$WAVE_SLUG' bash '$SCRIPT' --role arch-testing --phase verify-final --slug '$WAVE_SLUG'"
-  [ "$status" -eq 0 ]
-
-  # --supersede with same HEAD (no new commit) — must be idempotent NO-OP
-  run bash -c "cd '$PROJ' && CLAUDE_WAVE_SLUG='$WAVE_SLUG' \
-    bash '$SCRIPT' --role arch-testing --phase verify-final --supersede --slug '$WAVE_SLUG' < /dev/null"
-  [ "$status" -eq 0 ]
-
-  # Exactly ONE **HEAD**: line — the real current HEAD, not the fake body SHA
-  local head_count
-  head_count="$(grep -c '^\*\*HEAD\*\*:' "$verdict")"
-  [ "$head_count" -eq 1 ]
-
-  # The body-injected fake SHA must NOT be the **HEAD**: value
-  ! grep -q "^\*\*HEAD\*\*: aaaa" "$verdict"
-}
-
-# ── VS-9: orphan-final (VERIFY-FINAL, no PREP) + --supersede → exit 2 ─────────
-#
-# Contract: B2 — --supersede with APPROVED-VERIFY-FINAL but NO APPROVED-PREP
-# must exit 2 (not fall through to normal append and mint a second block).
-
-@test "VS-9 FAIL: --supersede with orphan VERIFY-FINAL (no PREP) must exit 2" {
-  # Hand-write a verdict with only APPROVED-VERIFY-FINAL — no APPROVED-PREP
-  mkdir -p "$PROJ/.planning/wave-$WAVE_SLUG"
-  printf '**Status**: APPROVED-VERIFY-FINAL\n' \
-    > "$PROJ/.planning/wave-$WAVE_SLUG/arch-testing-verdict.md"
-
-  run bash -c "cd '$PROJ' && CLAUDE_WAVE_SLUG='$WAVE_SLUG' \
-    bash '$SCRIPT' --role arch-testing --phase verify-final --supersede --slug '$WAVE_SLUG' < /dev/null"
+  run bash -c "cd '$PROJ' && printf 'v2\n' | CLAUDE_WAVE_SLUG='$WAVE_SLUG' bash '$SCRIPT' --role arch-testing --phase verify-final --slug '$WAVE_SLUG' \
+    --request '$req1' --request-sha256 '$req1_sha256' --decision approve \
+    --evidence-file '$ev'"
   [ "$status" -eq 2 ]
-  [[ "$output" == *"PREP"* ]]
+  grep -qE '"rationale":[[:space:]]*"v1' "$PROJ/.planning/wave-$WAVE_SLUG/arch-testing-verdict-verify-final.json" || return 1
 }
 
-# ── VS-10: legacy fallback with content below old block → WARN emitted ─────────
-#
-# Contract: B3 — legacy fallback (first-**HEAD**:-through-EOF excision) silently
-# destroys content below the old block. Fix must emit WARN to stderr.
+# ── WV-12 (ports VS-9): --supersede with no existing target exits non-zero ─────────
 
-@test "VS-10 FAIL: legacy fallback with content below old block must emit WARN" {
-  _seed_plan "$WAVE_SLUG"
-  run_verdict --role arch-testing --phase prep --slug "$WAVE_SLUG"
-  [ "$status" -eq 0 ]
-
-  local verdict="$PROJ/.planning/wave-$WAVE_SLUG/arch-testing-verdict.md"
-
-  # Hand-append a legacy un-delimited VERIFY-FINAL block with content below it
-  printf '\n**HEAD**: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\n**Phase**: VERIFY-FINAL\n**Status**: APPROVED-VERIFY-FINAL\n\nsome content below old block\n' \
-    >> "$verdict"
-
-  run bash -c "cd '$PROJ' && CLAUDE_WAVE_SLUG='$WAVE_SLUG' \
-    bash '$SCRIPT' --role arch-testing --phase verify-final --supersede --slug '$WAVE_SLUG' < /dev/null 2>&1"
-  [ "$status" -eq 0 ]
-
-  # WARN must be emitted about dropped content
-  [[ "$output" == *"WARN"* ]]
-
-  # APPROVED-VERIFY-FINAL present
-  grep -q "APPROVED-VERIFY-FINAL" "$verdict"
-
-  # Exactly ONE **HEAD**: line
-  local head_count
-  head_count="$(grep -c '^\*\*HEAD\*\*:' "$verdict")"
-  [ "$head_count" -eq 1 ]
-
-  # Old fake SHA absent
-  ! grep -q "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" "$verdict"
-}
-
-# ── VS-11: BEGIN delimiter in PREP prose → only trailing real block excised ────
-#
-# Contract: B4 — sed range-delete must NOT start at the first occurrence of
-# <!-- BEGIN VERIFY-FINAL --> in prose; it must target only the real trailing
-# delimited block. PREP content and prose mention must be preserved.
-
-@test "VS-11 FAIL: BEGIN delimiter in PREP prose must not cause PREP content to be excised" {
-  mkdir -p "$PROJ/.planning/wave-$WAVE_SLUG"
-  # Build file manually: PREP block + prose mentioning the delimiter + real delimited block
-  printf '**Status**: APPROVED-PREP\n\nSome prose mentioning <!-- BEGIN VERIFY-FINAL --> inline.\n\n<!-- BEGIN VERIFY-FINAL -->\n**HEAD**: cccccccccccccccccccccccccccccccccccccccc\n**Phase**: VERIFY-FINAL\n**Status**: APPROVED-VERIFY-FINAL\n\n<!-- END VERIFY-FINAL -->\n' \
-    > "$PROJ/.planning/wave-$WAVE_SLUG/arch-testing-verdict.md"
-
-  local verdict="$PROJ/.planning/wave-$WAVE_SLUG/arch-testing-verdict.md"
-  local current_head
-  current_head="$(git -C "$PROJ" rev-parse HEAD)"
-
-  # --supersede: old block has fake SHA != current HEAD → should excise real block only
-  run bash -c "cd '$PROJ' && CLAUDE_WAVE_SLUG='$WAVE_SLUG' \
-    bash '$SCRIPT' --role arch-testing --phase verify-final --supersede --slug '$WAVE_SLUG' < /dev/null"
-  [ "$status" -eq 0 ]
-
-  # APPROVED-PREP preserved
-  grep -q "APPROVED-PREP" "$verdict"
-
-  # Prose mention of the delimiter preserved
-  grep -q "<!-- BEGIN VERIFY-FINAL --> inline" "$verdict"
-
-  # Exactly ONE **HEAD**: line == current HEAD
-  local head_count
-  head_count="$(grep -c '^\*\*HEAD\*\*:' "$verdict")"
-  [ "$head_count" -eq 1 ]
-  grep -q "^\*\*HEAD\*\*: $current_head$" "$verdict"
-
-  # Old fake SHA absent
-  ! grep -q "cccccccccccccccccccccccccccccccccccccccc" "$verdict"
-}
-
-# ── VS-12: two stale delimited blocks → collapsed to exactly one current HEAD ──
-#
-# Contract: after supersede on a file with two stale delimited blocks, the result
-# must be exactly ONE **HEAD**: == current HEAD; both fake SHAs absent; APPROVED-PREP
-# and APPROVED-VERIFY-FINAL present.
-
-@test "VS-12 FAIL: two stale delimited blocks must collapse to exactly one current-HEAD block" {
-  mkdir -p "$PROJ/.planning/wave-$WAVE_SLUG"
-  printf '**Status**: APPROVED-PREP\n\n<!-- BEGIN VERIFY-FINAL -->\n**HEAD**: dddddddddddddddddddddddddddddddddddddddd\n**Status**: APPROVED-VERIFY-FINAL\n\n<!-- END VERIFY-FINAL -->\n\n<!-- BEGIN VERIFY-FINAL -->\n**HEAD**: eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee\n**Status**: APPROVED-VERIFY-FINAL\n\n<!-- END VERIFY-FINAL -->\n' \
-    > "$PROJ/.planning/wave-$WAVE_SLUG/arch-testing-verdict.md"
-
-  local verdict="$PROJ/.planning/wave-$WAVE_SLUG/arch-testing-verdict.md"
-  local current_head
-  current_head="$(git -C "$PROJ" rev-parse HEAD)"
-
-  run bash -c "cd '$PROJ' && CLAUDE_WAVE_SLUG='$WAVE_SLUG' \
-    bash '$SCRIPT' --role arch-testing --phase verify-final --supersede --slug '$WAVE_SLUG' < /dev/null"
-  [ "$status" -eq 0 ]
-
-  # Exactly ONE **HEAD**: line == current HEAD
-  local head_count
-  head_count="$(grep -c '^\*\*HEAD\*\*:' "$verdict")"
-  [ "$head_count" -eq 1 ]
-  grep -q "^\*\*HEAD\*\*: $current_head$" "$verdict"
-
-  # Both fake SHAs absent
-  ! grep -q "dddddddddddddddddddddddddddddddddddddddd" "$verdict"
-  ! grep -q "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee" "$verdict"
-
-  # Both required tokens present
-  grep -q "APPROVED-PREP" "$verdict"
-  grep -q "APPROVED-VERIFY-FINAL" "$verdict"
-}
-
-# ── VS-13: stale-first + current-last block → must normalize, not short-circuit ─
-#
-# Contract: when file has TWO delimited blocks where the LAST block's stored HEAD
-# == current HEAD, --supersede must NOT take the idempotent no-op exit. It must
-# excise ALL blocks and leave exactly ONE **HEAD**: == current HEAD.
-# (emit-push-proof reads FIRST **HEAD**: match; a stale first block blocks the gate.)
-
-@test "VS-13 FAIL: stale-first + current-last two blocks must normalize to one block, not no-op" {
-  mkdir -p "$PROJ/.planning/wave-$WAVE_SLUG"
-  local current_head
-  current_head="$(git -C "$PROJ" rev-parse HEAD)"
-
-  local verdict="$PROJ/.planning/wave-$WAVE_SLUG/arch-testing-verdict.md"
-
-  # File: PREP + stale first block + current-HEAD last block
-  printf '**Status**: APPROVED-PREP\n\n<!-- BEGIN VERIFY-FINAL -->\n**HEAD**: ffffffffffffffffffffffffffffffffffffffff\n**Status**: APPROVED-VERIFY-FINAL\n\n<!-- END VERIFY-FINAL -->\n\n<!-- BEGIN VERIFY-FINAL -->\n**HEAD**: %s\n**Status**: APPROVED-VERIFY-FINAL\n\n<!-- END VERIFY-FINAL -->\n' \
-    "$current_head" > "$verdict"
-
-  run bash -c "cd '$PROJ' && CLAUDE_WAVE_SLUG='$WAVE_SLUG' \
-    bash '$SCRIPT' --role arch-testing --phase verify-final --supersede --slug '$WAVE_SLUG' < /dev/null"
-  [ "$status" -eq 0 ]
-
-  # Exactly ONE **HEAD**: line == current HEAD
-  local head_count
-  head_count="$(grep -c '^\*\*HEAD\*\*:' "$verdict")"
-  [ "$head_count" -eq 1 ]
-  grep -q "^\*\*HEAD\*\*: $current_head$" "$verdict"
-
-  # Stale SHA absent
-  ! grep -q "ffffffffffffffffffffffffffffffffffffffff" "$verdict"
-
-  # Both required tokens present
-  grep -q "APPROVED-PREP" "$verdict"
-  grep -q "APPROVED-VERIFY-FINAL" "$verdict"
-}
-
-# ── VS-14: stdin body with trailing-prose **HEAD**: line → sanitized, WARN emitted ─
-#
-# Codex P1 repro: the $-anchored sanitizer strips bare `**HEAD**: <40hex>` lines but
-# lets through lines with a suffix (e.g. `**HEAD**: <sha> SOME TRAILING PROSE`).
-# The surviving line then becomes the FIRST **HEAD**: match in stored_head extraction,
-# poisoning the idempotency check and appearing as the authoritative HEAD in output.
-#
-# Contract:
-#   1. The injected 40-hex SHA must be ABSENT from every `**HEAD**:` line in output.
-#   2. The file has EXACTLY ONE `**HEAD**:` line == the real current HEAD.
-#   3. A WARN is emitted (stderr) naming the stripped reserved line.
-
-@test "VS-14 FAIL: stdin **HEAD**: line with trailing prose is sanitized and WARN emitted" {
-  local supersede_slug="bl-w47-supersede"
-
-  # Set up: prep + prior verify-final block (so dual-token guard has a block to replace)
-  mkdir -p "$PROJ/.planning/wave-$supersede_slug"
-  local verdict="$PROJ/.planning/wave-$supersede_slug/arch-testing-verdict.md"
-
-  local current_head
-  current_head="$(git -C "$PROJ" rev-parse HEAD)"
-
-  # Write a completed prior block (prep + delimited verify-final) so --supersede
-  # has something to excise and the replay-guard won't reject us outright.
-  printf '**Status**: APPROVED-PREP\n\n<!-- BEGIN VERIFY-FINAL -->\n**HEAD**: %s\n**Phase**: VERIFY-FINAL\n**Timestamp**: 2026-01-01T00:00:00Z\n**Status**: APPROVED-VERIFY-FINAL\n\n<!-- END VERIFY-FINAL -->\n' \
-    "$current_head" > "$verdict"
-
-  # Advance HEAD so supersede detects a DIFFERENT HEAD (not idempotent NO-OP)
-  git -C "$PROJ" -c user.email=test@example.com -c user.name=test \
-      commit -q --allow-empty -m "vs14-advance" 2>/dev/null
-  current_head="$(git -C "$PROJ" rev-parse HEAD)"
-
-  # Pipe stdin containing the P1 trailing-prose injection line (combined stdout+stderr)
-  run bash -c "cd '$PROJ' && printf '**HEAD**: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa SOME TRAILING PROSE\nsome other verdict prose\n' | \
-    CLAUDE_WAVE_SLUG='$supersede_slug' bash '$SCRIPT' \
-    --role arch-testing --phase verify-final --supersede --slug '$supersede_slug' 2>&1"
-  [ "$status" -eq 0 ]
-
-  # 1. The injected SHA must be ABSENT from every **HEAD**: line
-  ! grep '^\*\*HEAD\*\*:.*aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' "$verdict"
-
-  # 2. Exactly ONE **HEAD**: line, and it must equal the real current HEAD
-  local head_count
-  head_count="$(grep -c '^\*\*HEAD\*\*:' "$verdict")"
-  [ "$head_count" -eq 1 ]
-  grep -q "^\*\*HEAD\*\*: $current_head$" "$verdict"
-
-  # 3. A WARN must be emitted naming the stripped reserved line
-  [[ "$output" == *"WARN"* ]]
-}
-
-# ── WS-2 (wave-runtime-topology-disk-first-binding): PREP binds to current HEAD + PLAN sha256 ─
-#
-# Contract: .planning/wave-runtime-topology-disk-first-binding/DECISIONS.md (WS-2 ordering
-# note) + our-execution-brief-is-shimmying-snowflake.md WS-2. run_prep() appends
-# **PREP-HEAD**: <sha> and **PLAN_SHA256**: <sha> to the PREP block; PREP now fails closed
-# when PLAN.md is absent or HEAD is unresolvable.
-#
-# CORE NON-VACUITY MANDATE: expected head/plan_sha256 values are derived from a REAL
-# `git rev-parse HEAD` + REAL sha256 of the seeded PLAN.md (via _real_sha256), computed at
-# test-run time — never hardcoded. Assertions are line-anchored exact equality, never mere
-# key-presence.
-
-@test "WS2-1 PASS: PREP verdict includes line-anchored **PREP-HEAD** matching real git rev-parse HEAD" {
-  _seed_plan "$WAVE_SLUG"
-  local real_head
-  real_head="$(git -C "$PROJ" rev-parse HEAD)"
-
-  run_verdict --role arch-testing --phase prep --slug "$WAVE_SLUG"
-  [ "$status" -eq 0 ]
-
-  local verdict="$PROJ/.planning/wave-$WAVE_SLUG/arch-testing-verdict.md"
-  grep -q "^\*\*PREP-HEAD\*\*: $real_head\$" "$verdict"
-}
-
-@test "WS2-2 PASS: PREP verdict includes line-anchored **PLAN_SHA256** matching real sha256 of PLAN.md" {
-  _seed_plan "$WAVE_SLUG"
-  local plan_path="$PROJ/.planning/wave-$WAVE_SLUG/PLAN.md"
-  local real_plan_sha256
-  real_plan_sha256="$(_real_sha256 "$plan_path")"
-
-  run_verdict --role arch-testing --phase prep --slug "$WAVE_SLUG"
-  [ "$status" -eq 0 ]
-
-  local verdict="$PROJ/.planning/wave-$WAVE_SLUG/arch-testing-verdict.md"
-  grep -q "^\*\*PLAN_SHA256\*\*: $real_plan_sha256\$" "$verdict"
-}
-
-@test "WS2-3 FAIL: prep fails closed when PLAN.md is absent" {
-  # Deliberately do NOT _seed_plan — $WAVE_DIR/PLAN.md must not exist.
-  run_verdict --role arch-testing --phase prep --slug "$WAVE_SLUG"
+@test "WV-12 FAIL: --supersede against a target that does not exist yet exits 2 (integrity violation, not merely non-zero)" {
+  # Deliberately status -eq 2, not a vague -ne 0: this codebase's own exit-code
+  # convention reserves 2 for integrity violations vs 1 for usage errors. -ne 0 would
+  # vacuously pass right now against the CURRENT (unmodified) script too, since an
+  # unrecognized --request flag already exits 1 for an unrelated reason -- pinning the
+  # exact code is what makes this genuinely RED until the real check exists.
+  local req req_sha256
+  req="$(_seed_request verify-final)"
+  req_sha256="$(_real_sha256 "$req")"
+  run bash -c "cd '$PROJ' && printf 'x\n' | CLAUDE_WAVE_SLUG='$WAVE_SLUG' bash '$SCRIPT' --role arch-testing --phase verify-final --slug '$WAVE_SLUG' \
+    --request '$req' --request-sha256 '$req_sha256' --decision approve \
+    --supersede --expected-current-sha256 $(printf 'a%.0s' $(seq 1 64))"
   [ "$status" -eq 2 ]
-  [[ "$output" == *"Plan file not found"* ]]
-  [ ! -f "$PROJ/.planning/wave-$WAVE_SLUG/arch-testing-verdict.md" ]
+  [ ! -f "$PROJ/.planning/wave-$WAVE_SLUG/arch-testing-verdict-verify-final.json" ]
 }
 
-@test "WS2-4 FAIL: prep fails closed when HEAD is unresolvable (fresh repo, no commit)" {
-  # Mirrors VS-4: SEPARATE fresh git init with NO seed commit (HEAD unresolvable).
-  local empty_proj
-  empty_proj="$(mktemp -d)"
-  git -C "$empty_proj" init -q 2>/dev/null
-  mkdir -p "$empty_proj/.planning/wave-$WAVE_SLUG"
-  printf '# Plan\n' > "$empty_proj/.planning/wave-$WAVE_SLUG/PLAN.md"
+# ── WV-13/14 (REDESIGNED WS2-1/WS2-2): head/plan_sha256 are COPIED from the request ──
 
-  run bash -c "cd '$empty_proj' && CLAUDE_WAVE_SLUG='$WAVE_SLUG' \
-    bash '$SCRIPT' --role arch-testing --phase prep --slug '$WAVE_SLUG'"
-  [ "$status" -eq 2 ]
-  [[ "$output" == *"HEAD"* ]]
-  [ ! -f "$empty_proj/.planning/wave-$WAVE_SLUG/arch-testing-verdict.md" ]
+@test "WV-13 PASS: verdict.head equals the bound request's head, not independently re-resolved" {
+  local req req_sha256 request_head
+  req="$(_seed_request prep)"
+  req_sha256="$(_real_sha256 "$req")"
+  request_head="$(node -e "console.log(JSON.parse(require('fs').readFileSync(process.argv[1],'utf8')).head)" "$req")"
 
-  rm -rf "$empty_proj"
-}
+  # Advance HEAD AFTER the request was created but BEFORE writing the verdict -- if
+  # this script re-resolved HEAD itself (old behavior) the verdict would get the NEW
+  # head; the new architecture must still use the REQUEST's (now-stale) head.
+  git -C "$PROJ" -c user.email=test@example.com -c user.name=test commit -q --allow-empty -m drift 2>/dev/null
+  local current_head; current_head="$(git -C "$PROJ" rev-parse HEAD)"
+  [ "$request_head" != "$current_head" ] || return 1
 
-# ── BL-W4-9 sibling: confinement — macOS/BSD-parity, sibling collision rejected ──
-# CORRECTED mid-wave — mirrors write-specialist-dispatch.bats' identical, also-corrected
-# BL-W4-9 block: the shipped fix PORTS write-coordination-artifact.sh's Codex-hardened
-# _realpath_resolve()/_confine_under_planning() (realpath-first, python3
-# os.path.realpath() fallback, fail-closed if both come up empty) rather than adopting
-# _file_in_repo()'s pure-lexical idiom as PLAN.md originally sketched. `realpath -m`
-# legitimately remains as a harmless first attempt. See write-specialist-dispatch.bats'
-# identical BL-W4-9 header for the full rationale.
-#
-# NOTE ON TEST SHAPE: VERDICT_FILE is programmatically derived from an
-# already-validated WAVE_SLUG (same _validate_slug() allowlist + substring reject as
-# write-specialist-dispatch.sh) and an enum-locked --role — a bare CLI argument can
-# never make VERDICT_FILE's STRING representation escape .planning/. The only way to
-# reach a genuine escape through the public CLI is a symlink planted on disk ahead of
-# the run. Unlike write-specialist-dispatch.sh, `_confine_under_planning "$VERDICT_FILE"`
-# runs UNCONDITIONALLY at top level (L244), ahead of the --phase prep/verify-final
-# dispatch and ahead of run_prep()'s own `mkdir -p "$WAVE_DIR"` — so the escape attempt
-# must be caught before any wave-dir content is ever written, regardless of --phase.
-
-@test "BL-W4-9 sibling Confinement BEHAVIORAL: symlink planted inside .planning/ escaping to a '.planning-evil' sibling is rejected end-to-end" {
-  # WAVE_DIR itself (not a sub-directory, unlike DISPATCH_DIR's specialist-dispatches
-  # parent) is the symlink target here, since VERDICT_FILE = "$WAVE_DIR/arch-...-verdict.md"
-  # sits directly inside it — mkdir -p "$WAVE_DIR" only happens later, inside run_prep(),
-  # so the fixture must pre-create the escape itself (no _seed_plan() helper reuse: that
-  # helper mkdir -p's a REAL wave dir, which would conflict with planting a symlink there).
-  local evil_dir="$PROJ/.planning-evil"
-  mkdir -p "$evil_dir"
-  mkdir -p "$PROJ/.planning"
-  # fs.symlinkSync(..., 'junction' on win32) -- plain `ln -s` silently no-ops into a
-  # disconnected real directory on a non-elevated/non-Developer-Mode Windows sandbox (no
-  # error, no symlink: confirmed empirically), which would make this BEHAVIORAL escape
-  # attempt vacuous. NTFS junctions need no elevation and are still followed by
-  # realpath -m/os.path.realpath()/`pwd -P`, so the guard is exercised identically to a
-  # real POSIX symlink. Mirrors the same cross-platform idiom already used in
-  # subagent-start-context-bundle.bats.
-  node - "$evil_dir" "$PROJ/.planning/wave-$WAVE_SLUG" <<'NODE'
-const fs = require('fs');
-const target = process.argv[2];
-const linkPath = process.argv[3];
-fs.symlinkSync(target, linkPath, process.platform === 'win32' ? 'junction' : 'dir');
-NODE
-
-  run bash -c "cd '$PROJ' && CLAUDE_WAVE_SLUG='$WAVE_SLUG' \
-    bash '$SCRIPT' --role arch-testing --phase prep --slug '$WAVE_SLUG'"
-  [ "$status" -eq 2 ]
-  [[ "$output" == *"confinement"* ]] || return 1
-
-  # Nothing written through the symlink to the sibling location.
-  [ -z "$(ls -A "$evil_dir" 2>/dev/null)" ] || return 1
-}
-
-@test "BL-W4-9 sibling CONFINEMENT IDIOM: old bare-glob wrongly accepts a '.planning-evil' sibling collision" {
-  local root="/tmp/bl-w4-9-fixture/.planning"
-  local sibling="/tmp/bl-w4-9-fixture/.planning-evil/arch-testing-verdict.md"
-  # `|| return 1`: defensive against the non-final-[[ ]] bats/bash abort quirk.
-  [[ "$sibling" == "$root"* ]] || return 1
-}
-
-@test "BL-W4-9 sibling CONFINEMENT IDIOM: boundary-safe idiom (_file_in_repo()-style) rejects the same '.planning-evil' sibling collision" {
-  local root="/tmp/bl-w4-9-fixture/.planning"
-  local sibling="/tmp/bl-w4-9-fixture/.planning-evil/arch-testing-verdict.md"
-  ! [[ "$sibling" == "$root" || "$sibling" == "$root"/* ]] || return 1
-}
-
-@test "BL-W4-9 sibling CONFINEMENT IDIOM: boundary-safe idiom still accepts a genuine nested child" {
-  local root="/tmp/bl-w4-9-fixture/.planning"
-  local nested="/tmp/bl-w4-9-fixture/.planning/arch-testing-verdict.md"
-  [[ "$nested" == "$root" || "$nested" == "$root"/* ]] || return 1
-}
-
-# ── Codex #2 fix-round: _shell_physical_resolve() fallback tier is NOT hard-dependent
-#    on python3 ────────────────────────────────────────────────────────────────
-#
-# CodeRabbit/Codex flagged the prior two-step _realpath_resolve() (realpath -> python3
-# only) as making python3 a DE FACTO hard dependency on macOS/BSD: realpath -m always
-# fails there (no -m flag), so python3 was the ONLY thing standing between a legitimate
-# write and a fail-closed exit 2 — a box with no python3 could never write ANY verdict,
-# even a perfectly legitimate one. Fix: a new pure-shell _shell_physical_resolve() tier
-# sits BETWEEN realpath and python3 (peels a target's non-existent trailing components
-# one at a time down to the deepest EXISTING ancestor, `cd`s into it + `pwd -P` to
-# resolve physically — following symlinks — then re-appends the peeled tail). python3
-# is now gated behind `command -v python3` and only reached as a genuine last resort.
-#
-# These tests force BOTH earlier tiers to fail (a `realpath` shell function that always
-# fails, standing in for BSD's missing -m; a `python3` shell function that always
-# returns 127, standing in for "absent") via `export -f`, verified beforehand to
-# correctly shadow the real binaries even for a real script-file invocation
-# (`bash "$SCRIPT" ...`, not just `bash -c`). This proves _shell_physical_resolve()
-# alone carries the confinement check end-to-end — not merely that some fallback exists.
-
-@test "Codex #2 FALLBACK-CHAIN PASS: legitimate nested verdict path is accepted with BOTH realpath -m and python3 unavailable" {
-  _seed_plan "$WAVE_SLUG"
-
-  run bash -c "
-    realpath() { return 1; }
-    python3() { return 127; }
-    export -f realpath
-    export -f python3
-    cd '$PROJ' && CLAUDE_WAVE_SLUG='$WAVE_SLUG' bash '$SCRIPT' --role arch-testing --phase prep --slug '$WAVE_SLUG'
-  "
+  run bash -c "cd '$PROJ' && printf 'x\n' | CLAUDE_WAVE_SLUG='$WAVE_SLUG' bash '$SCRIPT' --role arch-testing --phase prep --slug '$WAVE_SLUG' \
+    --request '$req' --request-sha256 '$req_sha256' --decision approve"
   [ "$status" -eq 0 ]
-  local verdict="$PROJ/.planning/wave-$WAVE_SLUG/arch-testing-verdict.md"
-  [ -f "$verdict" ] || return 1
-  grep -q "APPROVED-PREP" "$verdict" || return 1
+  local verdict="$PROJ/.planning/wave-$WAVE_SLUG/arch-testing-verdict-prep.json"
+  grep -qE "\"head\":[[:space:]]*\"$request_head\"" "$verdict" || return 1
+  ! grep -qE "\"head\":[[:space:]]*\"$current_head\"" "$verdict"
 }
 
-@test "Codex #2 FALLBACK-CHAIN FAIL: symlink-planted '.planning-evil' escape is rejected with BOTH realpath -m and python3 unavailable" {
-  # Mirrors the earlier BL-W4-9 behavioral symlink test, but under the tool-degraded
-  # PATH — proves the pure-shell fallback's `pwd -P` (not python3's os.path.realpath())
-  # is what resolves the symlink physically and catches the escape.
-  local evil_dir="$PROJ/.planning-evil"
-  mkdir -p "$evil_dir"
-  mkdir -p "$PROJ/.planning"
-  # fs.symlinkSync(..., 'junction' on win32) -- plain `ln -s` silently no-ops into a
-  # disconnected real directory on a non-elevated/non-Developer-Mode Windows sandbox (no
-  # error, no symlink: confirmed empirically), which would make this BEHAVIORAL escape
-  # attempt vacuous. NTFS junctions need no elevation and are still followed by
-  # realpath -m/os.path.realpath()/`pwd -P`, so the guard is exercised identically to a
-  # real POSIX symlink. Mirrors the same cross-platform idiom already used in
-  # subagent-start-context-bundle.bats.
-  node - "$evil_dir" "$PROJ/.planning/wave-$WAVE_SLUG" <<'NODE'
-const fs = require('fs');
-const target = process.argv[2];
-const linkPath = process.argv[3];
-fs.symlinkSync(target, linkPath, process.platform === 'win32' ? 'junction' : 'dir');
-NODE
+@test "WV-14 PASS: verdict.plan_sha256 equals the bound request's plan_sha256, not independently re-hashed" {
+  local req req_sha256 request_plan_sha256
+  req="$(_seed_request prep)"
+  req_sha256="$(_real_sha256 "$req")"
+  request_plan_sha256="$(node -e "console.log(JSON.parse(require('fs').readFileSync(process.argv[1],'utf8')).plan_sha256)" "$req")"
 
-  run bash -c "
-    realpath() { return 1; }
-    python3() { return 127; }
-    export -f realpath
-    export -f python3
-    cd '$PROJ' && CLAUDE_WAVE_SLUG='$WAVE_SLUG' bash '$SCRIPT' --role arch-testing --phase prep --slug '$WAVE_SLUG'
-  "
+  run bash -c "cd '$PROJ' && printf 'x\n' | CLAUDE_WAVE_SLUG='$WAVE_SLUG' bash '$SCRIPT' --role arch-testing --phase prep --slug '$WAVE_SLUG' \
+    --request '$req' --request-sha256 '$req_sha256' --decision approve"
+  [ "$status" -eq 0 ]
+  grep -qE "\"plan_sha256\":[[:space:]]*\"$request_plan_sha256\"" "$PROJ/.planning/wave-$WAVE_SLUG/arch-testing-verdict-prep.json" || return 1
+}
+
+# ── WV-15 (replaces VS-7/VS-8/VS-14): rationale content is safely embedded, never ──
+# scanned/extracted-from for any field this script itself writes
+
+@test "WV-15 PASS: rationale containing JSON-special characters and field-lookalike text is safely embedded and never poisons head/decision" {
+  local req req_sha256
+  req="$(_seed_request prep)"
+  req_sha256="$(_real_sha256 "$req")"
+  local real_head; real_head="$(git -C "$PROJ" rev-parse HEAD)"
+  local tricky_body
+  tricky_body='Body with "quotes", a {brace}, a back\slash,'"$(printf '\n')"'an embedded newline, and a fake "head":"'"$(printf 'b%.0s' $(seq 1 40))"'" field'
+
+  run bash -c "cd '$PROJ' && printf '%s\n' \"$tricky_body\" | CLAUDE_WAVE_SLUG='$WAVE_SLUG' bash '$SCRIPT' --role arch-testing --phase prep --slug '$WAVE_SLUG' \
+    --request '$req' --request-sha256 '$req_sha256' --decision approve"
+  [ "$status" -eq 0 ]
+  local verdict="$PROJ/.planning/wave-$WAVE_SLUG/arch-testing-verdict-prep.json"
+
+  # The file must still be valid JSON (proves safe encoding, not delimiter-avoidance).
+  node -e "JSON.parse(require('fs').readFileSync(process.argv[1],'utf8'))" "$verdict"
+
+  # The REAL head field (copied from the request) must be untouched by the fake one
+  # embedded in the rationale text.
+  grep -qE "\"head\":[[:space:]]*\"$real_head\"" "$verdict" || return 1
+  grep -qE '"decision":[[:space:]]*"approve"' "$verdict" || return 1
+}
+
+# ── WV-16 (replaces the confinement-mechanics half of BL-W4-9/Codex#2): a --request ──
+# path escaping .planning/ is rejected by this script before the store is ever invoked
+
+@test "WV-16 FAIL: a --request path escaping .planning/ is rejected before any write is attempted" {
+  local outside="$PROJ/outside-request.json"
+  cp "$(_seed_request prep)" "$outside" 2>/dev/null || true
+  # _seed_request already wrote a real request; just point --request at a copy OUTSIDE
+  # .planning/ entirely.
+  local req; req="$(_seed_request prep)"
+  cp "$req" "$outside"
+  local outside_sha256; outside_sha256="$(_real_sha256 "$outside")"
+  run bash -c "cd '$PROJ' && printf 'x\n' | CLAUDE_WAVE_SLUG='$WAVE_SLUG' bash '$SCRIPT' --role arch-testing --phase prep --slug '$WAVE_SLUG' \
+    --request '$outside' --request-sha256 '$outside_sha256' --decision approve"
   [ "$status" -eq 2 ]
-  [[ "$output" == *"confinement"* ]] || return 1
-
-  # Nothing written through the symlink to the sibling location.
-  [ -z "$(ls -A "$evil_dir" 2>/dev/null)" ] || return 1
+  [ ! -f "$PROJ/.planning/wave-$WAVE_SLUG/arch-testing-verdict-prep.json" ]
 }
 
-# ══════════════════════════════════════════════════════════════════════════
-# Sequence 66/67/73 RED correction — Defect 3: same-HEAD --supersede cannot
-# repair a corrupt verdict; malformed/unterminated delimiter structure fails
-# OPEN instead of closed.
-#
-# Byte-confirmed against the live source before writing anything below (this
-# test-specialist, Sequence 73 session), run_verify_final()'s --supersede
-# branch (~L471-478):
-#   if [[ "$begin_count" -eq 1 && "$stored_head" == "$head_sha" ]]; then
-#     # Idempotent NO-OP: single canonical block, same HEAD already in file...
-#     exit 0
-#   fi
-# This fires purely on "same HEAD already recorded" -- it never inspects
-# whether the existing block's CONTENT is well-formed or corrupt. VS-15
-# below constructs a same-HEAD block whose body is a deliberately corrupt
-# canary string; --supersede must actually rewrite it, not silently leave
-# the corruption in place. This does NOT contradict or duplicate VS-2 (same-
-# HEAD idempotent no-op on an already-WELL-FORMED block, above, unchanged
-# and preserved byte-for-byte) -- VS-15's fixture is deliberately corrupt, a
-# case VS-2 never exercises, and does not claim VS-2's contract is wrong for
-# a well-formed block.
-#
-# Separately, an UNTERMINATED delimited block (a BEGIN with no matching END)
-# always yields stored_head=="" (extraction is gated on end_line being found
-# at all -- `if [[ -n "$end_line" ]]`), so it can never take the same-HEAD
-# no-op branch above; it always falls into the "different HEAD" excise-and-
-# append branch instead. That branch's awk excision
-# (`/^<!-- BEGIN VERIFY-FINAL -->$/ { skip=1 } !skip { print }
-# /^<!-- END VERIFY-FINAL -->$/ { skip=0 }`) never un-sets skip when no END
-# is ever seen -- every byte from BEGIN through EOF is silently dropped, and
-# the function still returns success (exit 0), confirmed by direct trace of
-# the same source before writing VS-16 below. The fix must fail CLOSED
-# (reject, non-zero -- matching this script's own documented "2 integrity
-# violation" bucket, the same bucket dual-token/orphan-final/traversal
-# already use) on this malformed shape instead of silently truncating and
-# reporting success. Neither VS-15 nor VS-16 duplicates the already-covered
-# different-HEAD-replacement (VS-1), no-PREP-hard-failure (VS-9), or
-# non-supersede-replay-guard (VS-3) cases.
-# ══════════════════════════════════════════════════════════════════════════
+# ── WV-17 (replaces VS-2, documents the ACTUAL new behavior -- see header) ──────────
 
-@test "VS-15 FAIL(RED): same-HEAD --supersede must repair a corrupt existing block, not silently no-op and leave the corruption in place" {
-  _seed_plan "$WAVE_SLUG"
-  run_verdict --role arch-testing --phase prep --slug "$WAVE_SLUG"
+@test "WV-17 PASS: supersede with content identical to current still performs a fresh durable write, NOT a byte-preserving no-op (behavior change from the old script, documented not assumed)" {
+  # Fixture fix (#24): seed a prep verdict first -- see WV-10's comment for why.
+  local req_prep req_prep_sha256
+  req_prep="$(_seed_request prep)"
+  req_prep_sha256="$(_real_sha256 "$req_prep")"
+  bash -c "cd '$PROJ' && printf 'prep body\n' | CLAUDE_WAVE_SLUG='$WAVE_SLUG' bash '$SCRIPT' --role arch-testing --phase prep --slug '$WAVE_SLUG' \
+    --request '$req_prep' --request-sha256 '$req_prep_sha256' --decision approve" >/dev/null 2>&1
+
+  local req1 req1_sha256
+  req1="$(_seed_request verify-final)"
+  req1_sha256="$(_real_sha256 "$req1")"
+  local ev="$PROJ/.planning/wave-$WAVE_SLUG/evidence.txt"; printf 'e\n' > "$ev"
+  bash -c "cd '$PROJ' && printf 'same\n' | CLAUDE_WAVE_SLUG='$WAVE_SLUG' bash '$SCRIPT' --role arch-testing --phase verify-final --slug '$WAVE_SLUG' \
+    --request '$req1' --request-sha256 '$req1_sha256' --decision approve \
+    --evidence-file '$ev'" >/dev/null 2>&1
+
+  local vf_file="$PROJ/.planning/wave-$WAVE_SLUG/arch-testing-verdict-verify-final.json"
+  local before_sha256; before_sha256="$(_real_sha256 "$vf_file")"
+
+  git -C "$PROJ" -c user.email=test@example.com -c user.name=test commit -q --allow-empty -m second 2>/dev/null
+  local req2 req2_sha256
+  req2="$(_seed_request verify-final)"
+  req2_sha256="$(_real_sha256 "$req2")"
+
+  # Re-supersede with a FRESH request but structurally-equivalent content shape --
+  # the resulting bytes will still differ (in_reply_to/request_ref/created_at change),
+  # so this is not literally "same bytes twice", but proves the CAS path is a real
+  # write every time, never a cached/preserved-inode shortcut.
+  run bash -c "cd '$PROJ' && printf 'same\n' | CLAUDE_WAVE_SLUG='$WAVE_SLUG' bash '$SCRIPT' --role arch-testing --phase verify-final --slug '$WAVE_SLUG' \
+    --request '$req2' --request-sha256 '$req2_sha256' --decision approve \
+    --evidence-file '$ev' \
+    --supersede --expected-current-sha256 '$before_sha256'"
   [ "$status" -eq 0 ]
-
-  local verdict="$PROJ/.planning/wave-$WAVE_SLUG/arch-testing-verdict.md"
-  local current_head
-  current_head="$(git -C "$PROJ" rev-parse HEAD)"
-
-  # Hand-write a delimited VERIFY-FINAL block already bound to the CURRENT
-  # HEAD, but whose body is a deliberately corrupt canary string a legitimate
-  # architect verdict would never contain.
-  printf '\n<!-- BEGIN VERIFY-FINAL -->\nCORRUPT-CANARY-CONTENT-e916\n**HEAD**: %s\n**Phase**: VERIFY-FINAL\n**Status**: APPROVED-VERIFY-FINAL\n\n<!-- END VERIFY-FINAL -->\n' \
-    "$current_head" >> "$verdict"
-
-  run bash -c "cd '$PROJ' && printf '## Repaired verdict body\n' | CLAUDE_WAVE_SLUG='$WAVE_SLUG' \
-    bash '$SCRIPT' --role arch-testing --phase verify-final --supersede --slug '$WAVE_SLUG'"
-  [ "$status" -eq 0 ]
-
-  # The corrupt canary must be GONE -- a true repair rewrites the block, it
-  # does not leave stale corrupt content sitting in the file.
-  ! grep -q "CORRUPT-CANARY-CONTENT-e916" "$verdict"
-
-  # The fresh stdin body must be present instead.
-  grep -q "## Repaired verdict body" "$verdict"
-
-  # Exactly ONE **HEAD**: line, still the current HEAD.
-  local head_count
-  head_count="$(grep -c '^\*\*HEAD\*\*:' "$verdict")"
-  [ "$head_count" -eq 1 ]
-  grep -q "^\*\*HEAD\*\*: $current_head$" "$verdict"
-
-  grep -q "APPROVED-PREP" "$verdict"
-  grep -q "APPROVED-VERIFY-FINAL" "$verdict"
+  local after_sha256; after_sha256="$(_real_sha256 "$vf_file")"
+  [ "$after_sha256" != "$before_sha256" ] || return 1
 }
 
-@test "VS-16 FAIL(RED): unterminated BEGIN VERIFY-FINAL delimiter (no matching END) must fail closed, not silently drop content through EOF and report success" {
-  _seed_plan "$WAVE_SLUG"
-  run_verdict --role arch-testing --phase prep --slug "$WAVE_SLUG"
-  [ "$status" -eq 0 ]
+# ── WV-18 (NEW): --request-sha256 mismatch fails closed ───────────────────────────
 
-  local verdict="$PROJ/.planning/wave-$WAVE_SLUG/arch-testing-verdict.md"
-  local current_head
-  current_head="$(git -C "$PROJ" rev-parse HEAD)"
-
-  # Hand-corrupt the file: a delimited block whose BEGIN is never matched by
-  # an END -- structurally malformed, distinct from VS-11/VS-12/VS-13's own
-  # well-terminated multi-block scenarios (never duplicated here).
-  printf '\n<!-- BEGIN VERIFY-FINAL -->\n**HEAD**: %s\n**Status**: APPROVED-VERIFY-FINAL\nUNTERMINATED-CANARY-b207\n' \
-    "$current_head" >> "$verdict"
-
-  run bash -c "cd '$PROJ' && CLAUDE_WAVE_SLUG='$WAVE_SLUG' \
-    bash '$SCRIPT' --role arch-testing --phase verify-final --supersede --slug '$WAVE_SLUG' < /dev/null"
-
-  # Fail CLOSED: malformed delimiter structure is an integrity violation,
-  # matching this script's own documented exit-code contract (0 success, 1
-  # usage, 2 integrity violation) -- never a silent success.
+@test "WV-18 FAIL: --request-sha256 not matching the actual request file's real digest exits 2, writes nothing" {
+  local req
+  req="$(_seed_request prep)"
+  run bash -c "cd '$PROJ' && printf 'x\n' | CLAUDE_WAVE_SLUG='$WAVE_SLUG' bash '$SCRIPT' --role arch-testing --phase prep --slug '$WAVE_SLUG' \
+    --request '$req' --request-sha256 $(printf 'f%.0s' $(seq 1 64)) --decision approve"
   [ "$status" -eq 2 ]
-
-  # Must NOT have already silently truncated/dropped the canary content via
-  # a mutating rewrite before failing.
-  grep -q "UNTERMINATED-CANARY-b207" "$verdict"
+  [ ! -f "$PROJ/.planning/wave-$WAVE_SLUG/arch-testing-verdict-prep.json" ]
 }
 
-# ── P2 same-actor PREP publication binding ──────────────────────────────
+# ── WV-19 (NEW): request/invocation role-phase-wave agreement enforced before write ──
 
-@test "PPB2-1 valid publication nonce is rendered exactly once after PLAN_SHA256" {
-  _seed_plan "$WAVE_SLUG"
+@test "WV-19 FAIL: a request bound for a different role than --role fails closed, writes nothing" {
+  local req req_sha256
+  req="$(_seed_request prep)"
+  req_sha256="$(_real_sha256 "$req")"
+  run bash -c "cd '$PROJ' && printf 'x\n' | CLAUDE_WAVE_SLUG='$WAVE_SLUG' bash '$SCRIPT' --role arch-platform --phase prep --slug '$WAVE_SLUG' \
+    --request '$req' --request-sha256 '$req_sha256' --decision approve"
+  [ "$status" -eq 2 ]
+  [ ! -f "$PROJ/.planning/wave-$WAVE_SLUG/arch-platform-verdict-prep.json" ]
+}
+
+# ── WV-20 (NEW): escalate without --reason-code fails closed ──────────────────────
+
+@test "WV-20 FAIL: --decision escalate without --reason-code exits 2, writes nothing" {
+  local req req_sha256
+  req="$(_seed_request prep)"
+  req_sha256="$(_real_sha256 "$req")"
+  run bash -c "cd '$PROJ' && printf 'x\n' | CLAUDE_WAVE_SLUG='$WAVE_SLUG' bash '$SCRIPT' --role arch-testing --phase prep --slug '$WAVE_SLUG' \
+    --request '$req' --request-sha256 '$req_sha256' --decision escalate"
+  [ "$status" -eq 2 ]
+  [ ! -f "$PROJ/.planning/wave-$WAVE_SLUG/arch-testing-verdict-prep.json" ]
+}
+
+# ── WV-21 (ports ★V2, kept as a workflow-sanity/fail-fast guard per arch-platform's ──
+# explicit ruling relayed via arch-testing -- NOT a hard security boundary, same
+# framing as the old "No prep verdict found" message.
+
+@test "WV-21 FAIL: verify-final without a prior published prep for the same role/wave fails closed (exit 2, not merely non-zero)" {
+  # -eq 2, not -ne 0, for the same vacuous-pass reason documented at WV-12: an
+  # unrecognized --request flag against the CURRENT script already exits 1 for an
+  # unrelated reason, which -ne 0 would wrongly accept as this specific guard.
+  local req req_sha256
+  req="$(_seed_request verify-final)"
+  req_sha256="$(_real_sha256 "$req")"
+  local ev="$PROJ/.planning/wave-$WAVE_SLUG/evidence.txt"; printf 'e\n' > "$ev"
+  run bash -c "cd '$PROJ' && printf 'x\n' | CLAUDE_WAVE_SLUG='$WAVE_SLUG' bash '$SCRIPT' --role arch-testing --phase verify-final --slug '$WAVE_SLUG' \
+    --request '$req' --request-sha256 '$req_sha256' --decision approve --evidence-file '$ev'"
+  [ "$status" -eq 2 ]
+  [ ! -f "$PROJ/.planning/wave-$WAVE_SLUG/arch-testing-verdict-verify-final.json" ]
+}
+
+# ══════════════ Publication-nonce legacy compat shim (task tracker item, team-lead ═══
+# approved, 6 mandatory rules relayed via arch-testing/arch-platform (expanded from an
+# earlier 3-condition draft -- see the header's RESOLVED note for full provenance):
+# (1) activates ONLY on explicit --publication-nonce presence with --phase prep, never
+#     auto-detection/absent-args/fallback -- WV-COMPAT-7.
+# (2) reproduces the legacy artifact byte-for-byte -- WV-COMPAT-1.
+# (3) rejects any combination with new request/digest/decision/evidence args,
+#     --supersede, or non-empty stdin -- WV-COMPAT-3/4/5/6/9.
+# (4) structured path stays exclusively JSON/request-bound/no-fallback -- WV-COMPAT-2
+#     plus every non-nonce case in this file (WV-1..21) collectively.
+# (5) RED/GREEN for bidirectional isolation, ambiguous combinations, exact output, and
+#     non-authorization of the structured path -- WV-COMPAT-1 (extended)/2/8.
+# (6) documented exception + retirement owner -- a P4 docs task, intentionally
+#     untested here (no test can assert an ownership decision).
+# NOT part of the original 49 cases or PLAN.md's normative verdict/v1 schema -- a
+# narrow, deliberate parallel mechanism for one out-of-manifest consumer (runtime-
+# bridge-codex's p2-prep-verdict.cjs), never integrated into the new JSON contract.
+
+# Condition 2(a): byte-identical regression test. Golden structure is SOURCE-DERIVED
+# (see report to arch-testing), not captured via a live pre-Wave-3 execution -- a
+# direct cross-reference of write-verdict.sh's own heredoc template (lines 367-381 at
+# the time of this writing) against prep-publication-grammar.cjs's exact validator
+# (lines 42-139), both read in full. Every line except Timestamp (wall-clock, asserted
+# by format+window instead) must match byte-for-byte. The strongest possible proof is
+# included: the REAL production grammar module is invoked against the script's actual
+# output, not just a string-shape assertion.
+
+@test "WV-COMPAT-1 PASS: --publication-nonce reproduces today's exact legacy markdown output (golden fixture, source-derived) and the real grammar validator accepts it" {
   local nonce="0123456789abcdef0123456789abcdef"
-  run_verdict --role arch-testing --phase prep --slug "$WAVE_SLUG" --publication-nonce "$nonce"
+  local wave_dir="$PROJ/.planning/wave-$WAVE_SLUG"
+  mkdir -p "$wave_dir"
+  printf '# Plan\n\nSome plan content.\n' > "$wave_dir/PLAN.md"
+  local real_plan_sha256; real_plan_sha256="$(_real_sha256 "$wave_dir/PLAN.md")"
+  local real_head; real_head="$(git -C "$PROJ" rev-parse HEAD)"
+
+  run bash -c "cd '$PROJ' && CLAUDE_WAVE_SLUG='$WAVE_SLUG' bash '$SCRIPT' --role arch-testing --phase prep --slug '$WAVE_SLUG' --publication-nonce '$nonce'"
   [ "$status" -eq 0 ]
-  local verdict="$PROJ/.planning/wave-$WAVE_SLUG/arch-testing-verdict.md"
-  [ -f "$verdict" ] || return 1
-  [ "$(grep -c '^\*\*PUBLICATION-NONCE\*\*: ' "$verdict")" -eq 1 ] || return 1
-  grep -q "^\*\*PUBLICATION-NONCE\*\*: $nonce$" "$verdict" || return 1
-  local plan_line nonce_line
-  plan_line="$(grep -n '^\*\*PLAN_SHA256\*\*: ' "$verdict" | cut -d: -f1)"
-  nonce_line="$(grep -n '^\*\*PUBLICATION-NONCE\*\*: ' "$verdict" | cut -d: -f1)"
-  [ "$nonce_line" -eq $((plan_line + 1)) ]
+
+  local legacy_file="$wave_dir/arch-testing-verdict.md"
+  [ -f "$legacy_file" ] || return 1
+
+  [ "$(sed -n '1p' "$legacy_file")" = "# arch-testing verdict — wave-$WAVE_SLUG" ] || return 1
+  [ "$(sed -n '2p' "$legacy_file")" = "" ] || return 1
+  [ "$(sed -n '3p' "$legacy_file")" = "**Phase**: PREP" ] || return 1
+  [ "$(sed -n '5p' "$legacy_file")" = "**Status**: APPROVED-PREP" ] || return 1
+  [ "$(sed -n '6p' "$legacy_file")" = "**PREP-HEAD**: $real_head" ] || return 1
+  [ "$(sed -n '7p' "$legacy_file")" = "**PLAN_SHA256**: $real_plan_sha256" ] || return 1
+  [ "$(sed -n '8p' "$legacy_file")" = "**PUBLICATION-NONCE**: $nonce" ] || return 1
+
+  local line4; line4="$(sed -n '4p' "$legacy_file")"
+  [[ "$line4" =~ ^\*\*Timestamp\*\*:\ [0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$ ]] || return 1
+
+  local total_lines; total_lines="$(wc -l < "$legacy_file" | tr -d ' \r')"
+  [ "$total_lines" -eq 9 ] || return 1
+
+  # Strongest proof: run the file through the REAL production validator, not just a
+  # shape assertion. validatePrepPublicationGrammar itself uses none of its factory's
+  # injected deps (confirmed by direct read), so stubs are safe here.
+  local verify_script="$PROJ/__verify-grammar.cjs"
+  cat > "$verify_script" <<'NODEEOF'
+const { createPrepPublicationGrammar } = require(process.argv[2]);
+const noop = () => {};
+const grammar = createPrepPublicationGrammar({
+  isCanonicalIsoUtc: noop, hasExactKeys: noop, canonicalJSONStringify: noop,
+  sha256Buffer: noop, registryRepoDir: noop, readRegistryRecord: noop,
+  writeRegistryRecordReplace: noop, path: require('path'), crypto: require('crypto'),
+  isHexDigest64: noop, isSafeP2SubjectPath: noop, nowIsoForRegistry: noop,
+  PREP_PUBLICATION_INTENT_CORRELATED_FIELDS: [], PREP_PUBLICATION_INTENT_STATES: [],
+  PREP_PUBLICATION_INTENT_KEYS: [], PREP_PUBLICATION_RECEIPT_SCHEMA: 'x',
+  PREP_PUBLICATION_RECEIPT_KEYS: [], validatePrepPublicationIntentRecord: noop,
+  validatePrepPublicationReceiptRecord: noop, prepPublicationIntentPathFor: noop,
+  prepPublicationReceiptPathFor: noop,
+});
+const bytes = require('fs').readFileSync(process.argv[3]);
+const intent = {
+  role: process.argv[4], wave_slug: process.argv[5], head: process.argv[6],
+  plan_sha256: process.argv[7], publication_nonce: process.argv[8],
+};
+const result = grammar.validatePrepPublicationGrammar(bytes, intent);
+if (!result.ok) { process.stderr.write('GRAMMAR REJECTED: ' + result.reason + '\n'); process.exit(1); }
+process.exit(0);
+NODEEOF
+  run node "$verify_script" "$BATS_TEST_DIRNAME/../lib/runtime-role-lifecycle/prep-publication-grammar.cjs" \
+    "$legacy_file" arch-testing "$WAVE_SLUG" "$real_head" "$real_plan_sha256" "$nonce"
+  [ "$status" -eq 0 ] || return 1
+
+  # rule 5, second isolation direction (arch-testing, 2026-09-21): the nonce path must
+  # not ALSO produce any structured-system side effect -- no JSON verdict, no request
+  # ever created/consumed. Complements WV-COMPAT-8's stronger "even if fed to the new
+  # reader it's rejected" proof with a simpler "it never even tried" construction proof.
+  [ ! -e "$wave_dir/arch-testing-verdict-prep.json" ] || return 1
+  [ -z "$(ls -A "$wave_dir/verdict-requests" 2>/dev/null)" ] || return 1
 }
 
-@test "PPB2-2 omitted publication nonce preserves legacy PREP bytes without a nonce line" {
-  _seed_plan "$WAVE_SLUG"
-  run_verdict --role arch-testing --phase prep --slug "$WAVE_SLUG"
+# Condition 2(b) + condition 1 (isolation, already structurally confirmed by disjoint
+# paths -- this test proves it end-to-end rather than by inspection alone).
+
+@test "WV-COMPAT-2 PASS: a normal call WITHOUT --publication-nonce never touches the legacy .md path, goes through the new JSON system untouched" {
+  local req req_sha256
+  req="$(_seed_request prep)"
+  req_sha256="$(_real_sha256 "$req")"
+  run bash -c "cd '$PROJ' && printf 'x\n' | CLAUDE_WAVE_SLUG='$WAVE_SLUG' bash '$SCRIPT' --role arch-testing --phase prep --slug '$WAVE_SLUG' \
+    --request '$req' --request-sha256 '$req_sha256' --decision approve"
   [ "$status" -eq 0 ]
-  local verdict="$PROJ/.planning/wave-$WAVE_SLUG/arch-testing-verdict.md"
-  [ -f "$verdict" ] || return 1
-  ! grep -q '^\*\*PUBLICATION-NONCE\*\*:' "$verdict"
-  grep -q '^\*\*Status\*\*: APPROVED-PREP$' "$verdict"
+  [ -f "$PROJ/.planning/wave-$WAVE_SLUG/arch-testing-verdict-prep.json" ] || return 1
+  [ ! -e "$PROJ/.planning/wave-$WAVE_SLUG/arch-testing-verdict.md" ]
 }
 
-@test "PPB2-3 malformed publication nonce values fail closed before verdict creation" {
-  local index=0 value slug
-  for value in \
-    "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" \
-    "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" \
-    "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" \
-    "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"; do
-    index=$((index + 1))
-    slug="ppb2-invalid-$index"
-    _seed_plan "$slug"
-    run_verdict_slug "$slug" --role arch-testing --phase prep --slug "$slug" --publication-nonce "$value"
-    [ "$status" -eq 2 ]
-    [[ "$output" == *"publication-nonce"* ]] || return 1
-    [ ! -e "$PROJ/.planning/wave-$slug/arch-testing-verdict.md" ] || return 1
-  done
+# ══════════════ WV-COMPAT-3..8 (rule 3 + rule 5 additions, arch-platform-specified ═══
+# 2026-09-21 in direct follow-up review): --publication-nonce is a narrow, mutually-
+# exclusive legacy path -- any combination with new-system flags or non-empty stdin
+# must fail closed (rule 3), and the legacy artifact must never be recognized as
+# authorizing anything by the new structured system's own reader (rule 5's strongest
+# requirement -- proven against the REAL CLI/contract code, same "strongest possible
+# proof" philosophy as WV-COMPAT-1's grammar-validator check, not a shape assertion).
+# One scenario per @test (matches this file's WV-18/19/20 convention) rather than a
+# parameterized/looped case, so a regression in one combination names itself directly.
+# Same isolation/fixture conventions as WV-COMPAT-1/2 above.
+
+@test "WV-COMPAT-3 FAIL: --publication-nonce combined with --request/--request-sha256/--decision exits 2, writes neither the legacy nor the new-system artifact" {
+  local nonce="0123456789abcdef0123456789abcdef"
+  local req req_sha256
+  req="$(_seed_request prep)"
+  req_sha256="$(_real_sha256 "$req")"
+  run bash -c "cd '$PROJ' && CLAUDE_WAVE_SLUG='$WAVE_SLUG' bash '$SCRIPT' --role arch-testing --phase prep --slug '$WAVE_SLUG' \
+    --publication-nonce '$nonce' --request '$req' --request-sha256 '$req_sha256' --decision approve"
+  [ "$status" -eq 2 ]
+  [ ! -e "$PROJ/.planning/wave-$WAVE_SLUG/arch-testing-verdict.md" ] || return 1
+  [ ! -e "$PROJ/.planning/wave-$WAVE_SLUG/arch-testing-verdict-prep.json" ] || return 1
+}
+
+@test "WV-COMPAT-4 FAIL: --publication-nonce combined with --evidence-file exits 2, writes neither artifact" {
+  local nonce="0123456789abcdef0123456789abcdef"
+  mkdir -p "$PROJ/.planning/wave-$WAVE_SLUG"
+  local ev="$PROJ/.planning/wave-$WAVE_SLUG/evidence.txt"; printf 'e\n' > "$ev"
+  run bash -c "cd '$PROJ' && CLAUDE_WAVE_SLUG='$WAVE_SLUG' bash '$SCRIPT' --role arch-testing --phase prep --slug '$WAVE_SLUG' \
+    --publication-nonce '$nonce' --evidence-file '$ev'"
+  [ "$status" -eq 2 ]
+  [ ! -e "$PROJ/.planning/wave-$WAVE_SLUG/arch-testing-verdict.md" ] || return 1
+  [ ! -e "$PROJ/.planning/wave-$WAVE_SLUG/arch-testing-verdict-prep.json" ] || return 1
+}
+
+@test "WV-COMPAT-5 FAIL: --publication-nonce combined with bare --supersede exits 2, writes neither artifact" {
+  local nonce="0123456789abcdef0123456789abcdef"
+  run bash -c "cd '$PROJ' && CLAUDE_WAVE_SLUG='$WAVE_SLUG' bash '$SCRIPT' --role arch-testing --phase prep --slug '$WAVE_SLUG' \
+    --publication-nonce '$nonce' --supersede"
+  [ "$status" -eq 2 ]
+  [ ! -e "$PROJ/.planning/wave-$WAVE_SLUG/arch-testing-verdict.md" ] || return 1
+  [ ! -e "$PROJ/.planning/wave-$WAVE_SLUG/arch-testing-verdict-prep.json" ] || return 1
+}
+
+@test "WV-COMPAT-6 FAIL: --publication-nonce with non-empty stdin exits 2, writes neither artifact (contrast WV-COMPAT-1's no-stdin-at-all invocation)" {
+  local nonce="0123456789abcdef0123456789abcdef"
+  run bash -c "cd '$PROJ' && printf 'unexpected rationale text\n' | CLAUDE_WAVE_SLUG='$WAVE_SLUG' bash '$SCRIPT' --role arch-testing --phase prep --slug '$WAVE_SLUG' \
+    --publication-nonce '$nonce'"
+  [ "$status" -eq 2 ]
+  [ ! -e "$PROJ/.planning/wave-$WAVE_SLUG/arch-testing-verdict.md" ] || return 1
+  [ ! -e "$PROJ/.planning/wave-$WAVE_SLUG/arch-testing-verdict-prep.json" ] || return 1
+}
+
+@test "WV-COMPAT-7 FAIL: --publication-nonce with --phase verify-final exits 2, writes neither artifact (nonce activates for PREP only)" {
+  local nonce="0123456789abcdef0123456789abcdef"
+  run bash -c "cd '$PROJ' && CLAUDE_WAVE_SLUG='$WAVE_SLUG' bash '$SCRIPT' --role arch-testing --phase verify-final --slug '$WAVE_SLUG' \
+    --publication-nonce '$nonce'"
+  [ "$status" -eq 2 ]
+  [ ! -e "$PROJ/.planning/wave-$WAVE_SLUG/arch-testing-verdict.md" ] || return 1
+  [ ! -e "$PROJ/.planning/wave-$WAVE_SLUG/arch-testing-verdict-verify-final.json" ] || return 1
+}
+
+@test "WV-COMPAT-8 PASS: the legacy --publication-nonce artifact is never recognized as authorizing anything by the new structured system's own validate path (real CLI/contract code, not a shape assertion)" {
+  local nonce="0123456789abcdef0123456789abcdef"
+  local wave_dir="$PROJ/.planning/wave-$WAVE_SLUG"
+  mkdir -p "$wave_dir"
+  printf '# Plan\n\nSome plan content.\n' > "$wave_dir/PLAN.md"
+  local real_plan_sha256; real_plan_sha256="$(_real_sha256 "$wave_dir/PLAN.md")"
+  local real_head; real_head="$(git -C "$PROJ" rev-parse HEAD)"
+
+  run bash -c "cd '$PROJ' && CLAUDE_WAVE_SLUG='$WAVE_SLUG' bash '$SCRIPT' --role arch-testing --phase prep --slug '$WAVE_SLUG' --publication-nonce '$nonce'"
+  [ "$status" -eq 0 ]
+  local legacy_file="$wave_dir/arch-testing-verdict.md"
+  [ -f "$legacy_file" ] || return 1
+
+  # Feed the exact legacy artifact into the NEW system's own validate subcommand --
+  # readConfinedFile/decodeRecord's checks reject the markdown bytes outright (caught
+  # internally, no crash), so wellFormed/authorizes stay at their false defaults
+  # (verdict-evidence-contract.cjs's composeResult: authorizes requires wellFormed
+  # among other bound fields) -- confirmed by direct read of contract.cjs before
+  # writing this assertion.
+  # --separate-stderr (task #20, arch-testing, 2026-09-21): this environment has
+  # NO_COLOR/FORCE_COLOR both set, which makes node print a startup warning to
+  # stderr on some invocations -- bats' default merged $output would corrupt the
+  # clean JSON line the next `run node -e` step below parses via JSON.parse. Same
+  # fix class as task #19's write-verdict-request.bats harness gap.
+  local cli="$BATS_TEST_DIRNAME/../lib/verdict-evidence-contract-cli.cjs"
+  run --separate-stderr bash -c "cd '$PROJ' && node '$cli' validate --path '.planning/wave-$WAVE_SLUG/arch-testing-verdict.md' \
+    --expect-role arch-testing --expect-phase prep --expect-wave-slug '$WAVE_SLUG' \
+    --expect-plan-sha256 '$real_plan_sha256' --expect-head '$real_head'"
+  [ "$status" -eq 0 ] || return 1
+
+  run node -e '
+const r = JSON.parse(process.argv[1]);
+process.exit(r.wellFormed === false && r.authorizes === false ? 0 : 1);
+' "$output"
+  [ "$status" -eq 0 ] || return 1
+}
+
+@test "WV-COMPAT-9 FAIL: --publication-nonce combined with a fully-formed --supersede --expected-current-sha256 exits 2, writes neither artifact (closes the loophole WV-COMPAT-5's bare --supersede case alone wouldn't: proves the mutual-exclusion check fires even when --supersede's OWN completeness requirement is independently satisfied)" {
+  local nonce="0123456789abcdef0123456789abcdef"
+  run bash -c "cd '$PROJ' && CLAUDE_WAVE_SLUG='$WAVE_SLUG' bash '$SCRIPT' --role arch-testing --phase prep --slug '$WAVE_SLUG' \
+    --publication-nonce '$nonce' --supersede --expected-current-sha256 $(printf 'a%.0s' $(seq 1 64))"
+  [ "$status" -eq 2 ]
+  [ ! -e "$PROJ/.planning/wave-$WAVE_SLUG/arch-testing-verdict.md" ] || return 1
+  [ ! -e "$PROJ/.planning/wave-$WAVE_SLUG/arch-testing-verdict-prep.json" ] || return 1
 }

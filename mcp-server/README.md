@@ -61,13 +61,8 @@ mcp-server/
       skills.ts           # Dynamic skill resources (skills://)
       changelog.ts        # Changelog resource (changelog://)
     tools/
-      index.ts            # Tool registration aggregator + rate limiter
-      check-freshness.ts  # Doc freshness validation
-      verify-kmp.ts       # KMP package verification
-      check-version-sync.ts  # Version sync check
-      script-parity.ts    # SH/PS1 script parity
-      setup-check.ts      # Project setup validation
-      validate-all.ts     # Meta-tool: run all gates
+      index.ts            # Registration aggregator for all 47 tools + limiter
+      *.ts                # Validation, audit, sync, search, metrics, and bridge tools
     prompts/
       index.ts            # Prompt registration aggregator
       architecture-review.ts  # Architecture review prompt
@@ -89,7 +84,7 @@ mcp-server/
 **Key patterns:**
 - **Server factory:** `createServer()` returns a configured `McpServer` without binding to a transport, enabling testing via `InMemoryTransport`.
 - **stderr-only logging:** All output goes to `console.error()`. An ESLint `no-console` rule prevents accidental `console.log()` usage that would corrupt the JSON-RPC stream.
-- **Rate limiting:** A shared sliding window limiter (30 calls / 60 seconds) prevents runaway agent loops across all tools.
+- **Rate limiting:** A shared sliding window limiter (45 calls / 60 seconds) prevents runaway agent loops across all tools.
 
 ## Resources
 
@@ -127,7 +122,7 @@ Use `client.listResources()` to discover all available skills.
 
 ## Tools
 
-Tools are invocable operations via `client.callTool()`. All tools return structured JSON with a `status` field (`PASS`, `FAIL`, `ERROR`, or `TIMEOUT`).
+Tools are invocable operations via `client.callTool()`. All tools return structured JSON with a `status` field (`PASS`, `FAIL`, `ERROR`, or `TIMEOUT`). The table below is the core bootstrap subset, not the complete catalog. The complete, generated list is [Operational Surface Catalog](../docs/agents/operational-surface-catalog.md), derived from actual registrations under `src/tools/`.
 
 | Tool Name | Description | Input Schema |
 |---|---|---|
@@ -137,9 +132,9 @@ Tools are invocable operations via `client.callTool()`. All tools return structu
 | `script-parity` | Validate that scripts/sh/ and scripts/ps1/ have matching basenames | `{ projectRoot?: string }` |
 | `setup-check` | Validate project configuration: env var, docs, scripts, skills, agents | `{ projectRoot?: string }` |
 | `validate-all` | Run all validation gates and return combined PASS/FAIL results | `{ projectRoot?: string, gates?: string }` |
-| `rate-limit-status` | Check current rate limit status (30 calls per minute) | `{}` |
+| `rate-limit-status` | Check current rate limit status (45 calls per minute) | `{}` |
 
-**Rate limiting:** All tools share a 30-calls-per-60-seconds rate limiter. The `rate-limit-status` tool reports current limits.
+**Rate limiting:** All tools share a 45-calls-per-60-seconds rate limiter. The `rate-limit-status` tool reports current limits.
 
 ## Prompts
 
