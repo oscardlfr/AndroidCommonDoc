@@ -21,7 +21,23 @@ if [[ ! -f "$verdict_file" ]]; then
   exit 2
 fi
 
-content="$(cat "$verdict_file")"
+# Dual-mode (wave structured-verdict-evidence-contract, PLAN.md sec 3.8): a verdict/v1
+# JSON record's rationale is extracted via the canonical CLI read-field subcommand; a
+# legacy Markdown verdict is read byte-for-byte unchanged (additive, no caller migration
+# forced -- some out-of-manifest frozen templates may still pass an .md path).
+case "$verdict_file" in
+  *.json)
+    verdict_lib_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/../lib" && pwd)"
+    if ! read_field_out="$(node "$verdict_lib_dir/verdict-evidence-contract-cli.cjs" read-field --path "$verdict_file" --field rationale)"; then
+      echo "ERROR: could not read 'rationale' field from $verdict_file: $read_field_out" >&2
+      exit 2
+    fi
+    content="$(python3 -c "import json,sys; print(json.loads(sys.argv[1])['value'])" "$read_field_out")"
+    ;;
+  *)
+    content="$(cat "$verdict_file")"
+    ;;
+esac
 
 # Extract sections G and H — match both ## and ### header depths
 # `sed '$d'` drops the trailing delimiter line. `head -n -1` is a GNU extension —

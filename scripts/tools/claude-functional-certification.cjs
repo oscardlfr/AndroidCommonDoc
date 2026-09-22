@@ -1099,13 +1099,14 @@ if (transportProfile === 'native-claude-cli') {
 // -- Current-PREP launch precondition ----------------------------------------
 // A full P4 scenario ends in an APPROVED ingestion whose correlated result the retained
 // doc-updater must actually WRITE. That write passes through the production
-// premature-execution-gate, which requires an APPROVED-PREP arch verdict bound to the
-// exact current PLAN bytes and to a PREP-HEAD that is an ancestor of HEAD. With no such
-// verdict on disk the write is blocked deterministically, no correlated result can ever
-// appear, and the run burns a genuine Claude session to discover it. Assert exactly the
-// condition the gate asserts, from disk, BEFORE anything is spawned. This mirrors
-// .claude/hooks/premature-execution-gate.js and never relaxes it.
-const CURRENT_PREP_VERDICT_FILENAME = /^(?:pr\d+-)?arch-[a-z]+-verdict\.md$/;
+// premature-execution-gate, which requires a canonical verdict/v1 PREP record (authorizes
+// == true) bound to the exact current PLAN bytes and to a PREP HEAD that is an ancestor of
+// HEAD. With no such verdict on disk the write is blocked deterministically, no correlated
+// result can ever appear, and the run burns a genuine Claude session to discover it. Assert
+// exactly the condition the gate asserts, from disk, BEFORE anything is spawned. This
+// mirrors .claude/hooks/premature-execution-gate.js and never relaxes it. Legacy Markdown
+// APPROVED-PREP files no longer authorize anything (PLAN.md sec 3.1/3.8) and are not scanned.
+const CURRENT_PREP_VERDICT_FILENAME = /^arch-([a-z]+)-verdict-prep\.json$/;
 
 function evaluateCurrentPrepPreflight(root) {
   let plan;
@@ -1115,7 +1116,10 @@ function evaluateCurrentPrepPreflight(root) {
     return { clear: false, reason: 'plan-not-discoverable', detail: String(error && error.message) };
   }
   if (!plan || plan.ok !== true) return { clear: false, reason: 'plan-not-discoverable' };
+  let verdictContractCli;
+  try { verdictContractCli = require('../lib/verdict-evidence-contract-cli.cjs'); } catch { verdictContractCli = null; }
   const waveDir = path.dirname(plan.planPath);
+  const waveSlug = path.basename(waveDir).replace(/^wave-/, '');
   const headProbe = spawnSync('git', ['rev-parse', 'HEAD'],
     { cwd: root, timeout: 5000, encoding: 'utf8', windowsHide: true });
   const head = headProbe.status === 0 ? String(headProbe.stdout || '').trim() : '';
@@ -1123,41 +1127,53 @@ function evaluateCurrentPrepPreflight(root) {
   let entries;
   try { entries = fs.readdirSync(waveDir); } catch { entries = []; }
   const examined = [];
-  for (const entry of entries.slice().sort()) {
-    if (!CURRENT_PREP_VERDICT_FILENAME.test(entry)) continue;
-    let content;
-    try { content = fs.readFileSync(path.join(waveDir, entry), 'utf8'); } catch { continue; }
-    if (!/APPROVED-PREP/.test(content)) {
-      examined.push({ verdict: entry, rejected: 'no-approved-prep-token' });
-      continue;
+  if (verdictContractCli) {
+    const savedCwd = process.cwd();
+    try {
+      // validateVerdict()/readField() confine reads under process.cwd(); align it
+      // with root (which can legitimately differ from process.cwd()) for the
+      // duration of this scan only. Mirrors premature-execution-gate.js.
+      process.chdir(root);
+      for (const entry of entries.slice().sort()) {
+        const m = CURRENT_PREP_VERDICT_FILENAME.exec(entry);
+        if (!m) continue;
+        const role = 'arch-' + m[1];
+        const verdictPath = path.join(waveDir, entry);
+        let result;
+        try {
+          result = verdictContractCli.validateVerdict({
+            path: verdictPath,
+            expectRole: role,
+            expectPhase: 'prep',
+            expectWaveSlug: waveSlug,
+            expectPlanSha256: plan.planDigest,
+            expectHead: head,
+          });
+        } catch (error) {
+          examined.push({ verdict: entry, rejected: 'validate-error' });
+          continue;
+        }
+        if (!result || result.authorizes !== true) {
+          examined.push({ verdict: entry, rejected: (result && result.reason) || 'not-authorized' });
+          continue;
+        }
+        let prepHead = null;
+        try { prepHead = verdictContractCli.readField({ path: verdictPath, field: 'head' }); } catch { prepHead = null; }
+        return {
+          clear: true,
+          reason: 'current-prep-present',
+          evaluated_root: root,
+          wave_dir: waveDir,
+          plan_sha256: plan.planDigest,
+          head,
+          verdict: entry,
+          prep_head: prepHead,
+          examined,
+        };
+      }
+    } finally {
+      try { process.chdir(savedCwd); } catch { /* best-effort */ }
     }
-    const planMatch = content.match(/^\*\*PLAN_SHA256\*\*:\s*([0-9a-f]{64})\s*$/m);
-    const headMatch = content.match(/^\*\*PREP-HEAD\*\*:\s*([0-9a-f]{40})\s*$/m);
-    if (!planMatch || !headMatch) {
-      examined.push({ verdict: entry, rejected: 'missing-binding-header' });
-      continue;
-    }
-    if (planMatch[1] !== plan.planDigest) {
-      examined.push({ verdict: entry, rejected: 'stale-plan-binding', bound_plan_sha256: planMatch[1] });
-      continue;
-    }
-    const ancestry = spawnSync('git', ['merge-base', '--is-ancestor', headMatch[1], head],
-      { cwd: root, timeout: 5000, windowsHide: true });
-    if (ancestry.status !== 0) {
-      examined.push({ verdict: entry, rejected: 'prep-head-not-ancestor', bound_prep_head: headMatch[1] });
-      continue;
-    }
-    return {
-      clear: true,
-      reason: 'current-prep-present',
-      evaluated_root: root,
-      wave_dir: waveDir,
-      plan_sha256: plan.planDigest,
-      head,
-      verdict: entry,
-      prep_head: headMatch[1],
-      examined,
-    };
   }
   return {
     clear: false,
@@ -4054,7 +4070,9 @@ child.on('exit', (code, signal) => {
   // that was never finalized. Finalize here, before any state is written, so
   // whatever the observer did capture is persisted and judged. It is idempotent
   // (hostProbeFinalized), so a run that already finalized is unaffected.
-  if (operation === 'host-contract-probe') finalizeHostContractProbe();
+  if (operation === 'host-contract-probe' && !String(state.status).startsWith('INVALID_')) {
+    finalizeHostContractProbe();
+  }
   if (transportProfile === 'native-claude-cli') {
     try {
       state.transcript_cleanup = cleanupNativeSessionTranscripts();

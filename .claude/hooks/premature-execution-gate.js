@@ -9,8 +9,11 @@
 //   specialists, no current dispatch artifact OR a Write/Edit target outside dispatch files[])
 //
 // Currency (WS-3, disk-first, ancestry-bound):
-//   - PREP: an arch-*-verdict.md with APPROVED-PREP whose **PLAN_SHA256** matches sha256(PLAN.md)
-//     and whose **PREP-HEAD** is an ancestor of (or equal to) current HEAD.
+//   - PREP: a canonical arch-<role>-verdict-prep.json (verdict/v1, wave
+//     structured-verdict-evidence-contract PLAN.md sec 3.1-3.5/3.8) whose
+//     verdict-evidence-contract-cli.cjs validateVerdict() result has authorizes===true
+//     against the current wave/HEAD/PLAN. Legacy arch-*-verdict.md prose
+//     (APPROVED-PREP/**PLAN_SHA256**/**PREP-HEAD**) is never consulted — no fallback.
 //   - Dispatch: specialist-dispatches/<canonical>/*.json whose plan_sha256 matches sha256(PLAN.md)
 //     and whose head is an ancestor of (or equal to) current HEAD.
 //   - Write/Edit: target file must be in the union of files[] across all current non-bash-only
@@ -34,6 +37,10 @@ const crypto = require('crypto');
 const { spawnSync } = require('child_process');
 let runtimeRoleLifecycle = null;
 try { runtimeRoleLifecycle = require('../../scripts/lib/runtime-role-lifecycle.cjs'); } catch { runtimeRoleLifecycle = null; }
+// verdict/v1 canonical PREP authority (wave structured-verdict-evidence-contract,
+// PLAN.md sec 3.1-3.5/3.8) — replaces legacy arch-*-verdict.md prose recognition below.
+let verdictContractCli = null;
+try { verdictContractCli = require('../../scripts/lib/verdict-evidence-contract-cli.cjs'); } catch { verdictContractCli = null; }
 
 // Canonical subject type names — matched with startsWith to tolerate
 // suffix-rotated peer names (e.g. toolkit-specialist-2 matches toolkit-specialist)
@@ -245,26 +252,51 @@ process.stdin.on('end', () => {
     }
     const planHash = sha256File(planPath);
 
-    // (3) PREP currency: an arch-*-verdict.md with APPROVED-PREP + matching PLAN_SHA256 + PREP-HEAD ancestor-of-HEAD.
-    const verdictRe = /^(?:pr\d+-)?arch-[a-z]+-verdict\.md$/;
+    // (3) PREP currency: a canonical arch-<role>-verdict-prep.json (verdict/v1) whose
+    // `authorizes` flag is true against the current wave/HEAD/PLAN (PLAN.md sec
+    // 3.1-3.5, 3.8). Legacy arch-*-verdict.md (prose APPROVED-PREP) is NEVER
+    // consulted here — no fallback, per Wave 3's atomic authority cutover.
+    const prepRe = /^arch-([a-z]+)-verdict-prep\.json$/;
     let prepCurrent = false;
     let vEntries;
     try { vEntries = fs.readdirSync(waveDir); } catch { vEntries = []; }
-    for (const entry of vEntries) {
-      if (!verdictRe.test(entry)) continue;
-      let content;
-      try { content = fs.readFileSync(path.join(waveDir, entry), 'utf8'); } catch { continue; }
-      if (!/APPROVED-PREP/.test(content)) continue;
-      const planM = content.match(/^\*\*PLAN_SHA256\*\*:\s*([0-9a-f]{64})\s*$/m);
-      const headM = content.match(/^\*\*PREP-HEAD\*\*:\s*([0-9a-f]{40})\s*$/m);
-      if (!planM || !headM) continue;
-      if (planM[1] !== planHash) continue;
-      if (!isAncestor(projectRoot, headM[1], currentHead)) continue;
-      prepCurrent = true;
-      break;
+    if (verdictContractCli) {
+      const savedCwd = process.cwd();
+      try {
+        // Safe specifically because this block is synchronous-only (fs.*Sync,
+        // spawnSync — zero await/Promise/setTimeout in the call chain) and this
+        // process is one-shot-per-invocation, so no other work can interleave
+        // while cwd is changed and no concurrent hook invocation shares it
+        // (chdir is process-local). A future async refactor of this block would
+        // reintroduce a real race — keep it sync, or replace chdir with an
+        // explicit cwd/waveDir param on validateVerdict() instead.
+        // validateVerdict() confines reads under process.cwd(); align it with
+        // projectRoot (which can legitimately differ, e.g. CLAUDE_PROJECT_DIR set
+        // without a matching chdir) for the duration of this check only.
+        process.chdir(projectRoot);
+        for (const entry of vEntries) {
+          const m = prepRe.exec(entry);
+          if (!m) continue;
+          const role = 'arch-' + m[1];
+          let result;
+          try {
+            result = verdictContractCli.validateVerdict({
+              path: path.join(waveDir, entry),
+              expectRole: role,
+              expectPhase: 'prep',
+              expectWaveSlug: slug,
+              expectPlanSha256: planHash,
+              expectHead: currentHead,
+            });
+          } catch { continue; }
+          if (result && result.authorizes === true) { prepCurrent = true; break; }
+        }
+      } finally {
+        try { process.chdir(savedCwd); } catch { /* best-effort */ }
+      }
     }
     if (!prepCurrent) {
-      block('[premature-execution-gate] Specialist "' + agentType + '" attempted ' + toolName + ' but no CURRENT PREP verdict for wave "' + slug + '" (needs APPROVED-PREP with a **PREP-HEAD** ancestor of HEAD and **PLAN_SHA256** matching the current PLAN.md). A stale or generic APPROVED-PREP does not authorize execution.');
+      block('[premature-execution-gate] Specialist "' + agentType + '" attempted ' + toolName + ' but no CURRENT PREP verdict (verdict/v1, authorizes==true) for wave "' + slug + '". Legacy Markdown APPROVED-PREP no longer authorizes execution (PLAN.md sec 3.1/3.8) — publish a canonical PREP via write-verdict-request.sh + write-verdict.sh.');
       return;
     }
 

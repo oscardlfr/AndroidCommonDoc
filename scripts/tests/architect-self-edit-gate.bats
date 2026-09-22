@@ -93,3 +93,15 @@ make_input() {
   run bash -c "cat '$INPUT_FILE' | node '$HOOK'"
   [ "$status" -eq 2 ]
 }
+
+# ── structured-verdict-evidence-contract: canonical JSON PREP paths are never ──
+# exempted by this gate (regression lock, not a bugfix proof — the exempt regex
+# is .md$-anchored, so arch-<role>-verdict-prep.json was already correctly
+# blocked before this wave; this pins that it stays blocked now that a real
+# JSON PREP file exists at this same directory convention).
+
+@test "blocks arch-testing Write to canonical JSON PREP path — the new JSON verdict paths are never exempted" {
+  make_input Write '/project/.planning/wave-bl-w43/arch-testing-verdict-prep.json' 'arch-testing'
+  run bash -c "cat '$INPUT_FILE' | node '$HOOK'"
+  [ "$status" -eq 2 ]
+}

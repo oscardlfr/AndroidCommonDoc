@@ -9,6 +9,12 @@ Run all pre-PR checks locally before opening a pull request. Validates commit me
 
 ## Instructions
 
+## Reproducible evidence
+
+For any result consumed by a quality gate, wrap execution with `scripts/tools/evidence-run.cjs`: create a start record before the command, finish it with the real artifact and counts, and retain its HEAD/PLAN/wave/target/environment/tool-version binding. Security-critical mint evidence requires two distinct agreeing records; newest-wins discovery and reused run IDs are rejected.
+
+> **Push authority:** this skill may prepare or request a push, but cannot authorize one. Only the installed canonical Git `pre-push` hook enforces ref updates from current stamps/proof. Runtime role labels and command-intent hooks are defense-in-depth, never portable identity proof.
+
 ## Usage Examples
 
 ```

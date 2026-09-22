@@ -207,8 +207,12 @@ PYEOF
   fi
 
   # -- 2. Slug resolution -------------------------------------------------------
-  local wave_slug
+  local wave_slug plan_digest
   wave_slug="$(resolve_slug)"
+  plan_digest="none"
+  if [[ -n "$wave_slug" && -f "$REPO_ROOT/.planning/wave-${wave_slug}/PLAN.md" ]]; then
+    plan_digest="$(python3 -c "import hashlib,sys;print(hashlib.sha256(open(sys.argv[1],'rb').read()).hexdigest())" "$REPO_ROOT/.planning/wave-${wave_slug}/PLAN.md")"
+  fi
 
   # -- 2b. CLASS-aware required-roles (BL-W48 artifact-floor) -------------------
   # Resolve required architect roles from the wave CLASS via wave-topology.yaml
@@ -265,7 +269,8 @@ except Exception:
   local bats_evidence_json
   bats_evidence_json="$(bash "$SCRIPT_DIR/lib/bats-handoff.sh" select \
       --repo-root "$REPO_ROOT" --head "$head_sha" --since "$report_started_at" \
-      --require-scope full --format json)"
+      --require-scope full --wave-slug "${wave_slug:-none}" --plan-digest "$plan_digest" \
+      --require-agreeing 2 --format json)"
 
   # All validation + predicate enforcement in one Python pass.
   # Predicate evaluation is mirrored from the bash eval_predicate design
@@ -497,6 +502,10 @@ if _test_suite_entry is not None and _test_suite_entry.get('result') == 'PASS':
         die(f"test-suite-evidence-stale: bats evidence status=stale (expected 'ok') -- evidence exists for this HEAD but predates this QG session (report.started_at)")
     elif _evidence_status == 'scope-mismatch':
         die(f"test-suite-evidence-partial: bats evidence status=scope-mismatch (expected 'ok') -- fresh evidence exists for this HEAD but never at the required full scope")
+    elif _evidence_status == 'provenance-mismatch':
+        die("test-suite-evidence-provenance: fresh runs disagree on bound provenance or counts")
+    elif _evidence_status == 'insufficient-agreement':
+        die("test-suite-evidence-agreement: fewer than two independent agreeing full runs")
     elif _evidence_status != 'ok':
         die(f"test-suite-evidence-absent: bats evidence status={_evidence_status!r} (expected 'ok')")
 
@@ -512,6 +521,14 @@ if _test_suite_entry is not None and _test_suite_entry.get('result') == 'PASS':
         die(f"test-suite-evidence-partial: bats evidence complete={_evidence.get('complete')!r} (expected true)")
     if _evidence.get('not_ok', 1) != 0:
         die(f"test-suite-evidence-dirty: bats evidence not_ok={_evidence.get('not_ok')!r} (expected 0)")
+    if _evidence.get('agreement_count', 0) < 2:
+        die(f"test-suite-evidence-agreement: independent agreeing runs={_evidence.get('agreement_count')!r} (expected >=2)")
+    _run_ids = [x for x in str(_evidence.get('run_ids', '')).split(',') if x]
+    if len(set(_run_ids)) < 2:
+        die(f"test-suite-evidence-reused: run_ids={_run_ids!r} do not prove two independent runs")
+    _log_digests = [x for x in str(_evidence.get('log_digests', '')).split(',') if x]
+    if len(set(_log_digests)) < 2:
+        die(f"test-suite-evidence-reused: log_digests={_log_digests!r} do not prove two retained artifacts")
 
     # Sanity floor (Amendment A, REQUIRED) -- "a guard that cannot fail is worse than none".
     # Die-code choice matters, not just die-vs-pass: ok<=0/expected<=0 means nothing ran
@@ -582,13 +599,12 @@ print("VALIDATION_PASS", file=sys.stderr)
 PYEOF
 
   # -- 3b. Verify arch verdict files (verdict→HEAD binding) ---------------------
-  # Reads arch-*-verdict.md files directly from .planning/wave-<slug>/.
-  # Every matched file must carry APPROVED-VERIFY-FINAL and **HEAD**: == final HEAD.
-  # No silent PREP-only skip: any matched file missing VERIFY-FINAL is a hard error.
-  # sha256(file, CRLF->LF) per verdict collected into artifact_digests for proof.json.
+  # Reads only canonical arch-*-verdict-verify-final.json files for required roles.
+  # The verdict/v1 validator binds each record to its request, PLAN, final HEAD,
+  # evidence bytes, role, phase, and canonical filename before proof minting.
   local artifact_digests_json
   artifact_digests_json="$(python3 - "$REPORT_PATH" "$REPO_ROOT" "$wave_slug" "$head_sha" << 'PYEOF'
-import sys, os, re, hashlib, json
+import sys, os, re, hashlib, json, subprocess
 
 report_path = sys.argv[1]
 repo_root   = sys.argv[2]
@@ -609,7 +625,7 @@ wave_dir = os.path.join(repo_root, '.planning', f'wave-{wave_slug}')
 digests = {}
 
 # Sequence 68/69 Defect 2: derive the exact canonical filename PER REQUIRED ROLE
-# and validate only that file -- never glob-scan every arch-*-verdict.md file in
+# and validate only that file -- never glob-scan every arch-*-verdict*.json file in
 # the directory. A historical/legacy/non-required verdict file (e.g. left over
 # from an earlier, since-retired role in this same wave) is therefore NEVER
 # opened, read, or capable of causing a rejection: only the canonical per-role
@@ -618,6 +634,15 @@ digests = {}
 if required_roles:
     if not os.path.isdir(wave_dir):
         die(2, f"verdict-head-binding: wave dir not found: {wave_dir}")
+
+    # verdict/v1 canonical VERIFY-FINAL authority (wave structured-verdict-evidence-contract,
+    # PLAN.md sec 3.1-3.5/3.8) -- delegates content authority to the CLI validator instead of
+    # substring/regex parsing; plan_sha256 is the raw-byte sha256 of the active wave's PLAN.md.
+    plan_path = os.path.join(wave_dir, 'PLAN.md')
+    if not os.path.isfile(plan_path):
+        die(2, f"verdict-head-binding: PLAN.md not found in {wave_dir}")
+    plan_sha256 = hashlib.sha256(open(plan_path, 'rb').read()).hexdigest()
+    cli_path = os.path.join(repo_root, 'scripts', 'lib', 'verdict-evidence-contract-cli.cjs')
 
     _ROLE_RE = re.compile(r'^(arch-)?[a-z][a-z0-9-]*$')
     seen_roles = set()
@@ -631,7 +656,7 @@ if required_roles:
             die(2, f"deliberation-role-incomplete: required_roles contains an unrecognized role '{role}'")
 
         short = role[len('arch-'):] if role.startswith('arch-') else role
-        expected = f'arch-{short}-verdict.md'
+        expected = f'arch-{short}-verdict-verify-final.json'
         fpath = os.path.join(wave_dir, expected)
 
         # Unsafe-file guard: never follow a symlink at the canonical path, and
@@ -641,18 +666,31 @@ if required_roles:
         if not os.path.isfile(fpath):
             die(2, f"verdict-head-binding: required verdict file '{expected}' missing in {wave_dir} — re-run write-verdict.sh --phase verify-final for role '{role}'")
 
-        with open(fpath, 'r', encoding='utf-8') as f:
-            content = f.read()
-        # Must contain APPROVED-VERIFY-FINAL
-        if 'APPROVED-VERIFY-FINAL' not in content:
-            die(2, f"verdict-head-binding: {expected} does not contain APPROVED-VERIFY-FINAL — re-run VERIFY-FINAL at final HEAD")
-        # Must contain **HEAD**: <sha> matching final HEAD
-        m = re.search(r'^\*\*HEAD\*\*:\s*([0-9a-f]{40})', content, re.MULTILINE)
-        if not m:
-            die(2, f"verdict-head-binding: {expected} missing **HEAD**: field — re-run write-verdict.sh --phase verify-final at final HEAD")
-        verdict_head = m.group(1)
-        if verdict_head != final_head:
-            die(2, f"verdict-head-binding: {expected} HEAD ({verdict_head}) != final HEAD ({final_head}) — stale verdict, re-run VERIFY-FINAL")
+        # Canonical validation delegated to verdict-evidence-contract-cli.cjs -- the sole
+        # parser/validator for verdict/v1 records (PLAN.md sec 3.5). No prose/substring
+        # authority remains here.
+        try:
+            proc = subprocess.run(
+                ['node', cli_path, 'validate',
+                 '--path', fpath,
+                 '--expect-role', role,
+                 '--expect-phase', 'verify-final',
+                 '--expect-wave-slug', wave_slug,
+                 '--expect-plan-sha256', plan_sha256,
+                 '--expect-head', final_head],
+                cwd=repo_root, capture_output=True, text=True, timeout=10,
+            )
+        except Exception as e:
+            die(2, f"verdict-head-binding: {expected} — could not invoke verdict-evidence-contract-cli.cjs: {e}")
+        if proc.returncode != 0:
+            die(2, f"verdict-head-binding: {expected} — verdict-evidence-contract-cli.cjs validate failed (exit {proc.returncode}): {proc.stderr.strip()}")
+        try:
+            validated = json.loads(proc.stdout.strip())
+        except Exception as e:
+            die(2, f"verdict-head-binding: {expected} — could not parse CLI validate output: {e}")
+        if validated.get('authorizes') is not True:
+            die(2, f"verdict-head-binding: {expected} not authorized (reason={validated.get('reason')!r}) — re-run write-verdict-request.sh + write-verdict.sh --phase verify-final for role '{role}' at final HEAD")
+
         # Digest the file (CRLF->LF)
         raw = open(fpath, 'rb').read().replace(b'\r\n', b'\n')
         digests[expected] = hashlib.sha256(raw).hexdigest()
@@ -1025,6 +1063,17 @@ bats_evidence = {
     "generated_at": _ev.get("generated_at", ""),
     "complete":     _ev.get("complete", False),
     "total":        _ev.get("total", 0),
+    "plan_digest":  _ev.get("plan_digest", ""),
+    "wave_slug":    _ev.get("wave_slug", ""),
+    "target_digest": _ev.get("target_digest", ""),
+    "environment_fingerprint": _ev.get("environment_fingerprint", ""),
+    "started_at":   _ev.get("started_at", ""),
+    "finished_at":  _ev.get("finished_at", ""),
+    "log_digest":   _ev.get("log_digest", ""),
+    "tool_versions": _ev.get("tool_versions", ""),
+    "agreement_count": _ev.get("agreement_count", 0),
+    "run_ids":      _ev.get("run_ids", ""),
+    "log_digests":  _ev.get("log_digests", ""),
 }
 
 proof = {
@@ -1181,6 +1230,14 @@ if _bv_total != _bv_expected:
 _bv_ok = bats_evidence.get('ok', 0)
 if not (isinstance(_bv_ok, int) and _bv_ok > 0):
     die(f"bats-evidence-floor: bats_evidence.ok ({_bv_ok!r}) fails sanity floor (must be > 0)")
+if bats_evidence.get('agreement_count', 0) < 2:
+    die(f"bats-evidence-agreement: independent agreeing runs ({bats_evidence.get('agreement_count')!r}) < 2")
+_run_ids = [x for x in str(bats_evidence.get('run_ids', '')).split(',') if x]
+if len(set(_run_ids)) < 2:
+    die(f"bats-evidence-reused: run_ids={_run_ids!r} do not prove independent runs")
+_log_digests = [x for x in str(bats_evidence.get('log_digests', '')).split(',') if x]
+if len(set(_log_digests)) < 2:
+    die(f"bats-evidence-reused: log_digests={_log_digests!r} do not prove independent retained artifacts")
 
 print("[emit-push-proof] verify-proof: PASS", file=sys.stderr)
 PYEOF

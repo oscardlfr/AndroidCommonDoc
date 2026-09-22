@@ -12,6 +12,8 @@ allowed-tools:
 copilot: false
 ---
 
+> **Authority boundary:** this skill's conversational PASS/FAIL or generated report is not a phase verdict. PREP and VERIFY-FINAL authority exists only as a request-bound, evidence-backed `verdict/v1` record accepted by the canonical validator.
+
 # /full-audit
 
 Unified project audit that orchestrates scripts and agents in waves, deduplicates findings, and produces a consolidated report.

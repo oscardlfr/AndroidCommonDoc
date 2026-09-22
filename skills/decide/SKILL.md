@@ -18,15 +18,10 @@ Technical decision analysis using the `advisor` agent.
 ## Steps
 
 1. Parse decision question from `$ARGUMENTS`
-2. Spawn the advisor agent:
-
-```
-Agent(
-  subagent_type="advisor",
-  prompt="Analyze this decision: $ARGUMENTS\n\nProject context: {cwd}\nProduce a comparison table with recommendation.",
-  description="Decide: $ARGUMENTS"
-)
-```
+2. Ask the shared lifecycle/control plane to ensure the `advisor` role, then
+   dispatch a runtime-neutral task containing `$ARGUMENTS`, `{cwd}`, and the
+   required comparison-table/recommendation output. Vendor-specific dispatch is
+   owned by the selected runtime connector, not this public skill.
 
 3. Present comparison table and recommendation to the user
 

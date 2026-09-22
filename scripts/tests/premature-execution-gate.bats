@@ -17,7 +17,7 @@ INPUT_FILE="${BATS_TEST_TMPDIR}/premature-exec-input-$$.json"
 # to exercise the missing-PLAN.md (ST-5) or missing-Spawn-Table (ST-1) boundaries
 # override this by rm -f or write_plan_without_spawn_table in their own body.
 setup() {
-  WAVE_DIR="$BATS_TEST_TMPDIR/planning/wave-bl-w43"
+  WAVE_DIR="$BATS_TEST_TMPDIR/.planning/wave-bl-w43"
   mkdir -p "$WAVE_DIR"
   export CLAUDE_PROJECT_DIR="$BATS_TEST_TMPDIR"
   export CLAUDE_WAVE_SLUG="bl-w43"
@@ -35,7 +35,7 @@ setup() {
 }
 
 teardown() {
-  rm -rf "$BATS_TEST_TMPDIR/planning"
+  rm -rf "$BATS_TEST_TMPDIR/.planning" "$BATS_TEST_TMPDIR/planning"
 }
 
 # Build a JSON envelope:
@@ -109,15 +109,45 @@ write_current_prep_raw() {
     "$head" "$plan_sha256" > "$file"
 }
 
-# write_current_prep <verdict-file> — CURRENT PREP: **PREP-HEAD** == real current HEAD of
-# $CLAUDE_PROJECT_DIR, **PLAN_SHA256** == real sha256 of $WAVE_DIR/PLAN.md, both derived at
-# call-time (CORE NON-VACUITY MANDATE).
+# write_current_prep <verdict-file> — CURRENT PREP (P3 consumer migration, port of the
+# legacy-markdown-only helper, arch-integration dispatch 2026-09-21T17:55:38Z): produces
+# a GENUINE arch-<role>-verdict-prep.json via the real write-verdict-request.sh +
+# write-verdict.sh --decision approve flow, mirroring JSON-PREP-1's own real-script-call
+# pattern (same file, ~line 1011) exactly, instead of hand-authoring legacy Markdown the
+# migrated gate no longer reads at all (no fallback). <verdict-file> stays the historical
+# LEGACY .md path every existing call site already passes (e.g.
+# $WAVE_DIR/arch-testing-verdict.md, or a pr\d+-prefixed variant like Case 4's -- the new
+# JSON contract has no prefix concept, so the prefix is simply dropped when deriving the
+# role) -- ROLE and the DOTLESS destination dir are both derived from it, so every caller
+# of write_current_prep (16 ported + several other pre-existing callers this incidentally
+# repairs too) is unchanged.
+#
+# write-verdict-request.sh/write-verdict.sh hardcode the DOTTED .planning/wave-<slug>/
+# convention (no override -- see RT-22's own comment), while this file's own $WAVE_DIR
+# fixture is deliberately DOTLESS (planning/wave-bl-w43, the bats-fixture-compat form
+# premature-execution-gate.js's own waveDirDot/waveDirNoDot resolution also supports).
+# Bridging that: mint the genuine JSON PREP under a scratch DOTTED wave dir (PLAN.md
+# byte-copied from $WAVE_DIR's real one, so plan_sha256 matches exactly), relocate the
+# resulting arch-<role>-verdict-prep.json into the real DOTLESS $WAVE_DIR the rest of
+# this test's fixture already uses, then remove the scratch dotted tree so the gate's own
+# dot-first resolution still finds the DOTLESS wave dir afterward -- never a transient
+# dotted directory left behind for the gate to reprioritize by accident.
 write_current_prep() {
-  local file="$1"
-  local head plan_sha256
-  head="$(git -C "$CLAUDE_PROJECT_DIR" rev-parse HEAD)"
-  plan_sha256="$(_real_sha256 "$WAVE_DIR/PLAN.md")"
-  write_current_prep_raw "$file" "$head" "$plan_sha256"
+  local legacy_file="$1"
+  local role; role="$(basename "$legacy_file" | sed -E 's/^(pr[0-9]+-)?(arch-[a-z]+)-verdict\.md$/\2/')"
+  local dotted_wave_dir="$CLAUDE_PROJECT_DIR/.planning/wave-$CLAUDE_WAVE_SLUG"
+  mkdir -p "$dotted_wave_dir"
+
+  local wvr_script="$BATS_TEST_DIRNAME/../sh/write-verdict-request.sh"
+  local wv_script="$BATS_TEST_DIRNAME/../sh/write-verdict.sh"
+  local req_out req_path req_sha256
+  req_out="$(cd "$CLAUDE_PROJECT_DIR" && CLAUDE_WAVE_SLUG="$CLAUDE_WAVE_SLUG" bash "$wvr_script" --role "$role" --phase prep --slug "$CLAUDE_WAVE_SLUG")"
+  req_path="$(printf '%s' "$req_out" | awk '{print $1}')"
+  req_sha256="$(printf '%s' "$req_out" | awk '{print $2}')"
+  bash -c "cd '$CLAUDE_PROJECT_DIR' && printf 'reviewed and approved' | CLAUDE_WAVE_SLUG='$CLAUDE_WAVE_SLUG' bash '$wv_script' --role '$role' --phase prep --slug '$CLAUDE_WAVE_SLUG' --request '$req_path' --request-sha256 '$req_sha256' --decision approve" >/dev/null 2>&1
+
+  # Keep the request and verdict in the canonical dotted wave directory. Moving
+  # a signed request after publication would deliberately violate confinement.
 }
 
 # write_dispatch_raw <specialist> <head> <plan-sha256> [file...] — low-level: writes a
@@ -234,6 +264,7 @@ write_dispatch() {
 
 # Case 8 PASS: no active wave detected (CLAUDE_WAVE_SLUG unset, no branch match), fail-open -> exit 0
 @test "Case 8: allows specialist Write when no active wave detected, fail-open" {
+  rm -rf "$WAVE_DIR"
   make_input "Write" "docs/new-doc.md" "test-specialist"
   run bash -c "cat '$INPUT_FILE' | WAVE_PREP_BYPASS='' CLAUDE_WAVE_SLUG='' node '$HOOK'"
   [ "$status" -eq 0 ]
@@ -365,6 +396,7 @@ PLANEOF
 # is 0 — the test validates that the gate does NOT incorrectly block.
 
 @test "B PEG-ENV-REJECT-develop: CLAUDE_WAVE_SLUG=develop → gate fails open (no block)" {
+  rm -rf "$WAVE_DIR"
   # develop is a reject-list slug — gate must skip/fail-open regardless of wave dirs.
   # Create a wave-develop dir to confirm the gate is NOT finding it and blocking.
   local dev_wave_dir="$BATS_TEST_TMPDIR/planning/wave-develop"
@@ -375,6 +407,7 @@ PLANEOF
 }
 
 @test "B PEG-ENV-REJECT-master: CLAUDE_WAVE_SLUG=master → gate fails open (no block)" {
+  rm -rf "$WAVE_DIR"
   # master is a reject-list slug — same behaviour as develop.
   local master_wave_dir="$BATS_TEST_TMPDIR/planning/wave-master"
   mkdir -p "$master_wave_dir"
@@ -420,6 +453,7 @@ PLANEOF
 }
 
 @test "B PEG-SLUG-TRAVERSAL: CLAUDE_WAVE_SLUG=../evil — robustness check (no crash, fail-open via isValidSlug rejection)" {
+  rm -rf "$WAVE_DIR"
   # Robustness: invalid slug (contains /) → isValidSlug rejects → getWaveSlug returns null
   # → no waveDir resolved → fail-open (exit 0, no block decision).
   # Non-vacuity for isValidSlug is proven at the bash layer (SRM-TRAVERSAL asserts
@@ -853,13 +887,15 @@ PYEOF
 # `crypto.createHash('sha256').update(fs.readFileSync(...))` (F2) — no encoding-mismatch
 # false "stale PLAN" block.
 
-@test "RT-22 CROSS-TOOL SMOKE: real write-verdict.sh prep -> real write-specialist-dispatch.sh -> real gate exits 0" {
+@test "RT-22 CROSS-TOOL SMOKE: real write-verdict-request.sh + write-verdict.sh prep -> real write-specialist-dispatch.sh -> real gate exits 0" {
+  local wvr_script="$BATS_TEST_DIRNAME/../sh/write-verdict-request.sh"
   local wv_script="$BATS_TEST_DIRNAME/../sh/write-verdict.sh"
   local wsd_script="$BATS_TEST_DIRNAME/../sh/write-specialist-dispatch.sh"
 
-  # write-verdict.sh / write-specialist-dispatch.sh hardcode .planning/wave-<slug>/ (no
-  # override) — use a slug distinct from setup()'s bl-w43 fixture (which lives under the
-  # bats-fixture-compat planning/, no dot) so the two do not collide.
+  # write-verdict-request.sh / write-verdict.sh / write-specialist-dispatch.sh hardcode
+  # .planning/wave-<slug>/ (no override) — use a slug distinct from setup()'s bl-w43
+  # fixture (which lives under the bats-fixture-compat planning/, no dot) so the two do
+  # not collide.
   local smoke_slug="rtdfb-smoke"
   local smoke_wave_dir="$CLAUDE_PROJECT_DIR/.planning/wave-$smoke_slug"
   mkdir -p "$smoke_wave_dir"
@@ -876,8 +912,17 @@ PYEOF
 | test-specialist | 1 | smoke |
 PLANEOF
 
-  run bash -c "cd '$CLAUDE_PROJECT_DIR' && CLAUDE_WAVE_SLUG='$smoke_slug' \
-    bash '$wv_script' --role arch-testing --phase prep --slug '$smoke_slug'"
+  # P2 (structured-verdict-evidence-contract): write-verdict.sh now requires a bound
+  # --request/--request-sha256 plus --decision, mirroring JSON-PREP-1's own real-script
+  # sequence exactly.
+  local req_out req_path req_sha256
+  req_out="$(cd "$CLAUDE_PROJECT_DIR" && CLAUDE_WAVE_SLUG="$smoke_slug" bash "$wvr_script" --role arch-testing --phase prep --slug "$smoke_slug")"
+  req_path="$(printf '%s' "$req_out" | awk '{print $1}')"
+  req_sha256="$(printf '%s' "$req_out" | awk '{print $2}')"
+
+  run bash -c "cd '$CLAUDE_PROJECT_DIR' && printf 'reviewed, approving' | CLAUDE_WAVE_SLUG='$smoke_slug' \
+    bash '$wv_script' --role arch-testing --phase prep --slug '$smoke_slug' \
+    --request '$req_path' --request-sha256 '$req_sha256' --decision approve"
   [ "$status" -eq 0 ]
 
   run bash -c "cd '$CLAUDE_PROJECT_DIR' && printf 'smoke task body\n' | CLAUDE_WAVE_SLUG='$smoke_slug' \
@@ -990,4 +1035,198 @@ NODE
     [ "$status" -eq 2 ]
     [[ "$output" == *"no CURRENT PREP verdict"* ]]
   done
+}
+
+# ── JSON-PREP-1..4: canonical verdict/v1 JSON PREP authorization (P3 bootstrap, ──
+# wave structured-verdict-evidence-contract, PLAN.md sec 3.1-3.5/3.8). Real
+# write-verdict-request.sh + write-verdict.sh + write-specialist-dispatch.sh
+# invocations throughout, never hand-crafted JSON -- structurally mirrors this
+# file's own RT-22 cross-tool-smoke pattern. RT-22 itself predates P2's
+# --request/--request-sha256/--decision flags and is a separately tracked gap
+# (along with every other write_current_prep-based legacy-markdown fixture in
+# this file), not fixed here -- this bootstrap's job is proving the NEW JSON
+# path end-to-end and doing the minimal production migration, not porting the
+# ~50 pre-existing legacy-fixture cases (a tracked gap for the real P3 wave).
+#
+# write-verdict-request.sh/write-verdict.sh/write-specialist-dispatch.sh hardcode
+# .planning/wave-<slug>/ (no override, unlike setup()'s dotless planning/
+# bats-fixture-compat default) -- each case below uses its own slug + real
+# .planning/wave-<slug>/ dir, exactly like RT-22.
+
+@test "JSON-PREP-1 PASS: a genuine current canonical JSON PREP (authorizes=true) with a matching dispatch allows a specialist Write" {
+  local slug="json-prep-1"
+  local wave_dir="$CLAUDE_PROJECT_DIR/.planning/wave-$slug"
+  mkdir -p "$wave_dir"
+  cat > "$wave_dir/PLAN.md" <<'PLANEOF'
+### Wave Class
+
+- **Class**: HARNESS
+
+### Spawn Table
+
+| Role | Count | Reason |
+|---|---|---|
+| arch-testing | 1 | smoke |
+| test-specialist | 1 | smoke |
+PLANEOF
+
+  local wvr_script="$BATS_TEST_DIRNAME/../sh/write-verdict-request.sh"
+  local wv_script="$BATS_TEST_DIRNAME/../sh/write-verdict.sh"
+  local wsd_script="$BATS_TEST_DIRNAME/../sh/write-specialist-dispatch.sh"
+
+  local req_out req_path req_sha256
+  req_out="$(cd "$CLAUDE_PROJECT_DIR" && CLAUDE_WAVE_SLUG="$slug" bash "$wvr_script" --role arch-testing --phase prep --slug "$slug")"
+  req_path="$(printf '%s' "$req_out" | awk '{print $1}')"
+  req_sha256="$(printf '%s' "$req_out" | awk '{print $2}')"
+  [ -n "$req_path" ] || return 1
+
+  run bash -c "cd '$CLAUDE_PROJECT_DIR' && printf 'reviewed, approving' | CLAUDE_WAVE_SLUG='$slug' bash '$wv_script' --role arch-testing --phase prep --slug '$slug' --request '$req_path' --request-sha256 '$req_sha256' --decision approve"
+  [ "$status" -eq 0 ]
+  [ -f "$wave_dir/arch-testing-verdict-prep.json" ] || return 1
+
+  run bash -c "cd '$CLAUDE_PROJECT_DIR' && printf 'smoke task body\n' | CLAUDE_WAVE_SLUG='$slug' bash '$wsd_script' --architect arch-testing --specialist test-specialist --file docs/smoke-target.md --slug '$slug'"
+  [ "$status" -eq 0 ]
+
+  make_input "Write" "docs/smoke-target.md" "test-specialist"
+  run bash -c "cat '$INPUT_FILE' | WAVE_PREP_BYPASS='' CLAUDE_WAVE_SLUG='$slug' CLAUDE_PROJECT_DIR='$CLAUDE_PROJECT_DIR' node '$HOOK'"
+  [ "$status" -eq 0 ]
+}
+
+@test "JSON-PREP-2 BLOCK: a current, well-formed legacy Markdown APPROVED-PREP (real --publication-nonce compat writer) no longer authorizes -- no fallback" {
+  local slug="json-prep-2"
+  local wave_dir="$CLAUDE_PROJECT_DIR/.planning/wave-$slug"
+  mkdir -p "$wave_dir"
+  cat > "$wave_dir/PLAN.md" <<'PLANEOF'
+### Wave Class
+
+- **Class**: HARNESS
+
+### Spawn Table
+
+| Role | Count | Reason |
+|---|---|---|
+| test-specialist | 1 | smoke |
+PLANEOF
+
+  local wv_script="$BATS_TEST_DIRNAME/../sh/write-verdict.sh"
+  local wsd_script="$BATS_TEST_DIRNAME/../sh/write-specialist-dispatch.sh"
+  local nonce; nonce="$(node -e "process.stdout.write(require('crypto').randomBytes(16).toString('hex'))")"
+
+  run bash -c "cd '$CLAUDE_PROJECT_DIR' && CLAUDE_WAVE_SLUG='$slug' bash '$wv_script' --role arch-testing --phase prep --slug '$slug' --publication-nonce '$nonce'"
+  [ "$status" -eq 0 ]
+  [ -f "$wave_dir/arch-testing-verdict.md" ] || return 1
+  grep -q 'APPROVED-PREP' "$wave_dir/arch-testing-verdict.md" || return 1
+
+  run bash -c "cd '$CLAUDE_PROJECT_DIR' && printf 'smoke task body\n' | CLAUDE_WAVE_SLUG='$slug' bash '$wsd_script' --architect arch-testing --specialist test-specialist --file docs/smoke-target.md --slug '$slug'"
+  [ "$status" -eq 0 ]
+
+  make_input "Write" "docs/smoke-target.md" "test-specialist"
+  run bash -c "cat '$INPUT_FILE' | WAVE_PREP_BYPASS='' CLAUDE_WAVE_SLUG='$slug' CLAUDE_PROJECT_DIR='$CLAUDE_PROJECT_DIR' node '$HOOK'"
+  [ "$status" -eq 2 ]
+}
+
+@test "JSON-PREP-3 BLOCK: a genuine current JSON PREP with decision=escalate (well-formed, non-authorizing) does not authorize, even alongside a well-formed legacy PREP (no legacy fallback)" {
+  local slug="json-prep-3"
+  local wave_dir="$CLAUDE_PROJECT_DIR/.planning/wave-$slug"
+  mkdir -p "$wave_dir"
+  cat > "$wave_dir/PLAN.md" <<'PLANEOF'
+### Wave Class
+
+- **Class**: HARNESS
+
+### Spawn Table
+
+| Role | Count | Reason |
+|---|---|---|
+| arch-testing | 1 | smoke |
+| test-specialist | 1 | smoke |
+PLANEOF
+
+  local wvr_script="$BATS_TEST_DIRNAME/../sh/write-verdict-request.sh"
+  local wv_script="$BATS_TEST_DIRNAME/../sh/write-verdict.sh"
+  local wsd_script="$BATS_TEST_DIRNAME/../sh/write-specialist-dispatch.sh"
+
+  # Non-vacuity: also seed a well-formed, CURRENT legacy PREP via the real
+  # --publication-nonce compat writer (byte-identical to genuine legacy output).
+  # Pre-migration, the OLD gate finds and accepts THIS (never looks at the JSON at
+  # all) -- so this test genuinely FAILS pre-migration (proving it isn't vacuously
+  # blocked for the wrong reason). Post-migration, the gate must ignore this legacy
+  # file entirely and block on the JSON's escalate/non-authorizing decision alone.
+  local nonce; nonce="$(node -e "process.stdout.write(require('crypto').randomBytes(16).toString('hex'))")"
+  run bash -c "cd '$CLAUDE_PROJECT_DIR' && CLAUDE_WAVE_SLUG='$slug' bash '$wv_script' --role arch-testing --phase prep --slug '$slug' --publication-nonce '$nonce'"
+  [ "$status" -eq 0 ]
+  [ -f "$wave_dir/arch-testing-verdict.md" ] || return 1
+
+  local req_out req_path req_sha256
+  req_out="$(cd "$CLAUDE_PROJECT_DIR" && CLAUDE_WAVE_SLUG="$slug" bash "$wvr_script" --role arch-testing --phase prep --slug "$slug")"
+  req_path="$(printf '%s' "$req_out" | awk '{print $1}')"
+  req_sha256="$(printf '%s' "$req_out" | awk '{print $2}')"
+
+  run bash -c "cd '$CLAUDE_PROJECT_DIR' && printf 'scope conflict, escalating' | CLAUDE_WAVE_SLUG='$slug' bash '$wv_script' --role arch-testing --phase prep --slug '$slug' --request '$req_path' --request-sha256 '$req_sha256' --decision escalate --reason-code scope-conflict"
+  [ "$status" -eq 0 ]
+  [ -f "$wave_dir/arch-testing-verdict-prep.json" ] || return 1
+
+  run bash -c "cd '$CLAUDE_PROJECT_DIR' && printf 'smoke task body\n' | CLAUDE_WAVE_SLUG='$slug' bash '$wsd_script' --architect arch-testing --specialist test-specialist --file docs/smoke-target.md --slug '$slug'"
+  [ "$status" -eq 0 ]
+
+  make_input "Write" "docs/smoke-target.md" "test-specialist"
+  run bash -c "cat '$INPUT_FILE' | WAVE_PREP_BYPASS='' CLAUDE_WAVE_SLUG='$slug' CLAUDE_PROJECT_DIR='$CLAUDE_PROJECT_DIR' node '$HOOK'"
+  [ "$status" -eq 2 ]
+}
+
+@test "JSON-PREP-4 BLOCK: a genuine JSON PREP bound to a now-superseded PLAN.md digest (stale/wrong-bound) does not authorize, even alongside a well-formed legacy PREP (no legacy fallback)" {
+  local slug="json-prep-4"
+  local wave_dir="$CLAUDE_PROJECT_DIR/.planning/wave-$slug"
+  mkdir -p "$wave_dir"
+  cat > "$wave_dir/PLAN.md" <<'PLANEOF'
+### Wave Class
+
+- **Class**: HARNESS
+
+### Spawn Table
+
+| Role | Count | Reason |
+|---|---|---|
+| arch-testing | 1 | smoke |
+| test-specialist | 1 | smoke |
+PLANEOF
+
+  local wvr_script="$BATS_TEST_DIRNAME/../sh/write-verdict-request.sh"
+  local wv_script="$BATS_TEST_DIRNAME/../sh/write-verdict.sh"
+  local wsd_script="$BATS_TEST_DIRNAME/../sh/write-specialist-dispatch.sh"
+
+  local req_out req_path req_sha256
+  req_out="$(cd "$CLAUDE_PROJECT_DIR" && CLAUDE_WAVE_SLUG="$slug" bash "$wvr_script" --role arch-testing --phase prep --slug "$slug")"
+  req_path="$(printf '%s' "$req_out" | awk '{print $1}')"
+  req_sha256="$(printf '%s' "$req_out" | awk '{print $2}')"
+
+  run bash -c "cd '$CLAUDE_PROJECT_DIR' && printf 'reviewed' | CLAUDE_WAVE_SLUG='$slug' bash '$wv_script' --role arch-testing --phase prep --slug '$slug' --request '$req_path' --request-sha256 '$req_sha256' --decision approve"
+  [ "$status" -eq 0 ]
+
+  # PLAN.md amended AFTER the PREP was approved -- its digest no longer matches the
+  # published verdict's plan_sha256 (real staleness via a real content change, not a
+  # fabricated hex). The dispatch below is written AFTER the amendment, so it binds
+  # to the NEW digest -- isolating PREP staleness specifically, not conflating it
+  # with dispatch staleness too.
+  cat >> "$wave_dir/PLAN.md" <<'PLANEOF2'
+
+Amended after PREP approval.
+PLANEOF2
+
+  # Non-vacuity: also seed a well-formed, CURRENT (post-amendment) legacy PREP via
+  # the real --publication-nonce compat writer. Pre-migration, the OLD gate finds
+  # and accepts THIS (never looks at the now-stale JSON at all) -- so this test
+  # genuinely FAILS pre-migration. Post-migration, the gate must ignore this legacy
+  # file entirely and block on the JSON's stale plan_sha256 alone.
+  local nonce; nonce="$(node -e "process.stdout.write(require('crypto').randomBytes(16).toString('hex'))")"
+  run bash -c "cd '$CLAUDE_PROJECT_DIR' && CLAUDE_WAVE_SLUG='$slug' bash '$wv_script' --role arch-testing --phase prep --slug '$slug' --publication-nonce '$nonce'"
+  [ "$status" -eq 0 ]
+  [ -f "$wave_dir/arch-testing-verdict.md" ] || return 1
+
+  run bash -c "cd '$CLAUDE_PROJECT_DIR' && printf 'smoke task body\n' | CLAUDE_WAVE_SLUG='$slug' bash '$wsd_script' --architect arch-testing --specialist test-specialist --file docs/smoke-target.md --slug '$slug'"
+  [ "$status" -eq 0 ]
+
+  make_input "Write" "docs/smoke-target.md" "test-specialist"
+  run bash -c "cat '$INPUT_FILE' | WAVE_PREP_BYPASS='' CLAUDE_WAVE_SLUG='$slug' CLAUDE_PROJECT_DIR='$CLAUDE_PROJECT_DIR' node '$HOOK'"
+  [ "$status" -eq 2 ]
 }

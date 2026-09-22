@@ -9,6 +9,8 @@ Git Flow branch management — start feature/release/hotfix branches, merge trac
 
 ## Instructions
 
+> **Push authority:** this skill may prepare or request a push, but cannot authorize one. Only the installed canonical Git `pre-push` hook enforces ref updates from current stamps/proof. Runtime role labels and command-intent hooks are defense-in-depth, never portable identity proof.
+
 ## Usage Examples
 
 ```

@@ -124,6 +124,12 @@
       }
     },
     "planner": {
+      "1.21.0": {
+        "date": "2026-09-22",
+        "breaking": false,
+        "summary": "Wave 3: planner outputs required architect roles while the orchestrator owns immutable verdict requests and phase-specific verdict/v1 target paths.",
+        "migration_hint": "Re-sync the planner template; remove legacy arch-*-verdict.md filename instructions from generated plans."
+      },
       "1.20.0": {
         "date": "2026-08-22",
         "breaking": false,
@@ -385,6 +391,12 @@
       }
     },
     "arch-testing": {
+      "1.41.0": {
+        "date": "2026-09-22",
+        "breaking": false,
+        "summary": "Wave 3: replace free-form Markdown approval tokens with verdict-request/v1 and verdict/v1 JSON artifacts bound to role, phase, wave, PLAN digest, HEAD, subject, evidence, and supersession.",
+        "migration_hint": "Re-sync the deployed template and use write-verdict-request.sh plus write-verdict.sh; legacy approval text is no longer authorization."
+      },
       "1.40.0": {
         "date": "2026-08-22",
         "breaking": false,
@@ -559,6 +571,12 @@
       }
     },
     "arch-platform": {
+      "1.36.0": {
+        "date": "2026-09-22",
+        "breaking": false,
+        "summary": "Wave 3: replace free-form Markdown approval tokens with verdict-request/v1 and verdict/v1 JSON artifacts bound to role, phase, wave, PLAN digest, HEAD, subject, evidence, and supersession.",
+        "migration_hint": "Re-sync the deployed template and use write-verdict-request.sh plus write-verdict.sh; legacy approval text is no longer authorization."
+      },
       "1.35.0": {
         "date": "2026-08-22",
         "breaking": false,
@@ -713,6 +731,12 @@
       }
     },
     "arch-integration": {
+      "1.32.0": {
+        "date": "2026-09-22",
+        "breaking": false,
+        "summary": "Wave 3: replace free-form Markdown approval tokens with verdict-request/v1 and verdict/v1 JSON artifacts bound to role, phase, wave, PLAN digest, HEAD, subject, evidence, and supersession.",
+        "migration_hint": "Re-sync the deployed template and use write-verdict-request.sh plus write-verdict.sh; legacy approval text is no longer authorization."
+      },
       "1.31.0": {
         "date": "2026-08-22",
         "breaking": false,

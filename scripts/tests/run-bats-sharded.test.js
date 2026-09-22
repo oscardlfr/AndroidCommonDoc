@@ -196,6 +196,11 @@ function baseHandoff(overrides) {
     BATS_COMPLETE: 'true', BATS_VERDICT: 'pass', BATS_HEAD: FROZEN_HEAD,
     BATS_RUN_ID: 'shard0-run', BATS_SCOPE: 'targeted', BATS_LOG: EXPECTED_LOG_PATH,
     BATS_TARGET_DIGEST: rbs.computeTargetDigest(['x.bats', 'y.bats']),
+    BATS_PLAN_DIGEST: 'b'.repeat(64), BATS_WAVE_SLUG: 'demo',
+    BATS_ENV_FINGERPRINT: 'c'.repeat(64), BATS_STARTED_AT: '2026-09-22T00:00:00Z',
+    BATS_FINISHED_AT: '2026-09-22T00:01:00Z', BATS_LOG_DIGEST: 'd'.repeat(64),
+    BATS_LOG_IDENTITY: 'e'.repeat(64),
+    BATS_TOOL_VERSIONS: 'node-v24_bats-1.12.0',
   }, overrides);
 }
 
@@ -339,7 +344,19 @@ test('aggregateHandoffs sums counts across shards and returns the shared HEAD', 
   ], 2);
   assert.equal(out.ok, true);
   assert.equal(out.head, 'a'.repeat(40));
+  assert.deepEqual(out.provenance, {
+    planDigest: 'b'.repeat(64), waveSlug: 'demo', environmentFingerprint: 'c'.repeat(64),
+    toolVersions: 'node-v24_bats-1.12.0',
+  });
   assert.deepEqual(out.facts, { ok: 18, notOk: 2, expected: 20, total: 20 });
+});
+
+test('aggregateHandoffs rejects cross-shard provenance disagreement', () => {
+  const out = rbs.aggregateHandoffs([
+    shardHandoff(0), shardHandoff(1, { BATS_ENV_FINGERPRINT: 'e'.repeat(64) }),
+  ], 2);
+  assert.equal(out.ok, false);
+  assert.equal(out.reason, 'SHARD_PROVENANCE_MISMATCH');
 });
 
 test('aggregateHandoffs fails closed: fewer handoffs than shards launched (one went missing)', () => {

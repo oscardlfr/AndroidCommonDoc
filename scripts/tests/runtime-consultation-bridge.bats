@@ -14894,11 +14894,13 @@ _app_live_prep_scan_schema() {
   [[ "$output" == *'"found":true'* ]]
 }
 
-@test "APP-LIVE-PREP-02 RED: no nonce-authenticated verdict-acceptance guard exists after real reservation" {
+@test "APP-LIVE-PREP-02 RED: a pre-existing nonce-mismatched legacy verdict is never accepted after real reservation" {
   _app_live_prep_prepare_seed_and_plan
 
+  local wrong_nonce="00000000000000000000000000000000"
   run --separate-stderr _app_live_prep_run_write_verdict \
-    --role arch-platform --phase prep --slug "$APP_LIVE_PREP_WAVE_SLUG"
+    --role arch-platform --phase prep --slug "$APP_LIVE_PREP_WAVE_SLUG" \
+    --publication-nonce "$wrong_nonce"
   [ "$status" -eq 0 ]
 
   local verdict_path="$PROJ/.planning/wave-$APP_LIVE_PREP_WAVE_SLUG/arch-platform-verdict.md"
@@ -14911,7 +14913,7 @@ _app_live_prep_scan_schema() {
     process.stdout.write([st.dev, st.ino, st.mtimeNs].map(String).join(":"));
   ' "$verdict_path")"
   verdict_digest_before="$(shasum -a 256 "$verdict_path" | awk '{print $1}')"
-  ! grep -q '^\*\*PUBLICATION-NONCE\*\*:' "$verdict_path"
+  grep -q "^\\*\\*PUBLICATION-NONCE\\*\\*: $wrong_nonce$" "$verdict_path"
 
   local minted action_json binding_id
   minted="$(_mint_raw_action "$APP_LIVE_PREP_ROLES")"
@@ -14974,7 +14976,7 @@ _app_live_prep_scan_schema() {
   verdict_digest_after="$(shasum -a 256 "$verdict_path" | awk '{print $1}')"
   [ "$verdict_stat_before" = "$verdict_stat_after" ]
   [ "$verdict_digest_before" = "$verdict_digest_after" ]
-  ! grep -q '^\*\*PUBLICATION-NONCE\*\*:' "$verdict_path"
+  grep -q "^\\*\\*PUBLICATION-NONCE\\*\\*: $wrong_nonce$" "$verdict_path"
 }
 #!/usr/bin/env bats
 # FAKE-FIXTURE / NOT-LIVE-P2-EVIDENCE

@@ -5,6 +5,8 @@ intent: [review, pr, pull-request, code-review, feedback]
 copilot: false
 ---
 
+> **Authority boundary:** this skill's conversational PASS/FAIL or generated report is not a phase verdict. PREP and VERIFY-FINAL authority exists only as a request-bound, evidence-backed `verdict/v1` record accepted by the canonical validator.
+
 # Review PR Skill
 
 Code review of a pull request with structured suggestions.

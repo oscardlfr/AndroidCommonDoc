@@ -52,6 +52,12 @@ interface UsageReport {
   audit_entries: number;
   findings_entries: number;
   skills: SkillUsageStats[];
+  audit_sources: SkillUsageStats[];
+  telemetry: {
+    authoritative_for_disuse: false;
+    skill_source: "explicit-data.skill_name-only";
+    audit_source_scope: "audit-event-and-finding-source";
+  };
 }
 
 // ── Time filter ──────────────────────────────────────────────────────────────
@@ -70,39 +76,38 @@ function computeSkillUsage(
   auditEntries: AuditLogEntry[],
   findingsEntries: FindingsLogEntry[],
   weeksBack: number,
-): SkillUsageStats[] {
+): { skills: SkillUsageStats[]; auditSources: SkillUsageStats[] } {
   // Filter by time window
   const recentAudit = auditEntries.filter((e) => isWithinWeeks(e.ts, weeksBack));
   const recentFindings = findingsEntries.filter((e) => isWithinWeeks(e.ts, weeksBack));
 
-  // Track skill stats from audit log
-  // Each unique event name is treated as a skill
-  const skillMap = new Map<
-    string,
-    {
-      runIds: Set<string>;
-      lastTs: string;
-      findings: number;
-      checks: Map<string, number>;
-    }
-  >();
+  type MutableStats = {
+    runIds: Set<string>;
+    lastTs: string;
+    findings: number;
+    checks: Map<string, number>;
+  };
+  const skillMap = new Map<string, MutableStats>();
+  const sourceMap = new Map<string, MutableStats>();
 
-  function ensureSkill(name: string) {
-    if (!skillMap.has(name)) {
-      skillMap.set(name, {
+  function ensure(map: Map<string, MutableStats>, name: string) {
+    if (!map.has(name)) {
+      map.set(name, {
         runIds: new Set(),
         lastTs: "",
         findings: 0,
         checks: new Map(),
       });
     }
-    return skillMap.get(name)!;
+    return map.get(name)!;
   }
 
-  // Process audit log entries
   for (const entry of recentAudit) {
-    const skillName = entry.event;
-    const stats = ensureSkill(skillName);
+    const explicitSkill = entry.data?.skill_name;
+    const isExplicitSkill = typeof explicitSkill === "string" && explicitSkill.trim().length > 0;
+    const map = isExplicitSkill ? skillMap : sourceMap;
+    const name = isExplicitSkill ? explicitSkill as string : entry.event;
+    const stats = ensure(map, name);
 
     // Use run_id if available, otherwise treat each entry as a unique run
     const runId = (entry.data?.run_id as string) ?? entry.ts;
@@ -113,10 +118,9 @@ function computeSkillUsage(
     }
   }
 
-  // Process findings log entries
   for (const entry of recentFindings) {
     const sourceName = entry.finding.source;
-    const stats = ensureSkill(sourceName);
+    const stats = ensure(sourceMap, sourceName);
 
     stats.runIds.add(entry.run_id);
     stats.findings++;
@@ -129,52 +133,61 @@ function computeSkillUsage(
     stats.checks.set(checkName, (stats.checks.get(checkName) ?? 0) + 1);
   }
 
-  // Build results
-  const results: SkillUsageStats[] = [];
-
-  for (const [skill, stats] of skillMap.entries()) {
-    const runCount = stats.runIds.size;
-
-    // Top 3 checks by frequency
-    const sortedChecks = [...stats.checks.entries()]
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 3)
-      .map(([name]) => name);
-
-    results.push({
-      skill,
-      run_count: runCount,
-      last_run: stats.lastTs,
-      total_findings: stats.findings,
-      avg_findings_per_run: runCount > 0 ? Math.round((stats.findings / runCount) * 100) / 100 : 0,
-      most_common_checks: sortedChecks,
-    });
+  function finish(map: Map<string, MutableStats>): SkillUsageStats[] {
+    const results: SkillUsageStats[] = [];
+    for (const [skill, stats] of map.entries()) {
+      const runCount = stats.runIds.size;
+      const sortedChecks = [...stats.checks.entries()]
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 3)
+        .map(([name]) => name);
+      results.push({
+        skill,
+        run_count: runCount,
+        last_run: stats.lastTs,
+        total_findings: stats.findings,
+        avg_findings_per_run: runCount > 0 ? Math.round((stats.findings / runCount) * 100) / 100 : 0,
+        most_common_checks: sortedChecks,
+      });
+    }
+    results.sort((a, b) => b.run_count - a.run_count);
+    return results;
   }
 
-  // Sort by run_count descending
-  results.sort((a, b) => b.run_count - a.run_count);
-
-  return results;
+  return { skills: finish(skillMap), auditSources: finish(sourceMap) };
 }
 
 // ── Markdown rendering ───────────────────────────────────────────────────────
 
 function renderMarkdown(report: UsageReport): string {
   const lines: string[] = [
-    `## Skill Usage Analytics -- ${report.project}`,
+    `## Skill Telemetry Analytics -- ${report.project}`,
     `**Lookback:** ${report.weeks_lookback} weeks | **Audit entries:** ${report.audit_entries} | **Findings entries:** ${report.findings_entries}`,
     "",
   ];
 
   if (report.skills.length === 0) {
-    lines.push("No skill usage data found in the specified time window.");
-    return lines.join("\n");
+    lines.push("No explicit skill invocation data found in the specified time window.");
+  } else {
+    lines.push("| Explicit Skill | Runs | Last Run | Findings | Avg/Run | Top Checks |");
+    lines.push("|----------------|------|----------|----------|---------|------------|");
+
+    for (const s of report.skills) {
+      const lastRun = s.last_run ? s.last_run.split("T")[0] : "-";
+      const topChecks = s.most_common_checks.length > 0 ? s.most_common_checks.join(", ") : "-";
+      lines.push(
+        `| ${s.skill} | ${s.run_count} | ${lastRun} | ${s.total_findings} | ${s.avg_findings_per_run} | ${topChecks} |`,
+      );
+    }
   }
 
-  lines.push("| Skill | Runs | Last Run | Findings | Avg/Run | Top Checks |");
-  lines.push("|-------|------|----------|----------|---------|------------|");
-
-  for (const s of report.skills) {
+  lines.push("", "> Absence from this report is not evidence of disuse; telemetry has no completeness sentinel.");
+  if (report.audit_sources.length > 0) {
+    lines.push("", "### Audit Sources (not skill invocations)");
+    lines.push("| Source | Runs | Last Run | Findings | Avg/Run | Top Checks |");
+    lines.push("|--------|------|----------|----------|---------|------------|");
+  }
+  for (const s of report.audit_sources) {
     const lastRun = s.last_run ? s.last_run.split("T")[0] : "-";
     const topChecks = s.most_common_checks.length > 0 ? s.most_common_checks.join(", ") : "-";
     lines.push(
@@ -193,7 +206,7 @@ export function registerSkillUsageAnalyticsTool(
 ): void {
   server.tool(
     "skill-usage-analytics",
-    "Read audit and findings logs to compute skill usage statistics: run counts, finding frequencies, most common checks, and trends over a configurable lookback window.",
+    "Read audit and findings logs to report explicit skill usage telemetry separately from audit-event and finding-source activity. It never infers skill disuse from absence.",
     {
       project_root: z.string().describe("Absolute path to the project root"),
       weeks_lookback: z
@@ -256,7 +269,7 @@ export function registerSkillUsageAnalyticsTool(
         };
       }
 
-      const skills = computeSkillUsage(auditEntries, findingsEntries, weeks_lookback);
+      const usage = computeSkillUsage(auditEntries, findingsEntries, weeks_lookback);
 
       const projectName = path.basename(project_root);
       const report: UsageReport = {
@@ -264,7 +277,13 @@ export function registerSkillUsageAnalyticsTool(
         weeks_lookback,
         audit_entries: auditEntries.length,
         findings_entries: findingsEntries.length,
-        skills,
+        skills: usage.skills,
+        audit_sources: usage.auditSources,
+        telemetry: {
+          authoritative_for_disuse: false,
+          skill_source: "explicit-data.skill_name-only",
+          audit_source_scope: "audit-event-and-finding-source",
+        },
       };
 
       const parts: string[] = [];

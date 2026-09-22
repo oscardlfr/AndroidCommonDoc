@@ -21,15 +21,10 @@ Systematic bug investigation using the `debugger` agent.
 2. Gather context:
    - Check recent commits: `git log --oneline -10`
    - Check for error logs or stack traces in the conversation
-3. Spawn the debugger agent:
-
-```
-Agent(
-  subagent_type="debugger",
-  prompt="Investigate this bug: $ARGUMENTS\n\nRecent changes:\n{git_log}\n\nProject root: {cwd}",
-  description="Debug: $ARGUMENTS"
-)
-```
+3. Ask the shared lifecycle/control plane to ensure the `debugger` role, then
+   dispatch this runtime-neutral task payload through the selected connector:
+   `Investigate this bug: $ARGUMENTS`, recent changes, and `{cwd}`.
+   The connector owns any vendor-specific tool call; this public skill does not.
 
 4. Report the debugger's findings to the user
 

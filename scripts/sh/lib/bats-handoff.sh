@@ -83,6 +83,10 @@ _BH_RE_VERDICT='^(pass|fail)$'
 _BH_RE_SCOPE='^(full|targeted)$'
 _BH_RE_TS='^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$'
 _BH_RE_FILENAME='^bats-result\.[A-Za-z0-9T-]+\.env$'
+_BH_RE_DIGEST='^([0-9a-f]{64}|none)$'
+_BH_RE_SHA256='^[0-9a-f]{64}$'
+_BH_RE_TARGET_DIGEST='^([0-9a-f]{40}|[0-9a-f]{64}|none)$'
+_BH_RE_TOKEN='^[A-Za-z0-9._-]+$'
 
 # handoff_get FILE KEY
 # Extracts a single value from a handoff .env file by parsing the known KEY=value line
@@ -132,13 +136,19 @@ count_head_candidates() {
 # select_bats_handoff --repo-root R --head H [--since S] [--require-scope full]
 # Sourced-interface selector. Always returns 0 — result communicated via BH_* globals.
 select_bats_handoff() {
-    local repo_root="" head="" since="" require_scope=""
+    local repo_root="" head="" since="" require_scope="" require_plan_digest="" require_wave_slug=""
+    local require_target_digest="" require_env_fingerprint="" require_agreeing="1"
     while [[ $# -gt 0 ]]; do
         case "$1" in
             --repo-root)     repo_root="$2"; shift 2 ;;
             --head)          head="$2"; shift 2 ;;
             --since)         since="$2"; shift 2 ;;
             --require-scope) require_scope="$2"; shift 2 ;;
+            --plan-digest) require_plan_digest="$2"; shift 2 ;;
+            --wave-slug) require_wave_slug="$2"; shift 2 ;;
+            --target-digest) require_target_digest="$2"; shift 2 ;;
+            --environment-fingerprint) require_env_fingerprint="$2"; shift 2 ;;
+            --require-agreeing) require_agreeing="$2"; shift 2 ;;
             *) shift ;;
         esac
     done
@@ -146,6 +156,13 @@ select_bats_handoff() {
     BH_STATUS="absent"
     BH_HEAD=""; BH_RUN_ID=""; BH_OK=""; BH_NOT_OK=""; BH_EXPECTED=""; BH_TOTAL=""
     BH_COMPLETE=""; BH_SCOPE=""; BH_GENERATED_AT=""; BH_PATH=""
+    BH_PLAN_DIGEST=""; BH_WAVE_SLUG=""; BH_TARGET_DIGEST=""; BH_ENV_FINGERPRINT=""
+    BH_STARTED_AT=""; BH_FINISHED_AT=""; BH_LOG_DIGEST=""; BH_TOOL_VERSIONS=""
+    BH_AGREEMENT_COUNT="0"; BH_RUN_IDS=""; BH_LOG_DIGESTS=""
+    if [[ ! "$require_agreeing" =~ $_BH_RE_UINT || "$require_agreeing" -lt 1 ]]; then
+        BH_STATUS="malformed"
+        return 0
+    fi
 
     local dir="$repo_root/.androidcommondoc"
     [[ -d "$dir" ]] || return 0
@@ -211,7 +228,9 @@ select_bats_handoff() {
     # Pass 3b: from the freshness-qualifying subset only, apply scope and track MAX
     # generated_at deterministically (same logic as before the split, just now over `fresh`
     # instead of `well_formed`).
-    local best="" best_gen="" scope
+    local candidates=()
+    local scope_matches=0
+    local scope plan_digest wave_slug target_digest env_fingerprint started_at finished_at log_digest log_identity tool_versions
     for f in "${fresh[@]}"; do
         generated_at="$(handoff_get "$f" "BATS_GENERATED_AT")"
 
@@ -222,17 +241,77 @@ select_bats_handoff() {
         elif [[ -n "$scope" ]]; then
             [[ "$scope" =~ $_BH_RE_SCOPE ]] || continue
         fi
-
-        if [[ -z "$best_gen" || "$generated_at" > "$best_gen" ]]; then
-            best_gen="$generated_at"
-            best="$f"
+        scope_matches=$((scope_matches + 1))
+        plan_digest="$(handoff_get "$f" "BATS_PLAN_DIGEST")"
+        wave_slug="$(handoff_get "$f" "BATS_WAVE_SLUG")"
+        target_digest="$(handoff_get "$f" "BATS_TARGET_DIGEST")"
+        env_fingerprint="$(handoff_get "$f" "BATS_ENV_FINGERPRINT")"
+        started_at="$(handoff_get "$f" "BATS_STARTED_AT")"
+        finished_at="$(handoff_get "$f" "BATS_FINISHED_AT")"
+        log_digest="$(handoff_get "$f" "BATS_LOG_DIGEST")"
+        log_identity="$(handoff_get "$f" "BATS_LOG_IDENTITY")"
+        tool_versions="$(handoff_get "$f" "BATS_TOOL_VERSIONS")"
+        if [[ -n "$require_plan_digest" || -n "$require_wave_slug" || -n "$require_target_digest" || -n "$require_env_fingerprint" || "$require_agreeing" -gt 1 ]]; then
+            if [[ ! "$plan_digest" =~ $_BH_RE_DIGEST || ! "$wave_slug" =~ $_BH_RE_TOKEN \
+                || ! "$target_digest" =~ $_BH_RE_TARGET_DIGEST || ! "$env_fingerprint" =~ $_BH_RE_DIGEST \
+                || ! "$started_at" =~ $_BH_RE_TS || ! "$finished_at" =~ $_BH_RE_TS \
+    || "$finished_at" < "$started_at" || ! "$log_digest" =~ $_BH_RE_SHA256 \
+    || ! "$log_identity" =~ $_BH_RE_SHA256 \
+                || ! "$tool_versions" =~ $_BH_RE_TOKEN ]]; then
+                BH_STATUS="malformed"
+                return 0
+            fi
+            [[ -z "$require_plan_digest" || "$plan_digest" == "$require_plan_digest" ]] || continue
+            [[ -z "$require_wave_slug" || "$wave_slug" == "$require_wave_slug" ]] || continue
+            [[ -z "$require_target_digest" || "$target_digest" == "$require_target_digest" ]] || continue
+            [[ -z "$require_env_fingerprint" || "$env_fingerprint" == "$require_env_fingerprint" ]] || continue
         fi
+        candidates+=("$f")
     done
 
-    if [[ -z "$best" ]]; then
-        BH_STATUS="scope-mismatch"
+    if [[ "${#candidates[@]}" -eq 0 ]]; then
+        if [[ "$scope_matches" -gt 0 ]]; then BH_STATUS="provenance-mismatch"; else BH_STATUS="scope-mismatch"; fi
         return 0
     fi
+
+    local best="" best_gen="" best_signature="" signature candidate run_id
+    local unique_run_ids="" unique_log_digests="" unique_log_identities="" agreement_count=0 log_digest log_identity
+    for f in "${candidates[@]}"; do
+        signature="$(handoff_get "$f" BATS_HEAD)|$(handoff_get "$f" BATS_SCOPE)|$(handoff_get "$f" BATS_PLAN_DIGEST)|$(handoff_get "$f" BATS_WAVE_SLUG)|$(handoff_get "$f" BATS_TARGET_DIGEST)|$(handoff_get "$f" BATS_ENV_FINGERPRINT)|$(handoff_get "$f" BATS_TOOL_VERSIONS)|$(handoff_get "$f" BATS_OK)|$(handoff_get "$f" BATS_NOT_OK)|$(handoff_get "$f" BATS_EXPECTED)|$(handoff_get "$f" BATS_TOTAL)|$(handoff_get "$f" BATS_COMPLETE)|$(handoff_get "$f" BATS_VERDICT)"
+        if [[ -z "$best_signature" ]]; then
+            best_signature="$signature"
+        elif [[ "$signature" != "$best_signature" ]]; then
+            BH_STATUS="provenance-mismatch"
+            return 0
+        fi
+        run_id="$(handoff_get "$f" BATS_RUN_ID)"
+        log_digest="$(handoff_get "$f" BATS_LOG_DIGEST)"
+        log_identity="$(handoff_get "$f" BATS_LOG_IDENTITY)"
+        case ",$unique_run_ids," in *,"$run_id",*) continue ;; esac
+        case ",$unique_log_identities," in *,"$log_identity",*) continue ;; esac
+        case ",$unique_run_ids," in
+            *)
+                if [[ -n "$unique_run_ids" ]]; then unique_run_ids+=","; fi
+                unique_run_ids+="$run_id"
+                if [[ -n "$unique_log_digests" ]]; then unique_log_digests+=","; fi
+                unique_log_digests+="$log_digest"
+                if [[ -n "$unique_log_identities" ]]; then unique_log_identities+=","; fi
+                unique_log_identities+="$log_identity"
+                agreement_count=$((agreement_count + 1))
+                ;;
+        esac
+        generated_at="$(handoff_get "$f" BATS_GENERATED_AT)"
+        if [[ -z "$best_gen" || "$generated_at" > "$best_gen" ]]; then
+            best="$f"; best_gen="$generated_at"
+        fi
+    done
+    if [[ "$agreement_count" -lt "$require_agreeing" ]]; then
+        BH_STATUS="insufficient-agreement"
+        return 0
+    fi
+    BH_AGREEMENT_COUNT="$agreement_count"
+    BH_RUN_IDS="$unique_run_ids"
+    BH_LOG_DIGESTS="$unique_log_digests"
 
     BH_STATUS="ok"
     BH_HEAD="$(handoff_get "$best" "BATS_HEAD")"
@@ -245,12 +324,20 @@ select_bats_handoff() {
     BH_SCOPE="$(handoff_get "$best" "BATS_SCOPE")"
     BH_GENERATED_AT="$best_gen"
     BH_PATH="$best"
+    BH_PLAN_DIGEST="$(handoff_get "$best" BATS_PLAN_DIGEST)"
+    BH_WAVE_SLUG="$(handoff_get "$best" BATS_WAVE_SLUG)"
+    BH_TARGET_DIGEST="$(handoff_get "$best" BATS_TARGET_DIGEST)"
+    BH_ENV_FINGERPRINT="$(handoff_get "$best" BATS_ENV_FINGERPRINT)"
+    BH_STARTED_AT="$(handoff_get "$best" BATS_STARTED_AT)"
+    BH_FINISHED_AT="$(handoff_get "$best" BATS_FINISHED_AT)"
+    BH_LOG_DIGEST="$(handoff_get "$best" BATS_LOG_DIGEST)"
+    BH_TOOL_VERSIONS="$(handoff_get "$best" BATS_TOOL_VERSIONS)"
     return 0
 }
 
 # ── CLI ────────────────────────────────────────────────────────────────────────────────
 _bh_cli_select() {
-    local repo_root="" head="" since="" require_scope="" format="json"
+    local repo_root="" head="" since="" require_scope="" format="json" plan_digest="" wave_slug="" target_digest="" env_fingerprint="" require_agreeing="1"
     while [[ $# -gt 0 ]]; do
         case "$1" in
             --repo-root)     repo_root="$2"; shift 2 ;;
@@ -258,12 +345,19 @@ _bh_cli_select() {
             --since)         since="$2"; shift 2 ;;
             --require-scope) require_scope="$2"; shift 2 ;;
             --format)        format="$2"; shift 2 ;;
+            --plan-digest) plan_digest="$2"; shift 2 ;;
+            --wave-slug) wave_slug="$2"; shift 2 ;;
+            --target-digest) target_digest="$2"; shift 2 ;;
+            --environment-fingerprint) env_fingerprint="$2"; shift 2 ;;
+            --require-agreeing) require_agreeing="$2"; shift 2 ;;
             *) shift ;;
         esac
     done
     [[ -n "$repo_root" ]] || repo_root="$(pwd)"
 
-    select_bats_handoff --repo-root "$repo_root" --head "$head" --since "$since" --require-scope "$require_scope"
+    select_bats_handoff --repo-root "$repo_root" --head "$head" --since "$since" --require-scope "$require_scope" \
+      --plan-digest "$plan_digest" --wave-slug "$wave_slug" --target-digest "$target_digest" \
+      --environment-fingerprint "$env_fingerprint" --require-agreeing "$require_agreeing"
 
     if [[ -n "$BH_PATH" ]]; then
         echo "[bats-handoff] INFO: selected $BH_PATH (status=$BH_STATUS)" >&2
@@ -278,8 +372,8 @@ _bh_cli_select() {
         complete_lit="true"
     fi
 
-    printf '{"status":"%s","head":"%s","run_id":"%s","ok":%s,"not_ok":%s,"expected":%s,"total":%s,"complete":%s,"scope":"%s","generated_at":"%s"}\n' \
-        "$BH_STATUS" "$BH_HEAD" "$BH_RUN_ID" "$ok_n" "$not_ok_n" "$expected_n" "$total_n" "$complete_lit" "$BH_SCOPE" "$BH_GENERATED_AT"
+    printf '{"status":"%s","head":"%s","run_id":"%s","ok":%s,"not_ok":%s,"expected":%s,"total":%s,"complete":%s,"scope":"%s","generated_at":"%s","plan_digest":"%s","wave_slug":"%s","target_digest":"%s","environment_fingerprint":"%s","started_at":"%s","finished_at":"%s","log_digest":"%s","tool_versions":"%s","agreement_count":%s,"run_ids":"%s","log_digests":"%s"}\n' \
+        "$BH_STATUS" "$BH_HEAD" "$BH_RUN_ID" "$ok_n" "$not_ok_n" "$expected_n" "$total_n" "$complete_lit" "$BH_SCOPE" "$BH_GENERATED_AT" "$BH_PLAN_DIGEST" "$BH_WAVE_SLUG" "$BH_TARGET_DIGEST" "$BH_ENV_FINGERPRINT" "$BH_STARTED_AT" "$BH_FINISHED_AT" "$BH_LOG_DIGEST" "$BH_TOOL_VERSIONS" "$BH_AGREEMENT_COUNT" "$BH_RUN_IDS" "$BH_LOG_DIGESTS"
     return 0
 }
 

@@ -28,7 +28,7 @@ All dashboard and support-plane operations enter through the shared product flow
 
 The Bash call must be one standalone direct Node command. For L0, `toolkit-root` and `consumer-root` are the current repository. For an installed runtime consumer, resolve `toolkit-root` only from the single local `layer=L0, role=tooling` source in `l0-manifest.json`; `consumer-root` remains the literal absolute application repository. Use the resolved Node executable. Never use `$(pwd)`, `$PWD`, `cd`, environment fallbacks, shell variables, command substitution, pipes, redirects, or command separators in this authenticated entrypoint call.
 
-Encode exactly `{"mode":"dashboard"}` for the read-only form or `{"mode":"start"}` for orchestration. Treat `READY` as a proven dashboard result, execute only returned `ACTION_REQUIRED` actions through the runtime adapter, and report `BLOCKED|UNAVAILABLE|FAILED` without inventing readiness.
+Encode exactly `{"mode":"dashboard"}` for the read-only form or canonical `{"mode":"start","wave_slug":"<slug>"}` for orchestration. The shared entrypoint initializes/validates the control-plane state and derives the lifecycle role set itself. Treat `READY` as a proven dashboard result, execute only returned `ACTION_REQUIRED` actions through the runtime adapter, and report `BLOCKED|UNAVAILABLE|FAILED` without inventing readiness.
 
 ## Step 0 — Core Support-Plane Dispatch (when --orchestrate <slug> is passed)
 
@@ -37,15 +37,15 @@ Skip this step if `--orchestrate` flag is absent. Default behavior is read-only 
 When `--orchestrate <slug>` is passed:
 
 1. Validate slug is present: if `--orchestrate` is passed without a slug, emit error: "Usage: /init-session --orchestrate <slug>" and exit.
-2. Ensure the persistent support plane through the shared role-lifecycle manager — never raw `Agent()`/`SendMessage()` calls and never a hard-coded roster:
+2. Submit the slug through the canonical runtime intent above. The entrypoint initializes or reads the shared phase state and obtains class-aware lifecycle work from the control plane; never run a second orchestration path, use a hard-coded roster, or embed vendor-specific dispatch/messaging calls:
    - `probe(profile)` reads the active `runtime-collaboration-policy.json` profile (`auto|persistent|ephemeral|disk-only`) and connector capabilities.
-   - `ensureRoles(profile, roles)` over exactly the default support plane — `arch-platform`, `arch-testing`, `arch-integration`, `context-provider`, `doc-updater`. **Never add `quality-gater`** — it stays phase-scoped and is dispatched fresh per wave, never parked in the persistent plane.
+   - Execute each returned `ensure` action through the existing Wave-1 role-lifecycle manager. HARNESS, DOC and FAST-PATH role floors come only from `wave-topology.yaml` plus the active PLAN; `quality-gater` stays phase-scoped and is never parked in the persistent plane.
    - `waitReady` for the resulting bindings, bounded by the policy's `ready_timeout_seconds`.
    - This is idempotent: a second `--orchestrate` call in the same session reuses the existing healthy bindings instead of respawning. `auto|persistent` launches at most one retained connector (Claude Agent Teams peer or Codex supervisor) per role; `ephemeral`/`disk-only` fall back per policy without a false READY claim.
 3. Once the support plane is READY, context-provider is addressable for the rest of the session — no separate mandatory "consult and wait" step is required here. An optional light consult may accelerate loading current project state before the dashboard, but rendering never blocks on it.
 4. Continue to Step 1 (dashboard render)
 
-> **Note**: The `<slug>` wave slug determines the wave artifact directory (`.planning/wave-<slug>/`). The load-bearing contract is disk artifacts — verdicts, stamps, and the QG report — not named-team membership or a live message.
+> **Note**: The `<slug>` determines the wave artifact directory and its persisted phase state. The load-bearing contract is validated disk artifacts and legal control-plane transitions — not named-team membership or a live message.
 
 ## Steps
 

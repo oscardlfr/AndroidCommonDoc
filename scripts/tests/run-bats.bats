@@ -398,7 +398,7 @@ EOF
     [ -n "$bash_path" ]
     mkdir -p "$isolated_bin"
     local command_name command_path
-    for command_name in dirname date mkdir sort git uname mv; do
+    for command_name in dirname date mkdir sort git uname mv node; do
         command_path="$(command -v "$command_name")"
         [ -n "$command_path" ]
         ln -s "$command_path" "$isolated_bin/$command_name"

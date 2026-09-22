@@ -100,7 +100,7 @@ fi
 echo "▶ Checking MCP tool tables..."
 
 if [ -d mcp-server/src/tools ]; then
-  actual_mcp=$(ls mcp-server/src/tools/*.ts 2>/dev/null | xargs -I {} basename {} .ts | grep -v index | sort)
+  actual_mcp=$(node -e "const {mcpToolNames}=require('./scripts/tools/generate-operational-catalog.cjs'); process.stdout.write(mcpToolNames(process.cwd()).join('\\n'))")
   actual_mcp_count=$(echo "$actual_mcp" | grep -c "." || echo "0")
   
   if [ -f AGENTS.md ]; then
@@ -150,7 +150,7 @@ if [ -d scripts/sh ]; then
   actual_sh_count=$(echo "$actual_sh" | grep -c "." || echo "0")
 
   if [ -f README.md ]; then
-    readme_scripts=$(sed -n '/^## Scripts/,/^## /p' README.md | grep "^| \`" | sed 's/| `\([^`]*\)`.*/\1/' | sort || true)
+    readme_scripts=$(sed -n '/^## Scripts/,/^### Shared Libraries/p' README.md | grep "^| \`" | sed 's/| `\([^`]*\)`.*/\1/' | sort || true)
     
     for script in $readme_scripts; do
       if ! echo "$actual_sh" | grep -qx "$script"; then
@@ -203,6 +203,7 @@ done
 echo "▶ Checking README Documentation table..."
 
 if [ -f README.md ]; then
+  readme_docs_section=$(sed -n '/^## Documentation/,/^## How Skills Work/p' README.md)
   # Every hub directory on disk should have a row in the Documentation table
   for hub_dir in docs/*/; do
     [ -d "$hub_dir" ] || continue
@@ -211,7 +212,7 @@ if [ -f README.md ]; then
     [ -f "$hub_file" ] || continue
     
     # Check if this hub appears in the README Documentation table
-    if ! sed -n '/^## Documentation/,/^---$/p' README.md | grep -q "$hub_name"; then
+    if ! grep -q "$hub_name" <<<"$readme_docs_section"; then
       add_finding "MEDIUM" "missing" "Hub '$hub_name/' exists on disk but missing from README Documentation table" "true"
     fi
   done
@@ -222,7 +223,7 @@ if [ -f README.md ]; then
     if [ ! -f "$link" ]; then
       add_finding "MEDIUM" "broken-link" "README Documentation table links to '$link' which doesn't exist" "false"
     fi
-  done < <(sed -n '/^## Documentation/,/^---$/p' README.md | grep -oE '\(docs/[^)]+\)' | tr -d '()\r' 2>/dev/null)
+  done < <(grep -oE '\(docs/[^)]+\)' <<<"$readme_docs_section" | tr -d '()\r' 2>/dev/null)
   
   # Sub-doc count in each hub should match what's on disk
   for hub_dir in docs/*/; do
@@ -231,12 +232,14 @@ if [ -f README.md ]; then
     hub_file="${hub_dir}${hub_name}-hub.md"
     [ -f "$hub_file" ] || continue
     
-    # Count sub-docs in hub (markdown links in the Documents table)
+    # Immediate hub links may intentionally route through sub-hubs. Broken links
+    # are checked above and transitive reachability is enforced by QG, so only an
+    # impossible over-count is meaningful here.
     hub_links=$(grep -oE '\([a-zA-Z0-9_-]+\.md\)' "$hub_file" 2>/dev/null | wc -l | tr -d ' \r')
     # Count actual non-hub .md files in the directory
     actual_docs=$(find "$hub_dir" -maxdepth 1 -name "*.md" -not -name "*hub*" | wc -l | tr -d ' \r')
     
-    if [ "$hub_links" -gt 0 ] && [ "$actual_docs" -gt 0 ] && [ "$hub_links" -ne "$actual_docs" ]; then
+    if [ "$hub_links" -gt "$actual_docs" ]; then
       add_finding "LOW" "count" "Hub '$hub_name': links $hub_links docs but directory has $actual_docs non-hub .md files" "true"
     fi
   done
@@ -249,7 +252,7 @@ if [ -f README.md ]; then
   # MCP tools in description
   readme_mcp_desc=$(grep -oE 'MCP server with [0-9]+ tools' README.md | grep -oE '[0-9]+' | head -1 || echo "?")
   if [ -n "$readme_mcp_desc" ] && [ "$readme_mcp_desc" != "?" ]; then
-    actual_mcp_for_check=$(ls mcp-server/src/tools/*.ts 2>/dev/null | grep -v index 2>/dev/null | wc -l | tr -d ' \r' || true)
+    actual_mcp_for_check="${actual_mcp_count:-0}"
     if [ "$readme_mcp_desc" != "$actual_mcp_for_check" ]; then
       add_finding "HIGH" "count" "README description says '$readme_mcp_desc tools' but actual: $actual_mcp_for_check" "true"
     fi

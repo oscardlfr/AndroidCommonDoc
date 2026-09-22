@@ -10,6 +10,7 @@ const lifecycleOwner = require('./runtime-role-lifecycle.cjs');
 const consultationOwner = require('./runtime-consultation.cjs');
 const runtimeProjectContext = require('./runtime-project-context.cjs');
 const claudeHostOwner = require('./runtime-host-claude.cjs');
+const waveControl = require('./wave-control-plane.cjs');
 
 const ENTRYPOINTS = Object.freeze([
   'init-session',
@@ -47,6 +48,7 @@ const PORT_SHAPE = Object.freeze({
 const TRUSTED_CONTEXTS = new WeakSet();
 const CONTEXT_STATE = new WeakMap();
 const PLAN_COMMAND_ARGS = new Map();
+const PLAN_SUPPORT_ROLES = new WeakMap();
 const HEX64 = '[0-9a-f]{64}';
 const REF_RE = Object.freeze({
   checkpoint: new RegExp(`^checkpoint:${HEX64}$`),
@@ -76,11 +78,14 @@ function validatePorts(ports) {
   }
 }
 
-function createTrustedHostContext(ports) {
+function createTrustedHostContext(ports, supportRoles = SUPPORT_ROLES) {
   validatePorts(ports);
+  if (!Array.isArray(supportRoles) || supportRoles.some((role) => typeof role !== 'string')) {
+    throw new TypeError('invalid-support-roles');
+  }
   const context = Object.freeze(Object.create(null));
   TRUSTED_CONTEXTS.add(context);
-  CONTEXT_STATE.set(context, { ports, ingestionResults: new Map() });
+  CONTEXT_STATE.set(context, { ports, ingestionResults: new Map(), supportRoles: [...supportRoles] });
   return context;
 }
 
@@ -92,15 +97,19 @@ function trustedState(context) {
 }
 
 function validateIntent(entrypoint, intent) {
+  const hasWaveSlug = typeof intent.wave_slug === 'string' && /^[A-Za-z0-9._-]+$/.test(intent.wave_slug)
+    && intent.wave_slug !== '.' && intent.wave_slug !== '..';
+  const exactWithOptionalWave = (keys) => hasExactKeys(intent, keys)
+    || (hasWaveSlug && hasExactKeys(intent, [...keys, 'wave_slug']));
   switch (entrypoint) {
     case 'init-session':
-      if (!hasExactKeys(intent, ['mode']) || !['dashboard', 'start'].includes(intent.mode)) throw new TypeError('invalid-intent');
+      if (!exactWithOptionalWave(['mode']) || !['dashboard', 'start'].includes(intent.mode)) throw new TypeError('invalid-intent');
       return;
     case 'resume-work':
-      if (!hasExactKeys(intent, ['checkpoint_ref']) || !REF_RE.checkpoint.test(intent.checkpoint_ref)) throw new TypeError('invalid-intent');
+      if (!exactWithOptionalWave(['checkpoint_ref']) || !REF_RE.checkpoint.test(intent.checkpoint_ref)) throw new TypeError('invalid-intent');
       return;
     case 'work':
-      if (!hasExactKeys(intent, ['role', 'subject_ref', 'task'])) throw new TypeError('invalid-intent');
+      if (!exactWithOptionalWave(['role', 'subject_ref', 'task'])) throw new TypeError('invalid-intent');
       if (!lifecycleOwner.CANONICAL_ROLES.includes(intent.role)) throw new TypeError('invalid-intent');
       if (!REF_RE.subject.test(intent.subject_ref)) throw new TypeError('invalid-intent');
       if (typeof intent.task !== 'string' || intent.task.trim().length === 0) throw new TypeError('invalid-intent');
@@ -187,22 +196,22 @@ function resolveSelection(entrypoint, ports) {
 // remain non-ready: only these three literal states ever qualify.
 const HEALTHY_SUPPORT_ROLE_STATES = Object.freeze(['READY', 'WAITING', 'BUSY']);
 
-function allSupportRolesHealthy(status) {
+function allSupportRolesHealthy(status, supportRoles = SUPPORT_ROLES) {
   const roles = status && status.roles && typeof status.roles === 'object' ? status.roles : {};
-  return SUPPORT_ROLES.every((role) => HEALTHY_SUPPORT_ROLE_STATES.includes(roles[role]));
+  return supportRoles.every((role) => HEALTHY_SUPPORT_ROLE_STATES.includes(roles[role]));
 }
 
 function actionRefs(value) {
   return value && Array.isArray(value.actions) ? value.actions : [];
 }
 
-function completedResumeCheckpoint(value, checkpointRef) {
+function completedResumeCheckpoint(value, checkpointRef, supportRoles = SUPPORT_ROLES) {
   const operation = value && value.resume_checkpoint;
   if (!operation || !hasExactKeys(operation, ['checkpoint_ref', 'resumed_roles', 'schema'])) return false;
   return operation.schema === 'runtime/resume-checkpoint-completion/v1'
     && operation.checkpoint_ref === checkpointRef
     && Array.isArray(operation.resumed_roles)
-    && JSON.stringify(operation.resumed_roles) === JSON.stringify([...SUPPORT_ROLES].sort());
+    && JSON.stringify(operation.resumed_roles) === JSON.stringify([...supportRoles].sort());
 }
 
 async function executeActions(ports, actions) {
@@ -251,32 +260,32 @@ function canonicalIngestionCompletion(value, expected) {
   return Object.fromEntries(keys.map((key) => [key, value[key]]));
 }
 
-async function executeInit(intent, ports, selection) {
+async function executeInit(intent, ports, selection, supportRoles) {
   const current = await ports.lifecycle.status();
-  if (intent.mode === 'dashboard' || allSupportRolesHealthy(current)) {
+  if (intent.mode === 'dashboard' || allSupportRolesHealthy(current, supportRoles)) {
     return makeEnvelope('init-session', 'READY', 'support-plane-ready', selection, [], current);
   }
-  const ensured = await ports.lifecycle.ensureRoles([...SUPPORT_ROLES]);
+  const ensured = await ports.lifecycle.ensureRoles([...supportRoles]);
   const actions = actionRefs(ensured);
   if (!await executeActions(ports, actions)) {
     return makeEnvelope('init-session', 'ACTION_REQUIRED', 'support-plane-action-required', selection, actions);
   }
   const finalStatus = await ports.lifecycle.status();
-  if (allSupportRolesHealthy(finalStatus)) {
+  if (allSupportRolesHealthy(finalStatus, supportRoles)) {
     return makeEnvelope('init-session', 'READY', 'support-plane-ready', selection, actions, finalStatus);
   }
   return makeEnvelope('init-session', 'ACTION_REQUIRED', 'support-plane-action-required', selection, actions);
 }
 
-async function executeResume(intent, ports, selection) {
+async function executeResume(intent, ports, selection, supportRoles) {
   const current = await ports.lifecycle.status();
-  if (completedResumeCheckpoint(current, intent.checkpoint_ref)) {
+  if (completedResumeCheckpoint(current, intent.checkpoint_ref, supportRoles)) {
     return makeEnvelope('resume-work', 'READY', 'runtime-resumed', selection, [], current);
   }
   const roles = current && current.roles && typeof current.roles === 'object' ? current.roles : {};
   const actions = [];
   let recoveryPending = false;
-  for (const role of SUPPORT_ROLES) {
+  for (const role of supportRoles) {
     if (roles[role] === 'READY') continue;
     recoveryPending = true;
     const digest = crypto.createHash('sha256').update(`${intent.checkpoint_ref}\0${role}`).digest('hex');
@@ -364,8 +373,8 @@ async function executeEntrypoint(entrypoint, intent, trustedHostContext) {
   const resolved = resolveSelection(entrypoint, state.ports);
   if (!resolved.ok) return makeEnvelope(entrypoint, 'UNAVAILABLE', 'selection-unavailable', resolved.selection);
   switch (entrypoint) {
-    case 'init-session': return executeInit(intent, state.ports, resolved.selection);
-    case 'resume-work': return executeResume(intent, state.ports, resolved.selection);
+    case 'init-session': return executeInit(intent, state.ports, resolved.selection, state.supportRoles);
+    case 'resume-work': return executeResume(intent, state.ports, resolved.selection, state.supportRoles);
     case 'work': return executeWork(intent, state.ports, resolved.selection);
     case 'ingest-content': return executeIngest(intent, state, resolved.selection);
     case 'monitor-docs': return executeMonitor(intent, state.ports, resolved.selection);
@@ -597,9 +606,24 @@ function ingestionCompletion(projectRoot, intent) {
   };
 }
 
+function supportRolesForIntent(entrypoint, intent, projectRoot) {
+  if (!intent.wave_slug) return [...SUPPORT_ROLES];
+  const state = entrypoint === 'init-session'
+    ? waveControl.initialize(projectRoot, intent.wave_slug)
+    : waveControl.status(projectRoot, intent.wave_slug);
+  if (state.plan_current === false) throw new TypeError('wave-control-plan-drift');
+  if (entrypoint === 'work' && state.phase !== 'EXECUTE') throw new TypeError('wave-control-work-outside-execute');
+  // EXECUTE intentionally permits HEAD movement while specialists commit.  The
+  // control plane adopts that final HEAD only at EXECUTE -> VERIFY_FINAL with
+  // the explicit rebind flag.  Every other phase remains exact-HEAD-bound.
+  if (state.current === false && state.phase !== 'EXECUTE') throw new TypeError('wave-control-state-drift');
+  return [...state.lifecycle_roles];
+}
+
 function planEntrypointStep(entrypoint, intent, projectRoot) {
   validateIntent(entrypoint, intent);
   if (typeof projectRoot !== 'string' || !path.isAbsolute(projectRoot)) throw new TypeError('invalid-project-root');
+  const supportRoles = supportRolesForIntent(entrypoint, intent, projectRoot);
   let command = null;
   let commandArg = null;
   let roleScope = null;
@@ -607,7 +631,7 @@ function planEntrypointStep(entrypoint, intent, projectRoot) {
   if (entrypoint === 'init-session') {
     if (intent.mode === 'start') {
       command = 'ensure';
-      roleScope = [...SUPPORT_ROLES].sort();
+      roleScope = [...supportRoles].sort();
       argvDigest = crypto.createHash('sha256').update('ensure:' + roleScope.join(',')).digest('hex');
     } else {
       command = 'status';
@@ -615,7 +639,7 @@ function planEntrypointStep(entrypoint, intent, projectRoot) {
     }
   } else if (entrypoint === 'resume-work') {
     command = 'ensure';
-    roleScope = [...SUPPORT_ROLES].sort();
+    roleScope = [...supportRoles].sort();
     argvDigest = digestArgv('ensure', roleScope.join(',') + ':resume:' + intent.checkpoint_ref);
   } else if (entrypoint === 'work') {
     const step = planWorkStep(intent, projectRoot);
@@ -638,7 +662,9 @@ function planEntrypointStep(entrypoint, intent, projectRoot) {
     if (PLAN_COMMAND_ARGS.size >= 256) PLAN_COMMAND_ARGS.delete(PLAN_COMMAND_ARGS.keys().next().value);
     PLAN_COMMAND_ARGS.set(argvDigest, commandArg);
   }
-  return Object.freeze({ command, argv_digest: argvDigest, role_scope: roleScope });
+  const planned = Object.freeze({ command, argv_digest: argvDigest, role_scope: roleScope });
+  PLAN_SUPPORT_ROLES.set(planned, supportRoles);
+  return planned;
 }
 
 function plannedEntrypointCommandArgument(plan) {
@@ -816,7 +842,10 @@ async function main(argv) {
     if (!consumed.ok) {
       envelope = makeEnvelope(parsed.entrypoint, 'UNAVAILABLE', 'host-composition-unavailable', null);
     } else {
-      const context = createTrustedHostContext(createProductionPorts(parsed, plan, consumed.record));
+      const context = createTrustedHostContext(
+        createProductionPorts(parsed, plan, consumed.record),
+        PLAN_SUPPORT_ROLES.get(plan) || SUPPORT_ROLES,
+      );
       envelope = await executeEntrypoint(parsed.entrypoint, parsed.intent, context);
     }
     process.stdout.write(`${JSON.stringify(envelope)}\n`);

@@ -6,7 +6,7 @@ model: sonnet
 domain: architecture
 intent: [testing, TDD, coverage, test-quality]
 token_budget: 4000
-template_version: "1.40.0"
+template_version: "1.41.0"
 skills:
   - test
   - test-full-parallel
@@ -315,14 +315,16 @@ Escalate to the orchestrator when:
 ### Disk-Write + 1-Liner DM (MANDATORY)
 
 After completing review:
-1. Write the verdict block to `.planning/wave{N}/arch-testing-verdict.md` using `write-verdict.sh`:
+1. The orchestrator must create an immutable `verdict-request/v1` before dispatch. Publish the response as `verdict/v1` with its exact request binding:
 
    ```bash
-   # PREP phase (creates file, fails if APPROVED-PREP already present)
-   bash scripts/sh/write-verdict.sh --role arch-testing --phase prep
+   bash scripts/sh/write-verdict.sh --role arch-testing --phase prep \
+     --request <request.json> --request-sha256 <sha256> --decision <approve|escalate> \
+     [--reason-code <closed-enum>] --evidence-file <path>
 
-   # VERIFY-FINAL phase (appends; requires APPROVED-PREP already in file)
-   bash scripts/sh/write-verdict.sh --role arch-testing --phase verify-final
+   bash scripts/sh/write-verdict.sh --role arch-testing --phase verify-final \
+     --request <request.json> --request-sha256 <sha256> --decision <approve|escalate> \
+     [--reason-code <closed-enum>] --evidence-file <path>
    ```
 
    Write/Edit are denied; `write-verdict.sh` is the only sanctioned verdict-write path (L1 canal, wave bl-w47-hook-surgery).
@@ -332,12 +334,11 @@ After completing review:
 
 Full protocol: `docs/agents/agent-verdict-protocol.md`
 
-### CRITICAL: APPEND for EXECUTE, OVERWRITE for PREP (BL-bump-ktr-01)
+### Structured authority boundary
 
-- **PREP phase initial write**: use `write-verdict.sh --phase prep` — creates file; fails exit 2 if APPROVED-PREP already present (duplicate guard).
-- **EXECUTE phase verdict write**: use `write-verdict.sh --phase verify-final` — APPENDS to the existing PREP verdict file; fails exit 2 if APPROVED-PREP is absent or dual-token replay detected. Never overwrite the PREP file directly: destroying the `APPROVED-PREP` literal token causes `premature-execution-gate` to block merge.
-- **Lesson**: PR #166 cost 1 fix-forward when arch-platform overwrote PREP verdict during EXECUTE phase. APPROVED-PREP token erased, gate triggered.
-- **Token asymmetry**: `APPROVED-PREP` is gate-enforced (premature-execution-gate blocks merge if absent); `APPROVED-VERDICT` is record-only (post-execution audit trail, not checked by any hook).
+- Prose tokens and Markdown verdict blocks are conversational output only and authorize nothing.
+- The canonical validator binds role, phase, wave, PLAN, HEAD, request, decision and evidence digests. Only `authorizes:true` advances the phase.
+- Superseding a verdict requires the exact compare-and-swap digest; never append, overwrite or reuse a request.
 
 ### 6. Coverage Baseline Gate
 - Run /coverage on every touched module

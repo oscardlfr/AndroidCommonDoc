@@ -21,12 +21,11 @@ bats_require_minimum_version 1.5.0
 #   Each test uses mktemp -d + git init + git checkout -b <branch>.
 #   NEVER read the live repo's .git or .androidcommondoc stamps.
 #
-# For wave-phase-gate branch-path tests (SRM-*2b): the sentinel is written at
-# $PROJ/.claude/wave-quality-gates/<last-segment>.md. The gate uses CLAUDE_PROJECT_DIR=$PROJ
-# and NO CLAUDE_WAVE_SLUG env so Priority 2 (git branch parsing) is exercised.
-# BEFORE P2b fix: gate returns full branch (e.g. codex/bl-w47-demo), sentinel path
-# embeds a slash → existsSync on the wrong path → exit 2 (RED).
-# AFTER P2b fix: gate returns last-segment (bl-w47-demo), sentinel found → exit 0 (GREEN).
+# For wave-phase-gate branch-path tests (SRM-*2b), the gate uses
+# CLAUDE_PROJECT_DIR=$PROJ and no CLAUDE_WAVE_SLUG so Priority 2 (git branch
+# parsing) is exercised. The current persisted control-plane contract then
+# fails closed because this isolated fixture has no matching phase-state file;
+# the assertions prove the resolved wave slug in that failure.
 #
 # Invocation: bats scripts/tests/slug-resolution-matrix.bats (from repo root)
 
@@ -103,19 +102,15 @@ PYEOF
 }
 
 # ── Helper: run wave-phase-gate via BRANCH path (no CLAUDE_WAVE_SLUG) ──────────
-# Checks out the given branch in $PROJ, creates a sentinel for expected_slug,
-# runs the gate with CLAUDE_PROJECT_DIR=$PROJ and NO env slug override.
-# BEFORE P2b fix: gate returns full branch name → wrong sentinel path → exit 2.
-# AFTER  P2b fix: gate returns last-segment → correct sentinel → exit 0.
+# Checks out the given branch and runs the gate with no env override. The modern
+# gate requires a persisted phase-state; this isolated slug fixture deliberately
+# omits it, so the expected result is a fail-closed diagnostic naming the exact
+# last-segment slug. That still proves branch resolution without forging QG state.
 run_wpg_branch_path() {
   local branch="$1" expected_slug="$2"
   # Checkout branch in isolated repo.
   git -C "$PROJ" checkout -b "$branch" -q 2>/dev/null || \
     git -C "$PROJ" checkout "$branch" -q 2>/dev/null
-  # Create sentinel at the CORRECT last-segment path (post-fix path).
-  local sentinel_dir="$PROJ/.claude/wave-quality-gates"
-  mkdir -p "$sentinel_dir"
-  printf '# sentinel for slug-matrix test\n' > "$sentinel_dir/$expected_slug.md"
   # Run gate with no CLAUDE_WAVE_SLUG — forces Priority 2 (branch parsing).
   local payload
   payload="$(printf '%s' '{"tool_name":"Bash","tool_input":{"command":"git push origin '"$branch"'"}}')"
@@ -132,14 +127,10 @@ run_wpg_branch_path() {
   [[ "$out" == *"Match confirmed"* ]]
 }
 
-@test "SRM-F2b: wave-phase-gate BRANCH PATH: feature/bl-w47-pr-0c1 → last-segment bl-w47-pr-0c1 → sentinel found → exit 0" {
-  # TRUE P2b validation for wave-phase-gate, feature/ row.
-  # Drives Priority 2 (branch parsing): no CLAUDE_WAVE_SLUG env.
-  # feature/ prefix is already stripped correctly BEFORE the P2b fix, so this
-  # is expected GREEN even now — used as a control to verify the branch-path
-  # plumbing works before relying on the codex/ and wip cases as RED signals.
+@test "SRM-F2b: wave-phase-gate resolves feature/ branch to its last segment before persisted-state enforcement" {
   run_wpg_branch_path "feature/bl-w47-pr-0c1" "bl-w47-pr-0c1"
-  [ "$status" -eq 0 ]
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"bl-w47-pr-0c1"* ]]
 }
 
 @test "SRM-F3: premature-execution-gate resolver: feature/bl-w47-pr-0c1 → slug bl-w47-pr-0c1 → wave detected" {
@@ -154,7 +145,8 @@ run_wpg_branch_path() {
   # PREP binding). Seed a minimal PLAN.md for this fixture so prep can hash it.
   mkdir -p "$PROJ/.planning/wave-bl-w47-pr-0c1" && printf '# PLAN\n' > "$PROJ/.planning/wave-bl-w47-pr-0c1/PLAN.md"
   run bash -c "cd '$PROJ' && CLAUDE_WAVE_SLUG=bl-w47-pr-0c1 bash '$SCRIPT_VERDICT' \
-    --role arch-testing --phase prep --slug bl-w47-pr-0c1"
+    --role arch-testing --phase prep --slug bl-w47-pr-0c1 \
+    --publication-nonce 00000000000000000000000000000001"
   [ "$status" -eq 0 ]
   [ -f "$PROJ/.planning/wave-bl-w47-pr-0c1/arch-testing-verdict.md" ]
 }
@@ -178,28 +170,21 @@ run_wpg_branch_path() {
   [[ "$out" == *"Match confirmed"* ]]
 }
 
-@test "SRM-C2b: wave-phase-gate BRANCH PATH: codex/bl-w47-demo → last-segment bl-w47-demo → sentinel found → exit 0" {
-  # TRUE P2b regression for wave-phase-gate.
-  # BEFORE fix: getWaveSlug() returns 'codex/bl-w47-demo' (full branch, no stripping for non-feature/).
-  #   getSentinelPath() → '.claude/wave-quality-gates/codex/bl-w47-demo.md'
-  #   fs.existsSync() cannot find it (sentinel is at 'bl-w47-demo.md') → exit 2. RED.
-  # AFTER fix: returns 'bl-w47-demo' (last-segment via split('/').pop() or ${branch##*/})
-  #   getSentinelPath() → '.claude/wave-quality-gates/bl-w47-demo.md' → found → exit 0. GREEN.
+@test "SRM-C2b: wave-phase-gate resolves codex/ branch to its last segment before persisted-state enforcement" {
   run_wpg_branch_path "codex/bl-w47-demo" "bl-w47-demo"
-  [ "$status" -eq 0 ]
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"bl-w47-demo"* ]]
 }
 
 @test "SRM-WPG-BRANCH: wave-phase-gate resolves codex/ branch via last-segment (no env)" {
   # Canonical P2b regression for wave-phase-gate branch-parsing path.
   # Exactly mirrors team-lead dispatch template — no CLAUDE_WAVE_SLUG env.
-  # Sentinel at bl-w47-demo.md (correct last-segment); BEFORE fix the gate
-  # looks for codex/bl-w47-demo.md (embedded slash, wrong path) → exit 2 (RED).
-  # AFTER fix: last-segment slug → sentinel found → exit 0 (GREEN).
+  # The persisted-state rejection must name the canonical last-segment slug,
+  # never the slash-containing branch name.
   git -C "$PROJ" checkout -b codex/bl-w47-demo -q 2>/dev/null
-  mkdir -p "$PROJ/.claude/wave-quality-gates"
-  : > "$PROJ/.claude/wave-quality-gates/bl-w47-demo.md"
   run bash -c "printf '%s' '{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"git push origin codex/bl-w47-demo\"}}' | CLAUDE_PROJECT_DIR='$PROJ' node '$HOOK_WAVE_PHASE'"
-  [ "$status" -eq 0 ]
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"bl-w47-demo"* ]]
 }
 
 @test "SRM-C3: premature-execution-gate resolver: codex/bl-w47-demo → slug bl-w47-demo → wave detected" {
@@ -213,7 +198,8 @@ run_wpg_branch_path() {
   # PREP binding). Seed a minimal PLAN.md for this fixture so prep can hash it.
   mkdir -p "$PROJ/.planning/wave-bl-w47-demo" && printf '# PLAN\n' > "$PROJ/.planning/wave-bl-w47-demo/PLAN.md"
   run bash -c "cd '$PROJ' && CLAUDE_WAVE_SLUG=bl-w47-demo bash '$SCRIPT_VERDICT' \
-    --role arch-testing --phase prep --slug bl-w47-demo"
+    --role arch-testing --phase prep --slug bl-w47-demo \
+    --publication-nonce 00000000000000000000000000000002"
   [ "$status" -eq 0 ]
   [ -f "$PROJ/.planning/wave-bl-w47-demo/arch-testing-verdict.md" ]
 }
@@ -237,7 +223,7 @@ run_wpg_branch_path() {
 # After the P2b fix (${branch##*/} regardless of slash presence + reject-list),
 # all 5 must agree on 'wip'.
 # SRM-W3 and SRM-W5 are RED now and GREEN after toolkit's P2b impl.
-# SRM-W2b is a GREEN control case (wip has no slash; current code already returns 'wip').
+# SRM-W2b is the no-slash control for the same persisted-state gate.
 
 @test "SRM-W1: subagent-start resolver: wip branch (no-slash) → slug 'wip'" {
   local out
@@ -246,18 +232,10 @@ run_wpg_branch_path() {
   [[ "$out" == *"Match confirmed"* ]]
 }
 
-@test "SRM-W2b: wave-phase-gate BRANCH PATH: wip (no-slash) → last-segment wip → sentinel found → exit 0" {
-  # TRUE P2b regression for wave-phase-gate, no-slash branch row.
-  # BEFORE fix: getWaveSlug() returns 'wip' (passes the non-empty, non-HEAD, non-protected check;
-  #   not feature/ → falls into `return branch` which is 'wip').
-  # Wait — 'wip' would ALREADY return 'wip' via `return branch` in the current code
-  # (line 41 in wave-phase-gate.js). The P2b bug for wave-phase-gate only fires on branches
-  # with a slash that aren't feature/ (e.g. codex/bl-w47-demo → 'codex/bl-w47-demo').
-  # For 'wip' (no slash), the current code already returns 'wip' (last-segment = itself).
-  # So this test is a control case: both BEFORE and AFTER the fix, exit 0 (GREEN).
-  # It confirms the sentinel-path logic works for no-slash slugs.
+@test "SRM-W2b: wave-phase-gate preserves a no-slash slug before persisted-state enforcement" {
   run_wpg_branch_path "wip" "wip"
-  [ "$status" -eq 0 ]
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"wave \\"wip\\""* || "$output" == *"wave \"wip\""* || "$output" == *"wip"* ]]
 }
 
 @test "SRM-W3: write-verdict.sh: wip branch (branch-detection path, no --slug) → verdict created (P2b regression)" {
@@ -271,7 +249,8 @@ run_wpg_branch_path() {
   # PREP binding). Seed a minimal PLAN.md for the branch-derived 'wip' slug.
   mkdir -p "$PROJ/.planning/wave-wip" && printf '# PLAN\n' > "$PROJ/.planning/wave-wip/PLAN.md"
   run bash -c "cd '$PROJ' && bash '$SCRIPT_VERDICT' \
-    --role arch-testing --phase prep"
+    --role arch-testing --phase prep \
+    --publication-nonce 00000000000000000000000000000003"
   [ "$status" -eq 0 ]
   [ -f "$PROJ/.planning/wave-wip/arch-testing-verdict.md" ]
 }

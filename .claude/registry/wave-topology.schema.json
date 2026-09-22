@@ -1,28 +1,59 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "type": "object",
-  "required": ["class_artifacts", "phase_gates"],
+  "required": ["control_plane", "class_artifacts", "phase_gates"],
   "properties": {
     "manifest": { "type": "object" },
+    "control_plane": {
+      "type": "object",
+      "required": ["schema", "phases", "state_path_template", "lifecycle_transport", "final_head_rebind"],
+      "properties": {
+        "schema": { "const": "wave-phase-state/v1" },
+        "phases": {
+          "type": "array",
+          "const": ["PREP", "EXECUTE", "VERIFY_FINAL", "QG", "COMPLETE"]
+        },
+        "state_path_template": { "const": ".androidcommondoc/wave-control/{slug}.json" },
+        "lifecycle_transport": { "const": "runtime-role-lifecycle" },
+        "final_head_rebind": { "const": "EXECUTE_TO_VERIFY_FINAL_ONLY" }
+      },
+      "additionalProperties": false
+    },
     "class_artifacts": {
       "type": "object",
       "description": "Per-class required disk verdict artifacts (BL-W48 artifact-floor). Replaces the obsolete class_floors/mandatory_peers roster. Keys are wave class names (HARNESS, DOC, FAST-PATH).",
       "additionalProperties": {
         "type": "object",
-        "required": ["architects", "qg"],
+        "required": ["architects", "lifecycle_roles", "execution_mode", "qg"],
         "properties": {
           "architects": {
             "description": "Fixed list of arch-<role> whose VERIFY-FINAL verdict is required, OR the sentinel string \"declared\" meaning PLAN.md carries a literal `**Required-Architects**: <role>[, ...]` token the gate resolves.",
             "oneOf": [
-              { "type": "array", "items": { "type": "string" } },
+              {
+                "type": "array",
+                "uniqueItems": true,
+                "items": { "type": "string", "pattern": "^arch-[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$" }
+              },
               { "type": "string", "enum": ["declared"] }
             ]
           },
           "qg": {
             "type": "boolean",
             "description": "Whether canonical QG artifacts (quality-gate-report.json + stamps + push-proof.json) are required before push."
+          },
+          "lifecycle_roles": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": { "type": "string", "pattern": "^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$" },
+            "description": "Class-aware roles passed to the shipped Wave-1 lifecycle manager; distinct from architect verdict requirements."
+          },
+          "execution_mode": {
+            "type": "string",
+            "enum": ["persistent", "ephemeral", "disk-only"],
+            "description": "Measured topology-pilot result for this wave class; runtime connectors implement the mode through the shared lifecycle."
           }
-        }
+        },
+        "additionalProperties": false
       }
     },
     "default_class": {
@@ -31,6 +62,7 @@
     },
     "phase_gates": {
       "type": "object",
+      "required": ["plan_required_before_arch_dispatch", "quality_gate_required_before_push", "sentinel_dir", "sentinel_filename_template"],
       "properties": {
         "plan_required_before_arch_dispatch": { "type": "boolean" },
         "quality_gate_required_before_push": { "type": "boolean" },
@@ -42,7 +74,9 @@
           "type": "string",
           "description": "Filename template for quality-gate sentinels. {slug} is replaced with the wave slug. Default: {slug}.md"
         }
-      }
+      },
+      "additionalProperties": false
     }
-  }
+  },
+  "additionalProperties": false
 }

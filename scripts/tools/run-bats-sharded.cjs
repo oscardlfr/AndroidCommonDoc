@@ -81,8 +81,8 @@
 const { spawn, spawnSync } = require('child_process');
 const crypto = require('crypto');
 const fs = require('fs');
-const os = require('os');
 const path = require('path');
+const { stableReadArtifact } = require('../lib/evidence-run-record.cjs');
 
 // ─────────────────────────────────────────────────────────────────────────
 // Pure, independently-testable helpers. No process spawning, no filesystem
@@ -210,6 +210,16 @@ function validateShardResult({ handoff, expectedFiles, gitBin, frozenHead, expec
   if (!handoff.BATS_TARGET_DIGEST || handoff.BATS_TARGET_DIGEST !== expectedDigest) {
     return { ok: false, reason: 'SHARD_FILE_SET_MISMATCH' };
   }
+  if (!/^(?:[0-9a-f]{64}|none)$/.test(handoff.BATS_PLAN_DIGEST || '')
+    || !/^[A-Za-z0-9._-]+$/.test(handoff.BATS_WAVE_SLUG || '')
+    || !/^[0-9a-f]{64}$/.test(handoff.BATS_ENV_FINGERPRINT || '')
+    || !/^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$/.test(handoff.BATS_STARTED_AT || '')
+    || !/^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$/.test(handoff.BATS_FINISHED_AT || '')
+    || !/^[0-9a-f]{64}$/.test(handoff.BATS_LOG_DIGEST || '')
+    || !/^[0-9a-f]{64}$/.test(handoff.BATS_LOG_IDENTITY || '')
+    || !/^[A-Za-z0-9._-]+$/.test(handoff.BATS_TOOL_VERSIONS || '')) {
+    return { ok: false, reason: 'SHARD_PROVENANCE_MALFORMED' };
+  }
   return { ok: true };
 }
 
@@ -221,10 +231,21 @@ function aggregateHandoffs(shardHandoffs, expectedShardCount) {
   }
   if (shardHandoffs.length === 0) return { ok: false, reason: 'NO_SHARDS' };
   const head = shardHandoffs[0].BATS_HEAD;
+  const provenance = {
+    planDigest: shardHandoffs[0].BATS_PLAN_DIGEST,
+    waveSlug: shardHandoffs[0].BATS_WAVE_SLUG,
+    environmentFingerprint: shardHandoffs[0].BATS_ENV_FINGERPRINT,
+    toolVersions: shardHandoffs[0].BATS_TOOL_VERSIONS,
+  };
   const seenRunIds = new Set();
   let ok = 0, notOk = 0, expected = 0, total = 0;
   for (const h of shardHandoffs) {
     if (h.BATS_HEAD !== head) return { ok: false, reason: 'SHARD_HEAD_MISMATCH' };
+    if (h.BATS_PLAN_DIGEST !== provenance.planDigest || h.BATS_WAVE_SLUG !== provenance.waveSlug
+      || h.BATS_ENV_FINGERPRINT !== provenance.environmentFingerprint
+      || h.BATS_TOOL_VERSIONS !== provenance.toolVersions) {
+      return { ok: false, reason: 'SHARD_PROVENANCE_MISMATCH' };
+    }
     if (seenRunIds.has(h.BATS_RUN_ID)) return { ok: false, reason: 'SHARD_RUN_ID_DUPLICATE' };
     seenRunIds.add(h.BATS_RUN_ID);
     const hOk = Number(h.BATS_OK), hNotOk = Number(h.BATS_NOT_OK), hExp = Number(h.BATS_EXPECTED), hTot = Number(h.BATS_TOTAL);
@@ -232,7 +253,7 @@ function aggregateHandoffs(shardHandoffs, expectedShardCount) {
     ok += hOk; notOk += hNotOk; expected += hExp; total += hTot;
   }
   if (total !== expected) return { ok: false, reason: 'AGGREGATE_COUNT_MISMATCH', total, expected };
-  return { ok: true, head, facts: { ok, notOk, expected, total } };
+  return { ok: true, head, provenance, facts: { ok, notOk, expected, total } };
 }
 
 /** Renumbers N shards' raw bats TAP logs into ONE stream with a single
@@ -302,13 +323,15 @@ module.exports = {
 let currentRunState = null;
 
 function parseArgs(argv) {
-  const out = { shardCount: null, maxParallel: null, projectRoot: null, suiteRoot: 'scripts/tests' };
+  const out = { shardCount: null, maxParallel: null, projectRoot: null, suiteRoot: 'scripts/tests', waveSlug: '', planPath: '' };
   for (let i = 0; i < argv.length; i += 1) {
     const a = argv[i];
     if (a === '--shard-count') out.shardCount = parseInt(argv[++i], 10);
     else if (a === '--max-parallel') out.maxParallel = parseInt(argv[++i], 10);
     else if (a === '--project-root') out.projectRoot = argv[++i];
     else if (a === '--suite-root') out.suiteRoot = argv[++i];
+    else if (a === '--wave-slug') out.waveSlug = argv[++i];
+    else if (a === '--plan') out.planPath = argv[++i];
     else throw new Error('unrecognized argument: ' + a);
   }
   if (!Number.isInteger(out.shardCount) || out.shardCount < 1) throw new Error('--shard-count must be a positive integer');
@@ -483,7 +506,7 @@ function installSignalHandlers(state) {
   }
 }
 
-function runBatsShard({ root, files, logPath, state, bashCmd }) {
+function runBatsShard({ root, files, logPath, state, bashCmd, waveSlug, planPath }) {
   return new Promise((resolve) => {
     if (state.shuttingDown) { resolve({ code: null, stderr: '', aborted: true }); return; }
     // stdio[0] MUST be 'ignore', not the default open pipe: some scripts this
@@ -502,10 +525,13 @@ function runBatsShard({ root, files, logPath, state, bashCmd }) {
     // kill() addresses exactly this child's descendants, never accidentally
     // this orchestrator process's own group (which it shares with whatever
     // shell launched it).
+    const provenanceArgs = ['--wave-slug', waveSlug];
+    if (planPath) provenanceArgs.push('--plan', planPath);
     const child = spawn(bashCmd || 'bash', [
       path.join(root, 'scripts', 'sh', 'run-bats.sh'),
       '--project-root', root,
       '--log', logPath,
+      ...provenanceArgs,
       ...files,
     ], { cwd: root, stdio: ['ignore', 'pipe', 'pipe'], detached: true });
     state.liveChildren.add(child);
@@ -571,6 +597,17 @@ async function main() {
 
   const args = parseArgs(process.argv.slice(2));
   const root = path.resolve(args.projectRoot);
+  const waveSlug = args.waveSlug || process.env.CLAUDE_WAVE_SLUG || 'none';
+  if (!/^[A-Za-z0-9._-]+$/.test(waveSlug) || waveSlug === '.' || waveSlug === '..') throw new Error('INVALID_WAVE_SLUG');
+  const expectedPlan = waveSlug === 'none' ? '' : path.join(root, '.planning', 'wave-' + waveSlug, 'PLAN.md');
+  const inferredPlan = args.planPath || (expectedPlan && fs.existsSync(expectedPlan) ? expectedPlan : '');
+  if (inferredPlan) {
+    if (!expectedPlan || path.resolve(inferredPlan) !== path.resolve(expectedPlan)) throw new Error('PLAN_PATH_MISMATCH');
+    const stat = fs.lstatSync(inferredPlan);
+    if (!stat.isFile() || stat.isSymbolicLink() || fs.realpathSync(inferredPlan) !== path.resolve(inferredPlan)) throw new Error('UNSAFE_PLAN_PATH');
+  }
+  const planDigest = inferredPlan
+    ? crypto.createHash('sha256').update(fs.readFileSync(inferredPlan)).digest('hex') : 'none';
 
   // Frozen ONCE, before any shard launches -- every shard's own BATS_HEAD is
   // held to this exact value (validateShardResult), never merely to each
@@ -593,6 +630,7 @@ async function main() {
   installSignalHandlers(state);
 
   const logDir = path.join(root, '.androidcommondoc');
+  const startedAt = nowUtc();
   fs.mkdirSync(logDir, { recursive: true });
   const stamp = nowUtc().replace(/[:.]/g, '');
   const shardLogPaths = plan.shards.map((s) => path.join(logDir, 'suite-bats.shard' + s.index + '.' + stamp + '.log'));
@@ -612,7 +650,9 @@ async function main() {
   const runs = await runPool(plan.shards, args.maxParallel, async (shard, i) => {
     const files = shard.files; // repo-relative path strings, per plan-bats-shards.cjs's --json output
     const logPath = shardLogPaths[i];
-    const { code, stderr, aborted } = await runBatsShard({ root, files, logPath, state, bashCmd });
+    const { code, stderr, aborted } = await runBatsShard({
+      root, files, logPath, state, bashCmd, waveSlug, planPath: inferredPlan,
+    });
     const rawHandoffPath = aborted ? null : extractPath(stderr);
     const confinement = rawHandoffPath ? confinePath(rawHandoffPath, logDir) : { ok: false, reason: 'SHARD_HANDOFF_MISSING' };
     if (confinement.ok) state.completedHandoffPaths.push(confinement.canonicalPath);
@@ -694,6 +734,13 @@ async function main() {
 
   fs.writeFileSync(aggLogPath, tapText, { mode: 0o644 });
 
+  if (agg.provenance.waveSlug !== waveSlug || agg.provenance.planDigest !== planDigest) {
+    throw new Error('AGGREGATE_PROVENANCE_MISMATCH: child wave/PLAN binding differs from aggregate inputs');
+  }
+  const logArtifact = stableReadArtifact(aggLogPath, { root });
+  const logDigest = logArtifact.sha256;
+  const finishedAt = nowUtc();
+
   const complete = agg.facts.total === agg.facts.expected;
   const verdict = agg.facts.notOk === 0 && complete ? 'pass' : 'fail';
   const lines = [
@@ -706,10 +753,17 @@ async function main() {
     'BATS_LOG=' + aggLogPath,
     'BATS_HEAD=' + agg.head,
     'BATS_RUN_ID=' + runId,
-    'BATS_GENERATED_AT=' + nowUtc(),
+    'BATS_GENERATED_AT=' + finishedAt,
     'BATS_SCOPE=full',
     'BATS_TARGET_DIGEST=' + digestOf(plan.shards.flatMap((s) => s.files)),
-    'BATS_ENV_FINGERPRINT=' + os.platform() + '-' + os.arch() + '-sharded' + plan.shards.length,
+    'BATS_ENV_FINGERPRINT=' + agg.provenance.environmentFingerprint,
+    'BATS_WAVE_SLUG=' + waveSlug,
+    'BATS_PLAN_DIGEST=' + planDigest,
+    'BATS_STARTED_AT=' + startedAt,
+    'BATS_FINISHED_AT=' + finishedAt,
+    'BATS_LOG_DIGEST=' + logDigest,
+    'BATS_LOG_IDENTITY=' + logArtifact.identity,
+    'BATS_TOOL_VERSIONS=' + agg.provenance.toolVersions,
   ];
   fs.writeFileSync(handoffTmp, lines.join('\n') + '\n');
 

@@ -20,6 +20,12 @@
 //   - .androidcommondoc/audit-log.jsonl   (telemetry append)
 //   - .claude/wave-quality-gates/arch-*.md   (architect verdict files — BL-W44-S2 fix)
 //
+//   NOT exempt (intentional): arch-*-verdict-prep.json / arch-*-verdict-verify-final.json
+//   (wave structured-verdict-evidence-contract, PLAN.md sec 3.1/3.6) — these canonical
+//   verdict/v1 records are never in the exempt list above, so a heredoc/redirect/tee
+//   bypass against them is already blocked by isExemptTarget() below; write-verdict.sh
+//   is the only sanctioned writer. No logic change.
+//
 // Exit codes:
 //   0 = allow (no violation, or non-arch agent, or non-Bash tool, or parse error)
 //   2 = block (with `decision: block` + `reason` JSON on stdout)

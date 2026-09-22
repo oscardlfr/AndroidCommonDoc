@@ -2,32 +2,32 @@
 
 REPO_ROOT="$BATS_TEST_DIRNAME/../.."
 
-@test "tl-session-start.md contains L0 Mechanical Floor Consultation Checklist header" {
-  run grep -c "L0 Mechanical Floor Consultation Checklist" "$REPO_ROOT/docs/agents/tl-session-start.md"
+@test "tl-session-start.md names the main conversation agent as orchestrator" {
+  run grep -c "main conversation agent is the orchestrator" "$REPO_ROOT/docs/agents/tl-session-start.md"
   [ "$status" -eq 0 ]
   [ "$output" -ge 1 ]
 }
 
-@test "tl-session-start.md contains step 1" {
-  run grep -c "1. Read all" "$REPO_ROOT/docs/agents/tl-session-start.md"
+@test "tl-session-start.md canonicalizes repository and worktree during preflight" {
+  run grep -c "Canonicalize repository/worktree" "$REPO_ROOT/docs/agents/tl-session-start.md"
   [ "$status" -eq 0 ]
   [ "$output" -ge 1 ]
 }
 
-@test "tl-session-start.md contains step 2" {
-  run grep -c "2. Read each" "$REPO_ROOT/docs/agents/tl-session-start.md"
+@test "tl-session-start.md reads repository instructions and planning state" {
+  run grep -c "Read repository instructions, BACKLOG, active PLAN, and current Git status" "$REPO_ROOT/docs/agents/tl-session-start.md"
   [ "$status" -eq 0 ]
   [ "$output" -ge 1 ]
 }
 
-@test "tl-session-start.md contains step 3" {
-  run grep -c "3. List active" "$REPO_ROOT/docs/agents/tl-session-start.md"
+@test "tl-session-start.md resolves waves through the canonical slug helper" {
+  run grep -c "Resolve the wave through the canonical slug helper" "$REPO_ROOT/docs/agents/tl-session-start.md"
   [ "$status" -eq 0 ]
   [ "$output" -ge 1 ]
 }
 
-@test "tl-session-start.md contains step 4" {
-  run grep -c "4. If brief contradicts" "$REPO_ROOT/docs/agents/tl-session-start.md"
+@test "tl-session-start.md initializes the persisted wave control plane" {
+  run grep -c "Initialize/read the wave control plane" "$REPO_ROOT/docs/agents/tl-session-start.md"
   [ "$status" -eq 0 ]
   [ "$output" -ge 1 ]
 }
@@ -44,16 +44,16 @@ REPO_ROOT="$BATS_TEST_DIRNAME/../.."
   [ "$output" -ge 1 ]
 }
 
-@test "tl-session-start.md contains INTERMEDIATE PUSHES note" {
-  run grep -c "INTERMEDIATE PUSHES" "$REPO_ROOT/docs/agents/tl-session-start.md"
+@test "tl-session-start.md forbids a redundant team-lead role" {
+  run grep -c "do not create a redundant" "$REPO_ROOT/docs/agents/tl-session-start.md"
   [ "$status" -eq 0 ]
   [ "$output" -ge 1 ]
 }
 
 # --- F1: TYPE-vs-SCOPE script + planner step ---
 
-@test "tl-session-start.md contains step 5 list-valid-commit-tokens.sh" {
-  run grep -c "list-valid-commit-tokens" "$REPO_ROOT/docs/agents/tl-session-start.md"
+@test "tl-session-start.md resolves class-required roles from topology" {
+  run grep -c "Resolve class-required roles" "$REPO_ROOT/docs/agents/tl-session-start.md"
   [ "$status" -eq 0 ]
   [ "$output" -ge 1 ]
 }
@@ -72,22 +72,22 @@ REPO_ROOT="$BATS_TEST_DIRNAME/../.."
 
 # --- F2: artifact verification ---
 
-@test "tl-session-start.md contains step 6 artifact verification" {
-  run grep -cE "artifact|\.aar|Outer\\\$Inner|nested.*class" "$REPO_ROOT/docs/agents/tl-session-start.md"
+@test "tl-session-start.md delegates lifecycle actions to the canonical runtime" {
+  run grep -c "Execute returned lifecycle actions through.*runtime-role-lifecycle" "$REPO_ROOT/docs/agents/tl-session-start.md"
   [ "$status" -eq 0 ]
   [ "$output" -ge 1 ]
 }
 
 # --- F4: User Decision Broadcast Protocol ---
 
-@test "tl-session-start.md contains User Decision Broadcast Protocol header" {
-  run grep -c "User Decision Broadcast Protocol" "$REPO_ROOT/docs/agents/tl-session-start.md"
+@test "tl-session-start.md requires request-bound JSON architect authority" {
+  run grep -c "Architect authority is request-bound JSON" "$REPO_ROOT/docs/agents/tl-session-start.md"
   [ "$status" -eq 0 ]
   [ "$output" -ge 1 ]
 }
 
-@test "tl-session-start.md broadcast protocol contains 60-second SLA" {
-  run grep -cE "60 second|60-second|60s|within 60" "$REPO_ROOT/docs/agents/tl-session-start.md"
+@test "tl-session-start.md assigns push authority to the installed Git hook" {
+  run grep -c "Push authority is the installed Git hook" "$REPO_ROOT/docs/agents/tl-session-start.md"
   [ "$status" -eq 0 ]
   [ "$output" -ge 1 ]
 }
@@ -134,8 +134,8 @@ REPO_ROOT="$BATS_TEST_DIRNAME/../.."
 
 # --- F4: code-state verification mandate + cross-module claim format ---
 
-@test "tl-session-start.md contains code-state verification mandate" {
-  run grep -c "code-state verification" "$REPO_ROOT/docs/agents/tl-session-start.md"
+@test "tl-session-start.md limits process cleanup to owned processes" {
+  run grep -c "Stop only owned processes" "$REPO_ROOT/docs/agents/tl-session-start.md"
   [ "$status" -eq 0 ]
   [ "$output" -ge 1 ]
 }

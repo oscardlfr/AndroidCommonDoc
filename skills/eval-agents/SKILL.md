@@ -10,6 +10,10 @@ copilot: false
 
 Run promptfoo evaluations against agent prompt templates.
 
+## Reproducible evidence
+
+For any result consumed by a quality gate, wrap execution with `scripts/tools/evidence-run.cjs`: create a start record before the command, finish it with the real artifact and counts, and retain its HEAD/PLAN/wave/target/environment/tool-version binding. Security-critical mint evidence requires two distinct agreeing records; newest-wins discovery and reused run IDs are rejected.
+
 ## Usage Examples
 
 ```

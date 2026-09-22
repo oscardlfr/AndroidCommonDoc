@@ -318,8 +318,8 @@ describe('arch-platform + arch-integration — caller grep rule', () => {
     expect(platformContent).toMatch(/template_version:\s*"\d+\.\d+\.\d+"/);
   });
 
-  it('arch-integration has template version 1.31.0', () => {
-    expect(integrationContent).toContain('template_version: "1.31.0"');
+  it('arch-integration has template version 1.32.0', () => {
+    expect(integrationContent).toContain('template_version: "1.32.0"');
   });
 });
 

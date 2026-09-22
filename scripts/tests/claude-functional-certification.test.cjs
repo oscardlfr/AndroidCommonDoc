@@ -186,17 +186,40 @@ function makePrepFixtureRepo(kind) {
   git('commit', '-q', '-m', 'sidecar');
   const unrelatedHead = git('rev-parse', 'HEAD');
   git('checkout', '-q', 'main');
+  // structured-verdict-evidence-contract (P3 consumer migration, arch-integration
+  // dispatch 2026-09-21T17:55:38Z): writeVerdict mints a GENUINE
+  // arch-<role>-verdict-prep.json via the real write-verdict-request.sh +
+  // write-verdict.sh --decision approve flow, then -- ONLY for the field(s) the
+  // caller wants deliberately wrong -- patches that field on the otherwise
+  // genuinely-produced record. The real writer always binds head/plan_sha256 to
+  // this fixture's OWN current git/PLAN.md state (by design -- WV-13/14 in
+  // write-verdict.bats), so it cannot itself produce a verdict bound to an
+  // arbitrary caller-chosen stale value; this negative-test-only field patch on
+  // an otherwise-real record mirrors scripts/tests/emit-push-proof.bats's own
+  // override_artifact_receipt_field pattern, not a hand-authored fixture.
+  const wvEnv = { ...process.env, CLAUDE_WAVE_SLUG: 'prep-fixture' };
+  const bash = (script, args, input) => {
+    const bashScript = process.platform === 'win32'
+      ? script.replace(/^([A-Za-z]):[\\/]/, (_match, drive) => `/mnt/${drive.toLowerCase()}/`).replace(/\\/g, '/')
+      : script;
+    const result = spawnSync('bash', [bashScript, ...args], {
+      cwd: root, encoding: 'utf8', windowsHide: true, env: wvEnv, input,
+    });
+    assert.equal(result.status, 0, `${path.basename(script)} ${args.join(' ')} failed: ${result.stderr}`);
+    return result.stdout;
+  };
   const writeVerdict = (role, boundPlanSha256, boundPrepHead) => {
-    fs.writeFileSync(path.join(waveDir, `arch-${role}-verdict.md`), [
-      `# arch-${role} verdict -- wave-prep-fixture`,
-      '',
-      '**Phase**: PREP',
-      '**Timestamp**: 2026-09-09T00:00:00Z',
-      '**Status**: APPROVED-PREP',
-      `**PREP-HEAD**: ${boundPrepHead}`,
-      `**PLAN_SHA256**: ${boundPlanSha256}`,
-      '',
-    ].join('\n'));
+    const reqScript = path.join(projectRoot, 'scripts', 'sh', 'write-verdict-request.sh');
+    const wvScript = path.join(projectRoot, 'scripts', 'sh', 'write-verdict.sh');
+    const reqOut = bash(reqScript, ['--role', `arch-${role}`, '--phase', 'prep', '--slug', 'prep-fixture']);
+    const [reqPath, reqSha256] = reqOut.trim().split(' ');
+    bash(wvScript, ['--role', `arch-${role}`, '--phase', 'prep', '--slug', 'prep-fixture',
+      '--request', reqPath, '--request-sha256', reqSha256, '--decision', 'approve'], 'reviewed and approved');
+    const verdictPath = path.join(waveDir, `arch-${role}-verdict-prep.json`);
+    const verdict = JSON.parse(fs.readFileSync(verdictPath, 'utf8'));
+    verdict.plan_sha256 = boundPlanSha256;
+    verdict.head = boundPrepHead;
+    fs.writeFileSync(verdictPath, `${JSON.stringify(verdict, null, 2)}\n`);
   };
   return { root, waveDir, head, unrelatedHead, planSha256, writeVerdict };
 }
@@ -1501,10 +1524,17 @@ test('CFC-PREP refuses a full P4 launch when every arch verdict binds a stale PL
   assert.equal(preflight.evaluated_root, fixture.root);
   assert.equal(preflight.plan_sha256, fixture.planSha256);
   assert.equal(preflight.head, fixture.head);
+  // structured-verdict-evidence-contract (P3 consumer migration): examined[].rejected
+  // is now validateVerdict()'s raw .reason string (composeResult()'s first-false-field
+  // order: exists, wellFormed, roleBound, requestBound, headBound, planBound,
+  // evidenceValid, else decisionAuthorized) -- arch-integration confirmed
+  // stale-plan-binding maps to 'planBound' for a fixture with a valid head (so
+  // planBound is the first false field reached). No bound_* companion field anymore
+  // (that richer shape was the old hand-rolled parser's own invention, not part of
+  // validateVerdict()'s result). Verdict filename is the canonical JSON PREP name.
   assert.deepEqual(preflight.examined, [{
-    verdict: 'arch-platform-verdict.md',
-    rejected: 'stale-plan-binding',
-    bound_plan_sha256: 'f'.repeat(64),
+    verdict: 'arch-platform-verdict-prep.json',
+    rejected: 'planBound',
   }]);
   // Nothing was spawned: the refusal costs no Claude session at all.
   assert.equal(run.state.pid, undefined);
@@ -1519,10 +1549,12 @@ test('CFC-PREP refuses a full P4 launch when the current-PLAN verdict binds a PR
   });
   assert.notEqual(run.code, 0, run.stderr);
   assert.equal(run.state.status, 'MISSING_CURRENT_PREP');
+  // prep-head-not-ancestor -> 'headBound' (arch-integration mapping; this fixture keeps
+  // plan_sha256 valid, so headBound is the first false field reached). No bound_*
+  // companion field; verdict filename is the canonical JSON PREP name.
   assert.deepEqual(run.state.current_prep_preflight.examined, [{
-    verdict: 'arch-testing-verdict.md',
-    rejected: 'prep-head-not-ancestor',
-    bound_prep_head: fixture.unrelatedHead,
+    verdict: 'arch-testing-verdict-prep.json',
+    rejected: 'headBound',
   }]);
   assert.equal(run.state.pid, undefined);
 });
@@ -1539,14 +1571,13 @@ test('CFC-PREP clears and runs the full P4 scenario when a current APPROVED-PREP
   const preflight = run.state.current_prep_preflight;
   assert.equal(preflight.clear, true);
   assert.equal(preflight.reason, 'current-prep-present');
-  assert.equal(preflight.verdict, 'arch-testing-verdict.md');
+  assert.equal(preflight.verdict, 'arch-testing-verdict-prep.json');
   assert.equal(preflight.prep_head, fixture.head);
   assert.equal(preflight.plan_sha256, fixture.planSha256);
   // The stale sibling verdict is examined and rejected, never silently accepted.
   assert.deepEqual(preflight.examined, [{
-    verdict: 'arch-platform-verdict.md',
-    rejected: 'stale-plan-binding',
-    bound_plan_sha256: 'f'.repeat(64),
+    verdict: 'arch-platform-verdict-prep.json',
+    rejected: 'planBound',
   }]);
 });
 

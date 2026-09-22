@@ -811,7 +811,7 @@ describe("P3 runtime-collaboration-entrypoints (RED)", () => {
     writeFileSpy.mockRestore();
   });
 
-  it("18. all five canonical skills contain the exact CLI prefix and their own --entrypoint value; the work skill never dispatches TeamCreate/SendMessage/Agent( directly; a static module scan proves the entrypoints module imports only node builtins plus the three named siblings", () => {
+  it("18. all five canonical skills contain the exact CLI prefix and their own --entrypoint value; the work skill never dispatches TeamCreate/SendMessage/Agent( directly; a static module scan proves the entrypoints module imports only node builtins plus the four named siblings", () => {
     loadEntrypoint({ fresh: true });
 
     const skillEntrypoints: Record<string, string> = {
@@ -844,6 +844,7 @@ describe("P3 runtime-collaboration-entrypoints (RED)", () => {
       "./runtime-consultation.cjs",
       "./runtime-host-claude.cjs",
       "./runtime-project-context.cjs",
+      "./wave-control-plane.cjs",
     ]);
     const nodeBuiltins = new Set(["fs", "path", "crypto", "child_process", "module", "os", "util"]);
     let match: RegExpExecArray | null;

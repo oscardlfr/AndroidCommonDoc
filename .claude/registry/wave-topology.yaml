@@ -1,7 +1,13 @@
 # yaml-language-server: $schema=./wave-topology.schema.json
 manifest:
-  version: 3
-  description: "Wave-class -> required disk verdict artifacts (artifact-floor). BL-W48 team-model migration: replaces the obsolete session-* named-team roster floor (class_floors / mandatory_peers) with a disk-artifact contract verified at the push boundary. The harness no longer depends on named-team rosters."
+  version: 4
+  description: "Wave-class artifact floors plus the persisted runtime-neutral phase control plane. Required peers are lifecycle actions, never a named-team roster."
+control_plane:
+  schema: wave-phase-state/v1
+  phases: [PREP, EXECUTE, VERIFY_FINAL, QG, COMPLETE]
+  state_path_template: ".androidcommondoc/wave-control/{slug}.json"
+  lifecycle_transport: runtime-role-lifecycle
+  final_head_rebind: EXECUTE_TO_VERIFY_FINAL_ONLY
 # class_artifacts: the disk verdicts each wave CLASS must have present + HEAD-bound
 # before push. The artifact-floor is enforced at the PUSH BOUNDARY by
 # emit-push-proof.sh, which resolves the CLASS-aware required architect roles via
@@ -17,12 +23,18 @@ manifest:
 class_artifacts:
   HARNESS:
     architects: [arch-platform, arch-testing, arch-integration]
+    lifecycle_roles: [arch-platform, arch-testing, arch-integration, context-provider, doc-updater]
+    execution_mode: persistent
     qg: true
   DOC:
     architects: declared
+    lifecycle_roles: [context-provider, doc-updater]
+    execution_mode: ephemeral
     qg: true
   FAST-PATH:
     architects: []
+    lifecycle_roles: []
+    execution_mode: disk-only
     qg: true
 default_class: HARNESS
 phase_gates:

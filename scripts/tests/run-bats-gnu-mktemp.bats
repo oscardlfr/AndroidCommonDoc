@@ -30,6 +30,16 @@ echo "ok 1 fake"
 FAKE
   chmod 0755 "$FAKEBIN/bats"
 
+  # The production wrapper probes npm-managed bats before the plain PATH
+  # fallback. Force that first probe to fail deterministically so these tests
+  # exercise the fake PATH bats declared above rather than a host-global npm
+  # installation that happens to be present on the runner.
+  cat > "$FAKEBIN/npx" <<'FAKE'
+#!/usr/bin/env bash
+exit 1
+FAKE
+  chmod 0755 "$FAKEBIN/npx"
+
   # BSD-shaped mktemp: rejects --version exactly like /usr/bin/mktemp does.
   cat > "$FAKEBIN/mktemp" <<'FAKE'
 #!/usr/bin/env bash
