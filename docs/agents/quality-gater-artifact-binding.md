@@ -12,6 +12,10 @@ description: "Mint-internal artifact-binding contract (wave qg-artifact-binding)
 
 # quality-gater: Artifact Binding (Mint Internals)
 
+## Current evidence floor
+
+Mint inputs are selected by exact provenance rather than file recency. Security-critical Bats evidence requires two distinct, complete, passing full-run handoffs agreeing on HEAD, PLAN, wave, target/digest, environment/toolchain, counts, and verdict. Architect inputs are validated `verdict/v1` records answering immutable requests; Markdown tokens are not mint inputs.
+
 Referenced from [quality-gater](../../setup/agent-templates/quality-gater.md) **Step 8** (Project Rule Cross-Check) for the one gater-facing requirement — authoring `rule_id` on `discovered_rules[]` entries. Everything else on this page documents `emit-push-proof.sh run-qg` internals that no template step invokes directly (Option B, below) — this doc exists so the mechanism is described, not so the gater has more steps to run.
 
 **Problem closed**: before this wave, `quality-gate-manifest.json` declared `pre_pr_coverage` and `discovered_rules` as required content, but `emit-push-proof.sh` only checked their *presence* — never that the content reflected a real `/pre-pr` run or real rule discovery (BACKLOG D5). Two other required steps — `secret-scan` and `doc-validator-parity` — already had real producer scripts, but the mint never opened their reports. This doc covers the fix: a generic binding loop, plus two mint-composed derived artifacts.
@@ -108,8 +112,8 @@ Inventory rule ids today (stable, source-derived — see `emit-rule-inventory.sh
 ## Non-Goals (this doc's scope)
 
 - **Not a new gater step.** Nothing here adds a Step N — the derived-artifact producers are mint-internal (Option B).
-- **Not push-detection.** This binding contract governs `run-qg`/`verify-proof` logic after a push attempt is already identified; the separate, best-effort `isGitPushCommand` command-string detector is a different, unrelated subsystem (see `BACKLOG.md`'s CRITICAL entry).
-- **Not evidence reproducibility.** The loop binds the newest receipt at HEAD; it does not detect that an earlier same-HEAD run of a producer disagreed (tracked separately in `BACKLOG.md`).
+- **Not push-detection.** This binding contract governs `run-qg`/`verify-proof` after intent is identified. Parsed shell intent is advisory; the installed Git `pre-push` hook remains authoritative.
+- **Not Bats evidence reproducibility.** Generic receipt binding is distinct from the Bats agreement set. The Bats contract rejects newest-wins selection and requires two distinct agreeing full runs for push minting.
 
 ---
 

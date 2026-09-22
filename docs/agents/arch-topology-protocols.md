@@ -135,8 +135,11 @@ review or specialist dispatch could proceed on outdated assumptions.
 **Required action** (when arch-X issues CANCEL/AMEND):
 
 1. **Self-check**: does this CANCEL/AMEND affect any task another architect previously approved
-   or amended? Read `.planning/<wave>/arch-*-pr<N>-verdict.md` to compare scopes.
-2. **Relay request**: if yes, SendMessage to team-lead with this exact shape:
+   or amended? Read the task-review notes to compare scopes. These historical
+   `arch-*-pr<N>-verdict.md` notes are non-authoritative; phase authority remains
+   the request-bound JSON verdict.
+2. **Relay request**: if yes, notify the orchestrator through the selected runtime
+   connector (or durable coordination message) with this shape:
    ```
    to: team-lead
    summary: cross-arch sync — CANCEL/AMEND of T{N} affects arch-Y verdict

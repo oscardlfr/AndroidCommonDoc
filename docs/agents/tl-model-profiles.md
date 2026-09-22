@@ -3,18 +3,20 @@ scope: [agents, models, config, pm, session-setup]
 sources: [androidcommondoc]
 targets: [all]
 slug: tl-model-profiles
-status: active
+status: superseded
 layer: L0
 parent: agents-hub
 category: agents
-description: "Design doc for .claude/model-profiles.json: profile semantics, team-lead-opus-override rationale, haiku/opus override maps, session-start selection."
+description: "Historical model-profile rationale retained for provenance; current profiles are defined by .claude/model-profiles.json and contain no team-lead agent override."
 version: 1
-last_updated: "2026-04"
+last_updated: "2026-09-22"
 assumes_read: agents-hub
 token_budget: 1500
 ---
 
 # team-lead Model Profiles
+
+> **Superseded historical rationale.** The `team-lead` agent was retired; the main agent now owns orchestration, and the current `.claude/model-profiles.json` contains no `team-lead` override. Treat the configuration file and generated operational catalog as current authority. The material below is retained only to explain earlier profile decisions.
 
 Reference for `.claude/model-profiles.json`. Explains the profile structure, what each profile means, why the team-lead override is intentional, and how the profile maps to session-start model selection.
 
@@ -85,7 +87,7 @@ The `team-lead` agent's template frontmatter is `model: sonnet`. The profile fil
 
 Reasoning:
 
-- **team-lead coordinates multiple architects in parallel.** It reads each architect's verdict, reconciles disagreements, authorizes scope extensions, and routes retries. This is multi-source reasoning — the failure mode of a sonnet team-lead is that it accepts a flawed verdict because it lacks the headroom to cross-check all three architects' outputs simultaneously.
+- **The main orchestrator coordinates the class-required architects in parallel.** It reads each required structured verdict, reconciles disagreements, authorizes scope extensions, and routes retries. This is multi-source reasoning — a weaker orchestrator can accept a flawed verdict if it lacks the headroom to cross-check every required architect's evidence simultaneously.
 - **team-lead decisions are load-bearing for the whole session.** A single bad team-lead call (wrong dispatch target, missed verdict conflict, silent scope drift) propagates to every dev and architect. The marginal opus cost is paid once per wave; the downside of a sonnet mistake is paid across the whole team.
 - **The template `model:` field is a fallback.** It is what a bootstrap project sees before `/set-model-profile` runs. Once a profile is selected, the `overrides` map wins. This is why the template shows `sonnet` (Wave 22 spawn-prompt diet) while live team-lead still runs on opus in both default profiles — the two are designed to be different.
 

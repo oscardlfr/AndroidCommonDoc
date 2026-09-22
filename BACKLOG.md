@@ -1,15 +1,15 @@
 # AndroidCommonDoc Backlog
 
-> **Last updated**: 2026-09-21
+> **Last updated**: 2026-09-22
 > **Roadmap baseline**: `develop@0704ddf` (PR #244; PR #245 at `619d9a7` is its confirmed ancestor). **H1 and G0 — Reusable Workflow Input Boundary Hardening are SHIPPED.**
-> **Current delivery**: **Wave 1 — SHIPPED** (PR #246 `1b3eebe5`, PR #247 `2a98bc17`, PR #248 `b5d7ed46`, all merged to `develop`). **Mandatory post-Wave-1 Agent & Skill Behavioral Restoration Qualification checkpoint COMPLETE** — see memory `project_post_wave1_agent_skill_behavioral_qualification.md`. **Wave 2 — Workflow Expression & Input Boundary Audit is SHIPPED** (PR #249 `fa7f6cf8`, squash-merged to `develop`; current HEAD `fa7f6cf8`) — see memory `project_wave_workflow_input_boundary_audit_shipped.md`. **Wave 3 — Structured Verdict Evidence Contract is NEXT — PLAN ONLY / NOT STARTED** until its PLAN is accepted.
+> **Current delivery**: **Waves 1–2 are SHIPPED**. **Waves 3–7 are COMMITTED AND LOCALLY VERIFIED** on `codex/waves3-7-authority-contracts`; they are not yet published, reviewed, or merged, so they are not labelled SHIPPED. The sealed Wave-3 PLAN remains the historical design input; the user's later direct instruction authorized the ordered Waves 3–7 implementation. **R33 remains deferred.** See `docs/agents/waves-3-7-implementation-closeout.md` for the frozen-source evidence.
 > **Source of truth**: this file owns ordering and scope. `git log`, merged PRs, and `project_*shipped.md` memory entries own historical detail.
 
 ## Operating contract
 
 - The load-bearing portability floor is **validated disk artifacts**. Runtime messaging is an optional acceleration layer.
 - Adapter delivery, message text, an MCP return value, or a live peer saying “GO” is never evidence. Only a valid, correlated result artifact counts as a protocol-valid consultation answer; phase and push authorization still require their own contracts.
-- Execute Waves 1-7 in order. Waves 1 and 2 are shipped and the mandatory post-Wave-1 qualification checkpoint is complete; Wave 3 is the only next wave and remains planning-only until its PLAN is explicitly accepted.
+- Execute Waves 1-7 in order. Waves 1 and 2 are shipped; Waves 3–7 have now been implemented in order and share one final local acceptance campaign before integration.
 - Re-audit observations and file counts at each wave's starting HEAD. Post-G0 counts below were recorded by PR #245 at `619d9a7`; they are a planning baseline, not permanent truth.
 - Each wave must have one frozen scope, explicit no-go boundaries, proportional tests, and a shipped memory entry before the backlog advances.
 - Rich runtimes may add `SendMessage`, persistent peers, MCP invocation, app-server threads, or wakeups; failure or absence of those capabilities must not invalidate the disk floor.
@@ -48,11 +48,11 @@
 | 1 | Portable Runtime Collaboration & Persistent Role Lifecycle | Persistent canonical support roles plus portable consultation and user-gated documentation ingestion | **SHIPPED** |
 | — | Agent & Skill Behavioral Restoration Qualification | Mandatory read-only qualification before Wave 2 | **COMPLETE** |
 | 2 | Workflow Expression & Input Boundary Audit | Repository-wide control of untrusted workflow inputs crossing into shell | **SHIPPED** |
-| 3 | Structured Verdict Evidence Contract | Verdicts become strictly parsed, correlated, evidence-backed records | **NEXT — PLAN ONLY** |
-| 4 | Reproducible Evidence & Bats Provenance | Independent runs and handoffs become comparable and fail closed | QUEUED |
-| 5 | Native Push Authority & Peer Authorization Policy | Git-layer push authority, robust intent detection, explicit actor policy | QUEUED |
-| 6 | Class-Aware Phase, Topology & Skill Orchestration Control Plane | Mechanized wave lifecycle and one runtime-neutral skill/entrypoint control plane | QUEUED |
-| 7 | Documentation & Operational Baseline Closure | README, agents, skills, MCP, ADRs, memory, and catalogs describe demonstrated behavior | QUEUED |
+| 3 | Structured Verdict Evidence Contract | Verdicts become strictly parsed, correlated, evidence-backed records | **IMPLEMENTED — LOCAL ACCEPTANCE** |
+| 4 | Reproducible Evidence & Bats Provenance | Independent runs and handoffs become comparable and fail closed | **IMPLEMENTED — LOCAL ACCEPTANCE** |
+| 5 | Native Push Authority & Peer Authorization Policy | Git-layer push authority, robust intent detection, explicit actor policy | **IMPLEMENTED — LOCAL ACCEPTANCE** |
+| 6 | Class-Aware Phase, Topology & Skill Orchestration Control Plane | Mechanized wave lifecycle and one runtime-neutral skill/entrypoint control plane | **IMPLEMENTED — LOCAL ACCEPTANCE** |
+| 7 | Documentation & Operational Baseline Closure | README, agents, skills, MCP, ADRs, memory, and catalogs describe demonstrated behavior | **IMPLEMENTED — LOCAL ACCEPTANCE** |
 
 ---
 
@@ -455,7 +455,9 @@ Any merge/deprecate/delete requires: no unique outcome; replacement parity acros
 
 **Class**: HARNESS / EVIDENCE
 
-**Plan**: `.planning/wave-structured-verdict-evidence-contract/PLAN.md`, SHA-256 `871016884f585870c82a9b78facf542247a5826499a0723d8c434998997be969`, status `FINALIZED — PLANNING ONLY / EXECUTION NOT AUTHORIZED`. Wave 3 is not started; explicit acceptance is required before PREP or implementation.
+**Status**: COMMITTED + LOCALLY VERIFIED — review/publication/merge remain.
+
+**Plan**: `.planning/wave-structured-verdict-evidence-contract/PLAN.md`, current raw-byte SHA-256 `aac4ad96d2b7c8fb947df7591996ccc33504b667860d2d5420a9ec01800d2240` (the digest bound by the final local acceptance). Its planning-only header records the pre-execution state; the later direct user instruction authorized implementation without treating that header as current execution authority.
 
 **Objective**: replace substring/token-based PREP and VERIFY-FINAL acceptance with a strict, correlated verdict record whose decision, rationale, evidence references/digests, role, PLAN, and HEAD are machine-validated.
 
@@ -484,6 +486,8 @@ Any merge/deprecate/delete requires: no unique outcome; replacement parity acros
 ## Wave 4 — Reproducible Evidence & Bats Provenance
 
 **Class**: HARNESS / EVIDENCE
+
+**Status**: COMMITTED + LOCALLY VERIFIED — review/publication/merge remain.
 
 **Objective**: make test and quality-gate evidence independently reproducible, comparable across runs, and fail closed when handoff selection, metadata, target, environment, or counts disagree.
 
@@ -514,6 +518,8 @@ Any merge/deprecate/delete requires: no unique outcome; replacement parity acros
 
 **Class**: SECURITY / HARNESS
 
+**Status**: COMMITTED + LOCALLY VERIFIED — review/publication/merge remain.
+
 **Objective**: make the installed git `pre-push` hook the sole portable push authority, redesign advisory runtime push-intent detection, and define what runtime-specific controls can honestly restrict which peer may request or perform a push.
 
 **Why fifth**: H1 bootstrapped the git authority but intentionally left command detection open. This redesign should consume the structured verdict and reproducible evidence contracts from Waves 3-4 rather than encode their old weak forms.
@@ -541,6 +547,8 @@ Any merge/deprecate/delete requires: no unique outcome; replacement parity acros
 ## Wave 6 — Class-Aware Phase, Topology & Skill Orchestration Control Plane
 
 **Class**: HARNESS
+
+**Status**: COMMITTED + LOCALLY VERIFIED — review/publication/merge remain.
 
 **Objective**: mechanize the PREP → EXECUTE → VERIFY-FINAL → QG lifecycle, derive required roles from wave class, and make every orchestration entrypoint and skill route through one runtime-neutral lifecycle/control plane.
 
@@ -574,6 +582,8 @@ Any merge/deprecate/delete requires: no unique outcome; replacement parity acros
 ## Wave 7 — Documentation & Operational Baseline Closure
 
 **Class**: DOC / GOVERNANCE
+
+**Status**: COMMITTED + LOCALLY VERIFIED — review/publication/merge remain.
 
 **Objective**: reconcile every public and operational description of the harness with behavior demonstrated by Waves 1–6 and establish one trustworthy post-program documentation baseline.
 
@@ -609,22 +619,22 @@ Historical text below is not an instruction to execute old wave plans literally.
 | Finding / historical entry | Current disposition | Roadmap home |
 |---|---|---|
 | Agent-team completion notification drop | Upstream/runtime report remains optional; local liveness/consultation behavior belongs here | Wave 1; upstream report independent |
-| Portable Coordination Artifacts have no general consumer/wakeup/result loop | Open | Wave 1; qualification proves operational closure |
-| BL-W4-12 orchestrator can forge architect-shaped verdict path | Open; spans result authorship, verdict evidence, and honest actor policy | Waves 1, 3, 5 |
-| Broad workflow input/expression inventory after targeted H1 follow-up | Open | Wave 2 |
-| Wave A unbacked `APPROVED-PREP` / weak VERIFY-FINAL substring acceptance | Open | Wave 3 |
-| Wave A evidence reproducibility / rerun-until-green concern | Open | Wave 4 |
-| Bats unsafe project-root and stale protocol metadata prose | Open | Wave 4 |
-| H1 command-string push detector | Explicitly deferred by H1 | Wave 5 |
-| BL-W4-10 class-aware phase mechanization | Open | Wave 6 |
-| BL-W4-11 README + `/work` + `/init-session` fixed-roster drift | Lifecycle-critical entrypoints start in Wave 1; full skill/topology behavior and global prose/catalog are separate | Waves 1, 6, 7 |
-| BL-W47 Topology Pilot / Wave 39 topology debt | Re-audit; do not replay old TeamCreate assumptions | Wave 6 |
-| BL-W4-8 Bats test-authoring hygiene (three small doc/test naming issues) | Behavioral matcher/test mechanics and documentation have separate owners; no cleanup wave | Wave 6 behavior; Wave 7 wording/cites |
+| Portable Coordination Artifacts have no general consumer/wakeup/result loop | Closed by shipped Wave 1 runtime and its Windows/macOS qualification | Wave 1 |
+| BL-W4-12 orchestrator can forge architect-shaped verdict path | Portable policy/evidence boundary locally closed by Waves 3 and 5; true human/OS actor authentication remains explicitly out of contract | Waves 1, 3, 5 |
+| Broad workflow input/expression inventory after targeted H1 follow-up | Closed by shipped Wave 2 | Wave 2 |
+| Wave A unbacked `APPROVED-PREP` / weak VERIFY-FINAL substring acceptance | Locally closed by request-bound `verdict/v1`; ships on this integration | Wave 3 |
+| Wave A evidence reproducibility / rerun-until-green concern | Locally closed by provenance-bound agreement selection and two-run acceptance | Wave 4 |
+| Bats unsafe project-root and stale protocol metadata prose | Locally closed and covered by portable project-root/provenance tests | Wave 4 |
+| H1 command-string push detector | Locally replaced by parsed advisory intent plus Git-hook-owned enforcement | Wave 5 |
+| BL-W4-10 class-aware phase mechanization | Locally closed by the persisted wave control plane | Wave 6 |
+| BL-W4-11 README + `/work` + `/init-session` fixed-roster drift | Locally closed by class-aware routing, qualified surfaces, and reconciled docs/catalog | Waves 1, 6, 7 |
+| BL-W47 Topology Pilot / Wave 39 topology debt | Completed with measured class-policy result; no old TeamCreate assumption revived | Wave 6 |
+| BL-W4-8 Bats test-authoring hygiene (three small doc/test naming issues) | Closed where behavioral/documentation ownership applied; no standalone cleanup wave created | Wave 6 behavior; Wave 7 wording/cites |
 | BL-W36-04 stash/baseline methodology | Re-audit against current diff/baseline tooling | Wave 4 if still reproducible |
 | BL-W32-04 context-provider zombie observation | Reproduce during Wave 1 and mandatory qualification; Wave-1 defect gets one stabilization batch, topology-only residual routes onward | Wave 1 + qualification; conditionally Wave 6 |
 | Historical collaboration/documentation behavior drift | Reconstruct expected vs observed behavior; do not treat old prose as authority or silently lose useful semantics | Mandatory post-Wave-1 qualification; findings route to Waves 1–7 |
 | Skill/command overlap, aliases, hard-coded runtime calls, dead-skill candidates | Telemetry currently lacks reliable per-skill attribution; zero deletion decisions now | Qualification census → Wave 6 behavior/migration → Wave 7 catalog |
-| README/AGENTS/doc index audit revalidated at `619d9a7` | Open; 21 findings (0 HIGH, 15 MEDIUM, 6 LOW) cover 12 missing script rows, four misclassified library rows, count drift, and hub coverage | Wave 7 global closure; no standalone cleanup wave |
+| README/AGENTS/doc index audit revalidated at `619d9a7` | Superseded and locally closed by Wave 7: README audit 0 findings; generated operational catalog and surface qualification pass | Wave 7 global closure |
 
 ## Independent / incubator backlog
 

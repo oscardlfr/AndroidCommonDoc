@@ -6,18 +6,17 @@ slug: agents-hub
 status: active
 layer: L0
 category: agents
-description: "Agent workflow hub: CLAUDE.md template, team-lead model, agent delegation, multi-agent patterns, agent consumption"
+description: "Agent workflow hub: CLAUDE.md template, main-orchestrator role, agent delegation, multi-agent patterns, agent consumption"
 version: 2
-last_updated: "2026-05"
+last_updated: "2026-09-22"
 monitor_urls:
   - url: "https://docs.anthropic.com/en/docs/claude-code/overview"
     type: doc-page
     tier: 3
 ---
-
 # Agent Workflow
 
-How AI agents operate in the L0/L1/L2 ecosystem: CLAUDE.md structure, team-lead orchestration, specialist delegation, multi-agent patterns, and agent consumption.
+How AI agents operate in the L0/L1/L2 ecosystem: CLAUDE.md structure, main-orchestrator behavior, specialist delegation, multi-agent patterns, and agent consumption. Historical `team-lead` wording denotes that logical role; there is no installable `team-lead` agent template.
 
 > All L1/L2 projects follow the Boris Cherny CLAUDE.md style with Agent Strategy.
 
@@ -47,6 +46,13 @@ How AI agents operate in the L0/L1/L2 ecosystem: CLAUDE.md structure, team-lead 
 | [arch-dispatch-modes](arch-dispatch-modes.md) | Architect PREP/EXECUTE dispatch modes + scope_doc_path protocol (Wave 23 Bug #5 + #6 fix) |
 | [Agent Core Rules](agent-core-rules.md) | Universal rules for all session agents |
 | [Agent Verdict Protocol](agent-verdict-protocol.md) | Architect verdict format + disk-write + 1-liner DM pattern |
+| [Verdict Evidence Schema](verdict-evidence-schema.md) | Strict request-bound `verdict/v1` schema, evidence binding, and migration boundary |
+| [Evidence Provenance Contract](evidence-provenance-contract.md) | Reproducible Bats/QG run records, agreement policy, and fail-closed selection |
+| [Push Authority Policy](push-authority-policy.md) | Git-layer push authority, parsed advisory intent, and honest peer-capability limits |
+| [Wave Control Plane](wave-control-plane.md) | Persisted class-aware PREP → EXECUTE → VERIFY-FINAL → QG → COMPLETE lifecycle |
+| [Topology Pilot Result](topology-pilot-results.md) | Measured persistent/ephemeral/disk-only comparison and class policy decision |
+| [Operational Surface Catalog](operational-surface-catalog.md) | Generated skill, command, agent, hook, MCP, availability, and migration catalog |
+| [Waves 3–7 Implementation Closeout](waves-3-7-implementation-closeout.md) | Pre-integration map of delivered authority, provenance, push, control-plane, and documentation contracts |
 | [Ingestion Loop](ingestion-loop.md) | External-source → L0 docs: context-provider flag → team-lead user-approval → doc-updater `ingest-content` (Wave 25 — closes T-BUG-005) |
 | [local-first-skills-pattern](local-first-skills-pattern.md) | When to deploy a skill locally (L1) before promoting to L0; lifecycle stages and promotion criteria |
 | [arch-review-depth-mandate](arch-review-depth-mandate.md) | Architect line-by-line file review mandate before APPROVE — 7 scan categories, APPROVE gate (BL-W47p #29/#30) |
@@ -66,7 +72,7 @@ How AI agents operate in the L0/L1/L2 ecosystem: CLAUDE.md structure, team-lead 
 | [arch-message-topic-discipline](arch-message-topic-discipline.md) | Message Topic Discipline — one SendMessage per topic; mixing topics creates ambiguous receiver state |
 | [context-provider-adoption-hooks](context-provider-adoption-hooks.md) | Context-provider adoption gate + tool-use observability layer (session-level enforcement) |
 | [knowledge-currency-gate](knowledge-currency-gate.md) | Knowledge currency gate: CP verification required before any KMP capability claim in arch dispatches |
-| [hook-manifest](hook-manifest.md) | L0 hook classification: consumer-required / consumer-optional / l0-internal for all 34 hooks |
+| [hook-manifest](hook-manifest.md) | L0 hook classification: consumer-required / consumer-optional / l0-internal for all registered hooks |
 | [hook-authoring-conventions](hook-authoring-conventions.md) | Canonical authoring conventions for L0 hook scripts: exit codes, stdin parsing, identity model, matching rules, bypass pattern |
 | [main-agent-orchestration-guide](main-agent-orchestration-guide.md) | Orchestration guide for the main agent: team topology, phase protocol, architect routing, quality gates |
 | [workflow-orchestration](workflow-orchestration.md) | Plan mode, agent delegation table, verification, and autonomous execution rules (extracted from CLAUDE.md prep-6) |
@@ -78,19 +84,16 @@ How AI agents operate in the L0/L1/L2 ecosystem: CLAUDE.md structure, team-lead 
 
 - **3-Phase Model** = Planning → Execution → Quality Gate. Load-bearing context lives in disk artifacts (PLAN, verdicts, QG proof); the orchestrator dispatches single-use subagents that may optionally persist as background peers (reachable via `SendMessage`) when the runtime supports them — selected per the wave's CLASS floor at session start and Phase 2. Planner is temporary.
 - **Core roles** = available roster, dispatched selectively per CLASS floor: context-provider, doc-updater, arch-testing, arch-platform, arch-integration, quality-gater (session start) + test-specialist, ui-specialist, domain-model-specialist, data-layer-specialist, toolkit-specialist (Phase 2). Dispatched as single-use subagents; optionally live as background peers for the session when the runtime supports them.
-- **CLAUDE.md** = workflow instructions (< 80 lines). Contains Agent Roster → triggers agent delegation.
-- **`.claude/agents/`** = canonical agent definitions. Synced via `/sync-l0`.
-- **team-lead** = orchestrator. NEVER codes — orchestrates 3-phase teams, spawns core specialists selectively at Phase 2 start per CLASS/scope, spawns extras on architect request. Pattern validation chain: specialist → architect → context-provider.
+- **CLAUDE.md / `.claude/agents/`** = concise workflow instructions plus canonical agent definitions, synchronized through `/sync-l0`.
+- **main orchestrator** (historically `team-lead`) = the coordination role in the active conversation, not a separately spawned agent template. It routes class-aware lifecycle actions through the shared control plane.
 - **quality-gater** = dynamic rule discovery. Reads CLAUDE.md for project rules, runs `/pre-pr`, cross-checks every rule.
 - **planner** = temporary planner `Agent`/subagent; consults context-provider via `SendMessage` when available; writes `PLAN.md`.
 - **Doc Integrity** = `/doc-integrity` pipeline: kdoc-coverage → check-doc-patterns → docs/api freshness → audit-docs. State in `kdoc-state.json`.
-- **Spec-driven agents** = debugger, verifier, advisor, researcher, codebase-mapper for autonomous work.
-- **Skills** = token-efficient script wrappers. Always prefer over manual agent work.
-
+- **Spec-driven agents and skills** = bounded autonomous roles plus token-efficient script wrappers.
 ## Rules
 
 See agent-core-rules.md for universal behavioral rules. Key constraints:
 - Agent Roster in CLAUDE.md is mandatory — without it, Claude Code uses generic agents
 - Script-first: if a regex can do it, don't make an agent for it
-- team-lead orchestrates, NEVER codes — assigns to devs, launches architect gates
+- The main orchestrator coordinates specialists and launches the class-required architect gates through the shared control plane.
 - **MCP tools must be declared in `tools:` frontmatter** to be callable (Wave 25 fix). 20 core agents wired; see agent-core-rules.md §8.

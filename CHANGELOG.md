@@ -5,6 +5,14 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 
 ## [Unreleased]
 
+### Added (Waves 3–7 — collaboration authority closure)
+
+- Added immutable `verdict-request/v1` and request-bound `verdict/v1` artifacts with strict role/phase/wave/PLAN/HEAD/evidence validation, durable no-clobber publication, and compare-and-swap supersession. Legacy Markdown verdict tokens are non-authoritative.
+- Added reproducible `evidence-run/v1` records and complete Bats provenance. Push-proof minting now requires two distinct agreeing full runs and rejects newest-wins selection, metadata/count disagreement, stale targets, reused run ids, and reused retained-file identities. Deterministic runs may have equal log-content digests; distinct file identities prove independent retained artifacts.
+- Added a centralized shell-intent parser and explicit peer push policy. Runtime hooks are defense-in-depth; the installed Git `pre-push` hook remains the sole portable push authority.
+- Added a persisted class-aware `PREP -> EXECUTE -> VERIFY_FINAL -> QG -> COMPLETE` control plane integrated with Wave-1 lifecycle actions, plus the canonical `/quality-gate` entrypoint.
+- Added the post-program authority, provenance, push, and control-plane documentation baseline and orchestration-surface qualification tool.
+
 ### Fixed (workflow-input-boundary-audit — GitHub Actions trust boundaries)
 
 - Removed raw untrusted GitHub expression interpolation from the shell and `github-script` bodies of the ten audited workflows/templates. Values now cross into runtimes through `env`, are quoted at consumption, and retain documented defaults and boolean semantics.

@@ -20,7 +20,11 @@ COPY:   .claude/agents/<name>.md
 3. Copy: cp setup/agent-templates/<name>.md .claude/agents/<name>.md
 4. Rehash: node mcp-server/build/cli/generate-template.js <name> --update-manifest-hash
    (NOT generate-registry.js -- memory: feedback_registry_rehash_template_aware)
-5. MIGRATIONS.json (if breaking): Write/python3 ONLY, NEVER Edit on Windows
+5. Regenerate the cross-surface registry after all template changes:
+   `cd mcp-server && npm run generate-registry -- ..`
+   This does not replace step 4: template hashes come from `generate-template`;
+   the registry then records the final canonical surfaces.
+6. MIGRATIONS.json (if breaking): Write/python3 ONLY, NEVER Edit on Windows
    (curly-quote autocorrect -- memory: feedback_migrations_json_encoding)
 
 ## MIGRATIONS.json Entry Shape

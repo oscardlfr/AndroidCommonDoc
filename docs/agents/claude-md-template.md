@@ -28,7 +28,7 @@ CLAUDE.md is the **workflow instruction file** for AI agents, not project docume
 |-----------|------|
 | **Workflow, not docs** | CLAUDE.md = operational instructions. Project docs go in `docs/` and `README.md` |
 | **< 80 lines** | Agents lose rules in long files. Compress to one-liners. |
-| **Delegation-first** | List agents + trigger conditions. Agent does the audit, not the team-lead. |
+| **Delegation-first** | List agents + trigger conditions. The scoped specialist performs the audit; the main conversation coordinates. |
 | **Boris Cherny 4 pillars** | Plan Mode, Agent Delegation, Verification Before Done, Autonomous Execution |
 | **Layer separation** | L0 auto-loads via `~/.claude/CLAUDE.md`. L1/L2 add ONLY project-specific rules. |
 
@@ -47,13 +47,13 @@ CLAUDE.md is the **workflow instruction file** for AI agents, not project docume
 - If something goes sideways, STOP and re-plan immediately
 
 ### 2. Agent Delegation
+- The main conversation is the orchestrator; do not add or spawn a `team-lead` template
 - Use specialized agents — don't do domain audits manually
 - One task per agent for focused execution
 - → delegate to `{agent-name}`: "{specific task description}"
 
 | Agent | Domain | When |
 |-------|--------|------|
-| `team-lead` | Orchestration | Entry point — NEVER codes, assigns to devs, launches architect gates |
 | `arch-testing` | Test verification | Architect gate after each wave |
 | `arch-platform` | Architecture verification | Architect gate after each wave |
 | `arch-integration` | Integration verification | Architect gate after each wave |
@@ -103,9 +103,10 @@ CLAUDE.md is the **workflow instruction file** for AI agents, not project docume
 - Changing foundation modules → plan mode — blast radius is every consumer
 
 ### 2. Agent Delegation
+The main conversation orchestrates through `/work` and the shared control plane.
+
 | Agent | Domain | When |
 |-------|--------|------|
-| `team-lead` | Orchestration | Entry point — assigns to devs, never codes |
 | `arch-testing` | Test verification | Architect gate after each wave |
 | `arch-platform` | Architecture verification | Architect gate after each wave |
 | `arch-integration` | Integration verification | Architect gate after each wave |
@@ -127,9 +128,10 @@ CLAUDE.md is the **workflow instruction file** for AI agents, not project docume
 - {Critical-path changes} → plan mode — high risk
 
 ### 2. Agent Delegation
+The main conversation orchestrates through `/work` and the shared control plane.
+
 | Agent | Domain | When |
 |-------|--------|------|
-| `team-lead` | Orchestration | Entry point — assigns to devs, never codes |
 | `arch-testing` | Test verification | Architect gate after each wave |
 | `arch-platform` | Architecture verification | Architect gate after each wave |
 | `arch-integration` | Integration verification | Architect gate after each wave |

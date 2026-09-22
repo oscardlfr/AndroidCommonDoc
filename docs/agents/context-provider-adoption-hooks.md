@@ -116,7 +116,7 @@ No blocking, no side effects beyond flag creation. If the flag directory does no
 Three sections in output:
 
 1. **Runtime** — `tool-use-analytics` output: top tools, dead tools, MCP/Context7 rates, CP bypass count, per-agent table
-2. **Skill-audit** — `skill-usage-analytics` output: skill call rates, unused skills, last-used timestamps
+2. **Skill-audit** — `skill-usage-analytics` output: explicitly observed skill calls, last-used timestamps, and separately labelled audit sources. Telemetry has no completeness sentinel, so an absent skill is never classified as unused or dead.
 3. **Cross-cutting** — derived: CP adoption rate (sessions with CP consult / total sessions), hook gate effectiveness (bypasses blocked / total Bash+Grep+Glob calls)
 
 Invoke: `/metrics` — no arguments required. Optional `--since {ISO date}` passed through to both analytics tools.

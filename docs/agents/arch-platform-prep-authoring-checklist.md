@@ -8,7 +8,9 @@ category: agents
 
 # Pre-Execute Authoring Checklist (arch-platform)
 
-Run this checklist before emitting `APPROVED-PREP` on any verdict. Automation: `scripts/sh/verdict-pre-execute-check.sh <verdict-path>`.
+Complete this checklist before publishing the request-bound PREP `verdict/v1`. The checklist is supporting rationale, while the immutable request and structured verdict supply the machine authority.
+
+Run this checklist before publishing a PREP approval. Automation: `scripts/sh/verdict-pre-execute-check.sh <structured-verdict-path>`.
 
 ## Check 1 — Cross-File Pin Scan (FIND-12)
 
@@ -83,7 +85,7 @@ Automation function: `check_new_doc_frontmatter`.
 
 ## Check 5 — Amendment Enumeration (FIND-11)
 
-Before declaring `APPROVED-PREP`, list all pending amendments with an explicit count.
+Before approving PREP, list all pending amendments with an explicit count in the rationale.
 
 The verdict MUST contain a literal line matching: `Pending amendments: <N>`
 
@@ -111,7 +113,7 @@ Automation function: `check_cap_escalation`.
 ## Running All Checks
 
 ```bash
-scripts/sh/verdict-pre-execute-check.sh .planning/wave-bl-wN/arch-platform-verdict.md
+scripts/sh/verdict-pre-execute-check.sh .planning/wave-bl-wN/arch-platform-verdict-prep.json
 # exit 0 = all checks pass
 # exit 1 = one or more checks failed (failures printed to stdout)
 ```

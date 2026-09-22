@@ -8,14 +8,14 @@ layer: L0
 category: guides
 description: "Guides hub: getting started, Detekt configuration, doc authoring templates"
 version: 2
-last_updated: "2026-03"
+last_updated: "2026-09-22"
 ---
 
 # Guides
 
 Setup, configuration, and authoring guides for the L0/L1/L2 ecosystem.
 
-> For agent workflow docs (CLAUDE.md template, dev-lead model, multi-agent patterns), see [agents-hub](../agents/agents-hub.md).
+> For agent workflow docs (CLAUDE.md template, main-orchestrator model, multi-agent patterns), see [agents-hub](../agents/agents-hub.md).
 
 ## Documents
 

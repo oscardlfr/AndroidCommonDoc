@@ -9,6 +9,9 @@ description: "ADR-001: engine-agnostic runtime adapter contract — multi-agent 
 
 # ADR-001: Runtime Adapter Contract
 
+## Post-Wave-1 authority boundaries
+The portable core separates transport, lifecycle identity/reuse, persisted phase control, structured verdict/evidence authority, and Git pre-push enforcement. Messages and actor labels never substitute for those authorities; rich adapters may only strengthen identity when the host exposes a runtime-bound capability.
+
 **Status:** Accepted — implemented in the `runtime-adapter-capability-matrix` wave.
 **Context:** Follows BL-W48, which decoupled the load-bearing harness contract from `TeamCreate`/named-team (those tools are gone from the current Claude Code build). This ADR defines an engine-agnostic **adapter contract** so multi-agent (background peers, `SendMessage`, operator visibility) stays a *supported optional accelerator* — never a least-common-denominator harness. The load-bearing contract remains disk artifacts.
 **Enforced by:** `scripts/tests/capability-preservation.bats` (C1–C7, anti-degradation) + `scripts/tests/named-team-regression-guard.bats` (anti-reintroduction of a hard `TeamCreate` dependency).
@@ -25,7 +28,7 @@ and have entirely different fates.
 
 The **orchestrator** (running as `team-lead`) is the dispatcher/coordinator of a wave:
 it spawns agents, sequences work, reads verdicts, and drives the artifact-floor
-(PLAN.md → arch-*-verdict.md → quality-gate-report.json → push-proof.json).
+(PLAN.md → request-bound arch-*-verdict-<phase>.json → quality-gate-report.json → push-proof.json).
 
 This role:
 - Is defined by BEHAVIOR, not by a runtime primitive.
@@ -160,8 +163,7 @@ and the agent reads it on next activation or via a fresh-instance spawn.
 
 **Semantic**: Query whether the agent is running, idle, complete, or failed.
 
-**Artifact-based fallback**: Read and validate the expected disk artifact. Architects:
-verdict file + `APPROVED-PREP`/`APPROVED-FINAL` marker + HEAD-binding (finding 5). Planner:
+**Artifact-based fallback**: Read and validate the expected disk artifact. Architects use phase-specific `verdict/v1` JSON plus its immutable `verdict-request/v1`, validated for role, phase, wave, PLAN, HEAD, subject and evidence. Planner:
 `PLAN.md` + `### Spawn Table` marker. Quality-gater: `quality-gate-report.json` with
 `"verdict":"PASS"` + stamp within TTL (≤30 min). Bare file presence is NOT sufficient.
 
@@ -169,9 +171,7 @@ verdict file + `APPROVED-PREP`/`APPROVED-FINAL` marker + HEAD-binding (finding 5
 
 **Semantic**: Retrieve the agent's final return value or summary message.
 
-**Artifact-based fallback**: Disk artifact is ALWAYS the authoritative result (message
-channel = optional accelerator). Validation mirrors Op 3. A verdict without a valid marker
-or with a HEAD mismatch → `result = null`; orchestrator must request re-verification.
+**Artifact-based fallback**: Disk artifact is ALWAYS authoritative; messages only accelerate. Validation mirrors Op 3. A failed structured binding returns null and requires a fresh request/verdict.
 
 #### Op 5: `stop(handle) → void`
 
@@ -191,7 +191,8 @@ This is the MOST IMPORTANT operation — it defines the load-bearing contract.
 
 **Examples**:
 - `artifact('planner', slug)` → `.planning/wave-<slug>/PLAN.md`
-- `artifact('arch-platform', slug)` → `.planning/wave-<slug>/arch-platform-verdict.md`
+- `artifact('arch-platform', slug, 'prep')` → `.planning/wave-<slug>/arch-platform-verdict-prep.json`
+- `artifact('arch-platform', slug, 'verify-final')` → `.planning/wave-<slug>/arch-platform-verdict-verify-final.json`
 - `artifact('quality-gater', slug)` → `.androidcommondoc/quality-gate-report.json`
   + `.androidcommondoc/push-proof.json`
 
@@ -224,9 +225,7 @@ a verdict from an ungovernable peer — re-verify via a fresh instance (finding 
 (intentional `-2` suffix pattern). Use ONLY for genuine overflow — NEVER to bypass
 an ungovernable peer (that is `spawn` / fresh-instance-replacement, not overflow).
 
-**Artifact-based fallback**: Overflow instances write to role-indexed artifact paths
-(e.g., `arch-platform-2-verdict.md`). The orchestrator aggregates all role verdicts
-before the QG.
+**Artifact-based fallback**: each required role has one canonical verdict per phase. Parallel reviewers contribute evidence; replacement needs a fresh request and digest-bound supersession.
 
 ---
 
@@ -236,10 +235,7 @@ before the QG.
 routing), `artifactPath` (always reliable), and optional `runtime_id` (adapter-internal
 opaque id — NOT the hook's `data.agent_id` which rotates per wake).
 
-`ArtifactValidation` has four fields: `exists`, `validMarker` (APPROVED-PREP/FINAL + HEAD
-match for verdicts; `"verdict":"PASS"` for QG), `headBound` (verdict HEAD == current HEAD),
-`fresh` (stamp within TTL). `AgentStatus.state` is derived from all four — bare existence
-is NOT sufficient.
+`ArtifactValidation` exposes `exists`, `wellFormed`, `roleBound`, `requestBound`, `headBound`, `planBound`, `evidenceValid`, and `decisionAuthorized`. QG artifacts retain independent PASS, digest and freshness checks; bare existence is never enough.
 
 ```typescript
 interface RuntimeAdapter {
@@ -365,11 +361,12 @@ planner writes `PLAN.md` to disk; orchestrator reads PLAN.md from disk.
 
 **Current**: orchestrator dispatches architects (arch-platform, arch-testing,
 arch-integration) who validate + specify work; specialists implement; architects
-verify. All via `Agent()` + `SendMessage` + verdict files.
+verify. Runtime-specific lifecycle calls are hidden behind the shared adapter; structured
+disk artifacts remain authoritative.
 
 **Adapter mapping**:
 - `spawn('arch-platform', prep_prompt)` → handle
-- `artifact('arch-platform', slug)` → `arch-platform-verdict.md`
+- `artifact('arch-platform', slug, phase)` → `arch-platform-verdict-<phase>.json`
 - Architects govern specialists: `spawn('test-specialist', task)` dispatched by
   orchestrator on behalf of architect spec.
 - `reuse('arch-platform')` for HEAD-move re-bind of verdict (pending-evidence on
@@ -378,8 +375,9 @@ verify. All via `Agent()` + `SendMessage` + verdict files.
 - Specialist→architect result: artifact (specialist writes file; architect reads and
   validates marker + HEAD-binding).
 
-**Gate preservation**: `premature-execution-gate.js` blocks specialists without
-`APPROVED-PREP` verdict. Gate reads file; adapter doesn't change this.
+**Gate preservation**: `premature-execution-gate.js` blocks specialists without an
+authorizing PREP `verdict/v1` bound to its request, role, wave, PLAN and HEAD. The gate
+uses the shared contract validator; the adapter cannot weaken it.
 `architect-self-edit-gate.js` blocks arch-* Write/Edit; gate reads agent_type prefix;
 adapter doesn't change this.
 
@@ -406,8 +404,9 @@ from silent deletion.
 **Adapter mapping**:
 - `spawn('quality-gater', qg_prompt)` → handle
 - `artifact('quality-gater', slug)` → `quality-gate-report.json` + `push-proof.json`
-- QG reads all arch-*-verdict.md via `artifact('arch-*', slug)` and validates
-  marker + HEAD-binding for each.
+- QG reads every class-required `arch-*-verdict-verify-final.json` via
+  `artifact('arch-*', slug, 'verify-final')` and validates its immutable
+  request, role, phase, PLAN, exact HEAD, evidence, and approving decision.
 - `emit-push-proof.sh` + `resolve-required-roles.js` are engine-agnostic scripts
   (they read disk files; they don't call runtime APIs).
 - `push-authorization-gate.js` checks `agent_type === ''` (main orchestrator).
