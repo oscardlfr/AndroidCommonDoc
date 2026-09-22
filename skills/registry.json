@@ -1371,7 +1371,7 @@
       "description": "> Switch the model tier used by all AndroidCommonDoc agents.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:ab28f3fb8bebf7bbffdf928d04b601f6def7fddfa5cf4e490c4c945582f4d9ba",
+      "hash": "sha256:af946e0fc92508c571972e517139474a5af4bb8b4f29561cdb567a4ba581cde1",
       "dependencies": [],
       "frontmatter": {
         "name": "set-model-profile",

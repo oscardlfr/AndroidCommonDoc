@@ -111,7 +111,7 @@ Development history beyond the CHANGELOG — summarized from memory + commit log
 | 28 | 2026-04-22 | [#62](https://github.com/oscardlfr/AndroidCommonDoc/pull/62) | L0 housekeeping pre-W29: BL-W27-01..04 + W17 HIGH findings #1, #3-#5 |
 | 27 | 2026-04-22 | [#61](https://github.com/oscardlfr/AndroidCommonDoc/pull/61) | BL-W26-06 rollback W25 pattern-search MCP wiring; codified dev → arch → CP chain |
 | 26 | 2026-04-21 | [#60](https://github.com/oscardlfr/AndroidCommonDoc/pull/60) | BL-W26-01a MCP wiring for 4 agents + Bug #8 topology activation gate post-ExitPlanMode |
-| 25 | 2026-04-21 | [#59](https://github.com/oscardlfr/AndroidCommonDoc/pull/59) | MCP wiring fix across 10 agents; context-provider v3.0 pattern pre-cache; ingestion loop closed (context-provider → team-lead approval → doc-updater → `ingest-content`) |
+| Wave 25 | 2026-04-21 | [#59](https://github.com/oscardlfr/AndroidCommonDoc/pull/59) | MCP wiring fix across 10 agents; context-provider v3.0 pattern pre-cache; ingestion loop closed (context-provider → team-lead approval → doc-updater → `ingest-content`) |
 | 24 | 2026-04-20 | [#58](https://github.com/oscardlfr/AndroidCommonDoc/pull/58) | Bug #3 session teardown (`TeamDelete` before `TeamCreate`); P4 17 agent mirrors; team-lead 5.17.0 |
 | 23 | 2026-04-20 | [#57](https://github.com/oscardlfr/AndroidCommonDoc/pull/57) | S8 token meter + scope_doc_path + PREP/EXECUTE architect dispatch modes |
 | 22 | 2026-04-20 | [#56](https://github.com/oscardlfr/AndroidCommonDoc/pull/56) | Token topology S1–S7: team-lead → sonnet, spawn-prompt diet, RTK prefix, verdict-to-disk |
