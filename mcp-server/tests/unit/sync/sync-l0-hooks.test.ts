@@ -150,6 +150,7 @@ describe("source-referenced runtime installation", () => {
     expect(inventoryPaths.has("scripts/lib/wave-control-plane.cjs")).toBe(true);
     expect(inventoryPaths.has("scripts/lib/verdict-evidence-contract-cli.cjs")).toBe(true);
     expect(inventoryPaths.has("scripts/lib/verdict-evidence-contract.cjs")).toBe(true);
+    expect(inventoryPaths.has("scripts/lib/verdict-artifact-confinement.cjs")).toBe(true);
     expect(inventoryPaths.has("scripts/lib/verdict-artifact-store.cjs")).toBe(true);
     expect(inventoryPaths.has(".claude/registry/wave-topology.yaml")).toBe(true);
     const verifierInventory = runtimeContext.computeRuntimeToolkitInventory(REAL_L0_ROOT);
