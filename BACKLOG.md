@@ -1,15 +1,15 @@
 # AndroidCommonDoc Backlog
 
-> **Last updated**: 2026-09-22
-> **Roadmap baseline**: `develop@0704ddf` (PR #244; PR #245 at `619d9a7` is its confirmed ancestor). **H1 and G0 — Reusable Workflow Input Boundary Hardening are SHIPPED.**
-> **Current delivery**: **Waves 1–2 are SHIPPED**. **Waves 3–7 are COMMITTED AND LOCALLY VERIFIED** on `codex/waves3-7-authority-contracts`; they are not yet published, reviewed, or merged, so they are not labelled SHIPPED. The sealed Wave-3 PLAN remains the historical design input; the user's later direct instruction authorized the ordered Waves 3–7 implementation. **R33 remains deferred.** See `docs/agents/waves-3-7-implementation-closeout.md` for the frozen-source evidence.
+> **Last updated**: 2026-09-26
+> **Roadmap baseline**: `develop@dfc48cf` (PR #250). **H1, G0, and ordered Waves 1–7 are SHIPPED.**
+> **Current delivery**: **Waves 1–7 are SHIPPED**. Waves 3–7 merged through PR #250 at `dfc48cf8488cf661704f8a312093c663c34db0bb`; their pre-integration evidence remains historical context in `docs/agents/waves-3-7-implementation-closeout.md`. The first real L2 consumer then exposed the runtime portability/host-version defects tracked below. **R33 remains deferred.**
 > **Source of truth**: this file owns ordering and scope. `git log`, merged PRs, and `project_*shipped.md` memory entries own historical detail.
 
 ## Operating contract
 
 - The load-bearing portability floor is **validated disk artifacts**. Runtime messaging is an optional acceleration layer.
 - Adapter delivery, message text, an MCP return value, or a live peer saying “GO” is never evidence. Only a valid, correlated result artifact counts as a protocol-valid consultation answer; phase and push authorization still require their own contracts.
-- Execute Waves 1-7 in order. Waves 1 and 2 are shipped; Waves 3–7 have now been implemented in order and share one final local acceptance campaign before integration.
+- Waves 1–7 were executed in order and are shipped through PR #250. Post-merge consumer defects are fixed as bounded follow-ups with their own clean-consumer acceptance.
 - Re-audit observations and file counts at each wave's starting HEAD. Post-G0 counts below were recorded by PR #245 at `619d9a7`; they are a planning baseline, not permanent truth.
 - Each wave must have one frozen scope, explicit no-go boundaries, proportional tests, and a shipped memory entry before the backlog advances.
 - Rich runtimes may add `SendMessage`, persistent peers, MCP invocation, app-server threads, or wakeups; failure or absence of those capabilities must not invalidate the disk floor.
@@ -48,11 +48,49 @@
 | 1 | Portable Runtime Collaboration & Persistent Role Lifecycle | Persistent canonical support roles plus portable consultation and user-gated documentation ingestion | **SHIPPED** |
 | — | Agent & Skill Behavioral Restoration Qualification | Mandatory read-only qualification before Wave 2 | **COMPLETE** |
 | 2 | Workflow Expression & Input Boundary Audit | Repository-wide control of untrusted workflow inputs crossing into shell | **SHIPPED** |
-| 3 | Structured Verdict Evidence Contract | Verdicts become strictly parsed, correlated, evidence-backed records | **IMPLEMENTED — LOCAL ACCEPTANCE** |
-| 4 | Reproducible Evidence & Bats Provenance | Independent runs and handoffs become comparable and fail closed | **IMPLEMENTED — LOCAL ACCEPTANCE** |
-| 5 | Native Push Authority & Peer Authorization Policy | Git-layer push authority, robust intent detection, explicit actor policy | **IMPLEMENTED — LOCAL ACCEPTANCE** |
-| 6 | Class-Aware Phase, Topology & Skill Orchestration Control Plane | Mechanized wave lifecycle and one runtime-neutral skill/entrypoint control plane | **IMPLEMENTED — LOCAL ACCEPTANCE** |
-| 7 | Documentation & Operational Baseline Closure | README, agents, skills, MCP, ADRs, memory, and catalogs describe demonstrated behavior | **IMPLEMENTED — LOCAL ACCEPTANCE** |
+| 3 | Structured Verdict Evidence Contract | Verdicts become strictly parsed, correlated, evidence-backed records | **SHIPPED — PR #250** |
+| 4 | Reproducible Evidence & Bats Provenance | Independent runs and handoffs become comparable and fail closed | **SHIPPED — PR #250** |
+| 5 | Native Push Authority & Peer Authorization Policy | Git-layer push authority, robust intent detection, explicit actor policy | **SHIPPED — PR #250** |
+| 6 | Class-Aware Phase, Topology & Skill Orchestration Control Plane | Mechanized wave lifecycle and one runtime-neutral skill/entrypoint control plane | **SHIPPED — PR #250** |
+| 7 | Documentation & Operational Baseline Closure | README, agents, skills, MCP, ADRs, memory, and catalogs describe demonstrated behavior | **SHIPPED — PR #250** |
+
+---
+
+## Post-PR #250 first-consumer hardening
+
+The first real L2 consumer of `dfc48cf` found a coherent portability failure
+cluster. The active follow-up owns only L0 upstream fixes; no product repository
+is modified.
+
+| Finding | Root contract | Follow-up state |
+|---:|---|---|
+| 1 | Source-coupled hooks must execute from L0, never as partial consumer copies | Corrected in follow-up; clean-consumer execution test added |
+| 2 | Installed shell hooks must be executable and self-repair identical mode drift | Corrected in follow-up; positive/conflict Bats coverage added |
+| 3 | Consumer launch requires explicit `--add-dir <L0-root>` | Corrected in operations guide/getting-started |
+| 4 | Documented entrypoints must use canonical single-quoted POSIX rendering | Corrected in canonical skills and mirrors |
+| 5 | Runtime installation owns `.claude/registry/wave-topology.yaml` | Corrected with conflict, checksum, and idempotency coverage |
+| 6 | YAML resolves from the toolkit runtime closure | Corrected; consumer-no-`mcp-server` fixture added |
+| 7–8 | Exact binary pinning needs one safe probe→qualification→atomic-publish flow | Corrected with recertification CLI; no manual certificate deletion/editing |
+| 9 | R131 must not read mutable real-repository `.planning/` | Corrected with isolated one-plan consumer fixture |
+| 10 | Requested effort is not effective effort | Corrected: effective stays null until observed; explicit inactive init fails effort-controlled certification |
+| 11 | Spawn→`system/init` needs a bounded deadline | Corrected with startup watchdog and silent-child negative test |
+| 12 | Normal, safe-mode, bare, and print modes need distinct recovery guidance | Corrected in operations guide |
+| 13 | Acceptance must execute from a clean consumer and linked worktree | Corrected with real `git worktree add` and runtime fixtures |
+
+**New retained residual from live 2.1.283 testing**: safe-mode/one-shot prompts
+do not enforce a filesystem read scope; a model may still issue a repository-wide
+search outside stated ownership. A future bounded security slice must define an
+enforceable Read/Bash path allowlist before claiming one-shot scope confinement.
+This is not solved by stronger prompt wording and is not conflated with the
+consumer-runtime distribution repairs above.
+
+**New retained Gradle operational residual**: validation commands sharing one
+worktree/build tree must be serialized unless their Gradle and build directories
+are genuinely isolated. Concurrent runs produced a false unresolved-reference
+cascade that passed when rerun alone. A future runner hardening slice should reject
+or isolate same-worktree concurrency. Task selection must also come from the
+checkout's enumerated Gradle tasks; the runtime must not invent a platform target
+such as `macosX64` when only `macosArm64` is configured.
 
 ---
 
@@ -455,7 +493,7 @@ Any merge/deprecate/delete requires: no unique outcome; replacement parity acros
 
 **Class**: HARNESS / EVIDENCE
 
-**Status**: COMMITTED + LOCALLY VERIFIED — review/publication/merge remain.
+**Status**: SHIPPED — PR #250, merged at `develop@dfc48cf`.
 
 **Plan**: `.planning/wave-structured-verdict-evidence-contract/PLAN.md`, current raw-byte SHA-256 `aac4ad96d2b7c8fb947df7591996ccc33504b667860d2d5420a9ec01800d2240` (the digest bound by the final local acceptance). Its planning-only header records the pre-execution state; the later direct user instruction authorized implementation without treating that header as current execution authority.
 
@@ -487,7 +525,7 @@ Any merge/deprecate/delete requires: no unique outcome; replacement parity acros
 
 **Class**: HARNESS / EVIDENCE
 
-**Status**: COMMITTED + LOCALLY VERIFIED — review/publication/merge remain.
+**Status**: SHIPPED — PR #250, merged at `develop@dfc48cf`.
 
 **Objective**: make test and quality-gate evidence independently reproducible, comparable across runs, and fail closed when handoff selection, metadata, target, environment, or counts disagree.
 
@@ -518,7 +556,7 @@ Any merge/deprecate/delete requires: no unique outcome; replacement parity acros
 
 **Class**: SECURITY / HARNESS
 
-**Status**: COMMITTED + LOCALLY VERIFIED — review/publication/merge remain.
+**Status**: SHIPPED — PR #250, merged at `develop@dfc48cf`.
 
 **Objective**: make the installed git `pre-push` hook the sole portable push authority, redesign advisory runtime push-intent detection, and define what runtime-specific controls can honestly restrict which peer may request or perform a push.
 
@@ -548,7 +586,7 @@ Any merge/deprecate/delete requires: no unique outcome; replacement parity acros
 
 **Class**: HARNESS
 
-**Status**: COMMITTED + LOCALLY VERIFIED — review/publication/merge remain.
+**Status**: SHIPPED — PR #250, merged at `develop@dfc48cf`.
 
 **Objective**: mechanize the PREP → EXECUTE → VERIFY-FINAL → QG lifecycle, derive required roles from wave class, and make every orchestration entrypoint and skill route through one runtime-neutral lifecycle/control plane.
 
@@ -583,7 +621,7 @@ Any merge/deprecate/delete requires: no unique outcome; replacement parity acros
 
 **Class**: DOC / GOVERNANCE
 
-**Status**: COMMITTED + LOCALLY VERIFIED — review/publication/merge remain.
+**Status**: SHIPPED — PR #250, merged at `develop@dfc48cf`.
 
 **Objective**: reconcile every public and operational description of the harness with behavior demonstrated by Waves 1–6 and establish one trustworthy post-program documentation baseline.
 
@@ -653,6 +691,8 @@ These items are not allowed to interrupt Waves 1-7 unless a concrete blocker or 
 | Consumer `settings.json` validation against the shipped hook manifest | Optional follow-up only; `docs/agents/hook-manifest.md` itself is already shipped |
 | macOS zsh/hooks sweep | Migration resolved; full shell/hook sweep still needs current evidence |
 | macOS Gradle truststore check | Verify one full build without legacy flags |
+| Same-worktree concurrent Gradle guard | Reject concurrency or isolate Gradle/build directories; preserve the serial operational rule until implemented |
+| Gradle platform-target discovery | Enumerate actual tasks/targets before invocation; never infer a sibling architecture target |
 | Xcode/iOS target smoke test | Run when an owning KMP validation wave is scheduled |
 | `~/.gradle/gradle.properties` hygiene | Re-verify the Mac-local configuration without copying Windows flags |
 | L2 consumer product alignment / future agents / plugin v0.2.1 | Long-term, trigger-driven; retain source memory entries |

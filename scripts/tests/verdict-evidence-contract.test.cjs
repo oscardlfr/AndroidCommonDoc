@@ -88,6 +88,7 @@ const LIB_DIR = path.resolve(__dirname, '../lib');
 const CONTRACT_PATH = path.join(LIB_DIR, 'verdict-evidence-contract.cjs');
 const STORE_PATH = path.join(LIB_DIR, 'verdict-artifact-store.cjs');
 const CLI_PATH = path.join(LIB_DIR, 'verdict-evidence-contract-cli.cjs');
+const CONFINEMENT_PATH = path.join(LIB_DIR, 'verdict-artifact-confinement.cjs');
 const STRUCTURAL_VALIDATORS_PATH = path.join(LIB_DIR, 'runtime-role-lifecycle/structural-validators.cjs');
 
 const contract = require(CONTRACT_PATH);
@@ -161,25 +162,25 @@ test('import boundaries: contract imports only node builtins + structural-valida
   }
 });
 
-test('import boundaries: store and CLI import only the new focused modules + node builtins', () => {
-  for (const modulePath of [STORE_PATH, CLI_PATH]) {
+test('import boundaries: store, confinement and CLI import only the focused modules + node builtins', () => {
+  for (const modulePath of [STORE_PATH, CONFINEMENT_PATH, CLI_PATH]) {
     const src = fs.readFileSync(modulePath, 'utf8');
     const requires = [...src.matchAll(/require\(\s*['"]([^'"]+)['"]\s*\)/g)].map((m) => m[1]);
     for (const spec of requires) {
       const isRelative = spec.startsWith('.') || spec.startsWith('/');
       if (!isRelative) continue;
       const resolved = path.resolve(path.dirname(modulePath), spec).replace(/\.cjs$/, '');
-      const allowed = [CONTRACT_PATH, STORE_PATH, CLI_PATH].map((p) => p.replace(/\.cjs$/, ''));
+      const allowed = [CONTRACT_PATH, STORE_PATH, CONFINEMENT_PATH, CLI_PATH].map((p) => p.replace(/\.cjs$/, ''));
       assert.ok(
         allowed.includes(resolved),
-        `${path.basename(modulePath)} must import only the 3 new verdict-evidence modules among local files, found: ${spec}`,
+        `${path.basename(modulePath)} must import only the 4 focused verdict-evidence modules among local files, found: ${spec}`,
       );
     }
   }
 });
 
-test('import boundaries: none of the 3 new modules ever require runtime-consultation (study-only prior art)', () => {
-  for (const modulePath of [CONTRACT_PATH, STORE_PATH, CLI_PATH]) {
+test('import boundaries: none of the 4 focused modules ever require runtime-consultation (study-only prior art)', () => {
+  for (const modulePath of [CONTRACT_PATH, STORE_PATH, CONFINEMENT_PATH, CLI_PATH]) {
     const src = fs.readFileSync(modulePath, 'utf8');
     assert.ok(
       !/require\(\s*['"][^'"]*runtime-consultation[^'"]*['"]\s*\)/.test(src),
@@ -188,8 +189,8 @@ test('import boundaries: none of the 3 new modules ever require runtime-consulta
   }
 });
 
-test('module size: each of the 3 new modules stays at or below the 250-line target', () => {
-  for (const modulePath of [CONTRACT_PATH, STORE_PATH, CLI_PATH]) {
+test('module size: each of the 4 focused modules stays at or below the 250-line target', () => {
+  for (const modulePath of [CONTRACT_PATH, STORE_PATH, CONFINEMENT_PATH, CLI_PATH]) {
     const lines = fs.readFileSync(modulePath, 'utf8').split(/\r?\n/);
     assert.ok(
       lines.length <= 250,

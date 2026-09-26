@@ -156,7 +156,10 @@ write_valid_bats_handoff() {
   for suffix in a b; do
     run_id="wave-a-fixture-$$-${RANDOM}-${suffix}"
     path="$ACDOC/bats-result.${run_id}.env"
-    if [[ "$suffix" == a ]]; then digest="cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"; else digest="eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"; fi
+    # Deterministic full-suite runs may produce byte-identical TAP logs. Their
+    # retained-artifact identities still differ because each run owns a
+    # distinct artifact; content hashes are integrity, not run identity.
+    digest="cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
     {
     printf 'BATS_OK=%s\n'           "42"
     printf 'BATS_NOT_OK=%s\n'       "0"

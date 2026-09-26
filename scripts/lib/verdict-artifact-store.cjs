@@ -5,6 +5,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const { spawnSync } = require('child_process');
+const { assertConfinedAncestry } = require('./verdict-artifact-confinement.cjs');
 const REASON_CODES = Object.freeze([
   'already-exists', 'compare-mismatch', 'confinement-failed',
   'durability-unproven', 'identity-drift', 'lock-timeout',
@@ -21,47 +22,6 @@ function isTestCapability() {
 }
 function faultActive(name) {
   return isTestCapability() && typeof process.env[name] === 'string' && process.env[name].length > 0;
-}
-// Windows junctions report isSymbolicLink()===true via lstat but are NOT
-// rejected by O_NOFOLLOW at open() (empirically confirmed on this machine) --
-// this per-component walk is the PRIMARY defense, done before any mkdir/open.
-function assertConfinedAncestry(waveDir, targetPath, includeLeaf) {
-  const logicalRoot = path.resolve(waveDir);
-  let resolvedRoot;
-  try { resolvedRoot = fs.realpathSync(logicalRoot); } catch (err) { throwReasonCode('confinement-failed', 'wave directory does not exist: ' + logicalRoot); }
-  const lexicalTarget = path.resolve(path.isAbsolute(targetPath) ? targetPath : path.join(logicalRoot, targetPath));
-  const logicalRelative = path.relative(logicalRoot, lexicalTarget);
-  const canonicalRelative = path.relative(resolvedRoot, lexicalTarget);
-  const targetIsRoot = lexicalTarget === logicalRoot || lexicalTarget === resolvedRoot;
-  const logicalConfined = logicalRelative !== '' && !logicalRelative.startsWith('..') && !path.isAbsolute(logicalRelative);
-  const canonicalConfined = canonicalRelative !== '' && !canonicalRelative.startsWith('..') && !path.isAbsolute(canonicalRelative);
-  if (!targetIsRoot && !logicalConfined && !canonicalConfined) {
-    throwReasonCode('confinement-failed', 'target escapes the wave directory: ' + targetPath);
-  }
-  const resolvedTarget = targetIsRoot ? resolvedRoot : (logicalConfined ? path.resolve(resolvedRoot, logicalRelative) : lexicalTarget);
-  const rel = path.relative(resolvedRoot, resolvedTarget);
-  if ((rel === '' && !includeLeaf) || rel.startsWith('..') || path.isAbsolute(rel)) {
-    throwReasonCode('confinement-failed', 'target escapes the wave directory: ' + targetPath);
-  }
-  let rootLst;
-  try { rootLst = fs.lstatSync(logicalRoot); } catch (err) { throwReasonCode('confinement-failed', 'wave directory does not exist: ' + logicalRoot); }
-  if (rootLst.isSymbolicLink()) throwReasonCode('confinement-failed', 'wave directory is a symlink: ' + resolvedRoot);
-  const segments = rel.split(path.sep);
-  let walked = resolvedRoot;
-  for (let idx = 0; idx < segments.length; idx += 1) {
-    walked = path.join(walked, segments[idx]);
-    let segLst;
-    try {
-      segLst = fs.lstatSync(walked);
-    } catch (err) {
-      // First missing component: nothing deeper can exist -- fine on the write path
-      // (first-publish), a hard failure on the read path.
-      if (!includeLeaf) break;
-      throwReasonCode('confinement-failed', 'path component does not exist: ' + walked);
-    }
-    if (segLst.isSymbolicLink()) throwReasonCode('confinement-failed', 'path component is a symlink or reparse point: ' + walked);
-  }
-  return resolvedTarget;
 }
 function readAllFromFd(fd, size) {
   const buf = Buffer.allocUnsafe(size);

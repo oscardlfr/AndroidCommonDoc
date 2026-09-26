@@ -23,7 +23,7 @@ The `<slug>` is required when `--orchestrate` is passed. Example: `/init-session
 All dashboard and support-plane operations enter through the shared product flow:
 
 ```bash
-"<resolved-node>" "<toolkit-root>/scripts/lib/runtime-collaboration-entrypoints.cjs" execute --entrypoint init-session --project-root <consumer-root> --intent <base64url canonical JSON>
+'<resolved-node>' '<toolkit-root>/scripts/lib/runtime-collaboration-entrypoints.cjs' 'execute' '--entrypoint' 'init-session' '--project-root' '<consumer-root>' '--intent' '<base64url canonical JSON>'
 ```
 
 The Bash call must be one standalone direct Node command. For L0, `toolkit-root` and `consumer-root` are the current repository. For an installed runtime consumer, resolve `toolkit-root` only from the single local `layer=L0, role=tooling` source in `l0-manifest.json`; `consumer-root` remains the literal absolute application repository. Use the resolved Node executable. Never use `$(pwd)`, `$PWD`, `cd`, environment fallbacks, shell variables, command substitution, pipes, redirects, or command separators in this authenticated entrypoint call.

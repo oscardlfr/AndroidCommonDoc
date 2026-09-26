@@ -200,6 +200,10 @@ print(d.get(sys.argv[2], ''))
       --plan-digest aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa --require-agreeing 2
     [ "$(json_get "$output" status)" = "ok" ]
     [ "$(json_get "$output" agreement_count)" = "2" ]
+    [ "$(json_get "$output" log_digests)" = "$(json_get "$output" log_digest),$(json_get "$output" log_digest)" ]
+    local identities
+    identities="$(json_get "$output" log_identities)"
+    [ "$(printf '%s' "$identities" | tr ',' '\n' | sort -u | wc -l | tr -d ' ')" = "2" ]
 }
 
 @test "#BH16 different run ids reusing one log do not prove independence" {
@@ -288,7 +292,7 @@ print(d.get(sys.argv[2], ''))
     run python3 -c "
 import json, sys
 d = json.loads(sys.argv[1])
-expected_keys = {'status','head','run_id','ok','not_ok','expected','total','complete','scope','generated_at','plan_digest','wave_slug','target_digest','environment_fingerprint','started_at','finished_at','log_digest','tool_versions','agreement_count','run_ids','log_digests'}
+expected_keys = {'status','head','run_id','ok','not_ok','expected','total','complete','scope','generated_at','plan_digest','wave_slug','target_digest','environment_fingerprint','started_at','finished_at','log_digest','tool_versions','agreement_count','run_ids','log_digests','log_identities'}
 assert set(d.keys()) == expected_keys, f'unexpected keys: {set(d.keys())}'
 assert d['status'] != 'ok', f'malicious scope must never be selected, got status={d[\"status\"]!r}'
 print('OK')

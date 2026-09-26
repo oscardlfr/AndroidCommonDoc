@@ -489,8 +489,8 @@ describe('quality-gater template — gate protocol', () => {
     expect(content).toMatch(/[Cc]ross-cutting/);
   });
 
-  it('has template version 2.25.0', () => {
-    expect(content).toContain('template_version: "2.25.0"');
+  it('has template version 2.26.0', () => {
+    expect(content).toContain('template_version: "2.26.0"');
   });
 });
 

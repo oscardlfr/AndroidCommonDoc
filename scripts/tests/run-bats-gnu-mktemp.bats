@@ -55,10 +55,10 @@ FAKE
   : > "$TMPDIR_WITNESS"
   export FAKE_BATS_TMPDIR_WITNESS="$TMPDIR_WITNESS"
   LOG="$BATS_TEST_TMPDIR/out.log"
-  # setup-node installs Node outside /usr/bin on GitHub-hosted runners. Keep the
-  # real Node directory in the deliberately restricted child PATH while the
-  # fake directory still wins for bats, npx, and mktemp.
-  NODE_BIN_DIR="$(dirname "$(command -v node)")"
+  # Expose exactly Node, not its entire host bin directory. On Homebrew systems
+  # that directory may also contain gmktemp, which would invalidate the
+  # deliberate "no GNU mktemp" negative fixture.
+  ln -s "$(command -v node)" "$FAKEBIN/node"
   SHIMS_BEFORE="$(_shim_snapshot)"
   BUDGET_SCOPED_TMPDIR=""
 }
@@ -95,7 +95,7 @@ _assert_no_new_shim() {  # $1 = snapshot taken before the inner run
 }
 
 _run_runbats() {
-  PATH="$FAKEBIN:$NODE_BIN_DIR:/usr/bin:/bin" run bash "$RUNBATS" --project-root "$PROJ" --log "$LOG" "$@"
+  PATH="$FAKEBIN:/usr/bin:/bin" run bash "$RUNBATS" --project-root "$PROJ" --log "$LOG" "$@"
 }
 
 @test "GNU-MKTEMP-01 native GNU mktemp runs the suite directly and builds no shim" {

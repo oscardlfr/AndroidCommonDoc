@@ -111,6 +111,15 @@ function Get-AndroidProjects {
     return $discovered
 }
 
+function Set-HookExecutableOnUnix {
+    param([string]$Path)
+    $isUnixPowerShell = $PSVersionTable.PSEdition -eq "Core" -and
+        (Get-Variable IsWindows -ErrorAction SilentlyContinue) -and (-not $IsWindows)
+    if (-not $isUnixPowerShell -or -not $Path.EndsWith(".sh")) { return $true }
+    & chmod +x -- $Path
+    return $LASTEXITCODE -eq 0
+}
+
 # --- JSON Merging ---
 function Merge-HookSettings {
     param(
@@ -282,8 +291,18 @@ foreach ($project in $allProjects) {
         $targetPath = Join-Path $targetHooksDir $hookName
 
         if ((Test-Path $targetPath) -and -not $Force) {
-            Write-Host "  [SKIP] $hookName (exists, use -Force to overwrite)" -ForegroundColor Yellow
-            $totalSkipped++
+            $sourceHash = (Get-FileHash -Algorithm SHA256 -Path $hookFile).Hash
+            $targetHash = (Get-FileHash -Algorithm SHA256 -Path $targetPath).Hash
+            if ($sourceHash -ne $targetHash) {
+                Write-Host "  [ERROR] Conflict: $hookName differs from the toolkit (use -Force to overwrite)" -ForegroundColor Red
+                $totalErrors++
+            } elseif (-not $DryRun -and -not (Set-HookExecutableOnUnix -Path $targetPath)) {
+                Write-Host "  [ERROR] Failed to repair executable bit: $hookName" -ForegroundColor Red
+                $totalErrors++
+            } else {
+                Write-Host "  [OK] Verified content and executable mode: $hookName" -ForegroundColor Green
+                $totalInstalled++
+            }
             continue
         }
 
@@ -294,6 +313,11 @@ foreach ($project in $allProjects) {
                 New-Item -ItemType Directory -Path $targetHooksDir -Force | Out-Null
             }
             Copy-Item -Path $hookFile -Destination $targetPath -Force
+            if (-not (Set-HookExecutableOnUnix -Path $targetPath)) {
+                Write-Host "  [ERROR] Installed hook is not executable: $hookName" -ForegroundColor Red
+                $totalErrors++
+                continue
+            }
             Write-Host "  [OK] Copied: $hookName" -ForegroundColor Green
         }
         $totalInstalled++
@@ -348,3 +372,7 @@ if ($DryRun) {
 
 Write-Host ""
 Write-Host "Restart Claude Code session (or use /hooks to review) for hooks to take effect." -ForegroundColor Yellow
+
+if ($totalErrors -gt 0) {
+    exit 1
+}

@@ -2198,22 +2198,30 @@ EOF
     grep -qF 'if [ "$DI_REGEX_STATUS" -eq 2 ]; then' "$wf"
     grep -qF 'di_path_pattern must be a valid PCRE expression' "$wf"
 
+    pcre_grep="grep"
+    if ! printf 'x\n' | grep -P -- 'x' >/dev/null 2>&1; then
+      command -v ggrep >/dev/null 2>&1 || skip "PCRE-capable grep unavailable on this host"
+      pcre_grep="ggrep"
+    fi
+
     run bash -c '
-      pattern=$1
-      if printf "" | grep -P -- "$pattern" >/dev/null 2>&1; then :; else
+      grep_bin=$1
+      pattern=$2
+      if printf "" | "$grep_bin" -P -- "$pattern" >/dev/null 2>&1; then :; else
         status=$?
         if [ "$status" -eq 2 ]; then exit 2; fi
       fi
-    ' _ '(|Test'
+    ' _ "$pcre_grep" '(|Test'
     [ "$status" -eq 2 ]
 
     run bash -c '
-      pattern=$1
-      if printf "" | grep -P -- "$pattern" >/dev/null 2>&1; then :; else
+      grep_bin=$1
+      pattern=$2
+      if printf "" | "$grep_bin" -P -- "$pattern" >/dev/null 2>&1; then :; else
         status=$?
         if [ "$status" -eq 2 ]; then exit 2; fi
       fi
-    ' _ '(^|/)di(/|$)'
+    ' _ "$pcre_grep" '(^|/)di(/|$)'
     [ "$status" -eq 0 ]
 }
 

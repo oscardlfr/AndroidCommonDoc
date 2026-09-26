@@ -186,6 +186,19 @@ test('canonical confinement treats a parent-path alias and its real path as the 
   assert.strictEqual(store.readConfinedFile(logicalWave, canonicalTarget).bytes.toString('utf8'), '{}\n');
 });
 
+test('canonical confinement accepts an aliased target beneath a real wave directory', () => {
+  const container = freshRoot();
+  const realParent = path.join(container, 'real-parent');
+  const aliasParent = path.join(container, 'alias-parent');
+  fs.mkdirSync(realParent);
+  fs.symlinkSync(realParent, aliasParent, process.platform === 'win32' ? 'junction' : 'dir');
+  const realWave = path.join(realParent, 'wave-demo');
+  fs.mkdirSync(realWave);
+  const aliasedTarget = path.join(aliasParent, 'wave-demo', 'record.json');
+  fs.writeFileSync(path.join(realWave, 'record.json'), Buffer.from('{}\n'));
+  assert.strictEqual(store.readConfinedFile(realWave, aliasedTarget).bytes.toString('utf8'), '{}\n');
+});
+
 test('RED: readConfinedFile rejects a `..` traversal segment', () => {
   const waveDir = freshRoot();
   const escaping = path.join(waveDir, '..', 'escaped.json');
@@ -362,6 +375,19 @@ test('RED: publishNoClobber rejects a targetPath lexically outside waveDir entir
   const outsideTarget = path.join(freshRoot(), 'arch-testing-verdict-prep.json');
   assertReasonCode(() => store.publishNoClobber(waveDir, outsideTarget, Buffer.from('{}\n')), 'confinement-failed');
   assert.strictEqual(fs.existsSync(outsideTarget), false);
+});
+
+test('publishNoClobber accepts a missing target reached through an alias above the wave directory', () => {
+  const container = freshRoot();
+  const realParent = path.join(container, 'real-parent');
+  const aliasParent = path.join(container, 'alias-parent');
+  fs.mkdirSync(realParent);
+  fs.symlinkSync(realParent, aliasParent, process.platform === 'win32' ? 'junction' : 'dir');
+  const realWave = path.join(realParent, 'wave-demo');
+  fs.mkdirSync(realWave);
+  const aliasedTarget = path.join(aliasParent, 'wave-demo', 'arch-testing-verdict-prep.json');
+  store.publishNoClobber(realWave, aliasedTarget, Buffer.from('{}\n'));
+  assert.strictEqual(fs.readFileSync(path.join(realWave, 'arch-testing-verdict-prep.json'), 'utf8'), '{}\n');
 });
 
 test('RED: publishNoClobber rejects writing through a Windows junction ancestor component', { skip: process.platform !== 'win32' ? 'Windows-native junction case; this leg is not win32' : false }, () => {

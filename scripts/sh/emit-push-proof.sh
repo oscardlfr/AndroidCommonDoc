@@ -526,9 +526,9 @@ if _test_suite_entry is not None and _test_suite_entry.get('result') == 'PASS':
     _run_ids = [x for x in str(_evidence.get('run_ids', '')).split(',') if x]
     if len(set(_run_ids)) < 2:
         die(f"test-suite-evidence-reused: run_ids={_run_ids!r} do not prove two independent runs")
-    _log_digests = [x for x in str(_evidence.get('log_digests', '')).split(',') if x]
-    if len(set(_log_digests)) < 2:
-        die(f"test-suite-evidence-reused: log_digests={_log_digests!r} do not prove two retained artifacts")
+    _log_identities = [x for x in str(_evidence.get('log_identities', '')).split(',') if x]
+    if len(set(_log_identities)) < 2:
+        die(f"test-suite-evidence-reused: log_identities={_log_identities!r} do not prove two independent retained artifacts")
 
     # Sanity floor (Amendment A, REQUIRED) -- "a guard that cannot fail is worse than none".
     # Die-code choice matters, not just die-vs-pass: ok<=0/expected<=0 means nothing ran
@@ -1074,6 +1074,7 @@ bats_evidence = {
     "agreement_count": _ev.get("agreement_count", 0),
     "run_ids":      _ev.get("run_ids", ""),
     "log_digests":  _ev.get("log_digests", ""),
+    "log_identities": _ev.get("log_identities", ""),
 }
 
 proof = {
@@ -1235,9 +1236,9 @@ if bats_evidence.get('agreement_count', 0) < 2:
 _run_ids = [x for x in str(bats_evidence.get('run_ids', '')).split(',') if x]
 if len(set(_run_ids)) < 2:
     die(f"bats-evidence-reused: run_ids={_run_ids!r} do not prove independent runs")
-_log_digests = [x for x in str(bats_evidence.get('log_digests', '')).split(',') if x]
-if len(set(_log_digests)) < 2:
-    die(f"bats-evidence-reused: log_digests={_log_digests!r} do not prove independent retained artifacts")
+_log_identities = [x for x in str(bats_evidence.get('log_identities', '')).split(',') if x]
+if len(set(_log_identities)) < 2:
+    die(f"bats-evidence-reused: log_identities={_log_identities!r} do not prove independent retained artifacts")
 
 print("[emit-push-proof] verify-proof: PASS", file=sys.stderr)
 PYEOF

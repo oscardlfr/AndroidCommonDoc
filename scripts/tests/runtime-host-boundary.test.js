@@ -953,8 +953,6 @@ test('R131-BOUNDARY-ADMITTED-ENTRYPOINT-PRETOOLUSE-26: exact signed rewritten en
   const rll = require('../lib/runtime-role-lifecycle.cjs');
   const entrypoints = require('../lib/runtime-collaboration-entrypoints.cjs');
   const intent = { scope: 'all' };
-  const plan = entrypoints.planEntrypointStep('monitor-docs', intent, PROJECT_ROOT);
-  const sessionId = 'r131-boundary-production-' + crypto.randomBytes(12).toString('hex');
   // Certificates are stored per platform, so this is no longer Windows-only:
   // whichever platform has a published certificate and its pinned executable
   // present exercises the real production identity path on that host.
@@ -994,34 +992,61 @@ test('R131-BOUNDARY-ADMITTED-ENTRYPOINT-PRETOOLUSE-26: exact signed rewritten en
     t.skip('the pinned Claude executable for this platform is not installed here');
     return;
   }
-  assert.strictEqual(host.recordProductionSessionIdentity({
-    projectRoot: PROJECT_ROOT,
-    event: {
-      type: 'system', subtype: 'init', session_id: sessionId,
-      model: 'claude-sonnet-5', cwd: PROJECT_ROOT,
-      tools: ['Task', 'Bash', 'Read', 'SendMessage'], mcp_servers: [],
-    },
-    hostPin: {
-      executablePath: executable, cliVersion: certificate.cli_version,
-      observerPath: path.join(PROJECT_ROOT, 'scripts', 'tests', 'fixtures', 'claude-host-contract-probe.cjs'),
-      transportProfile: certificate.transport_profile, os: process.platform,
-    },
-  }).ok, true);
-  const minted = host.mintProductionHostComposition({
-    projectRoot: PROJECT_ROOT,
-    event: { hook_event_name: 'PreToolUse', tool_name: 'Bash', session_id: sessionId },
-    entrypoint: 'monitor-docs', argvDigest: plan.argv_digest, roleScope: plan.role_scope,
-  });
-  assert.strictEqual(minted.ok, true);
-  const command = rll.renderPosixDirect([
-    process.execPath, path.join(PROJECT_ROOT, 'scripts/lib/runtime-collaboration-entrypoints.cjs'), 'execute',
-    '--entrypoint', 'monitor-docs', '--project-root', PROJECT_ROOT,
-    '--intent', Buffer.from(JSON.stringify(intent)).toString('base64url'),
-    '--host-composition', minted.compositionId,
-  ]);
-  assert.deepStrictEqual(lib.admitEntrypointPreToolUse({
-    hook_event_name: 'PreToolUse', tool_name: 'Bash', cwd: PROJECT_ROOT, tool_input: { command },
-  }), { admitted: true, compositionId: minted.compositionId });
+  const consumerRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'r131-consumer-fixture-'));
+  try {
+    const runtimeContext = require('../lib/runtime-project-context.cjs');
+    const inventory = runtimeContext.computeRuntimeToolkitInventory(PROJECT_ROOT);
+    assert.strictEqual(inventory.ok, true, JSON.stringify(inventory));
+    const toolkitCommit = spawnSync('git', ['rev-parse', 'HEAD'], { cwd: PROJECT_ROOT, encoding: 'utf8' }).stdout.trim();
+    fs.mkdirSync(path.join(consumerRoot, '.planning', 'wave-r131-fixture'), { recursive: true });
+    fs.writeFileSync(path.join(consumerRoot, '.planning', 'wave-r131-fixture', 'PLAN.md'), '# isolated R131 fixture\n');
+    fs.writeFileSync(path.join(consumerRoot, 'l0-manifest.json'), JSON.stringify({
+      version: 2,
+      sources: [{ layer: 'L0', path: PROJECT_ROOT, role: 'tooling' }],
+      runtime: {
+        schema: 'runtime-consumer/v1', enabled: true, consumer_layer: 'L2',
+        toolkit_commit: toolkitCommit, toolkit_content_sha256: inventory.digest,
+      },
+    }));
+    for (const args of [
+      ['init', '-q'], ['config', 'user.email', 'test@example.invalid'],
+      ['config', 'user.name', 'Test'], ['add', '.'], ['commit', '-qm', 'fixture'],
+    ]) assert.strictEqual(spawnSync('git', args, { cwd: consumerRoot }).status, 0);
+
+    const plan = entrypoints.planEntrypointStep('monitor-docs', intent, consumerRoot);
+    const sessionId = 'r131-boundary-production-' + crypto.randomBytes(12).toString('hex');
+    assert.strictEqual(host.recordProductionSessionIdentity({
+      projectRoot: consumerRoot,
+      event: {
+        type: 'system', subtype: 'init', session_id: sessionId,
+        model: 'claude-sonnet-5', cwd: consumerRoot,
+        tools: ['Task', 'Bash', 'Read', 'SendMessage'], mcp_servers: [],
+      },
+      hostPin: {
+        executablePath: executable, cliVersion: certificate.cli_version,
+        observerPath: path.join(PROJECT_ROOT, 'scripts', 'tests', 'fixtures', 'claude-host-contract-probe.cjs'),
+        transportProfile: certificate.transport_profile, os: process.platform,
+      },
+    }).ok, true);
+    const minted = host.mintProductionHostComposition({
+      projectRoot: consumerRoot,
+      event: { hook_event_name: 'PreToolUse', tool_name: 'Bash', session_id: sessionId },
+      entrypoint: 'monitor-docs', argvDigest: plan.argv_digest, roleScope: plan.role_scope,
+    });
+    assert.strictEqual(minted.ok, true);
+    const command = rll.renderPosixDirect([
+      process.execPath, path.join(PROJECT_ROOT, 'scripts/lib/runtime-collaboration-entrypoints.cjs'), 'execute',
+      '--entrypoint', 'monitor-docs', '--project-root', consumerRoot,
+      '--intent', Buffer.from(JSON.stringify(intent)).toString('base64url'),
+      '--host-composition', minted.compositionId,
+    ]);
+    assert.deepStrictEqual(lib.admitEntrypointPreToolUse({
+      hook_event_name: 'PreToolUse', tool_name: 'Bash', cwd: consumerRoot, tool_input: { command },
+    }), { admitted: true, compositionId: minted.compositionId });
+  } finally {
+    try { fs.rmSync(rll.registryRepoDir(consumerRoot), { recursive: true, force: true }); } catch { /* best effort */ }
+    fs.rmSync(consumerRoot, { recursive: true, force: true });
+  }
 });
 
 test('R131-BOUNDARY-EXACT-ACTION-CORRELATION-27: Agent event must match exact durable action and bootstrap', () => {

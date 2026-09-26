@@ -1525,6 +1525,69 @@ test('P1-HOST-CERT-FAIL-CLOSED RED: publisher rejects trusted-summary lies, obse
   }
 });
 
+test('P1-HOST-CERT-RECERTIFY: an explicit replacement atomically advances a previously verified platform certificate', () => {
+  const mod = requireHostClaude();
+  const fixture = writeHostContractFixture('recertify');
+  try {
+    const args = { projectRoot: fixture.projectRoot, qualificationPath: fixture.qualificationPath,
+      evidenceRoot: fixture.evidenceRoot, observerPath: fixture.observerPath };
+    const first = mod.publishClaudeHostContractPackage(args);
+    assert.strictEqual(first.ok, true, JSON.stringify(first));
+    const firstBytes = fs.readFileSync(first.packagePath);
+
+    fs.writeFileSync(fixture.executablePath, Buffer.from('isolated claude executable recertified', 'utf8'));
+    const streamPath = path.join(fixture.evidenceRoot, 'claude-stream.jsonl');
+    const stream = fs.readFileSync(streamPath, 'utf8').trim().split(/\r?\n/).map(JSON.parse);
+    stream[0].claude_code_version = '2.1.262';
+    fs.writeFileSync(streamPath, stream.map((row) => JSON.stringify(row)).join('\n') + '\n');
+    fixture.qualification.cli.version = '2.1.262';
+    fixture.qualification.cli.executable_sha256 = sha256bytes(fs.readFileSync(fixture.executablePath));
+    fixture.qualification.evidence_sha256['claude-stream.jsonl'] = sha256bytes(fs.readFileSync(streamPath));
+    fixture.qualification.qualified_at = '2026-09-05T15:00:00.000Z';
+    fs.writeFileSync(fixture.qualificationPath, JSON.stringify(fixture.qualification));
+
+    const replaced = mod.publishClaudeHostContractPackage({ ...args, replaceExisting: true });
+    assert.strictEqual(replaced.ok, true, JSON.stringify(replaced));
+    assert.strictEqual(replaced.replaced, true);
+    assert.notDeepStrictEqual(fs.readFileSync(replaced.packagePath), firstBytes);
+    assert.strictEqual(mod.verifyClaudeHostContractPackage(fixture.projectRoot, {
+      executablePath: fixture.executablePath, cliVersion: '2.1.262', observerPath: fixture.observerPath,
+      transportProfile: 'native-claude-cli', os: process.platform,
+    }).ok, true);
+    const temporaryFiles = fs.readdirSync(path.dirname(replaced.packagePath))
+      .filter((name) => name.includes('.tmp'));
+    assert.deepStrictEqual(temporaryFiles, []);
+  } finally {
+    cleanupHostContractFixture(fixture);
+  }
+});
+
+test('P1-HOST-CERT-RECERTIFY: replacement refuses an untrusted existing package and preserves its bytes', () => {
+  const mod = requireHostClaude();
+  const fixture = writeHostContractFixture('recertify-untrusted');
+  try {
+    const published = mod.publishClaudeHostContractPackage({
+      projectRoot: fixture.projectRoot, qualificationPath: fixture.qualificationPath,
+      evidenceRoot: fixture.evidenceRoot, observerPath: fixture.observerPath,
+    });
+    assert.strictEqual(published.ok, true, JSON.stringify(published));
+    const untrusted = Buffer.from('{"untrusted":true}\n');
+    fs.writeFileSync(published.packagePath, untrusted);
+    fs.writeFileSync(fixture.executablePath, Buffer.from('different executable', 'utf8'));
+    fixture.qualification.cli.executable_sha256 = sha256bytes(fs.readFileSync(fixture.executablePath));
+    fs.writeFileSync(fixture.qualificationPath, JSON.stringify(fixture.qualification));
+    const denied = mod.publishClaudeHostContractPackage({
+      projectRoot: fixture.projectRoot, qualificationPath: fixture.qualificationPath,
+      evidenceRoot: fixture.evidenceRoot, observerPath: fixture.observerPath, replaceExisting: true,
+    });
+    assert.strictEqual(denied.ok, false);
+    assert.strictEqual(denied.reason, 'HOST_CONTRACT_EXISTING_PACKAGE_UNTRUSTED');
+    assert.deepStrictEqual(fs.readFileSync(published.packagePath), untrusted);
+  } finally {
+    cleanupHostContractFixture(fixture);
+  }
+});
+
 // --- F-24: platform-scoped storage for the signed host certificate ---
 //
 // The certificate already binds its platform CRYPTOGRAPHICALLY: `os` is one of

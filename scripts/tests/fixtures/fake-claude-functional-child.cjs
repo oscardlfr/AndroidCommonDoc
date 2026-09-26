@@ -1002,8 +1002,9 @@ const initEvent = {
   capabilities: scenario === 'p4-missing-interrupt-capability'
     ? []
     : ['interrupt_receipt_v1', 'interrupt_cancel_queued_v1', 'msg_lifecycle_v1'],
+  ...(scenario === 'effort-inactive' ? { per_turn_effort_active: false } : {}),
 };
-if (!(directRole && scenario === 'direct-role-init-after-input')) emit(initEvent);
+if (scenario !== 'startup-silent' && !(directRole && scenario === 'direct-role-init-after-input')) emit(initEvent);
 if (scenario === 'wrong-session-frame' || scenario === 'hcp-wrong-session') {
   emit({ type: 'system', subtype: 'foreign-session-frame', session_id: 'foreign-session' });
 }
@@ -1014,6 +1015,7 @@ if (scenario === 'malformed-json' || scenario === 'hcp-malformed-json') {
 const input = readline.createInterface({ input: process.stdin, crlfDelay: Infinity });
 input.on('line', (line) => {
   if (!line.trim()) return;
+  if (scenario === 'startup-silent') return;
   const message = JSON.parse(line);
   if (message.type === 'control_request') {
     if (!awaitingActionInterrupt) process.exit(96);

@@ -269,6 +269,49 @@ test('CE-02 managed conductor rejects invalid init before executing any host com
   assert.equal(run.state.managed_conductor_commands, undefined);
 });
 
+test('CFC-STARTUP-WATCHDOG terminates a child that emits no system/init', async () => {
+  const run = await runScenario('startup-silent', {
+    operation: 'host-contract-probe', transportProfile: 'native-claude-cli', nativeFixture: true,
+    extraEnv: { P4_CERT_STARTUP_TIMEOUT_MS: '100' },
+  });
+  assert.notEqual(run.code, 0);
+  assert.equal(run.state.status, 'HOST_STARTUP_TIMEOUT');
+  assert.equal(run.state.startup_timeout_ms, 100);
+});
+
+test('CFC-FIRST-ACTIVITY-WATCHDOG terminates a child that emits init and then stays silent', async () => {
+  const root = fs.mkdtempSync(path.join(privateRoot, 'cfc-init-then-silent-child-'));
+  const childPath = path.join(root, 'init-then-silent.cjs');
+  fs.writeFileSync(childPath, `'use strict';
+const index = process.argv.indexOf('--session-id');
+const sessionId = index === -1 ? null : process.argv[index + 1];
+process.stdout.write(JSON.stringify({
+  type: 'system', subtype: 'init', cwd: process.cwd(), session_id: sessionId,
+  tools: ['Task', 'Bash', 'SendMessage', 'Read', 'Glob'],
+  mcp_servers: [{ name: 'docs' }], model: 'fake-model-literal',
+  permissionMode: 'bypassPermissions', claude_code_version: '2.1.261',
+  agents: [], capabilities: [],
+}) + '\\n');
+process.stdin.resume();
+`);
+  try {
+    const startedAt = Date.now();
+    const run = await runScenario('init-then-silent', {
+      operation: 'host-contract-probe', transportProfile: 'native-claude-cli', nativeFixture: true,
+      extraEnv: {
+        P4_CERT_NATIVE_TRANSPORT_FAKE_CHILD: childPath,
+        P4_CERT_FIRST_ACTIVITY_TIMEOUT_MS: '100',
+      },
+    });
+    assert.notEqual(run.code, 0);
+    assert.equal(run.state.status, 'HOST_FIRST_ACTIVITY_TIMEOUT');
+    assert.equal(run.state.first_activity_timeout_ms, 100);
+    assert.ok(Date.now() - startedAt < 5_000, 'first-activity timeout must fail well before the outer recertification timeout');
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('CE-03 managed conductor fails closed when the model attempts a host Bash command', async () => {
   const run = await runScenario('managed-model-bash', {
     operation: 'entrypoint-protocol', transportProfile: 'native-claude-cli', nativeFixture: true,
@@ -1105,6 +1148,8 @@ test('NATIVE-ENTRYPOINT runs entrypoint-protocol through the pinned native launc
     control: '--effort',
     expected_observed: 'high',
     observed: 'high',
+    per_turn_effort_active: null,
+    verification: 'observed',
     observation_source: 'assistant.effort-if-emitted',
   });
   assert.equal(run.state.native_argv.filter((value) => value === '--append-system-prompt').length, 1);
@@ -2047,14 +2092,14 @@ test('CFC-PIN rejects observed effort drift before relaying an owning action set
   assert.notEqual(run.code, 0);
   assert.equal(run.state.status, 'HOST_PIN_MISMATCH');
   assert.equal(run.state.effort_profile.requested, 'high');
-  assert.equal(run.state.effort_profile.effective, 'high');
+  assert.equal(run.state.effort_profile.effective, 'max');
   assert.equal(run.state.effort_profile.control, '--effort');
   assert.equal(run.state.effort_profile.expected_observed, 'high');
   assert.equal(run.state.effort_profile.observed, 'max');
   assert.equal(run.state.action_relay_count, 0);
 });
 
-test('CFC-PIN accepts the exact --effort control when Claude emits no undocumented effort telemetry', async () => {
+test('CFC-PIN records --effort as requested but unproven when Claude emits no effort telemetry', async () => {
   const run = await runScenario('p4-effort-telemetry-absent', {
     operation: 'entrypoint-protocol',
     transportProfile: 'native-claude-cli',
@@ -2064,8 +2109,19 @@ test('CFC-PIN accepts the exact --effort control when Claude emits no undocument
   const effortIndex = run.state.native_argv.indexOf('--effort');
   assert.notEqual(effortIndex, -1);
   assert.equal(run.state.native_argv[effortIndex + 1], 'high');
-  assert.equal(run.state.effort_profile.effective, 'high');
+  assert.equal(run.state.effort_profile.effective, null);
   assert.equal(run.state.effort_profile.observed, null);
+  assert.equal(run.state.effort_profile.verification, 'unproven');
+});
+
+test('CFC-PIN fails an effort-controlled entrypoint certification when init reports effort inactive', async () => {
+  const run = await runScenario('effort-inactive', {
+    operation: 'entrypoint-protocol', transportProfile: 'native-claude-cli', nativeFixture: true,
+  });
+  assert.notEqual(run.code, 0);
+  assert.equal(run.state.status, 'HOST_EFFORT_INACTIVE');
+  assert.equal(run.state.effort_profile.per_turn_effort_active, false);
+  assert.equal(run.state.effort_profile.effective, null);
 });
 
 test('CFC-RELAY keeps bootstrap bytes out of the model proposal while requiring canonical observed execution', async () => {

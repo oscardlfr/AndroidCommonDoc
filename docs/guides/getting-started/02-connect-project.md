@@ -13,7 +13,7 @@ description: >
   hooks, Copilot instructions, and run the first L0 sync. / Usar
   setup-toolkit.sh para instalar el plugin de Gradle, hooks de Claude Code,
   instrucciones de Copilot y ejecutar el primer sync de L0.
-last_updated: "2026-03-18"
+last_updated: "2026-09-26"
 ---
 
 # Step 2 — Connect a downstream project
@@ -92,6 +92,18 @@ bash "$ANDROID_COMMON_DOC/setup/install-copilot-prompts.sh" --projects my-app
 cd "$ANDROID_COMMON_DOC/mcp-server"
 npx tsx src/sync/sync-l0-cli.ts --project-root /path/to/my-project
 ```
+
+For the collaboration runtime, build the MCP server and add `--runtime`, then
+launch Claude with the sibling toolkit explicitly allowed:
+
+```bash
+node "$ANDROID_COMMON_DOC/mcp-server/build/sync/sync-l0-cli.js" \
+  --project-root /path/to/my-project --runtime
+cd /path/to/my-project
+claude --add-dir "$ANDROID_COMMON_DOC"
+```
+
+Operational details and recovery: [Runtime consumer operations](../runtime-consumer-operations.md).
 
 ---
 

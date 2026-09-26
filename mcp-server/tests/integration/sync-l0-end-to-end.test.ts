@@ -14,11 +14,13 @@
  * cannot detect (prep-8 F7 root cause: CLI orchestration gap).
  */
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { writeFile, mkdir, rm, readdir, access } from "node:fs/promises";
+import { writeFile, mkdir, rm, readdir, access, mkdtemp, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { spawnSync } from "node:child_process";
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { existsSync, readFileSync, writeFileSync, realpathSync } from "node:fs";
+import { installRuntimeConsumer, resolveL0Source } from "../../src/sync/sync-engine.js";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -122,6 +124,120 @@ describe("sync-l0 end-to-end CLI", () => {
       ? require("node:fs").readdirSync(hooksDir)
       : [];
     expect(hookFiles).not.toContain("premature-execution-gate.js");
+    const settings = JSON.parse(readFileSync(join(fixtureDir, ".claude", "settings.json"), "utf8"));
+    const commands = Object.values(settings.hooks).flatMap((blocks: any) =>
+      blocks.flatMap((block: any) => block.hooks.map((hook: any) => hook.command)));
+    expect(commands.some((command: string) => command.includes("premature-execution-gate.js"))).toBe(false);
+  });
+
+  it("registers source-coupled hooks from L0 and executes the push gate in a clean consumer", () => {
+    const legacyCommand = 'node "$CLAUDE_PROJECT_DIR"/.claude/hooks/push-authorization-gate.js';
+    writeFileSync(join(fixtureDir, ".claude", "settings.json"), JSON.stringify({
+      hooks: { PreToolUse: [{ matcher: "Bash", hooks: [{ type: "command", command: legacyCommand }] }] },
+    }, null, 2));
+
+    const result = spawnSync(process.execPath, [CLI_PATH, "--project-root", fixtureDir], {
+      encoding: "utf8", timeout: 60000,
+    });
+    expect(result.status, `stderr: ${result.stderr}`).toBe(0);
+
+    const settings = JSON.parse(readFileSync(join(fixtureDir, ".claude", "settings.json"), "utf8"));
+    const commands = Object.values(settings.hooks).flatMap((blocks: any) =>
+      blocks.flatMap((block: any) => block.hooks.map((hook: any) => hook.command)));
+    const pushCommands = commands.filter((command: string) => command.includes("push-authorization-gate.js"));
+    expect(pushCommands).toHaveLength(1);
+    expect(pushCommands[0]).toContain(realpathSync(L0_ROOT).replace(/\\/g, "/"));
+    expect(pushCommands[0].startsWith(JSON.stringify(realpathSync(process.execPath).replace(/\\/g, "/"))))
+      .toBe(true);
+    expect(pushCommands[0]).not.toContain("$CLAUDE_PROJECT_DIR");
+    expect(existsSync(join(fixtureDir, ".claude", "hooks", "push-authorization-gate.js"))).toBe(false);
+
+    const hook = spawnSync(process.execPath, [join(L0_ROOT, ".claude", "hooks", "push-authorization-gate.js")], {
+      cwd: fixtureDir,
+      env: { ...process.env, CLAUDE_PROJECT_DIR: fixtureDir },
+      input: JSON.stringify({ tool_name: "Bash", tool_input: { command: "echo healthy" } }),
+      encoding: "utf8",
+      timeout: 10000,
+    });
+    expect(hook.status, hook.stderr).toBe(0);
+    expect(hook.stderr).not.toContain("MODULE_NOT_FOUND");
+  });
+});
+
+describe("sync source and managed runtime file boundaries", () => {
+  it("fails closed when a linked worktree relative source resolves to two distinct toolkits", async () => {
+    const root = await mkdtemp(join(tmpdir(), "sync-l0-ambiguous-worktree-"));
+    const mainRoot = join(root, "main", "consumer");
+    const linkedRoot = join(root, "linked", "consumer");
+    const mainToolkit = join(root, "main", "toolkit");
+    const linkedToolkit = join(root, "linked", "toolkit");
+    try {
+      for (const toolkit of [mainToolkit, linkedToolkit]) {
+        await mkdir(join(toolkit, "skills"), { recursive: true });
+        await writeFile(join(toolkit, "skills", "registry.json"), "{}\n", "utf8");
+      }
+      await mkdir(mainRoot, { recursive: true });
+      await writeFile(join(mainRoot, "tracked.txt"), "fixture\n", "utf8");
+      for (const args of [
+        ["init", "-q"], ["config", "user.email", "test@example.invalid"],
+        ["config", "user.name", "Test"], ["add", "."], ["commit", "-qm", "fixture"],
+      ]) {
+        const git = spawnSync("git", args, { cwd: mainRoot, encoding: "utf8" });
+        expect(git.status, git.stderr).toBe(0);
+      }
+      await mkdir(join(root, "linked"), { recursive: true });
+      const linked = spawnSync("git", ["worktree", "add", "-q", "-b", "ambiguous-source", linkedRoot], {
+        cwd: mainRoot, encoding: "utf8",
+      });
+      expect(linked.status, linked.stderr).toBe(0);
+
+      await expect(resolveL0Source("../toolkit", linkedRoot)).rejects.toThrow(
+        /ambiguous across repository-owned resolution bases/,
+      );
+      await writeFile(join(linkedRoot, "l0-manifest.json"), makeManifest("../toolkit"), "utf8");
+      const install = await installRuntimeConsumer(linkedRoot, linkedToolkit);
+      expect(install.ok).toBe(false);
+      expect(install.reason).toBe("runtime-l0-source-invalid");
+      expect(existsSync(join(linkedRoot, ".claude"))).toBe(false);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("updates an unchanged managed topology and rejects consumer drift", async () => {
+    const consumer = await mkdtemp(join(tmpdir(), "runtime-topology-upgrade-"));
+    const topologyRelative = ".claude/registry/wave-topology.yaml";
+    const topologyPath = join(consumer, topologyRelative);
+    try {
+      await writeFile(join(consumer, "l0-manifest.json"), makeManifest(L0_ROOT), "utf8");
+      const installed = await installRuntimeConsumer(consumer, L0_ROOT);
+      expect(installed.ok).toBe(true);
+
+      const previousManagedBytes = "schema: previous-toolkit-version\n";
+      await writeFile(topologyPath, previousManagedBytes, "utf8");
+      const manifestPath = join(consumer, "l0-manifest.json");
+      const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
+      manifest.checksums[topologyRelative] = `sha256:${createHash("sha256").update(previousManagedBytes).digest("hex")}`;
+      await writeFile(manifestPath, JSON.stringify(manifest, null, 2) + "\n", "utf8");
+
+      const dryRun = await installRuntimeConsumer(consumer, L0_ROOT, { dryRun: true });
+      expect(dryRun.ok).toBe(true);
+      expect(await readFile(topologyPath, "utf8")).toBe(previousManagedBytes);
+
+      const updated = await installRuntimeConsumer(consumer, L0_ROOT);
+      expect(updated.ok).toBe(true);
+      expect(await readFile(topologyPath, "utf8"))
+        .toBe(await readFile(join(L0_ROOT, topologyRelative), "utf8"));
+
+      const consumerDrift = "schema: consumer-owned-drift\n";
+      await writeFile(topologyPath, consumerDrift, "utf8");
+      const conflict = await installRuntimeConsumer(consumer, L0_ROOT);
+      expect(conflict.ok).toBe(false);
+      expect(conflict.reason).toBe(`runtime-consumer-file-conflict:${topologyRelative}`);
+      expect(await readFile(topologyPath, "utf8")).toBe(consumerDrift);
+    } finally {
+      await rm(consumer, { recursive: true, force: true });
+    }
   });
 });
 

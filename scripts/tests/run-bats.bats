@@ -234,10 +234,11 @@ EOF
 
     # Wave A: no-silent-install prefixes every real bats invocation with --no-install.
     mapfile -t args < "$WORK_DIR/npx-args"
+    canonical_work_dir="$(cd "$WORK_DIR" && pwd -P)"
     [ "${#args[@]}" -eq 3 ]
     [ "${args[0]}" = "--no-install" ]
     [ "${args[1]}" = "bats" ]
-    [ "${args[2]}" = "$WORK_DIR/scripts/tests" ]
+    [ "${args[2]}" = "$canonical_work_dir/scripts/tests" ]
 }
 
 @test "#RB12 EXPLICIT TARGETS: caller-supplied bats targets pass through unchanged" {

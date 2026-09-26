@@ -158,7 +158,7 @@ select_bats_handoff() {
     BH_COMPLETE=""; BH_SCOPE=""; BH_GENERATED_AT=""; BH_PATH=""
     BH_PLAN_DIGEST=""; BH_WAVE_SLUG=""; BH_TARGET_DIGEST=""; BH_ENV_FINGERPRINT=""
     BH_STARTED_AT=""; BH_FINISHED_AT=""; BH_LOG_DIGEST=""; BH_TOOL_VERSIONS=""
-    BH_AGREEMENT_COUNT="0"; BH_RUN_IDS=""; BH_LOG_DIGESTS=""
+    BH_AGREEMENT_COUNT="0"; BH_RUN_IDS=""; BH_LOG_DIGESTS=""; BH_LOG_IDENTITIES=""
     if [[ ! "$require_agreeing" =~ $_BH_RE_UINT || "$require_agreeing" -lt 1 ]]; then
         BH_STATUS="malformed"
         return 0
@@ -312,6 +312,7 @@ select_bats_handoff() {
     BH_AGREEMENT_COUNT="$agreement_count"
     BH_RUN_IDS="$unique_run_ids"
     BH_LOG_DIGESTS="$unique_log_digests"
+    BH_LOG_IDENTITIES="$unique_log_identities"
 
     BH_STATUS="ok"
     BH_HEAD="$(handoff_get "$best" "BATS_HEAD")"
@@ -372,8 +373,8 @@ _bh_cli_select() {
         complete_lit="true"
     fi
 
-    printf '{"status":"%s","head":"%s","run_id":"%s","ok":%s,"not_ok":%s,"expected":%s,"total":%s,"complete":%s,"scope":"%s","generated_at":"%s","plan_digest":"%s","wave_slug":"%s","target_digest":"%s","environment_fingerprint":"%s","started_at":"%s","finished_at":"%s","log_digest":"%s","tool_versions":"%s","agreement_count":%s,"run_ids":"%s","log_digests":"%s"}\n' \
-        "$BH_STATUS" "$BH_HEAD" "$BH_RUN_ID" "$ok_n" "$not_ok_n" "$expected_n" "$total_n" "$complete_lit" "$BH_SCOPE" "$BH_GENERATED_AT" "$BH_PLAN_DIGEST" "$BH_WAVE_SLUG" "$BH_TARGET_DIGEST" "$BH_ENV_FINGERPRINT" "$BH_STARTED_AT" "$BH_FINISHED_AT" "$BH_LOG_DIGEST" "$BH_TOOL_VERSIONS" "$BH_AGREEMENT_COUNT" "$BH_RUN_IDS" "$BH_LOG_DIGESTS"
+    printf '{"status":"%s","head":"%s","run_id":"%s","ok":%s,"not_ok":%s,"expected":%s,"total":%s,"complete":%s,"scope":"%s","generated_at":"%s","plan_digest":"%s","wave_slug":"%s","target_digest":"%s","environment_fingerprint":"%s","started_at":"%s","finished_at":"%s","log_digest":"%s","tool_versions":"%s","agreement_count":%s,"run_ids":"%s","log_digests":"%s","log_identities":"%s"}\n' \
+        "$BH_STATUS" "$BH_HEAD" "$BH_RUN_ID" "$ok_n" "$not_ok_n" "$expected_n" "$total_n" "$complete_lit" "$BH_SCOPE" "$BH_GENERATED_AT" "$BH_PLAN_DIGEST" "$BH_WAVE_SLUG" "$BH_TARGET_DIGEST" "$BH_ENV_FINGERPRINT" "$BH_STARTED_AT" "$BH_FINISHED_AT" "$BH_LOG_DIGEST" "$BH_TOOL_VERSIONS" "$BH_AGREEMENT_COUNT" "$BH_RUN_IDS" "$BH_LOG_DIGESTS" "$BH_LOG_IDENTITIES"
     return 0
 }
 

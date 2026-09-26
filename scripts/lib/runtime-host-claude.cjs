@@ -713,6 +713,34 @@ function resolveEvidencePath(evidenceRoot, relativeName) {
   }
 }
 
+function atomicReplaceVerifiedHostContract(packagePath, packageBytes, hostOs) {
+  let stat;
+  try { stat = fs.lstatSync(packagePath); } catch { return { ok: false, reason: 'HOST_CONTRACT_PACKAGE_CONFLICT' }; }
+  if (!stat.isFile() || stat.isSymbolicLink() || !verifiedHostContractAt(packagePath, hostOs).ok) {
+    return { ok: false, reason: 'HOST_CONTRACT_EXISTING_PACKAGE_UNTRUSTED' };
+  }
+  const parent = path.dirname(packagePath);
+  const temporary = path.join(parent, `.${path.basename(packagePath)}.${process.pid}.${crypto.randomBytes(8).toString('hex')}.tmp`);
+  let fd;
+  try {
+    fd = fs.openSync(temporary, fs.constants.O_CREAT | fs.constants.O_EXCL | fs.constants.O_WRONLY, 0o600);
+    fs.writeFileSync(fd, packageBytes);
+    fs.fsyncSync(fd);
+    fs.closeSync(fd);
+    fd = undefined;
+    fs.renameSync(temporary, packagePath);
+    if (process.platform !== 'win32') {
+      const parentFd = fs.openSync(parent, fs.constants.O_RDONLY);
+      try { fs.fsyncSync(parentFd); } finally { fs.closeSync(parentFd); }
+    }
+    return { ok: true };
+  } catch {
+    if (fd !== undefined) try { fs.closeSync(fd); } catch { /* best effort */ }
+    try { fs.unlinkSync(temporary); } catch { /* best effort */ }
+    return { ok: false, reason: 'HOST_CONTRACT_PUBLISH_FAILED' };
+  }
+}
+
 function publishClaudeHostContractPackage(options) {
   const projectRoot = options && options.projectRoot;
   const evidenceRoot = options && options.evidenceRoot;
@@ -810,16 +838,22 @@ function publishClaudeHostContractPackage(options) {
   const legacyPath = hostContractLegacyPath(projectRoot);
   const packagePath = verifiedHostContractAt(legacyPath, certificate.os).ok ? legacyPath : platformPath;
   const packageBytes = Buffer.from(canonicalJSONStringify(pkg), 'utf8');
+  let replaced = false;
   try {
     fs.mkdirSync(path.dirname(packagePath), { recursive: true, mode: 0o700 });
     publishNoClobber(packagePath, packageBytes, {});
   } catch {
     let existing;
     try { existing = fs.readFileSync(packagePath); } catch { return { ok: false, reason: 'HOST_CONTRACT_PUBLISH_FAILED' }; }
-    if (!existing.equals(packageBytes)) return { ok: false, reason: 'HOST_CONTRACT_PACKAGE_CONFLICT' };
+    if (!existing.equals(packageBytes)) {
+      if (options.replaceExisting !== true) return { ok: false, reason: 'HOST_CONTRACT_PACKAGE_CONFLICT' };
+      const replacement = atomicReplaceVerifiedHostContract(packagePath, packageBytes, certificate.os);
+      if (!replacement.ok) return replacement;
+      replaced = true;
+    }
   }
   return { ok: true, packagePath, package: pkg, pinDigest: certificate.pin_digest,
-    hostContractDigest: digest(canonicalJSONStringify(certificate)) };
+    hostContractDigest: digest(canonicalJSONStringify(certificate)), replaced };
 }
 
 function verifiedHostContractAt(packagePath, hostOs) {

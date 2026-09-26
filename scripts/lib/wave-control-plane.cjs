@@ -145,7 +145,10 @@ function parsePlanClass(planText) {
   return match ? match[1] : 'HARNESS';
 }
 function topology(root) {
-  const yamlModule = path.join(root, 'mcp-server', 'node_modules', 'yaml');
+  // `root` is the consumer repository. Runtime dependencies belong to the L0
+  // toolkit that owns this module; requiring them from the consumer made every
+  // clean L1/L2 install depend on a nonexistent consumer `mcp-server` tree.
+  const yamlModule = path.resolve(__dirname, '../../mcp-server/node_modules/yaml');
   const topologyPath = path.join(root, '.claude', 'registry', 'wave-topology.yaml');
   assertSafeAncestry(root, topologyPath);
   const yaml = require(yamlModule);
@@ -237,15 +240,84 @@ function validateStateShape(state) {
     || new Date(state.updated_at).getTime() < previousTime) throw new Error('INVALID_PHASE_STATE');
   return state;
 }
+function validateVerdictSource(root, slug, state, transition, evidence) {
+  const phase = transition.from === 'PREP' ? 'prep' : 'verify-final';
+  const resolvedVerdictPath = path.isAbsolute(evidence.path) ? evidence.path : path.resolve(root, evidence.path);
+  // The control plane is source-referenced from L0 in consumers; its validator
+  // belongs to that same toolkit closure, not to a consumer-local scripts tree.
+  const cli = path.join(__dirname, 'verdict-evidence-contract-cli.cjs');
+  const waveDir = path.join(root, '.planning', 'wave-' + slug);
+  const result = spawnSync(process.execPath, [cli, 'validate', '--path', resolvedVerdictPath,
+    '--expect-role', evidence.role, '--expect-phase', phase, '--expect-wave-slug', slug,
+    '--expect-plan-sha256', state.plan_sha256, '--expect-head', transition.from_head],
+  { cwd: waveDir, encoding: 'utf8', timeout: 10000 });
+  let payload;
+  try { payload = JSON.parse((result.stdout || '').trim()); } catch {
+    return { ok: false, reason: 'validation-unavailable' };
+  }
+  return { ok: result.status === 0 && payload.authorizes === true,
+    reason: payload.reason || (result.status === 0 ? 'invalid' : 'validation-unavailable') };
+}
+
+function migrateLegacyDecisionlessState(root, slug, statePath, rawState) {
+  if (!rawState || typeof rawState !== 'object' || Array.isArray(rawState)
+    || !Array.isArray(rawState.transitions) || !Array.isArray(rawState.required_roles)) return null;
+  const candidate = JSON.parse(JSON.stringify(rawState));
+  let missingDecision = false;
+  const verdictTransitions = [];
+  for (const transition of candidate.transitions) {
+    if (!transition || (transition.from !== 'PREP' && transition.from !== 'VERIFY_FINAL')) continue;
+    if (!Array.isArray(transition.evidence)) return null;
+    const roles = [];
+    for (const evidence of transition.evidence) {
+      if (exactKeys(evidence, ['path', 'role'])) {
+        evidence.decision = 'approve';
+        missingDecision = true;
+      } else if (!exactKeys(evidence, ['decision', 'path', 'role'])) return null;
+      roles.push(evidence.role);
+    }
+    if (JSON.stringify(roles.slice().sort()) !== JSON.stringify(candidate.required_roles.slice().sort())) return null;
+    verdictTransitions.push(transition);
+  }
+  if (!missingDecision) return null;
+
+  // Prove that the state differs from the current schema only by the omitted
+  // decision field before trusting any path embedded in the legacy record.
+  validateStateShape(candidate);
+  for (const transition of verdictTransitions) {
+    for (const evidence of transition.evidence) {
+      const validation = validateVerdictSource(root, slug, candidate, transition, evidence);
+      if (!validation.ok) {
+        throw new Error(`LEGACY_PHASE_STATE_VERDICT_INVALID:${evidence.role}:${validation.reason}`);
+      }
+    }
+  }
+  // Callers enter through the same per-state lock used by normal transitions,
+  // so the verified candidate replaces the decisionless state atomically.
+  atomicWrite(statePath, candidate);
+  return candidate;
+}
+
+function readStateUnlocked(root, slug) {
+  const p = pathsFor(root, slug);
+  const rawState = JSON.parse(readRootFile(p.root, p.state).toString('utf8'));
+  try { return validateStateShape(rawState); }
+  catch (originalError) {
+    const migrated = migrateLegacyDecisionlessState(p.root, slug, p.state, rawState);
+    if (migrated) return migrated;
+    throw originalError;
+  }
+}
+
 function readState(root, slug) {
   const p = pathsFor(root, slug);
-  return validateStateShape(JSON.parse(readRootFile(p.root, p.state).toString('utf8')));
+  return withStateLock(p.root, p.state, () => readStateUnlocked(p.root, slug));
 }
 function initialize(root, slug) {
   const inputs = currentInputs(root, slug);
   return withStateLock(inputs.root, inputs.state, () => {
     if (fs.existsSync(inputs.state)) {
-      const existing = readState(root, slug);
+      const existing = readStateUnlocked(root, slug);
       if (existing.head !== inputs.head || existing.plan_sha256 !== inputs.planDigest) throw new Error('PHASE_STATE_INPUT_DRIFT');
       return existing;
     }
@@ -270,16 +342,15 @@ function verifyVerdicts(root, slug, state, phase, verdicts) {
     const verdictPath = supplied.get(role);
     if (!verdictPath) throw new Error('REQUIRED_VERDICT_MISSING:' + role);
     const resolvedVerdictPath = path.isAbsolute(verdictPath) ? verdictPath : path.resolve(root, verdictPath);
-    const cli = path.join(root, 'scripts', 'lib', 'verdict-evidence-contract-cli.cjs');
-    const waveDir = path.join(root, '.planning', 'wave-' + slug);
-    const result = spawnSync(process.execPath, [cli, 'validate', '--path', resolvedVerdictPath,
-      '--expect-role', role, '--expect-phase', phase, '--expect-wave-slug', slug,
-      '--expect-plan-sha256', state.plan_sha256, '--expect-head', state.head],
-    { cwd: waveDir, encoding: 'utf8', timeout: 10000 });
-    let payload;
-    try { payload = JSON.parse((result.stdout || '').trim()); } catch { throw new Error('VERDICT_VALIDATION_UNAVAILABLE:' + role); }
-    if (!payload.authorizes) throw new Error('VERDICT_NOT_AUTHORIZING:' + role + ':' + (payload.reason || 'invalid'));
-    results.push({ role, path: resolvedVerdictPath, decision: payload.decision });
+    const validation = validateVerdictSource(root, slug, state,
+      { from: phase === 'prep' ? 'PREP' : 'VERIFY_FINAL', from_head: state.head },
+      { role, path: resolvedVerdictPath });
+    if (!validation.ok) throw new Error('VERDICT_NOT_AUTHORIZING:' + role + ':' + validation.reason);
+    // The validator intentionally exposes only binding booleans plus
+    // `authorizes`; it does not echo the source decision. Once `authorizes` is
+    // true, the closed verdict contract has already proven decision=approve.
+    // Persist that canonical value explicitly so the state remains readable.
+    results.push({ role, path: resolvedVerdictPath, decision: 'approve' });
   }
   return results;
 }
@@ -287,7 +358,7 @@ function transition(root, slug, to, options = {}) {
   if (!PHASES.includes(to)) throw new Error('UNKNOWN_PHASE');
   const inputs = currentInputs(root, slug);
   return withStateLock(inputs.root, inputs.state, () => {
-  const state = readState(root, slug);
+  const state = readStateUnlocked(root, slug);
   if (state.plan_sha256 !== inputs.planDigest) throw new Error('PHASE_STATE_PLAN_DRIFT');
   if (NEXT[state.phase] !== to) throw new Error('ILLEGAL_PHASE_TRANSITION:' + state.phase + '->' + to);
   const headChanged = state.head !== inputs.head;

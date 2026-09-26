@@ -170,7 +170,7 @@ write_lone_cr_hook() {
   # present (5) byte-identical -- all 5 pass.
   provide_canonical_source
   write_canonical_hook
-  run bash "$SCRIPT" --repo-root "$REPO"
+  run bash "$SCRIPT" --repo-root "$REPO" --toolkit-root "$REPO"
   [ "$status" -eq 0 ]
 }
 
@@ -178,7 +178,7 @@ write_lone_cr_hook() {
   # Chain: (1) source present [satisfied] -- (2) no hook file at the
   # resolved path [TRIPPED]. Checks 3-5 never reached.
   provide_canonical_source
-  run bash "$SCRIPT" --repo-root "$REPO"
+  run bash "$SCRIPT" --repo-root "$REPO" --toolkit-root "$REPO"
   [ "$status" -ne 0 ]
   [[ "$output" == *"hook-absent"* ]] || return 1
 }
@@ -191,7 +191,7 @@ write_lone_cr_hook() {
   provide_canonical_source
   write_canonical_hook
   chmod -x "$REPO/.git/hooks/pre-push"
-  run bash "$SCRIPT" --repo-root "$REPO"
+  run bash "$SCRIPT" --repo-root "$REPO" --toolkit-root "$REPO"
   [ "$status" -ne 0 ]
   [[ "$output" == *"hook-not-executable"* ]] || return 1
 }
@@ -202,7 +202,7 @@ write_lone_cr_hook() {
   # stub [TRIPPED]. Check 5 never reached.
   provide_canonical_source
   write_marker_missing_hook
-  run bash "$SCRIPT" --repo-root "$REPO"
+  run bash "$SCRIPT" --repo-root "$REPO" --toolkit-root "$REPO"
   [ "$status" -ne 0 ]
   [[ "$output" == *"hook-marker-missing"* ]] || return 1
 }
@@ -213,7 +213,7 @@ write_lone_cr_hook() {
   # flipped byte outside the marker line [TRIPPED].
   provide_canonical_source
   write_drifted_hook
-  run bash "$SCRIPT" --repo-root "$REPO"
+  run bash "$SCRIPT" --repo-root "$REPO" --toolkit-root "$REPO"
   [ "$status" -ne 0 ]
   [[ "$output" == *"hook-drifted"* ]] || return 1
 }
@@ -227,7 +227,7 @@ write_lone_cr_hook() {
   # verifier that skipped or reordered this check could otherwise crash,
   # silently pass, or misreport a downstream reason instead.
   write_canonical_hook
-  run bash "$SCRIPT" --repo-root "$REPO"
+  run bash "$SCRIPT" --repo-root "$REPO" --toolkit-root "$REPO"
   [ "$status" -ne 0 ]
   [[ "$output" == *"canonical-source-missing"* ]] || return 1
 }
@@ -246,7 +246,7 @@ write_lone_cr_hook() {
   write_canonical_hook
   local other_cwd
   other_cwd="$(cd "$(mktemp -d)" && pwd -P)"
-  run bash -c "cd '$other_cwd' && bash '$SCRIPT' --repo-root '$REPO'"
+  run bash -c "cd '$other_cwd' && bash '$SCRIPT' --repo-root '$REPO' --toolkit-root '$REPO'"
   rm -rf "$other_cwd"
   [ "$status" -eq 0 ]
 }
@@ -268,7 +268,7 @@ write_lone_cr_hook() {
   # canonical and must PASS both before and after the tr -d '\r' fix.
   provide_canonical_source
   write_crlf_hook
-  run bash "$SCRIPT" --repo-root "$REPO"
+  run bash "$SCRIPT" --repo-root "$REPO" --toolkit-root "$REPO"
   [ "$status" -eq 0 ]
 }
 
@@ -284,12 +284,18 @@ write_lone_cr_hook() {
   # canonical).
   provide_canonical_source
   write_lone_cr_hook
-  run bash "$SCRIPT" --repo-root "$REPO"
+  run bash "$SCRIPT" --repo-root "$REPO" --toolkit-root "$REPO"
   [ "$status" -ne 0 ]
   [[ "$output" == *"hook-drifted"* ]] || return 1
 }
 
-@test "VGH-10 PASS: drive-letter absolute --git-path is not prefixed with repo root" {
+@test "VGH-10 PASS: without an override, canonical source resolves from the verifier checkout" {
+  write_canonical_hook
+  run env -u ANDROID_COMMON_DOC bash "$SCRIPT" --repo-root "$REPO"
+  [ "$status" -eq 0 ]
+}
+
+@test "VGH-11 PASS: drive-letter absolute --git-path is not prefixed with repo root" {
   provide_canonical_source
 
   local raw_hook_path hook_path run_cwd stub_dir

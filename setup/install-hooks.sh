@@ -173,8 +173,28 @@ for project in "${PROJECT_LIST[@]}"; do
         target_path="$target_hooks_dir/$hook_name"
 
         if [ -f "$target_path" ] && [ "$FORCE" = false ]; then
-            log_warn "  Skipping $hook_name (exists, use --force to overwrite)"
-            SKIPPED=$((SKIPPED + 1))
+            if cmp -s "$hook_file" "$target_path"; then
+                if [ ! -x "$target_path" ]; then
+                    if [ "$DRY_RUN" = true ]; then
+                        log_info "  [DRY RUN] Would repair executable bit: $hook_name"
+                    else
+                        chmod +x "$target_path"
+                        if [ ! -x "$target_path" ]; then
+                            log_err "  Failed to repair executable bit: $hook_name"
+                            ERRORS=$((ERRORS + 1))
+                            continue
+                        fi
+                        log_ok "  Repaired executable bit: $hook_name"
+                    fi
+                    INSTALLED=$((INSTALLED + 1))
+                else
+                    log_warn "  Skipping $hook_name (identical and already executable)"
+                    SKIPPED=$((SKIPPED + 1))
+                fi
+            else
+                log_warn "  Conflict: $hook_name differs from the toolkit (use --force to overwrite)"
+                ERRORS=$((ERRORS + 1))
+            fi
             continue
         fi
 
@@ -183,6 +203,11 @@ for project in "${PROJECT_LIST[@]}"; do
         else
             cp "$hook_file" "$target_path"
             chmod +x "$target_path"
+            if [ ! -x "$target_path" ]; then
+                log_err "  Installed hook is not executable: $hook_name"
+                ERRORS=$((ERRORS + 1))
+                continue
+            fi
             log_ok "  Copied: $hook_name"
         fi
         INSTALLED=$((INSTALLED + 1))
@@ -306,3 +331,7 @@ fi
 
 echo ""
 log_info "Restart Claude Code session (or use /hooks to review) for hooks to take effect."
+
+if [ "$ERRORS" -gt 0 ]; then
+    exit 1
+fi

@@ -2,11 +2,13 @@
 # verify-git-hooks.sh — clone-gating verifier (H1 Push Authority Bootstrap).
 #
 # USAGE
-#   verify-git-hooks.sh [--repo-root <path>]
+#   verify-git-hooks.sh [--repo-root <path>] [--toolkit-root <path>]
 #
 # --repo-root <path>   Repo root to verify against (default: `git rev-parse
 #                       --show-toplevel`) — same flag name and override
 #                       precedence as emit-push-proof.sh's own --repo-root.
+# --toolkit-root <path> L0 toolkit that owns the canonical hook source. Defaults
+#                       to ANDROID_COMMON_DOC, then this script's own checkout.
 #
 # WHAT IT CHECKS
 #   Confirms the git-layer pre-push hook — resolved via `git rev-parse
@@ -54,6 +56,9 @@ set -euo pipefail
 
 MARKER="ACDOC-PRE-PUSH-GATE"
 REPO_ROOT_OVERRIDE=""
+TOOLKIT_ROOT_OVERRIDE=""
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+SOURCE_TOOLKIT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd -P)"
 
 usage() {
   sed -n '2,/^$/p' "$0"
@@ -63,6 +68,10 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     --repo-root)
       REPO_ROOT_OVERRIDE="${2:-}"
+      shift 2
+      ;;
+    --toolkit-root)
+      TOOLKIT_ROOT_OVERRIDE="${2:-}"
       shift 2
       ;;
     -h|--help)
@@ -84,13 +93,20 @@ else
   REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 fi
 
-CANONICAL_SOURCE="$REPO_ROOT/scripts/sh/pre-push-hook.sh"
+if [[ -n "$TOOLKIT_ROOT_OVERRIDE" ]]; then
+  TOOLKIT_ROOT="$TOOLKIT_ROOT_OVERRIDE"
+elif [[ -n "${ANDROID_COMMON_DOC:-}" ]]; then
+  TOOLKIT_ROOT="$ANDROID_COMMON_DOC"
+else
+  TOOLKIT_ROOT="$SOURCE_TOOLKIT_ROOT"
+fi
+CANONICAL_SOURCE="$TOOLKIT_ROOT/scripts/sh/pre-push-hook.sh"
 
 fail() {  # $1 = reason code, $2 = human-readable detail
   echo "$1"
   {
     echo "[verify-git-hooks] BLOCKED: $1 — ${2:-}"
-    echo "  Fix: bash scripts/sh/install-git-hooks.sh   (or: make install-git-hooks)"
+    echo "  Fix: bash \"$TOOLKIT_ROOT/scripts/sh/install-git-hooks.sh\" \"$REPO_ROOT\""
   } >&2
   exit 1
 }

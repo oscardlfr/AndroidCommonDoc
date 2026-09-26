@@ -8,7 +8,7 @@ layer: L0
 category: guides
 description: "Guides hub: getting started, Detekt configuration, doc authoring templates"
 version: 2
-last_updated: "2026-09-22"
+last_updated: "2026-09-26"
 ---
 
 # Guides
@@ -22,6 +22,7 @@ Setup, configuration, and authoring guides for the L0/L1/L2 ecosystem.
 | Document | Description |
 |----------|-------------|
 | [getting-started](getting-started.md) | **Full L0/L1/L2 setup from scratch** — manifest, Detekt, MCP, CI (EN + ES) |
+| [runtime-consumer-operations](runtime-consumer-operations.md) | Exact L1/L2 runtime install, launch, worktree, recovery, and Claude recertification procedure |
 | [detekt-config](detekt-config.md) | Detekt L0/L1 config hierarchy, rule catalog, and how to add rules |
 | [detekt-migration-v2](detekt-migration-v2.md) | Migrating from Detekt 1.x to 2.0: plugin renames, config.validation, KMP baselines |
 | [baseline-reduction](baseline-reduction.md) | Playbook for progressively eliminating Detekt baseline suppressions (EN + ES) |

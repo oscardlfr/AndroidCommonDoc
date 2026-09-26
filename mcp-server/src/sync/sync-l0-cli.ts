@@ -194,8 +194,6 @@ async function ensureManifest(
     if (l0Sources.length !== 1 || l0Sources[0].remote !== undefined) {
       throw new Error("Runtime install requires exactly one local L0 tooling source in l0-manifest.json");
     }
-    const configured = path.resolve(projectRoot, l0Sources[0].path);
-    if (!existsSync(configured)) throw new Error("Runtime L0 tooling source is missing");
     const resolved = await resolveL0Source(l0Sources[0].path, projectRoot);
     if (l0RootOverride && path.resolve(l0RootOverride) !== path.resolve(resolved)) {
       throw new Error("--l0-root must equal the runtime source declared in l0-manifest.json");
@@ -396,6 +394,7 @@ async function main(): Promise<void> {
     const runtimeResult = await installRuntimeConsumer(projectRoot, l0Root, { dryRun });
     if (!runtimeResult.ok) throw new Error(`Runtime install failed: ${runtimeResult.reason}`);
     console.log(`Runtime consumer: ${runtimeResult.consumerLayer} (${runtimeResult.toolkitContentDigest})`);
+    console.log(`Required Claude launch: claude --add-dir ${JSON.stringify(l0Root)}`);
   }
   } finally {
     // Cleanup temporary clones

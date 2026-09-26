@@ -152,10 +152,11 @@ When editing a template:
 
 ## Hook Propagation (F7 — BL-W47-prep-8)
 
-Ordinary `/sync-l0` propagates `.claude/hooks/*.js` files from L0 to the destination project. Runtime installation uses source references instead: it registers the closed runtime hook set by absolute L0 path and does not copy runtime hooks.
+Ordinary `/sync-l0` copies standalone `.claude/hooks/*.js` files from L0 to the destination project. Hooks that import the L0 runtime closure are never copied partially: ordinary and runtime sync register those entrypoints by canonical absolute L0 path.
 
 **Behavior**:
-- All `*.js` files in L0's `.claude/hooks/` are copied to the destination `.claude/hooks/`
+- Standalone `*.js` files are copied to the destination `.claude/hooks/`
+- Source-coupled hooks remain in L0 and receive canonical absolute registrations
 - Project-local hooks (not present in L0) are never touched
 - Missing L0 hooks dir is handled gracefully (no error, no copies)
 
@@ -170,7 +171,7 @@ Ordinary `/sync-l0` propagates `.claude/hooks/*.js` files from L0 to the destina
 }
 ```
 
-The `exclude_hooks` field defaults to `[]` (all L0 hooks propagated). Existing manifests without this field auto-migrate via schema default.
+The `exclude_hooks` field defaults to `[]`. An exclusion prevents ordinary sync from copying or newly registering that hook, including a source-coupled hook. Sync is additive: adding an exclusion does not delete a file or registration already present, so removal of a previously adopted enforcement hook remains an explicit reviewed operation. Existing manifests without this field auto-migrate via schema default.
 
 ## .commitlintrc.json — Project-Specific, NOT Propagated
 

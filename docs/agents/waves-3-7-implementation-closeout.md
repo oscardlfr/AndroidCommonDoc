@@ -9,12 +9,18 @@ parent: agents-hub
 category: agents
 description: "Pre-integration implementation closeout for the ordered Waves 3-7 harness program."
 version: 1
-last_updated: "2026-09-22"
+last_updated: "2026-09-26"
 ---
 
 # Waves 3–7 implementation closeout
 
-This record describes the committed, locally verified pre-integration baseline. It does not call the work `SHIPPED`: review, PR checks, merge, and post-merge memory remain separate integration steps.
+This record preserves the committed, locally verified pre-integration baseline. The work subsequently merged through PR #250 at `develop@dfc48cf8488cf661704f8a312093c663c34db0bb` and is now `SHIPPED`; the acceptance evidence below remains historical and is not a claim that the first downstream-consumer exercise was complete.
+
+The first real L2 consumer after merge exposed bounded runtime distribution,
+worktree, launch-documentation, and Claude host-recertification defects. Those
+are post-merge defects, not reasons to rewrite this frozen acceptance record;
+they are tracked by the consumer-hardening follow-up and its clean consumer
+fixtures.
 
 ## Delivered contracts
 

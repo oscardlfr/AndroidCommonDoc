@@ -413,17 +413,32 @@ export async function resolveL0Source(
 
   const bases = [
     ...(gitToplevel ? [gitToplevel] : []),
+    ...gitMainCheckoutBases(projectRoot),
     projectRoot,
-  ];
+  ].filter((value, index, all) => all.indexOf(value) === index);
 
+  const repositoryCandidates = new Map<string, string>();
   for (const base of bases) {
     const resolved = path.resolve(base, l0Source);
     try {
       await access(path.join(resolved, "skills", "registry.json"));
-      return resolved;
+      const canonical = await realpath(resolved);
+      await access(path.join(canonical, "skills", "registry.json"));
+      if (!repositoryCandidates.has(canonical)) repositoryCandidates.set(canonical, resolved);
     } catch {
       // Not found at this base, try next
     }
+  }
+
+  if (repositoryCandidates.size > 1) {
+    throw new Error(
+      `L0 source "${l0Source}" is ambiguous across repository-owned resolution bases.\n` +
+      `  Resolved distinct toolkits: ${[...repositoryCandidates.keys()].join(", ")}\n` +
+      `  Use an absolute manifest source or remove the stale sibling toolkit.`,
+    );
+  }
+  if (repositoryCandidates.size === 1) {
+    return repositoryCandidates.values().next().value!;
   }
 
   // 3. Fallback: ANDROID_COMMON_DOC env var
@@ -449,6 +464,31 @@ export async function resolveL0Source(
     `  ${envPath ? "" : "Set ANDROID_COMMON_DOC env var as fallback.\n"}` +
     `  If running from a worktree, l0_source must be relative to the git toplevel.`,
   );
+}
+
+/**
+ * A linked Git worktree keeps the consumer manifest but moves its checkout.
+ * Relative sibling paths are authored against the main checkout, whose `.git`
+ * directory is returned by `--git-common-dir`. Include that root as a bounded
+ * resolution base; no ambient directory or environment fallback is involved.
+ */
+function gitMainCheckoutBases(projectRoot: string): string[] {
+  try {
+    const commonDir = execFileSync(
+      "git", ["rev-parse", "--path-format=absolute", "--git-common-dir"],
+      { cwd: projectRoot, encoding: "utf8", stdio: ["pipe", "pipe", "pipe"] },
+    ).trim();
+    if (path.basename(commonDir) !== ".git") return [];
+    const mainRoot = path.dirname(commonDir);
+    // Darwin canonicalizes /var and /tmp through /private. A manifest is a
+    // lexical path authored at the main checkout, so preserve the equivalent
+    // non-/private spelling as a bounded alias before resolving its `..`s.
+    return process.platform === "darwin" && mainRoot.startsWith("/private/")
+      ? [mainRoot, mainRoot.slice("/private".length)]
+      : [mainRoot];
+  } catch {
+    return [];
+  }
 }
 
 /**
@@ -694,6 +734,26 @@ const L0_REQUIRED_HOOK_REGISTRATIONS: readonly HookRegistrationEntry[] = [
   { event: 'SubagentStop', matcher: '.*',            file: 'subagent-start-context-bundle.js' },
 ] as const;
 
+/**
+ * Hooks in this set are thin toolkit entrypoints, not standalone consumer
+ * assets. Their relative imports deliberately resolve into `scripts/lib/` in
+ * the L0 checkout. Copying one of these files without that closure creates a
+ * hook that fails before it can inspect its event, so ordinary sync keeps the
+ * implementation in L0 and registers an absolute source reference instead.
+ */
+const SOURCE_REFERENCED_HOOK_FILES = new Set([
+  "agent-spawn-execution-gate.js",
+  "architect-verdict-presence-gate.js",
+  "context-provider-gate.js",
+  "premature-execution-gate.js",
+  "push-authorization-gate.js",
+  "runtime-consultation-target-gate.js",
+  "runtime-host-boundary.js",
+  "runtime-host-session-start.js",
+  "subagent-start-context-bundle.js",
+  "wave-phase-gate.js",
+]);
+
 /** Shape of a single hook entry within a matcher block */
 interface HookCommandEntry {
   type: string;
@@ -784,6 +844,10 @@ const RUNTIME_ROLE_TEMPLATES = [
   "quality-gater", "planner",
 ] as const;
 
+const RUNTIME_CONSUMER_FILES = [
+  ".claude/registry/wave-topology.yaml",
+] as const;
+
 const RUNTIME_HOOK_REGISTRATIONS: readonly (HookRegistrationEntry & { timeout: number })[] = [
   { event: "SessionStart", matcher: "startup", file: "runtime-host-session-start.js", timeout: 20 },
   { event: "PreToolUse", matcher: "Write|Edit|Bash", file: "premature-execution-gate.js", timeout: 5 },
@@ -844,11 +908,15 @@ export async function computeRuntimeToolkitInventory(toolkitRoot: string): Promi
   const files = [
     "scripts/lib/runtime-role-lifecycle.cjs", "scripts/lib/runtime-host-claude.cjs",
     "scripts/lib/runtime-consultation.cjs", "scripts/lib/runtime-collaboration-entrypoints.cjs",
+    "scripts/lib/wave-control-plane.cjs",
+    "scripts/lib/verdict-evidence-contract-cli.cjs",
+    "scripts/lib/verdict-evidence-contract.cjs", "scripts/lib/verdict-artifact-store.cjs",
     "scripts/lib/runtime-collaboration-policy.json", "scripts/lib/runtime-routing.json",
     "scripts/lib/runtime-bridge-codex.cjs", "scripts/lib/runtime-project-context.cjs",
     ".claude/settings.json", ".claude/model-profiles.json", "setup/claude-host-contract.json",
     "mcp-server/package-lock.json",
     ...RUNTIME_CORE_HOOK_FILES.map((file) => `.claude/hooks/${file}`),
+    ...RUNTIME_CONSUMER_FILES,
     ...RUNTIME_ROLE_TEMPLATES.map((role) => `.claude/agents/${role}.md`),
     ...["init-session", "resume-work", "work", "ingest-content", "monitor-docs"].map((skill) => `skills/${skill}/SKILL.md`),
     ...["init-session", "resume-work", "work", "ingest-content", "monitor-docs"].map((command) => `.claude/commands/${command}.md`),
@@ -903,11 +971,19 @@ async function l0SourceResolvesToToolkit(
   sourcePath: string,
   canonicalToolkit: string,
 ): Promise<boolean> {
-  try {
-    return await realpath(path.resolve(rootAsGiven, sourcePath)) === canonicalToolkit;
-  } catch {
-    return false;
+  const bases = [rootAsGiven, ...gitMainCheckoutBases(rootAsGiven)]
+    .filter((value, index, all) => all.indexOf(value) === index);
+  const candidates = new Set<string>();
+  for (const base of bases) {
+    try {
+      const candidate = await realpath(path.resolve(base, sourcePath));
+      await access(path.join(candidate, "skills", "registry.json"));
+      candidates.add(candidate);
+    } catch {
+      // Try the next repository-owned base.
+    }
   }
+  return candidates.size === 1 && candidates.has(canonicalToolkit);
 }
 
 export async function installRuntimeConsumer(
@@ -1003,10 +1079,35 @@ export async function installRuntimeConsumer(
       roleWrites.push({ role, source, destination, content, migration });
     }
 
+    const consumerFileWrites: Array<{ relative: string; destination: string; content: string }> = [];
+    for (const relative of RUNTIME_CONSUMER_FILES) {
+      const source = path.join(toolkit, relative);
+      const destination = path.join(consumer, relative);
+      const content = await readFile(source, "utf8");
+      try {
+        const existing = await readFile(destination, "utf8");
+        if (existing === content) continue;
+        const recorded = manifest.checksums[relative];
+        const existingDigest = `sha256:${createHash("sha256").update(existing).digest("hex")}`;
+        if (recorded !== existingDigest) {
+          return { ok: false, reason: `runtime-consumer-file-conflict:${relative}`, dryRun };
+        }
+      } catch (err) {
+        if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
+          return { ok: false, reason: `runtime-consumer-file-unreadable:${relative}`, dryRun };
+        }
+      }
+      consumerFileWrites.push({ relative, destination, content });
+    }
+
     if (!dryRun) {
       await mkdir(path.dirname(settingsPath), { recursive: true });
       await writeFile(settingsPath, JSON.stringify(nextSettings, null, 2) + "\n", "utf8");
       for (const write of roleWrites) {
+        await mkdir(path.dirname(write.destination), { recursive: true });
+        await writeFile(write.destination, write.content, "utf8");
+      }
+      for (const write of consumerFileWrites) {
         await mkdir(path.dirname(write.destination), { recursive: true });
         await writeFile(write.destination, write.content, "utf8");
       }
@@ -1016,6 +1117,9 @@ export async function installRuntimeConsumer(
       };
       for (const role of RUNTIME_ROLE_TEMPLATES) {
         const relative = `.claude/agents/${role}.md`;
+        manifest.checksums[relative] = `sha256:${createHash("sha256").update(await readFile(path.join(toolkit, relative))).digest("hex")}`;
+      }
+      for (const relative of RUNTIME_CONSUMER_FILES) {
         manifest.checksums[relative] = `sha256:${createHash("sha256").update(await readFile(path.join(toolkit, relative))).digest("hex")}`;
       }
       await writeManifest(manifestPath, manifest);
@@ -1131,15 +1235,20 @@ export async function mergeObservationBoundaryRegistration(
  * Additively merge L0 enforcement hook registrations into a downstream project's
  * .claude/settings.json.
  *
- * Idempotent: a hook is skipped if its basename already appears in the matching
- * event/matcher block. PostToolUse arrays are never touched.
+ * Idempotent: a hook is skipped when its exact managed command already appears
+ * in the matching event/matcher block. Excluded hooks are neither copied nor
+ * newly registered; this additive merge never deletes an existing registration.
  *
  * @param projectRoot - Root of the downstream project
  * @param dryRun - If true, compute diff but do not write
+ * @param l0Root - Canonical source root for hooks coupled to the L0 closure
+ * @param excludeHooks - Manifest hook exclusions to honor during registration
  */
 export async function mergeHookRegistrations(
   projectRoot: string,
   dryRun = false,
+  l0Root?: string,
+  excludeHooks: readonly string[] = [],
 ): Promise<MergeHookRegistrationsResult> {
   const settingsPath = path.join(projectRoot, '.claude', 'settings.json');
   const result: MergeHookRegistrationsResult = { added: [], skipped: [], dryRun };
@@ -1165,9 +1274,20 @@ export async function mergeHookRegistrations(
     settings.hooks = {};
   }
 
+  const excludeSet = new Set(excludeHooks);
+  const canonicalNode = l0Root ? await realpath(process.execPath) : process.execPath;
+  const canonicalL0Root = l0Root ? await realpath(l0Root) : undefined;
+
   for (const entry of L0_REQUIRED_HOOK_REGISTRATIONS) {
     const { event, matcher, file } = entry;
-    const command = `node "$CLAUDE_PROJECT_DIR"/.claude/hooks/${file}`;
+    if (excludeSet.has(file)) {
+      result.skipped.push({ event, matcher, file });
+      continue;
+    }
+    const sourceReferenced = Boolean(canonicalL0Root) && SOURCE_REFERENCED_HOOK_FILES.has(file);
+    const command = sourceReferenced
+      ? `${JSON.stringify(canonicalNode.replace(/\\/g, "/"))} ${JSON.stringify(path.join(canonicalL0Root!, ".claude", "hooks", file).replace(/\\/g, "/"))}`
+      : `node "$CLAUDE_PROJECT_DIR"/.claude/hooks/${file}`;
 
     // Ensure the event array exists
     if (!settings.hooks[event]) {
@@ -1183,9 +1303,11 @@ export async function mergeHookRegistrations(
     }
 
     // Idempotency check: scan existing commands for this hook's basename
-    const alreadyPresent = matcherBlock.hooks.some((h) =>
-      typeof h.command === 'string' && h.command.includes(file),
-    );
+    if (sourceReferenced) {
+      const legacy = `node "$CLAUDE_PROJECT_DIR"/.claude/hooks/${file}`;
+      matcherBlock.hooks = matcherBlock.hooks.filter((hook) => hook.command !== legacy);
+    }
+    const alreadyPresent = matcherBlock.hooks.some((h) => h.command === command);
 
     if (alreadyPresent) {
       result.skipped.push({ event, matcher, file });
@@ -1752,7 +1874,9 @@ export async function syncMultiSource(
   // Hook registration merge (F1 — BL-W47-prep-11): additive merge into settings.json
   const msMergeResult = options.runtime
     ? { added: [], skipped: [], dryRun }
-    : await mergeHookRegistrations(projectRoot, dryRun);
+    : await mergeHookRegistrations(
+      projectRoot, dryRun, msL0Root, manifest.selection?.exclude_hooks ?? [],
+    );
   if (msMergeResult.added.length > 0) {
     report.warnings.push(
       `Hook registrations added to settings.json: ${msMergeResult.added.map((e) => e.file).join(', ')}`,
@@ -2115,7 +2239,9 @@ export async function syncL0(
   // Hook registration merge (F1 — BL-W47-prep-11): additive merge into settings.json
   const slMergeResult = options.runtime
     ? { added: [], skipped: [], dryRun }
-    : await mergeHookRegistrations(projectRoot, dryRun);
+    : await mergeHookRegistrations(
+      projectRoot, dryRun, l0Root, manifest.selection?.exclude_hooks ?? [],
+    );
   if (slMergeResult.added.length > 0) {
     report.warnings.push(
       `Hook registrations added to settings.json: ${slMergeResult.added.map((e) => e.file).join(', ')}`,
@@ -2200,9 +2326,10 @@ export interface HookSyncResult {
 /**
  * Propagate .claude/hooks/ JS files from L0 to the downstream project.
  *
- * Copies every *.js file in the L0 .claude/hooks/ directory to the
+ * Copies standalone *.js files in the L0 .claude/hooks/ directory to the
  * destination project's .claude/hooks/ directory, skipping files whose
- * basename appears in manifest.selection.exclude_hooks.
+ * basename appears in manifest.selection.exclude_hooks. Hooks that import the
+ * L0 runtime closure remain source-referenced and are never copied partially.
  *
  * Hooks not present in L0 (project-local hooks) are never touched.
  * Missing L0 hooks dir is handled gracefully (returns empty result).
@@ -2237,7 +2364,7 @@ export async function syncHooks(
   }
 
   for (const filename of entries) {
-    if (excludeSet.has(filename)) {
+    if (excludeSet.has(filename) || SOURCE_REFERENCED_HOOK_FILES.has(filename)) {
       result.skipped.push(filename);
       continue;
     }
