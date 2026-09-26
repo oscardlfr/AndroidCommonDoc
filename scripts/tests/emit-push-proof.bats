@@ -77,6 +77,7 @@ setup() {
   mkdir -p "$REPO/scripts/lib/runtime-role-lifecycle"
   cp "$SCRIPTS_SRC/lib/verdict-evidence-contract-cli.cjs" "$REPO/scripts/lib/"
   cp "$SCRIPTS_SRC/lib/verdict-evidence-contract.cjs"     "$REPO/scripts/lib/"
+  cp "$SCRIPTS_SRC/lib/verdict-artifact-confinement.cjs"  "$REPO/scripts/lib/"
   cp "$SCRIPTS_SRC/lib/verdict-artifact-store.cjs"        "$REPO/scripts/lib/"
   cp "$SCRIPTS_SRC/lib/runtime-role-lifecycle/structural-validators.cjs" \
      "$REPO/scripts/lib/runtime-role-lifecycle/"

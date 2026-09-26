@@ -8,6 +8,7 @@ install_verdict_contract_runtime() {
   local source_root="$1" repo="$2"
   mkdir -p "$repo/scripts/lib/runtime-role-lifecycle"
   cp "$source_root/scripts/lib/verdict-evidence-contract.cjs" "$repo/scripts/lib/"
+  cp "$source_root/scripts/lib/verdict-artifact-confinement.cjs" "$repo/scripts/lib/"
   cp "$source_root/scripts/lib/verdict-artifact-store.cjs" "$repo/scripts/lib/"
   cp "$source_root/scripts/lib/verdict-evidence-contract-cli.cjs" "$repo/scripts/lib/"
   cp "$source_root/scripts/lib/runtime-role-lifecycle/structural-validators.cjs" \
