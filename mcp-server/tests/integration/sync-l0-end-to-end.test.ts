@@ -434,14 +434,20 @@ describe("clean L1/L2 consumer convergence through the real CLI", () => {
 
         smokeEveryEmittedHook(projectRoot);
 
-        const executableHooks = ["detekt-pre-commit.sh", "detekt-post-write.sh"];
-        for (const file of executableHooks) {
-          await chmod(join(projectRoot, ".claude", "hooks", file), 0o644);
-        }
-        const repair = runSyncCli(projectRoot, true);
-        expect(repair.stdout + repair.stderr).toMatch(/Runtime executable mode repaired:/);
-        for (const file of executableHooks) {
-          expect((await stat(join(projectRoot, ".claude", "hooks", file))).mode & 0o777).toBe(0o755);
+        // Windows has no POSIX executable mode to damage or repair. The same
+        // contract remains covered here on macOS/Linux and by the sync-engine
+        // mode tests, while Windows continues through the full hook smoke and
+        // idempotency checks above and below.
+        if (process.platform !== "win32") {
+          const executableHooks = ["detekt-pre-commit.sh", "detekt-post-write.sh"];
+          for (const file of executableHooks) {
+            await chmod(join(projectRoot, ".claude", "hooks", file), 0o644);
+          }
+          const repair = runSyncCli(projectRoot, true);
+          expect(repair.stdout + repair.stderr).toMatch(/Runtime executable mode repaired:/);
+          for (const file of executableHooks) {
+            expect((await stat(join(projectRoot, ".claude", "hooks", file))).mode & 0o777).toBe(0o755);
+          }
         }
 
         const manifestAfterConvergence = await readFile(manifestPath, "utf8");
