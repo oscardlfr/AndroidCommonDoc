@@ -215,8 +215,8 @@ if (-not $testSuitePolicy -or $testSuitePolicy.min_local_runs -ne 1 -or $testSui
     Die "manifest-evidence-drift: expected min_local_runs=1 and remote_merge_check='CI Gate'"
 }
 
-$localRunCount = 0
-try { $localRunCount = [int]$proof.bats_evidence.agreement_count } catch {
+$localRunCount = $proof.bats_evidence.agreement_count
+if (($localRunCount -isnot [int]) -and ($localRunCount -isnot [long])) {
     Die "bats-evidence-agreement: agreement_count is not an integer"
 }
 if ($localRunCount -lt 1) {

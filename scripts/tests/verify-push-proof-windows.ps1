@@ -196,6 +196,18 @@ try {
         param($manifest, $proof)
         $proof.bats_evidence.agreement_count = 0
     }
+    Test-Negative -Name 'boolean local agreement' -Reason 'bats-evidence-agreement' -Mutate {
+        param($manifest, $proof)
+        $proof.bats_evidence.agreement_count = $true
+    }
+    Test-Negative -Name 'string local agreement' -Reason 'bats-evidence-agreement' -Mutate {
+        param($manifest, $proof)
+        $proof.bats_evidence.agreement_count = '1'
+    }
+    Test-Negative -Name 'fractional local agreement' -Reason 'bats-evidence-agreement' -Mutate {
+        param($manifest, $proof)
+        $proof.bats_evidence.agreement_count = 1.5
+    }
     Test-Negative -Name 'missing run_ids' -Reason 'bats-evidence-reused' -Mutate {
         param($manifest, $proof)
         $proof.bats_evidence.PSObject.Properties.Remove('run_ids')
