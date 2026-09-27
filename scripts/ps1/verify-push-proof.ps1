@@ -10,9 +10,9 @@
 # as a git-layer pre-push hook on Windows -- install-git-hooks.ps1 installs no
 # pre-push hook at all. The only installed git-layer pre-push hook, on any OS, is
 # the bash pre-push-hook.sh via scripts/sh/install-git-hooks.sh. This script is a
-# standalone/CI-adjacent verifier today; pwsh is confirmed absent from this
-# project's macOS dev box, so it is exercised by static assertion only (see
-# scripts/tests/emit-push-proof-template-size.bats's #EP-PS1-VERIFY).
+# standalone/CI-adjacent verifier today. Its live contract is exercised on a
+# real windows-latest runner by scripts/tests/verify-push-proof-windows.ps1;
+# local non-PowerShell hosts retain the complementary static assertions.
 #
 # USAGE
 #   verify-push-proof.ps1 -PushedSha <sha> [-RepoRoot <path>]
@@ -188,10 +188,10 @@ if ($proof.bats_evidence.head -ne $PushedSha) {
 }
 
 # -- 11-15. bats_evidence completeness (wave qg-artifact-binding, W7) --------
-# The SAME predicate bash verify_proof() and push-authorization-gate.js's in-JS
-# fallback re-derive: not_ok==0 && scope=='full' && complete==true &&
-# total==expected && ok>0. A half-done completeness binding would mint correctly
-# but verify permissively for these five fields too, same rationale as -- 10.
+# The SAME predicate as the installed Bash verify_proof() path:
+# not_ok==0 && scope=='full' && complete==true && total==expected && ok>0.
+# A half-done completeness binding would mint correctly but verify permissively
+# for these five fields too, same rationale as -- 10.
 if ($proof.bats_evidence.not_ok -ne 0) {
     Die "bats-evidence-dirty: bats_evidence.not_ok ($($proof.bats_evidence.not_ok)) != 0"
 }

@@ -818,7 +818,9 @@ PYEOF
 
 # ── wave qg-artifact-binding (W7): bash verify_proof()'s completeness predicate ──
 # Same predicate push-authorization-gate.js's in-JS fallback and verify-push-proof.ps1
-# re-derive: not_ok==0 && scope=='full' && complete==true && total==expected && ok>0.
+# re-derive. The PowerShell path is exercised dynamically on windows-latest by
+# scripts/tests/verify-push-proof-windows.ps1; these Bats rows cover the Bash path.
+# Predicate: not_ok==0 && scope=='full' && complete==true && total==expected && ok>0.
 # #20 above (an otherwise-valid write_push_proof fixture) is this row's positive
 # control; each #BE test reverts exactly one element from it.
 

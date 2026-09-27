@@ -35,3 +35,7 @@ jobs:
       - name: Run runtime consultation Windows tests
         shell: pwsh
         run: pwsh -NoLogo -NoProfile -NonInteractive -File scripts/tests/runtime-consultation-windows.ps1
+
+      - name: Verify push-proof Windows contract
+        shell: pwsh
+        run: pwsh -NoLogo -NoProfile -NonInteractive -File scripts/tests/verify-push-proof-windows.ps1
