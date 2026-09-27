@@ -8,8 +8,8 @@ layer: L0
 parent: agents-hub
 category: agents
 description: "Quality gate protocol: sequential verification (frontmatter → tests → coverage → benchmarks → pre-pr) after architect APPROVE, before commit"
-version: 5
-last_updated: "2026-09-22"
+version: 6
+last_updated: "2026-09-27"
 assumes_read: autonomous-multi-agent-workflow, context-rotation-guide
 token_budget: 1500
 ---
@@ -17,7 +17,7 @@ token_budget: 1500
 # Quality Gate Protocol
 
 ## Current phase and evidence contract
-The entrypoint runs only in persisted `QG`, after every class-required architect publishes an authorizing VERIFY-FINAL `verdict/v1`. Bats mint evidence requires two distinct, complete, provenance-matching full runs. Successful minting permits `QG -> COMPLETE`; Git pre-push independently enforces the current proof. Every step blocks on failure.
+The entrypoint runs only in persisted `QG`, after every class-required architect publishes an authorizing VERIFY-FINAL `verdict/v1`. Bats mint evidence requires one complete full local aggregate bound to the explicit wave and PLAN. Successful minting permits `QG -> COMPLETE`; Git pre-push independently enforces the current local proof, and the required GitHub `CI Gate` is the independent merge authority. Every step blocks on failure.
 
 ## When This Runs
 
@@ -33,8 +33,6 @@ Quality Gate (this protocol)
 All pass → commit
 Any fail → investigate → fix → re-run
 ```
-
----
 
 ## Step 0: Architect Deliberation
 
@@ -78,8 +76,9 @@ The quality-gater does NOT use a hardcoded checklist. It discovers each project'
 ### Step 3: Test Suite
 - `/test-full-parallel --fresh-daemon` — all modules must pass
 - **BLOCK** on any failure
-- **Lean execution**: suite output MUST go to `.androidcommondoc/suite-*.log`, NOT agent context. Use `run-bats.sh`; `^not ok` count is authoritative — `npx bats` exits 0 even when tests fail, so grep the log. Empty or absent log → treat as not-pass.
+- **Lean execution**: suite output MUST go to `.androidcommondoc/suite-*.log`, NOT agent context. Run `scripts/tools/run-bats-sharded.cjs` once with `--shard-count 6 --max-parallel 6` and explicit `--wave-slug` plus `--plan`; its aggregate handoff is authoritative. Empty or absent aggregate evidence → treat as not-pass.
 - **Full-suite completeness required**: see [§ Bats Evidence Contract](#bats-evidence-contract) below. A partial run (truncated, interrupted, or stale re-read) with 0 `not ok` is NOT a pass.
+- **Two independent authorities, not two local executions**: the local aggregate validates the exact branch HEAD and authorizes publishing it. Under strict branch protection, required GitHub `CI Gate` validates the PR merge candidate updated with `develop` and authorizes merge. Those subjects are not asserted to be byte-identical. A green local suite is not rerun solely to create a second handoff.
 
 ### Step 4: Coverage Baseline
 - `/coverage` on touched modules — drop >1% → INVESTIGATE → **BLOCK**
@@ -163,9 +162,9 @@ Distinct from `quality-gate-orchestrator` (L0 internal validator for toolkit con
 
 ## Bats Evidence Contract
 
-Documented here per wave `qg-suite-completeness` (2026-06-21). Mechanism lives in
-`scripts/sh/run-bats.sh` + `scripts/sh/emit-qg-result.sh` + CI inline guard; the
-`quality-gater.md` template is NOT edited (auto-discovery preserves the no-5-pata scope).
+The 2026-06-21 `qg-suite-completeness` contract is superseded by one local six-shard aggregate plus required CI. The exact init/runner command is normative
+in [Local CI Reproduction](quality-gate-local-ci-reproduction.md#qg-linux-canonical);
+only its verified `BATS_SCOPE=full` aggregate satisfies local QG.
 
 ### Canonical Full-Run Metric
 
@@ -195,9 +194,9 @@ Guard with `command -v npx`; skip silently if npx absent, never hard-fail.
 
 ### Run-ID-Bound Handoff (run-bats.sh → emit-qg-result.sh)
 
-**Problem**: `suite-bats.log` is a shared overwritable file. If bats runs more than once
-during a QG session (e.g., `/pre-pr` Step 2 + Step 3 `run-bats.sh`), `emit-qg-result.sh`
-re-reading the shared log may capture an intermediate, not the authoritative single run.
+**Problem**: `suite-bats.log` is a shared overwritable file. If any focused or
+diagnostic Bats command ran during the QG session, `emit-qg-result.sh` re-reading
+the shared log could capture that command rather than the authoritative full aggregate.
 
 **Solution**: full-run mode writes `.androidcommondoc/bats-result.<BATS_RUN_ID>.env`
 and immutable `.androidcommondoc/suite-bats.<BATS_RUN_ID>.log` artifacts. The ordinary
@@ -219,7 +218,7 @@ and immutable `.androidcommondoc/suite-bats.<BATS_RUN_ID>.log` artifacts. The or
 | `BATS_PLAN_DIGEST` / `BATS_WAVE_SLUG` / `BATS_TARGET_DIGEST` | Planning authority and sorted target set |
 | `BATS_ENV_FINGERPRINT` / `BATS_TOOL_VERSIONS` / start-finish timestamps | Environment, tools and interval |
 | `BATS_LOG_DIGEST` | SHA-256 of the retained TAP log |
-| `BATS_LOG_IDENTITY` | Stable file identity of the retained TAP log; two agreeing runs require distinct identities even when their bytes are identical |
+| `BATS_LOG_IDENTITY` | Stable file identity of the retained aggregate TAP log |
 **emit-qg-result.sh discovery algorithm** (final mode):
 
 1. Read `started_at` from `qg-result.json` (written at `--init`). If absent → skip handoff,
@@ -229,15 +228,16 @@ and immutable `.androidcommondoc/suite-bats.<BATS_RUN_ID>.log` artifacts. The or
    - `BATS_RUN_ID` non-empty
    - `BATS_GENERATED_AT >= started_at` (produced during THIS QG run, not a leftover)
    - All completeness fields present and well-formed
-3. Partition by complete provenance/count signature; any disagreement rejects and recency cannot select around it.
-4. Push-proof minting needs two distinct run ids in one agreeing full-run set; otherwise reject as `insufficient-agreement` or `provenance-mismatch`.
-5. Select a representative only after agreement; security-critical minting has no shared-log fallback.
+3. Require at least one complete full-scope aggregate; child shards cannot qualify.
+4. Extra eligible handoffs never add authority; disagreement rejects, never newest-wins.
+5. Select only after validation; GitHub `CI Gate` supplies the independent merge-candidate check.
 
 **Key invariant**: a handoff from a PREVIOUS QG on the same HEAD is REJECTED by the
 `BATS_GENERATED_AT >= started_at` guard. `started_at` and `BATS_GENERATED_AT` MUST share
 one sortable UTC format (lexicographic compare) — no fragile `date -d` parsing.
-`--init` / `--phase` heartbeat modes are **untouched** (run before bats; no bats logic
-in those modes). No `--bats-result` flag; no `quality-gater.md` edit.
+`--init` / `--phase` heartbeat modes run before Bats and contain no Bats execution
+logic. No `--bats-result` flag is needed; the quality-gater invokes the canonical
+sharded producer directly.
 
 ### CI-Parity Invariant
 

@@ -14,7 +14,12 @@ description: "Mint-internal artifact-binding contract (wave qg-artifact-binding)
 
 ## Current evidence floor
 
-Mint inputs are selected by exact provenance rather than file recency. Security-critical Bats evidence requires two distinct, complete, passing full-run handoffs agreeing on HEAD, PLAN, wave, target/digest, environment/toolchain, counts, and verdict. Architect inputs are validated `verdict/v1` records answering immutable requests; Markdown tokens are not mint inputs.
+Mint inputs are selected by exact provenance rather than file recency. Local
+security-critical Bats evidence requires one complete, passing six-shard full
+aggregate bound to branch HEAD, PLAN, wave, target/digest, environment/toolchain,
+counts, and verdict. Required GitHub `CI Gate` independently validates the updated
+PR merge candidate before merge. Architect inputs are validated `verdict/v1`
+records answering immutable requests; Markdown tokens are not mint inputs.
 
 Referenced from [quality-gater](../../setup/agent-templates/quality-gater.md) **Step 8** (Project Rule Cross-Check) for the one gater-facing requirement — authoring `rule_id` on `discovered_rules[]` entries. Everything else on this page documents `emit-push-proof.sh run-qg` internals that no template step invokes directly (Option B, below) — this doc exists so the mechanism is described, not so the gater has more steps to run.
 
@@ -81,7 +86,18 @@ Neither derived artifact is itself freshness-bound — its own `generated_at` is
 
 ## `manifest-evidence-drift`
 
-A drift-guard, not a new enforcement source. The mint hardcodes `{require_scope: 'full', max_not_ok: 0, require_complete: True}` in its Wave-A bats-evidence checks — those literals never change at runtime. This check asserts the manifest's OWN declared `required_steps[].test-suite.evidence` sub-object still reads the same three values. If the manifest is edited to claim something looser (e.g. `require_scope: "targeted"`) without the mint's hardcoded logic changing to match, `manifest-evidence-drift` fires — the manifest can never *silently* imply looser enforcement than the mint actually performs. The mint's own hardcoded predicates remain the sole source of enforcement; this check only keeps the manifest's documentation of that intent honest.
+A drift-guard, not a new enforcement source. The mint hardcodes
+`{require_scope: 'full', max_not_ok: 0, require_complete: True,
+min_local_runs: 1, remote_merge_check: 'CI Gate'}` in its Bats-evidence policy.
+This check asserts the manifest's OWN declared
+`required_steps[].test-suite.evidence` sub-object still reads the same five
+values. If the manifest is edited to claim something different (for example
+`require_scope: "targeted"`, two local runs, or a different remote required
+check) without the implementation changing to match, `manifest-evidence-drift`
+fires. The first four fields govern the local branch-HEAD proof; the remote check
+names strict branch protection's merge-candidate authority and is never synthesized
+locally. The mint's hardcoded predicates remain the enforcement source; this check
+keeps the manifest's declaration honest.
 
 ---
 
@@ -113,7 +129,10 @@ Inventory rule ids today (stable, source-derived — see `emit-rule-inventory.sh
 
 - **Not a new gater step.** Nothing here adds a Step N — the derived-artifact producers are mint-internal (Option B).
 - **Not push-detection.** This binding contract governs `run-qg`/`verify-proof` after intent is identified. Parsed shell intent is advisory; the installed Git `pre-push` hook remains authoritative.
-- **Not Bats evidence reproducibility.** Generic receipt binding is distinct from the Bats agreement set. The Bats contract rejects newest-wins selection and requires two distinct agreeing full runs for push minting.
+- **Not Bats evidence reproducibility.** Generic receipt binding is distinct from
+  Bats selection. The local Bats contract rejects partial/newest-wins substitution
+  and requires one complete full aggregate for branch-HEAD publication; required
+  GitHub `CI Gate` is the separate merge-candidate authority.
 
 ---
 

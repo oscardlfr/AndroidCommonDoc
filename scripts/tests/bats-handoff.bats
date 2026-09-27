@@ -18,8 +18,7 @@ bats_require_minimum_version 1.5.0
 #   #BH5  empty BATS_RUN_ID fails the well-formedness regex → status=malformed.
 #   #BH6  two qualifying candidates → the one with MAX BATS_GENERATED_AT wins
 #         (deterministic tie-break), proven via a distinctive BATS_OK sentinel.
-#   #BH7  valid full-scope well-formed handoff accepted → status=ok; every JSON field
-#         is sourced verbatim from the handoff.
+#   #BH7  one valid full-scope well-formed handoff satisfies the default one-run policy.
 #   #BH8  SECURITY command injection: a BATS_RUN_ID value containing a literal
 #         $(touch <marker>) payload is parsed key-by-key (grep+cut), never executed —
 #         the marker file is never created.
@@ -184,11 +183,14 @@ print(d.get(sys.argv[2], ''))
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
-@test "#BH7 one valid full-scope handoff is insufficient for the two-run policy" {
+@test "#BH7 one valid full-scope handoff satisfies the default one-run policy" {
     write_handoff "run-happy" "$HEAD" "2026-07-09T18:10:00Z" 7 0 7 true pass full
+    append_provenance "run-happy"
     select_json --head "$HEAD" --since "2026-07-09T18:00:00Z" --require-scope full
     [ "$status" -eq 0 ]
-    [ "$(json_get "$output" status)" = "insufficient-agreement" ]
+    [ "$(json_get "$output" status)" = "ok" ]
+    [ "$(json_get "$output" agreement_count)" = "1" ]
+    [ "$(json_get "$output" run_ids)" = "run-happy" ]
 }
 
 @test "#BH13 two independent matching provenance records are accepted as one evidence set" {
@@ -324,10 +326,8 @@ print('OK')
     [ "$output" = "0" ]
 
     # General property, proven on a legitimate "ok" acceptance (not the malicious file).
-    write_handoff "run-pathcheck-a" "$HEAD" "2026-07-09T18:11:00Z" 3 0 3 true pass full
-    append_provenance "run-pathcheck-a"
-    write_handoff "run-pathcheck-b" "$HEAD" "2026-07-09T18:12:00Z" 3 0 3 true pass full
-    append_provenance "run-pathcheck-b"
+    write_handoff "run-pathcheck" "$HEAD" "2026-07-09T18:11:00Z" 3 0 3 true pass full
+    append_provenance "run-pathcheck"
     select_json --head "$HEAD" --since "2026-07-09T18:00:00Z" --require-scope full
     [ "$status" -eq 0 ]
     [ "$(json_get "$output" status)" = "ok" ]

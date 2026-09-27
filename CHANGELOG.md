@@ -24,10 +24,15 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 - Runtime installation, launch, no-op refresh, fallback, and pin-failure behavior
   are documented as one L0/L1/L2 contract. The five control-plane skills no
   longer ask the model to discover a sibling toolkit entrypoint.
-- Clarified that the quality-gater owns exactly two fresh full Bats handoffs after
-  preflight; development does not run two full pre-suites and then repeat them in
-  QG. Separate backlog items retain canonical QG orchestration, amended-PLAN PREP
-  supersession, and project-root normalization as future workflow hardening.
+- Superseded the two-local-full-run QG policy with one canonical local full Bats
+  aggregate plus the required GitHub `CI Gate` as independent merge authority.
+  The local run uses six shards at max parallelism six and binds explicit
+  `--wave-slug`/`--plan` provenance; it validates and authorizes publishing the
+  exact branch HEAD. Under strict branch protection, CI validates the PR merge
+  candidate updated with `develop`; the two checks are not claimed to cover a
+  byte-identical SHA. Separate backlog items retain canonical
+  QG orchestration, amended-PLAN PREP supersession, and project-root normalization
+  as future workflow hardening.
 
 ### Fixed (post-#251 consumer stabilization — PR #252, `51598ec`)
 

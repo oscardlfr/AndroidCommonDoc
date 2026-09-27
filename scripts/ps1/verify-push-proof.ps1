@@ -179,10 +179,7 @@ if ($recomputed -ne $proof.report_digest) {
 }
 
 # -- 10. bats_evidence binding: present + head matches pushed_sha -----------
-# Mirrors the bash verify_proof's 9th check (its own comment-numbering counts "Load
-# proof" as step 1) and push-authorization-gate.js's in-JS fallback -- all three
-# verifiers now carry equivalent rigor. A half-done evidence binding would mint
-# correctly but verify permissively; this closes that gap.
+# Mirrors the Bash verify_proof contract used by the installed Git pre-push hook.
 if (-not $proof.bats_evidence) {
     Die "bats_evidence missing from push-proof.json -- proof was minted before this wave's evidence binding, or evidence was stripped. Re-run /quality-gate."
 }
@@ -209,6 +206,28 @@ if ($proof.bats_evidence.total -ne $proof.bats_evidence.expected) {
 }
 if (-not ($proof.bats_evidence.ok -gt 0)) {
     Die "bats-evidence-floor: bats_evidence.ok ($($proof.bats_evidence.ok)) fails sanity floor (must be > 0)"
+}
+
+# -- 16. Local-run policy + retained-artifact identity ---------------------
+$testSuiteStep = @($manifest.required_steps | Where-Object { $_.id -eq 'test-suite' } | Select-Object -First 1)
+$testSuitePolicy = if ($testSuiteStep.Count -eq 1) { $testSuiteStep[0].evidence } else { $null }
+if (-not $testSuitePolicy -or $testSuitePolicy.min_local_runs -ne 1 -or $testSuitePolicy.remote_merge_check -ne 'CI Gate') {
+    Die "manifest-evidence-drift: expected min_local_runs=1 and remote_merge_check='CI Gate'"
+}
+
+$localRunCount = 0
+try { $localRunCount = [int]$proof.bats_evidence.agreement_count } catch {
+    Die "bats-evidence-agreement: agreement_count is not an integer"
+}
+if ($localRunCount -lt 1) {
+    Die "bats-evidence-agreement: qualifying local runs ($localRunCount) < 1"
+}
+$runIds = @(([string]$proof.bats_evidence.run_ids).Split(',') | Where-Object { $_ })
+$logIdentities = @(([string]$proof.bats_evidence.log_identities).Split(',') | Where-Object { $_ })
+$uniqueRunIds = @($runIds | Sort-Object -Unique)
+$uniqueLogIdentities = @($logIdentities | Sort-Object -Unique)
+if ($uniqueRunIds.Count -ne $localRunCount -or $uniqueLogIdentities.Count -ne $localRunCount) {
+    Die "bats-evidence-reused: local_run_count=$localRunCount, run_ids=$($runIds -join ','), log_identities=$($logIdentities -join ',') must identify the same distinct local evidence set"
 }
 
 Write-Host "[emit-push-proof] verify-proof: PASS" -ForegroundColor Green

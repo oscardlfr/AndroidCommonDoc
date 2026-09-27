@@ -565,9 +565,9 @@ PYEOF
   [ "$output" = "0" ]
 }
 
-# #EP-PS1-VERIFY  ps1 static — verify-push-proof.ps1 carries the same bats_evidence
-# 8th check as bash's verify_proof and push-authorization-gate.js's in-JS fallback
-# (Wave A, Section A5b). No pwsh needed for a static assertion.
+# #EP-PS1-VERIFY  ps1 static — verify-push-proof.ps1 carries the same
+# bats_evidence and one-local-run policy checks as Bash verify_proof.
+# No pwsh needed for this static assertion; Windows CI executes the real script.
 @test "#EP-PS1-VERIFY static: verify-push-proof.ps1 contains the bats_evidence check" {
   local ps1="$BATS_TEST_DIRNAME/../ps1/verify-push-proof.ps1"
   run grep -c "bats_evidence" "$ps1"
@@ -580,8 +580,7 @@ PYEOF
   # wave qg-artifact-binding (W7): pin the 5 NEW bats-evidence-* die-code strings so
   # the .ps1 update ships proven, not merely green-because-unasserted (R7 -- "update,
   # do not disable" applies just as much to the grep this test extends as to the
-  # script itself). Identical literals across bash (emit-push-proof.sh verify_proof),
-  # JS (push-authorization-gate.js in-JS fallback, #PAG-BE1-5), and here.
+  # script itself). Identical literals across Bash verify_proof and this verifier.
   run grep -c "bats-evidence-dirty" "$ps1"
   [ "$output" != "0" ]
   run grep -c "bats-evidence-scope" "$ps1"
@@ -591,6 +590,14 @@ PYEOF
   run grep -c "bats-evidence-count-mismatch" "$ps1"
   [ "$output" != "0" ]
   run grep -c "bats-evidence-floor" "$ps1"
+  [ "$output" != "0" ]
+  run grep -c "min_local_runs" "$ps1"
+  [ "$output" != "0" ]
+  run grep -c "remote_merge_check" "$ps1"
+  [ "$output" != "0" ]
+  run grep -c "bats-evidence-agreement" "$ps1"
+  [ "$output" != "0" ]
+  run grep -c "bats-evidence-reused" "$ps1"
   [ "$output" != "0" ]
 }
 

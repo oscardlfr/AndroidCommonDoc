@@ -143,7 +143,31 @@ PYEOF
 write_valid_bats_handoff() {
   local head
   head="$(git -C "$REPO" rev-parse HEAD)"
-  write_two_agreeing_bats_handoffs "$REPO" "$ACDOC" "test-push-proof" "$head"
+  local plan="$REPO/.planning/wave-test-push-proof/PLAN.md"
+  mkdir -p "$ACDOC" "$(dirname "$plan")"
+  [ -f "$plan" ] || printf '# PLAN\n' > "$plan"
+  node - "$ACDOC" "$plan" "$head" <<'NODEEOF'
+const crypto = require('crypto');
+const fs = require('fs');
+const path = require('path');
+const [acdoc, planPath, head] = process.argv.slice(2);
+const sha256 = (value) => crypto.createHash('sha256').update(value).digest('hex');
+const stamp = new Date().toISOString().replace(/\.\d{3}Z$/, 'Z');
+const runId = `fixture-${process.pid}`;
+const values = {
+  BATS_OK: '42', BATS_NOT_OK: '0', BATS_EXPECTED: '42', BATS_TOTAL: '42',
+  BATS_COMPLETE: 'true', BATS_VERDICT: 'pass', BATS_LOG: `/tmp/${runId}.tap`,
+  BATS_HEAD: head, BATS_RUN_ID: runId, BATS_GENERATED_AT: stamp, BATS_SCOPE: 'full',
+  BATS_PLAN_DIGEST: sha256(fs.readFileSync(planPath)), BATS_WAVE_SLUG: 'test-push-proof',
+  BATS_TARGET_DIGEST: sha256('isolated-full-roster'),
+  BATS_ENV_FINGERPRINT: sha256('isolated-quality-gate-fixture'),
+  BATS_STARTED_AT: stamp, BATS_FINISHED_AT: stamp,
+  BATS_LOG_DIGEST: sha256(`${runId}|tap`), BATS_LOG_IDENTITY: sha256(`${runId}|artifact`),
+  BATS_TOOL_VERSIONS: 'bats-1.13.0_node-24',
+};
+fs.writeFileSync(path.join(acdoc, `bats-result.${runId}.env`),
+  Object.entries(values).map(([key, value]) => `${key}=${value}\n`).join(''), 'utf8');
+NODEEOF
 }
 
 # write_valid_artifact_receipts — writes HEAD-bound, fresh, status:PASS
@@ -331,10 +355,10 @@ proof = {
         "run_id": "canonical-run", "head": head_sha, "ok": 10, "not_ok": 0,
         "expected": 10, "scope": "full", "generated_at": ts,
         "complete": True, "total": 10,
-        "agreement_count": 2,
-        "run_ids": "canonical-run-a,canonical-run-b",
-        "log_digests": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa,bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-        "log_identities": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc,dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "agreement_count": 1,
+        "run_ids": "canonical-run",
+        "log_digests": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "log_identities": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
     },
 }
 with open(proof_path, "w", encoding="utf-8") as f:
@@ -857,6 +881,8 @@ PYEOF
   write_push_proof "$HEAD_SHA" 0 "$REPO"
   local duplicate
   duplicate="$(printf 'e%.0s' {1..64})"
+  patch_bats_evidence_field "agreement_count" "2"
+  patch_bats_evidence_field "run_ids" '"canonical-run,independent-run"'
   patch_bats_evidence_field "log_identities" "\"${duplicate},${duplicate}\""
   run_verifier "$HEAD_SHA"
   [ "$status" -eq 2 ]

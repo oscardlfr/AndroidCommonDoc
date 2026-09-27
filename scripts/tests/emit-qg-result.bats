@@ -823,6 +823,59 @@ print(d.get('suite_summary', {}).get('bats_ok', -1))
     [ "$bats_ok_field" = "1631" ]
 }
 
+@test "#QR10b BLOCK: canonical PLAN rejects wrong-plan handoff and never falls back to a green shared TAP log" {
+    cp "$MANIFEST_SRC" "$REPO/quality-gate-manifest.json"
+    local current_head
+    current_head="$(git -C "$REPO" rev-parse HEAD)"
+    local wave_dir="$REPO/.planning/wave-test-slug"
+    mkdir -p "$wave_dir"
+    printf '### Wave Class\n**Class**: HARNESS\n' > "$wave_dir/PLAN.md"
+
+    local out="$wave_dir/qg-result.json" log="$REPO/bats.log" rpt="$REPO/report.json"
+    run bash "$SCRIPT" --init --out "$out" --project-root "$REPO" --slug test-slug
+    [ "$status" -eq 0 ]
+    local generated_at
+    generated_at="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+    write_handoff "$ACDOC" "run-wrong-plan" "$current_head" "$generated_at" 2 0 2 true pass
+    write_clean_bats_log "$log"
+    write_report_all_pass "$rpt"
+
+    run bash "$SCRIPT" --bats-log "$log" --report "$rpt" --out "$out" \
+        --project-root "$REPO" --slug test-slug
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"strict wave/PLAN-bound handoff selection failed"* ]]
+    [ "$(parse_json_field "$out" status)" = "fail" ]
+    [ "$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1]))["suite_summary"]["bats_ok"])' "$out")" = "0" ]
+}
+
+@test "#QR10c PASS: canonical PLAN accepts one exact wave/PLAN-bound local handoff" {
+    cp "$MANIFEST_SRC" "$REPO/quality-gate-manifest.json"
+    local current_head
+    current_head="$(git -C "$REPO" rev-parse HEAD)"
+    local wave_dir="$REPO/.planning/wave-test-slug"
+    mkdir -p "$wave_dir"
+    printf '### Wave Class\n**Class**: HARNESS\n' > "$wave_dir/PLAN.md"
+
+    local out="$wave_dir/qg-result.json" log="$REPO/bats.log" rpt="$REPO/report.json"
+    run bash "$SCRIPT" --init --out "$out" --project-root "$REPO" --slug test-slug
+    [ "$status" -eq 0 ]
+    local generated_at plan_digest handoff
+    generated_at="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+    write_handoff "$ACDOC" "run-exact-plan" "$current_head" "$generated_at" 2 0 2 true pass
+    plan_digest="$(node -e 'const fs=require("fs"),c=require("crypto");process.stdout.write(c.createHash("sha256").update(fs.readFileSync(process.argv[1])).digest("hex"))' "$wave_dir/PLAN.md")"
+    handoff="$ACDOC/bats-result.run-exact-plan.env"
+    sed -i.bak "s/^BATS_PLAN_DIGEST=.*/BATS_PLAN_DIGEST=$plan_digest/" "$handoff"
+    rm -f "$handoff.bak"
+    write_clean_bats_log "$log"
+    write_report_all_pass "$rpt"
+
+    run bash "$SCRIPT" --bats-log "$log" --report "$rpt" --out "$out" \
+        --project-root "$REPO" --slug test-slug
+    [ "$status" -eq 0 ]
+    [ "$(parse_json_field "$out" status)" = "pass" ]
+    [ "$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1]))["suite_summary"]["bats_ok"])' "$out")" = "2" ]
+}
+
 # ─────────────────────────────────────────────────────────────────────────────
 # #QR11a  INVALID handoff: BATS_GENERATED_AT < started_at → rejected → fallback
 #          + partial log → status:fail + bats_complete:false

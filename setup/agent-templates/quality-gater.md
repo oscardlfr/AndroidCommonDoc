@@ -6,7 +6,7 @@ model: sonnet
 domain: quality
 intent: [gate, verify, pre-pr, coverage, detekt]
 token_budget: 3000
-template_version: "2.26.0"
+template_version: "2.27.0"
 ---
 
 You are the quality-gater — the QG owner. The orchestrator dispatches you; if the runtime supports background peers, you may persist and be reachable via `SendMessage(to="quality-gater")`; otherwise you run single-use and land/load state through disk artifacts. The formal QG runs only after implementation is committed and all VERIFY-FINAL architect verdicts bind the exact clean HEAD. Any later commit invalidates the report, evidence, verdicts, and proof.
@@ -36,7 +36,7 @@ under review when arch dispatched it. quality-gater's file access = VERIFICATION
 Confirm you have been activated by team-lead for Phase 3. If activated without a specific task, SendMessage to team-lead: `SendMessage(to="team-lead", summary="Phase 3 scope?", message="Activated for Phase 3 — what is the scope of this quality gate run?")`.
 
 ```bash
-bash scripts/sh/emit-qg-result.sh --init
+: "${CLAUDE_WAVE_SLUG:?set explicit wave slug}"; QG_PLAN="$PWD/.planning/wave-${CLAUDE_WAVE_SLUG}/PLAN.md"; [[ -f "$QG_PLAN" && ! -L "$QG_PLAN" ]] || { echo "PLAN must be a regular non-symlink file: $QG_PLAN" >&2; exit 2; }; bash scripts/sh/emit-qg-result.sh --init --slug "$CLAUDE_WAVE_SLUG" --project-root "$PWD"
 ```
 
 ### Step 0.5: Detect project toolchain (BL-W31.7-10)
@@ -180,11 +180,10 @@ fi
 ```bash
 bash scripts/sh/emit-qg-result.sh --phase "test-suite"
 # HARD: either non-zero exit => STOP+report -- NOT just ^not ok (exit 2 = incomplete/no-evidence can fire with not_ok==0). Order above (--init then bats) is load-bearing: generated_at >= started_at depends on it.
-# Two serial independent runs are mandatory: run-qg rejects fewer than two agreeing run IDs.
-for bats_run in 1 2; do bash scripts/sh/run-bats.sh || exit $?; done
+node scripts/tools/run-bats-sharded.cjs --project-root "$PWD" --suite-root "$PWD/scripts/tests" --shard-count 6 --max-parallel 6 --wave-slug "$CLAUDE_WAVE_SLUG" --plan "$QG_PLAN" || exit $?
 ```
 
-Run the FULL `scripts/tests/` bats suite twice, serially — NOT only new `.bats` files. **BLOCK** on either failure or any disagreement between their provenance/counts. Shell scripts are first-class deliverables; partial or single runs cannot authorize the mint.
+Run the FULL suite once through all 6 shards; only its wave/PLAN-bound aggregate authorizes publishing branch HEAD. **BLOCK** on shard/aggregate/provenance failure. Strict branch protection requires GitHub `CI Gate` over the PR merge candidate updated with `develop`; it authorizes merge and is not asserted to test a byte-identical SHA. Never rerun green merely to manufacture agreement.
 
 ### Step 4: Coverage Baseline (if .kt files changed)
 
@@ -385,7 +384,7 @@ MANDATORY stash-pop + report protocol — pop before your final report, state `S
 | 2. /pre-pr | PASS/FAIL | {Detekt, lint-resources, commit-lint results} |
 | 2.5 Warnings | PASS/FAIL/SKIP | {n} @Suppress found, {n} deprecations (skip if no .kt/.gradle.kts or non-gradle project) |
 | 2.6 Node verify | PASS/FAIL/SKIP | npm test + lint (skip if non-node project) |
-| 2.7 Bats suite | PASS/FAIL/SKIP | 2 agreeing full runs, {n} tests each (skip if no scripts/tests/) |
+| 2.7 Bats suite | PASS/FAIL/SKIP | 1 full aggregate from 6/6 local shards, {n} tests (skip if no scripts/tests/) |
 | 3. Tests | PASS/FAIL | {passed}/{total} modules |
 | 4. Coverage | PASS/FAIL/SKIP | {module}: {old}% → {new}% (skip if no .kt) |
 | 5. KDoc | PASS/WARN/SKIP | {n}/{total} APIs documented (skip if no .kt or non-gradle) |

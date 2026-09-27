@@ -43,6 +43,12 @@ handling and operational one-shot silence; false-perfect coverage evidence,
 non-atomic adapter publication, proportional `L0_SYNC` CI classification, and
 the remaining active residuals do not reopen the 13 closed findings.
 
+> **Historical-policy notice (2026-09-27):** the two-local-run acceptance and
+> `agreement_count=2` below record how PR #250 was qualified. They are not current
+> operator instructions. Current policy is one complete six-shard local aggregate
+> validating branch HEAD for publication plus required GitHub `CI Gate` validating
+> the PR merge candidate updated with `develop` before merge.
+
 ## Delivered contracts
 
 | Wave | Delivered authority | Canonical implementation |

@@ -233,6 +233,12 @@
       }
     },
     "quality-gater": {
+      "2.27.0": {
+        "date": "2026-09-27",
+        "breaking": true,
+        "summary": "Replace two serial local full Bats runs with one provenance-bound six-shard local aggregate for branch-HEAD publication; required GitHub CI Gate validates the PR merge candidate updated with develop and remains merge authority.",
+        "migration_hint": "Re-sync the deployed template. Set CLAUDE_WAVE_SLUG explicitly, initialize QG with --slug and --project-root, and invoke run-bats-sharded.cjs once with --shard-count 6 --max-parallel 6 plus explicit --wave-slug/--plan. Do not merge until required CI Gate passes under strict branch protection."
+      },
       "2.26.0": {
         "date": "2026-09-26",
         "breaking": false,

@@ -8,7 +8,7 @@ The collaboration harness has one portable authority per concern:
 |---|---|
 | Peer lifecycle and reuse | Wave-1 runtime lifecycle and connectors |
 | PREP/VERIFY-FINAL approval | Request-bound `verdict/v1` JSON |
-| Test/QG evidence | Provenance-bound run records; two agreeing full Bats runs for push minting |
+| Test/QG evidence | One full local aggregate validates branch HEAD for push; required GitHub `CI Gate` validates the updated PR merge candidate for merge |
 | Phase sequencing | Persisted class-aware `PREP -> EXECUTE -> VERIFY_FINAL -> QG -> COMPLETE` control plane |
 | Push enforcement | Installed Git `pre-push` hook validating current stamps/proof |
 

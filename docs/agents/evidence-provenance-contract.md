@@ -8,8 +8,8 @@ layer: L0
 parent: agents-hub
 category: agents
 description: "Portable provenance and agreement contract for test and quality-gate evidence."
-version: 1
-last_updated: "2026-09-22"
+version: 2
+last_updated: "2026-09-27"
 ---
 
 # Evidence Provenance Contract
@@ -22,11 +22,24 @@ Every completed run binds a unique run id, exact Git HEAD, PLAN digest and wave 
 
 `scripts/lib/evidence-run-record.cjs` provides the runtime-neutral `evidence-run/v1` record. Its CLI accepts an explicit `--target-sha256` for a resolved roster/configuration and `--tool-versions` as canonical JSON; omitting them means the target digest covers the literal target specification and only Node is claimed. Bats uses the equivalent `BATS_*` handoff fields emitted by `run-bats.sh` and `run-bats-sharded.cjs`.
 
-## Selection and agreement
+## Local selection and independent merge authority
 
-`scripts/sh/lib/bats-handoff.sh select` validates confinement and every requested binding before selection. A security-critical push-proof mint requires two complete, passing, independently identified full runs that agree on HEAD, PLAN, wave, target, target digest, scope, environment, tools, counts, and verdict. The newest file cannot override disagreement.
+`scripts/sh/lib/bats-handoff.sh select` validates confinement and every requested binding before selection. A security-critical local push-proof mint requires one complete, passing full aggregate bound to HEAD, PLAN, wave, target, target digest, scope, environment, tools, counts, and verdict. The canonical producer runs six isolated shards once, validates exhaustive and duplicate-free coverage, and publishes one `BATS_SCOPE=full` aggregate; a child shard is never independently sufficient.
 
-Distinct run ids and distinct retained-file identities are both necessary but not sufficient: reused files, mismatched digests, truncated TAP, wrong targets, and stale PLAN or HEAD are rejected. Deterministic runs may correctly produce byte-identical logs and therefore equal content digests; equality of content is agreement, while the file identity proves that two separately retained artifacts were produced. Exceptions must be explicit in the consuming policy; absence of an exception means two agreeing runs.
+The required GitHub `CI Gate` supplies the independent merge check. The local
+aggregate validates the exact branch HEAD and authorizes publishing it. Under
+strict branch protection, CI validates the PR merge candidate updated with
+`develop`; merge remains blocked while the required check is missing, pending,
+cancelled, or red. These authority subjects are not claimed to be byte-identical.
+This replaces the former
+two-local-run policy: a second green local execution adds cost but not an
+independent environment, so it is not required and must not be run solely to
+manufacture agreement.
+
+Run id and retained-file identity remain necessary but not sufficient: reused
+files, mismatched digests, truncated TAP, wrong targets, and stale PLAN or HEAD are
+rejected. If multiple eligible local handoffs exist, disagreement still fails
+closed and recency cannot select around it; agreeing duplicates add no authority.
 
 ## Portable roots
 

@@ -1076,16 +1076,16 @@
       "name": "quality-gate",
       "type": "skill",
       "path": "skills/quality-gate/SKILL.md",
-      "description": "Run the canonical quality-gate protocol for the active wave and mint push authority only from current structured verdicts and two agreeing full Bats runs.",
+      "description": "Run the canonical quality-gate protocol for the active wave with one full local Bats aggregate; required GitHub CI Gate remains merge authority.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:4d2d52fa35c54834101bea80771c85b09c495965a1890f0713e4501aad0737a1",
+      "hash": "sha256:1485f2d48c6b619990ad014a95080fd5929335f6a8951805e15a460dbe650c50",
       "dependencies": [
         "scripts/sh/emit-push-proof.sh"
       ],
       "frontmatter": {
         "name": "quality-gate",
-        "description": "Run the canonical quality-gate protocol for the active wave and mint push authority only from current structured verdicts and two agreeing full Bats runs.",
+        "description": "Run the canonical quality-gate protocol for the active wave with one full local Bats aggregate; required GitHub CI Gate remains merge authority.",
         "intent": [
           "quality-gate",
           "verification",
@@ -2731,7 +2731,7 @@
       "description": "QG owner (Phase 3). Runs sequential verification on the final committed HEAD after VERIFY-FINAL architect approval. Reports structured PASS/FAIL.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:fc58e5f9436881f38e56c4dd24d88d754512b88b47700dc478a368395a0125a4",
+      "hash": "sha256:cb2370fe4a4a2ef05c1ad05b6c506781d8dc0b87342ea20a5d61f66761bff667",
       "dependencies": [],
       "frontmatter": {
         "name": "quality-gater",
@@ -2747,7 +2747,7 @@
           "detekt"
         ],
         "token_budget": 3000,
-        "template_version": "2.26.0"
+        "template_version": "2.27.0"
       }
     },
     {

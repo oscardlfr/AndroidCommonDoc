@@ -110,12 +110,21 @@ the boundary intentionally sends non-canonical forms through ordinary approval.
 
 ## Full quality-gate ownership
 
-The `quality-gater` owns the two required independent full Bats runs. Do not run
-two full suites as a preflight and then ask the quality-gater to run them again.
-Focused tests are the development loop; after the PLAN, path manifest, clean HEAD,
-architect verdict bindings, and QG session are current, the quality-gater produces
-or selects exactly two fresh agreeing handoffs once. This does not weaken the
-two-run agreement or freshness requirements.
+The `quality-gater` owns one canonical local full Bats execution. Focused tests are
+the development loop; after the PLAN, path manifest, clean HEAD, architect verdict
+bindings, and QG session are current, it invokes `run-bats-sharded.cjs` once with
+six shards at max parallelism six and explicit `--wave-slug` plus `--plan`. Only
+the verified full aggregate authorizes the feature-branch push; individual shard
+handoffs do not.
+
+The local aggregate validates the exact branch HEAD and authorizes publishing it.
+Under strict branch protection, required GitHub `CI Gate` validates the PR merge
+candidate updated with `develop` and authorizes merge; it is not a claim that CI
+tested the byte-identical local SHA. Do not run a second local full suite to
+manufacture agreement, and never merge while `CI Gate` is absent, pending,
+cancelled, or red. The former two-local-run contract is
+superseded; freshness, exact HEAD/PLAN binding, full-roster completeness, and
+fail-closed evidence validation remain unchanged.
 
 ## Recovery when startup customizations interfere
 
