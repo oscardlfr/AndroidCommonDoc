@@ -199,9 +199,9 @@ Guard with `command -v npx`; skip silently if npx absent, never hard-fail.
 during a QG session (e.g., `/pre-pr` Step 2 + Step 3 `run-bats.sh`), `emit-qg-result.sh`
 re-reading the shared log may capture an intermediate, not the authoritative single run.
 
-**Solution**: `run-bats.sh` (full-run mode) writes a **unique-per-run handoff** file:
-`.androidcommondoc/bats-result.<BATS_RUN_ID>.env` (gitignored scratch; atomic temp+mv).
-
+**Solution**: full-run mode writes `.androidcommondoc/bats-result.<BATS_RUN_ID>.env`
+and immutable `.androidcommondoc/suite-bats.<BATS_RUN_ID>.log` artifacts. The ordinary
+`suite-bats.log` remains the live view, never the identity proving independent runs.
 **Handoff fields:**
 
 | Field | Description |
@@ -212,14 +212,14 @@ re-reading the shared log may capture an intermediate, not the authoritative sin
 | `BATS_TOTAL` | `BATS_OK + BATS_NOT_OK` |
 | `BATS_COMPLETE` | `true`\|`false` (4-part check) |
 | `BATS_VERDICT` | `pass`\|`fail` |
-| `BATS_LOG` | Absolute path of TAP log evaluated |
+| `BATS_LOG` | Absolute path of the immutable per-run retained TAP log |
 | `BATS_HEAD` | `git rev-parse HEAD` at run time |
 | `BATS_RUN_ID` | Unique per invocation (timestamp+pid+rand) |
 | `BATS_GENERATED_AT` | Sortable UTC timestamp (same format as `qg-result.json` `started_at`) |
 | `BATS_PLAN_DIGEST` / `BATS_WAVE_SLUG` / `BATS_TARGET_DIGEST` | Planning authority and sorted target set |
 | `BATS_ENV_FINGERPRINT` / `BATS_TOOL_VERSIONS` / start-finish timestamps | Environment, tools and interval |
 | `BATS_LOG_DIGEST` | SHA-256 of the retained TAP log |
-
+| `BATS_LOG_IDENTITY` | Stable file identity of the retained TAP log; two agreeing runs require distinct identities even when their bytes are identical |
 **emit-qg-result.sh discovery algorithm** (final mode):
 
 1. Read `started_at` from `qg-result.json` (written at `--init`). If absent → skip handoff,
@@ -236,7 +236,6 @@ re-reading the shared log may capture an intermediate, not the authoritative sin
 **Key invariant**: a handoff from a PREVIOUS QG on the same HEAD is REJECTED by the
 `BATS_GENERATED_AT >= started_at` guard. `started_at` and `BATS_GENERATED_AT` MUST share
 one sortable UTC format (lexicographic compare) — no fragile `date -d` parsing.
-
 `--init` / `--phase` heartbeat modes are **untouched** (run before bats; no bats logic
 in those modes). No `--bats-result` flag; no `quality-gater.md` edit.
 

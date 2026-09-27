@@ -499,6 +499,8 @@ if [[ "$EVAL_ONLY" == "false" ]]; then
     HANDOFF_DIR="$ROOT/.androidcommondoc"
     HANDOFF_PATH="$HANDOFF_DIR/bats-result.${BATS_RUN_ID}.env"
     HANDOFF_TMP="${HANDOFF_DIR}/bats-result-tmp-$$.${RANDOM}.env"
+    RETAINED_LOG="$HANDOFF_DIR/suite-bats.${BATS_RUN_ID}.log"
+    RETAINED_LOG_TMP="${HANDOFF_DIR}/suite-bats-tmp-$$.${RANDOM}.log"
 
     mkdir -p "$HANDOFF_DIR"
 
@@ -507,8 +509,21 @@ if [[ "$EVAL_ONLY" == "false" ]]; then
     BATS_FINISHED_AT="$BATS_GENERATED_AT"
     BATS_LOG_DIGEST="none"
     BATS_LOG_IDENTITY="none"
+    EVIDENCE_LOG="$LOG"
     if [[ -f "$LOG" ]]; then
-        BATS_LOG_FACTS="$(node -e "const e=require(process.argv[1]),r=e.stableReadArtifact(process.argv[2]);process.stdout.write(r.sha256+':'+r.identity)" "$SCRIPT_DIR/../lib/evidence-run-record.cjs" "$LOG")" || BATS_LOG_FACTS="none:none"
+        # Preserve one immutable log artifact per run. Re-reading the default
+        # suite-bats.log after the next invocation would otherwise bind two
+        # distinct run ids to the same overwritten inode, making the canonical
+        # two-run agreement requirement impossible to satisfy.
+        if cp -- "$LOG" "$RETAINED_LOG_TMP" && mv "$RETAINED_LOG_TMP" "$RETAINED_LOG"; then
+            EVIDENCE_LOG="$RETAINED_LOG"
+        else
+            rm -f -- "$RETAINED_LOG_TMP"
+            echo "[run-bats] ERROR: could not retain an immutable per-run log artifact" >&2
+            EXIT_CODE=2
+            BATS_VERDICT="fail"
+        fi
+        BATS_LOG_FACTS="$(node -e "const e=require(process.argv[1]),r=e.stableReadArtifact(process.argv[2]);process.stdout.write(r.sha256+':'+r.identity)" "$SCRIPT_DIR/../lib/evidence-run-record.cjs" "$EVIDENCE_LOG")" || BATS_LOG_FACTS="none:none"
         BATS_LOG_DIGEST="${BATS_LOG_FACTS%%:*}"
         BATS_LOG_IDENTITY="${BATS_LOG_FACTS#*:}"
     fi
@@ -520,7 +535,7 @@ if [[ "$EVAL_ONLY" == "false" ]]; then
     printf 'BATS_TOTAL=%s\n'            "$FACT_TOTAL"           >> "$HANDOFF_TMP"
     printf 'BATS_COMPLETE=%s\n'         "$FACT_COMPLETE"        >> "$HANDOFF_TMP"
     printf 'BATS_VERDICT=%s\n'          "$BATS_VERDICT"         >> "$HANDOFF_TMP"
-    printf 'BATS_LOG=%s\n'              "$LOG"                  >> "$HANDOFF_TMP"
+    printf 'BATS_LOG=%s\n'              "$EVIDENCE_LOG"         >> "$HANDOFF_TMP"
     printf 'BATS_HEAD=%s\n'             "$BATS_HEAD"            >> "$HANDOFF_TMP"
     printf 'BATS_RUN_ID=%s\n'           "$BATS_RUN_ID"          >> "$HANDOFF_TMP"
     printf 'BATS_GENERATED_AT=%s\n'     "$BATS_GENERATED_AT"    >> "$HANDOFF_TMP"
