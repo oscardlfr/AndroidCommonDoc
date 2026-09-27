@@ -8,8 +8,8 @@ layer: L0
 parent: agents-hub
 category: agents
 description: "QG-proof push gate: emit-push-proof.sh (run-qg/verify-proof), quality-gate-manifest.json policy, push-proof.json schema, verdict→HEAD binding, bats-evidence binding (Wave A), bypass audit trail."
-version: 3
-last_updated: "2026-07-11"
+version: 4
+last_updated: "2026-09-27"
 assumes_read: quality-gate-protocol, agent-verdict-protocol
 ---
 
@@ -17,7 +17,7 @@ assumes_read: quality-gate-protocol, agent-verdict-protocol
 
 ## Portable authority boundary
 
-The installed Git `pre-push` hook is the sole portable enforcement point. Runtime command-intent and peer checks are advisory defense-in-depth. Proof minting consumes validated structured verdicts and two agreeing full-run Bats handoffs; newest-wins selection and legacy Markdown tokens are rejected. See [Push Authority Policy](push-authority-policy.md) and [Evidence Provenance Contract](evidence-provenance-contract.md).
+The installed Git `pre-push` hook is the sole portable enforcement point for publishing the exact branch HEAD. Runtime command-intent and peer checks are advisory defense-in-depth. Proof minting consumes validated structured verdicts and one complete full-run local Bats aggregate; legacy Markdown tokens and partial shard handoffs are rejected. Under strict branch protection, required GitHub `CI Gate` validates the PR merge candidate updated with `develop` and is the separate merge authority; it is not fabricated inside the local proof, and the two authority subjects are not claimed to be byte-identical. See [Push Authority Policy](push-authority-policy.md) and [Evidence Provenance Contract](evidence-provenance-contract.md).
 
 The QG-proof push gate closes the loop between the quality-gater (Phase 3) and the git layer (pre-push hook). The quality-gater mints a cryptographically-bound proof after completing Steps 0-9; the pre-push hook verifies that proof before allowing any push.
 
@@ -77,7 +77,7 @@ Runs in sequence, failing CLOSED on any integrity violation:
 
 #### Evidence Binding (`test-suite-evidence-*`, Wave A)
 
-A claimed `report.steps[]` entry of `{"step":"test-suite","result":"PASS"}` is no longer accepted on faith. `run-qg` calls `lib/bats-handoff.sh select --since <report.started_at> --require-scope full` and requires the returned evidence to satisfy ALL of: `status == "ok"`, `head == <current HEAD>`, `scope == "full"`, `complete == true`, `not_ok == 0`, plus a sanity floor (`ok > 0`, `expected > 0`, `total == ok + not_ok`, `total == expected` — closing the bypass where an internally-inconsistent count would otherwise pass every other check). Failure die-codes: `test-suite-evidence-absent` (no qualifying handoff, or the sanity floor's `ok`/`expected` checks fail), `test-suite-evidence-stale` (`head` mismatch), `test-suite-evidence-partial` (`scope`/`complete` mismatch, or the sanity floor's count-consistency checks fail), `test-suite-evidence-dirty` (`not_ok > 0`). The selected evidence — `{run_id, head, ok, not_ok, expected, scope, generated_at}`, no filesystem paths — is carried into `push-proof.json` as `bats_evidence` (see schema below). **Wave `qg-artifact-binding` (W7)** additively persists two more fields into the same object, `complete` and `total`, growing it to 9 keys — see "Eight integrity checks" below for what the extra fields unlock at verify time.
+A claimed `report.steps[]` entry of `{"step":"test-suite","result":"PASS"}` is no longer accepted on faith. `run-qg` calls `lib/bats-handoff.sh select --since <report.started_at> --require-scope full --require-agreeing 1` and requires the returned aggregate evidence to satisfy ALL of: `status == "ok"`, `head == <current HEAD>`, `scope == "full"`, `complete == true`, `not_ok == 0`, plus a sanity floor (`ok > 0`, `expected > 0`, `total == ok + not_ok`, `total == expected` — closing the bypass where an internally-inconsistent count would otherwise pass every other check). Failure die-codes: `test-suite-evidence-absent` (no qualifying handoff, or the sanity floor's `ok`/`expected` checks fail), `test-suite-evidence-stale` (`head` mismatch), `test-suite-evidence-partial` (`scope`/`complete` mismatch, or the sanity floor's count-consistency checks fail), `test-suite-evidence-dirty` (`not_ok > 0`). The selected evidence — `{run_id, head, ok, not_ok, expected, scope, generated_at}`, no filesystem paths — is carried into `push-proof.json` as `bats_evidence` (see schema below). The canonical producer is one six-shard `run-bats-sharded.cjs` invocation with explicit wave/PLAN arguments; its six child handoffs are not six local acceptance runs. GitHub `CI Gate` independently reruns the required CI matrix before merge.
 
 ### `verify-proof` — Cheap Git-Layer Verifier (pre-push hook)
 
@@ -98,7 +98,11 @@ Eight integrity checks, all fail-CLOSED (exit 2 on failure):
 
 `verify-proof` does NOT re-evaluate predicates. Predicate consistency was enforced at mint (run-qg) and is bound cryptographically via `report_digest`. Post-mint tampering with `quality-gate-report.json` causes a digest mismatch and blocks. Check 8 is a narrower, independent binding: even a byte-identical, untampered proof carried over from an earlier commit fails it, since `report_digest` alone does not encode which commit the bats evidence was gathered for.
 
-All three verifiers implement this same 8-check contract at equivalent rigor: this bash `verify_proof` subcommand, `scripts/ps1/verify-push-proof.ps1` (Windows git-layer parity), and the in-JS fallback inside `.claude/hooks/push-authorization-gate.js` (used only when it cannot delegate to bash) — all three independently re-derive the SAME W7 completeness predicate over `bats_evidence`, not just presence + head match.
+Both proof verifiers implement this same contract at equivalent rigor: this Bash
+`verify_proof` subcommand and `scripts/ps1/verify-push-proof.ps1` (Windows parity).
+`.claude/hooks/push-authorization-gate.js` does not parse proof contents; it verifies
+that the canonical Git pre-push hook is installed, executable, and byte-identical,
+then leaves proof authority to that Git-layer hook.
 
 **Narrowed claim (2026-07-10):** the 8-check contract above governs the *proof verification* logic once a command has been identified as a push attempt. The separate *push-detection* logic inside `push-authorization-gate.js` (`isGitPushCommand`, PreToolUse) is best-effort command-string parsing with a known, unbounded shell-evasion surface (see `BACKLOG.md`'s CRITICAL entry) — it is **not** authoritative. The authoritative, escape-proof push gate is the git-layer `.git/hooks/pre-push` hook, which validates real git refs and stamps rather than parsing a command string, and so cannot be evaded by any command spelling.
 
@@ -115,7 +119,7 @@ All three verifiers implement this same 8-check contract at equivalent rigor: th
   "worktree_id":      "<absolute path from git rev-parse --show-toplevel>",
   "generated_at":     "<ISO-8601 UTC>",
   "wave_slug":        "<branch last-segment>",
-  "manifest_version": 3,
+  "manifest_version": 4,
   "steps_executed":   [{"step": "<id>", "result": "PASS|SKIP", "ran": true|false}],
   "report_digest":    "<sha256 hex>",
   "artifact_digests": {
@@ -123,7 +127,7 @@ All three verifiers implement this same 8-check contract at equivalent rigor: th
     "skills/registry.json":   "<sha256 hex, CRLF→LF, record-only>"
   },
   "bats_evidence": {
-    "run_id":       "<representative BATS_RUN_ID after agreement>",
+    "run_id":       "<qualifying aggregate BATS_RUN_ID>",
     "head":         "<40-char sha; re-checked against the pushed SHA at verify time>",
     "ok":           0,
     "not_ok":       0,
@@ -137,8 +141,8 @@ All three verifiers implement this same 8-check contract at equivalent rigor: th
     "target_digest": "<sorted target-set digest>",
     "environment_fingerprint": "<effective environment>",
     "tool_versions": "<effective tool versions>",
-    "agreement_count": 2,
-    "run_ids": "<two or more distinct agreeing ids>"
+    "agreement_count": 1,
+    "run_ids": "<the qualifying aggregate run id>"
   }
 }
 ```
@@ -147,7 +151,7 @@ All three verifiers implement this same 8-check contract at equivalent rigor: th
 - **`arch-*-verdict-verify-final.json`**: validated structured VERIFY-FINAL verdict files, bound at step 3. Post-mint tampering invalidates the proof.
 - **`skills/registry.json`**: sha256 (CRLF→LF) of the committed registry file, recorded for audit. `verify-proof` does NOT re-evaluate this digest — the committed-tree integrity check (step 4) already ran at mint time; the digest is a post-hoc record. `schema_version` stays 1.
 
-`bats_evidence` is the agreeing set selected by `lib/bats-handoff.sh select --since report.started_at --require-scope full --require-agreeing 2`. No filesystem paths are stored. `verify-proof` rechecks HEAD, full completeness, zero failures, count equality, at least two distinct run ids, and the persisted provenance fields; a newest or disagreeing run cannot displace the set. The Git hook remains the portable enforcement point.
+`bats_evidence` is selected by `lib/bats-handoff.sh select --since report.started_at --require-scope full --require-agreeing 1`. No filesystem paths are stored. `verify-proof` rechecks HEAD, full completeness, zero failures, count equality, the local aggregate run id, and the persisted provenance fields; a partial, newest, or disagreeing run cannot displace valid full evidence. The Git hook remains the portable local branch-HEAD publication gate. Strict branch protection's required GitHub `CI Gate` validates the PR merge candidate updated with `develop` and is the merge authority; local proof is necessary for push but never substitutes for CI, nor implies GitHub tested the byte-identical local SHA.
 
 ---
 
@@ -194,6 +198,13 @@ Committed to repo root. Versioned (`manifest_version`) so `verify-proof` detects
 ```
 
 **Required steps** (7): `architect-deliberation`, `pre-pr`, `test-suite`, `rule-cross-check`, `registry-hash`, `secret-scan`, `doc-validator-parity`. A `FAIL` result blocks proof emission.
+
+The `test-suite` evidence policy declares `min_local_runs: 1` and
+`remote_merge_check: "CI Gate"`. `min_local_runs` is enforced while minting the
+local proof for the exact branch HEAD. `remote_merge_check` is declarative merge
+policy enforced by strict GitHub branch protection after push, against the PR merge
+candidate updated with `develop`; the local emitter must never claim to have
+executed or synthesized that remote status, or that both checks cover one byte-identical SHA.
 
 **Conditional steps** (9) carry a `predicate` field evaluated at mint time. Named predicates (closed enum — unknown predicates are a hard exit-2 error):
 

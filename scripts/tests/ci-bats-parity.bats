@@ -4,7 +4,7 @@ bats_require_minimum_version 1.5.0
 # CI-parity tests: assert that .github/workflows/reusable-shell-tests.yml contains
 # the same completeness logic as scripts/sh/run-bats.sh.
 #
-# Coverage map (12 tests):
+# Coverage map (13 tests):
 #   #CP1  Workflow contains the plan-parse grep (^1\.[0-9]) — mirroring run-bats.sh LD1(c)
 #   #CP2  Workflow contains the total != expected mismatch fail branch — LD1(c)
 #   #CP3  Workflow contains the Executed-warning grep — LD1(d)
@@ -29,6 +29,8 @@ bats_require_minimum_version 1.5.0
 #         run-bats-sharded-stdin-regression.test.js, which spawns run-bats.sh
 #         for real and needs bats resolvable, unlike bats-post's other Node
 #         tests, which don't touch a real bats subprocess at all
+#   #CP13 The required branch-protection check "CI Gate" depends on shell-tests and
+#         includes its result in the aggregate decision.
 #
 # Rationale: the CI inline bats guard (reusable-shell-tests.yml) duplicates the
 # completeness logic from run-bats.sh by design (consumer-portability invariant —
@@ -348,4 +350,18 @@ NAMES
         return 1
     }
     [ "$install_line" -lt "$run_line" ]
+}
+
+@test "#CP13 POLICY: CI Gate depends on shell-tests and checks its result" {
+    local workflow="$REPO_ROOT/.github/workflows/l0-ci.yml"
+    [ -f "$workflow" ] || {
+        echo "workflow not found: $workflow" >&2
+        return 1
+    }
+    local ci_gate
+    ci_gate="$(awk 'f{print} /^  ci-gate:/{f=1}' "$workflow")"
+    [ -n "$ci_gate" ]
+    grep -qF 'name: CI Gate' <<< "$ci_gate"
+    grep -qE '^[[:space:]]*-[[:space:]]*shell-tests[[:space:]]*$' <<< "$ci_gate"
+    grep -qF '${{ needs.shell-tests.result }}' <<< "$ci_gate"
 }

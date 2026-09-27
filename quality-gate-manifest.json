@@ -1,10 +1,10 @@
 {
-  "manifest_version": 3,
-  "protocol_digest": "4d2303c76bfcfb3e554fa320da722002a3e9bc06267b9cd30e641942d0a89a17",
+  "manifest_version": 4,
+  "protocol_digest": "b38b8c7b90b395bcefe05dfd9ce83853a1cc55be17d92f3fd8a6df0576f33b0c",
   "required_steps": [
     {"id": "architect-deliberation", "kind": "judgment",    "artifact_glob": ".planning/wave-*/arch-*-verdict-*.json", "head_bound": true, "required_roles": ["arch-platform","arch-testing","arch-integration"]},
     {"id": "pre-pr",                 "kind": "automatable", "artifact": ".androidcommondoc/pre-pr-report.json", "mint_rederived": true},
-    {"id": "test-suite",             "kind": "automatable", "evidence": {"kind": "bats-handoff", "require_scope": "full", "max_not_ok": 0, "require_complete": true, "require_since": "report.started_at"}},
+    {"id": "test-suite",             "kind": "automatable", "evidence": {"kind": "bats-handoff", "require_scope": "full", "max_not_ok": 0, "require_complete": true, "require_since": "report.started_at", "min_local_runs": 1, "remote_merge_check": "CI Gate"}},
     {"id": "rule-cross-check",       "kind": "judgment"},
     {"id": "registry-hash",          "kind": "automatable", "artifact": ".androidcommondoc/registry-hash-report.json", "mint_rederived": true},
     {"id": "secret-scan",            "kind": "automatable", "artifact": ".androidcommondoc/secret-scan-report.json"},

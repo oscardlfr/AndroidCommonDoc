@@ -10,9 +10,9 @@
 # as a git-layer pre-push hook on Windows -- install-git-hooks.ps1 installs no
 # pre-push hook at all. The only installed git-layer pre-push hook, on any OS, is
 # the bash pre-push-hook.sh via scripts/sh/install-git-hooks.sh. This script is a
-# standalone/CI-adjacent verifier today; pwsh is confirmed absent from this
-# project's macOS dev box, so it is exercised by static assertion only (see
-# scripts/tests/emit-push-proof-template-size.bats's #EP-PS1-VERIFY).
+# standalone/CI-adjacent verifier today. Its live contract is exercised on a
+# real windows-latest runner by scripts/tests/verify-push-proof-windows.ps1;
+# local non-PowerShell hosts retain the complementary static assertions.
 #
 # USAGE
 #   verify-push-proof.ps1 -PushedSha <sha> [-RepoRoot <path>]
@@ -179,10 +179,7 @@ if ($recomputed -ne $proof.report_digest) {
 }
 
 # -- 10. bats_evidence binding: present + head matches pushed_sha -----------
-# Mirrors the bash verify_proof's 9th check (its own comment-numbering counts "Load
-# proof" as step 1) and push-authorization-gate.js's in-JS fallback -- all three
-# verifiers now carry equivalent rigor. A half-done evidence binding would mint
-# correctly but verify permissively; this closes that gap.
+# Mirrors the Bash verify_proof contract used by the installed Git pre-push hook.
 if (-not $proof.bats_evidence) {
     Die "bats_evidence missing from push-proof.json -- proof was minted before this wave's evidence binding, or evidence was stripped. Re-run /quality-gate."
 }
@@ -191,10 +188,10 @@ if ($proof.bats_evidence.head -ne $PushedSha) {
 }
 
 # -- 11-15. bats_evidence completeness (wave qg-artifact-binding, W7) --------
-# The SAME predicate bash verify_proof() and push-authorization-gate.js's in-JS
-# fallback re-derive: not_ok==0 && scope=='full' && complete==true &&
-# total==expected && ok>0. A half-done completeness binding would mint correctly
-# but verify permissively for these five fields too, same rationale as -- 10.
+# The SAME predicate as the installed Bash verify_proof() path:
+# not_ok==0 && scope=='full' && complete==true && total==expected && ok>0.
+# A half-done completeness binding would mint correctly but verify permissively
+# for these five fields too, same rationale as -- 10.
 if ($proof.bats_evidence.not_ok -ne 0) {
     Die "bats-evidence-dirty: bats_evidence.not_ok ($($proof.bats_evidence.not_ok)) != 0"
 }
@@ -209,6 +206,28 @@ if ($proof.bats_evidence.total -ne $proof.bats_evidence.expected) {
 }
 if (-not ($proof.bats_evidence.ok -gt 0)) {
     Die "bats-evidence-floor: bats_evidence.ok ($($proof.bats_evidence.ok)) fails sanity floor (must be > 0)"
+}
+
+# -- 16. Local-run policy + retained-artifact identity ---------------------
+$testSuiteStep = @($manifest.required_steps | Where-Object { $_.id -eq 'test-suite' } | Select-Object -First 1)
+$testSuitePolicy = if ($testSuiteStep.Count -eq 1) { $testSuiteStep[0].evidence } else { $null }
+if (-not $testSuitePolicy -or $testSuitePolicy.min_local_runs -ne 1 -or $testSuitePolicy.remote_merge_check -ne 'CI Gate') {
+    Die "manifest-evidence-drift: expected min_local_runs=1 and remote_merge_check='CI Gate'"
+}
+
+$localRunCount = $proof.bats_evidence.agreement_count
+if (($localRunCount -isnot [int]) -and ($localRunCount -isnot [long])) {
+    Die "bats-evidence-agreement: agreement_count is not an integer"
+}
+if ($localRunCount -lt 1) {
+    Die "bats-evidence-agreement: qualifying local runs ($localRunCount) < 1"
+}
+$runIds = @(([string]$proof.bats_evidence.run_ids).Split(',') | Where-Object { $_ })
+$logIdentities = @(([string]$proof.bats_evidence.log_identities).Split(',') | Where-Object { $_ })
+$uniqueRunIds = @($runIds | Sort-Object -Unique)
+$uniqueLogIdentities = @($logIdentities | Sort-Object -Unique)
+if ($uniqueRunIds.Count -ne $localRunCount -or $uniqueLogIdentities.Count -ne $localRunCount) {
+    Die "bats-evidence-reused: local_run_count=$localRunCount, run_ids=$($runIds -join ','), log_identities=$($logIdentities -join ',') must identify the same distinct local evidence set"
 }
 
 Write-Host "[emit-push-proof] verify-proof: PASS" -ForegroundColor Green

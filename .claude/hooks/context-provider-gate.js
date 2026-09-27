@@ -35,16 +35,19 @@ let runtimeRoleLifecycle = null;
 let runtimeConsultationLib = null;
 let runtimeHostClaude = null;
 let runtimeCollaborationEntrypoints = null;
+let runtimeProjectContext = null;
 try {
   runtimeRoleLifecycle = require('../../scripts/lib/runtime-role-lifecycle.cjs');
   runtimeConsultationLib = require('../../scripts/lib/runtime-consultation.cjs');
   runtimeHostClaude = require('../../scripts/lib/runtime-host-claude.cjs');
   runtimeCollaborationEntrypoints = require('../../scripts/lib/runtime-collaboration-entrypoints.cjs');
+  runtimeProjectContext = require('../../scripts/lib/runtime-project-context.cjs');
 } catch {
   runtimeRoleLifecycle = null;
   runtimeConsultationLib = null;
   runtimeHostClaude = null;
   runtimeCollaborationEntrypoints = null;
+  runtimeProjectContext = null;
 }
 
 function sanitizeId(id) {
@@ -736,6 +739,7 @@ const LIFECYCLE_BOOTSTRAP_ADMITTED_SUBCOMMANDS = Object.freeze(['probe', 'ensure
 // lifecycle CLI.
 const CANONICAL_LIFECYCLE_CLI_PATH = path.resolve(__dirname, '../../scripts/lib/runtime-role-lifecycle.cjs');
 const CANONICAL_ENTRYPOINT_CLI_PATH = path.resolve(__dirname, '../../scripts/lib/runtime-collaboration-entrypoints.cjs');
+const ENTRYPOINT_LAUNCHER_RELATIVE_PATH = '.claude/runtime/l0-entrypoint-launcher.cjs';
 
 /**
  * Recognizes ONLY the canonical `node <canonical-absolute-path> <subcommand>
@@ -842,12 +846,123 @@ function parseEntrypointCliCommand(command, event) {
     rewritten[1] = CANONICAL_ENTRYPOINT_CLI_PATH;
     return rewritten;
   }
+  if (path.isAbsolute(scriptToken)
+      && scriptToken.replace(/\\/g, '/').endsWith('/' + ENTRYPOINT_LAUNCHER_RELATIVE_PATH)) {
+    return tokens;
+  }
+  if (scriptToken === ENTRYPOINT_LAUNCHER_RELATIVE_PATH) return tokens;
   if (scriptToken !== ENTRYPOINT_RELATIVE_CLI_PATH) return null;
-  if (typeof event.cwd !== 'string' || event.cwd.length === 0 || !path.isAbsolute(event.cwd)) return null;
-  if (path.resolve(event.cwd, scriptToken) !== CANONICAL_ENTRYPOINT_CLI_PATH) return null;
+  // Keep the exact legacy relative surface recognizable even when it is
+  // issued from a consumer checkout.  Returning null here would hand the
+  // command back to ordinary Bash approval and silently bypass the installed
+  // runtime adapter.  canonicalizeInstalledEntrypointSurface resolves the
+  // declared project root below and either preserves L0 self-use or denies a
+  // consumer fail-closed.
+  return tokens;
+}
+
+function canonicalizeInstalledEntrypointSurface(tokens, event) {
+  if (!runtimeProjectContext || tokens.length < 3 || tokens[2] !== 'execute') {
+    return { recognized: false, tokens: null, reason: null };
+  }
+  const scriptToken = String(tokens[1]);
+  const normalizedScript = scriptToken.replace(/\\/g, '/');
+  const isLauncher = scriptToken === ENTRYPOINT_LAUNCHER_RELATIVE_PATH
+    || (path.isAbsolute(scriptToken)
+      && normalizedScript.endsWith('/' + ENTRYPOINT_LAUNCHER_RELATIVE_PATH));
+  const isDirect = normalizedScript === CANONICAL_ENTRYPOINT_CLI_PATH.replace(/\\/g, '/');
+  const isLegacyRelative = normalizedScript === ENTRYPOINT_RELATIVE_CLI_PATH;
+  if (!isLauncher && !isDirect && !isLegacyRelative) {
+    return { recognized: false, tokens: null, reason: null };
+  }
+
+  if (isLauncher && (tokens.length !== 9
+      || tokens[3] !== '--entrypoint'
+      || tokens[5] !== '--project-root'
+      || tokens[7] !== '--intent')) {
+    return { recognized: true, tokens: null, reason: 'installed L0 entrypoint launcher argv is not the closed canonical shape' };
+  }
+
+  const values = extractFlagValues(tokens.slice(3), []);
+  if (!values || typeof values['--project-root'] !== 'string'
+      || !path.isAbsolute(values['--project-root'])) {
+    return { recognized: true, tokens: null, reason: 'malformed canonical collaboration entrypoint command' };
+  }
+  let projectRoot;
+  try {
+    projectRoot = fs.realpathSync(values['--project-root']);
+    if (projectRoot !== path.resolve(values['--project-root']) || !fs.statSync(projectRoot).isDirectory()) {
+      throw new Error('unsafe-project-root');
+    }
+    if (process.env.CLAUDE_PROJECT_DIR
+        && fs.realpathSync(process.env.CLAUDE_PROJECT_DIR) !== projectRoot) {
+      throw new Error('foreign-project-root');
+    }
+  } catch {
+    return { recognized: true, tokens: null, reason: 'collaboration entrypoint project root is unresolved or foreign' };
+  }
+
+  if (isDirect) {
+    const context = runtimeProjectContext.resolveRuntimeProjectContext(projectRoot);
+    if (!context || context.ok !== true) {
+      return { recognized: true, tokens: null, reason: 'collaboration runtime project context is invalid' };
+    }
+    if (context.consumerLayer !== 'L0') {
+      return { recognized: true, tokens: null, reason: 'a consumer must invoke its installed L0 entrypoint launcher, never the toolkit target directly' };
+    }
+    return { recognized: true, tokens, reason: null };
+  }
+
+  if (isLegacyRelative) {
+    const context = runtimeProjectContext.resolveRuntimeProjectContext(projectRoot);
+    if (!context || context.ok !== true) {
+      return { recognized: true, tokens: null, reason: 'collaboration runtime project context is invalid' };
+    }
+    if (context.consumerLayer !== 'L0') {
+      return {
+        recognized: true,
+        tokens: null,
+        reason: 'a consumer legacy relative entrypoint is unsupported; invoke its installed L0 entrypoint launcher',
+      };
+    }
+    if (typeof event.cwd !== 'string' || event.cwd.length === 0 || !path.isAbsolute(event.cwd)
+        || path.resolve(event.cwd, scriptToken) !== CANONICAL_ENTRYPOINT_CLI_PATH) {
+      return { recognized: true, tokens: null, reason: 'L0 relative collaboration entrypoint is foreign' };
+    }
+    const rewritten = tokens.slice();
+    rewritten[1] = CANONICAL_ENTRYPOINT_CLI_PATH;
+    return { recognized: true, tokens: rewritten, reason: null };
+  }
+
+  const expectedLauncher = path.join(projectRoot, ENTRYPOINT_LAUNCHER_RELATIVE_PATH);
+  try {
+    const supplied = scriptToken === ENTRYPOINT_LAUNCHER_RELATIVE_PATH
+      ? path.resolve(event.cwd || '', scriptToken)
+      : path.resolve(scriptToken);
+    const info = fs.lstatSync(expectedLauncher);
+    if (supplied !== expectedLauncher || !info.isFile() || info.isSymbolicLink()
+        || fs.realpathSync(expectedLauncher) !== expectedLauncher) {
+      throw new Error('unsafe-launcher');
+    }
+  } catch {
+    return { recognized: true, tokens: null, reason: 'installed L0 entrypoint launcher is missing, foreign, or unsafe' };
+  }
+  const qualification = runtimeProjectContext.verifyRuntimeConsumerInstallation(
+    projectRoot, { verifyContent: true },
+  );
+  if (!qualification || qualification.ok !== true
+      || qualification.consumerRoot !== projectRoot
+      || qualification.toolkitRoot !== fs.realpathSync(path.resolve(__dirname, '../..'))) {
+    return {
+      recognized: true,
+      tokens: null,
+      reason: 'installed L0 runtime is not qualified'
+        + (qualification && qualification.reason ? ': ' + qualification.reason : ''),
+    };
+  }
   const rewritten = tokens.slice();
   rewritten[1] = CANONICAL_ENTRYPOINT_CLI_PATH;
-  return rewritten;
+  return { recognized: true, tokens: rewritten, reason: null };
 }
 
 // SUBCOMMAND_SPEC's own per-subcommand `repeatable` contract (runtime-role-
@@ -1263,8 +1378,14 @@ function tryInjectEntrypointComposition(toolInput, event) {
   if (typeof command !== 'string' || command.length === 0 ||
       !runtimeRoleLifecycle || !runtimeHostClaude || !runtimeCollaborationEntrypoints) return null;
   if (/[;&|`\n]|\$\(/.test(command)) return null;
-  const tokens = parseEntrypointCliCommand(command, event);
-  if (!tokens) return null;
+  const parsedTokens = parseEntrypointCliCommand(command, event);
+  if (!parsedTokens) return null;
+  const surface = canonicalizeInstalledEntrypointSurface(parsedTokens, event);
+  if (!surface.recognized) return null;
+  if (!surface.tokens) {
+    return m7DenyResult('[R131/P3] ' + surface.reason + '.');
+  }
+  const tokens = surface.tokens;
   const cliIdx = findEntrypointCliInvocation(tokens);
   if (cliIdx === -1 || tokens[cliIdx + 1] !== 'execute') return null;
   const values = extractFlagValues(tokens.slice(cliIdx + 2), []);

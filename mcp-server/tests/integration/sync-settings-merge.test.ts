@@ -143,8 +143,8 @@ describe("mergeHookRegistrations()", () => {
     expect(permissions.allow).toEqual(FULL_L1_SETTINGS.permissions.allow);
   });
 
-  // Assertion 2: PostToolUse 3 blocks untouched
-  it("leaves all 3 PostToolUse blocks completely unchanged", async () => {
+  // Assertion 2: project blocks stay unchanged while the owned Detekt hook converges.
+  it("converges the owned Detekt PostToolUse command without disturbing project blocks", async () => {
     await writeSettings(fixtureDir, FULL_L1_SETTINGS);
 
     await mergeHookRegistrations(fixtureDir);
@@ -152,8 +152,13 @@ describe("mergeHookRegistrations()", () => {
     const settings = await readSettings(fixtureDir);
     const postToolUse = (settings.hooks as Record<string, unknown>)["PostToolUse"];
 
-    // Byte-identical to original (no additions, no mutations)
-    expect(JSON.stringify(postToolUse)).toBe(JSON.stringify(FULL_L1_SETTINGS.hooks.PostToolUse));
+    expect(postToolUse).toHaveLength(3);
+    expect(postToolUse[0].hooks).toEqual([{
+      type: "command",
+      command: '"$CLAUDE_PROJECT_DIR"/.claude/hooks/detekt-post-write.sh',
+      timeout: 30,
+    }]);
+    expect(postToolUse.slice(1)).toEqual(FULL_L1_SETTINGS.hooks.PostToolUse.slice(1));
   });
 
   // Assertion 3: existing Bash entries preserved + L0 entries appended
@@ -176,6 +181,34 @@ describe("mergeHookRegistrations()", () => {
     expect(cmds.some((c) => c.includes("branch-guard.js"))).toBe(true);
     expect(cmds.some((c) => c.includes("push-authorization-gate.js"))).toBe(true);
     expect(cmds.some((c) => c.includes("commit-scope-validation-gate.js"))).toBe(true);
+  });
+
+  it("converges and deduplicates owned registrations, including bash-cli-spawn-gate through the launcher", async () => {
+    await writeSettings(fixtureDir, {
+      hooks: {
+        PreToolUse: [
+          { matcher: "Bash", hooks: [
+            { type: "command", command: '"$ANDROID_COMMON_DOC"/.claude/hooks/detekt-pre-commit.sh', timeout: 60 },
+            { type: "command", command: '"$CLAUDE_PROJECT_DIR"/.claude/hooks/detekt-pre-commit.sh', timeout: 60 },
+            { type: "command", command: 'node "$CLAUDE_PROJECT_DIR"/.claude/hooks/bash-cli-spawn-gate.js', timeout: 5 },
+          ] },
+          { matcher: "Bash", hooks: [
+            { type: "command", command: 'node "$CLAUDE_PROJECT_DIR"/.claude/hooks/bash-cli-spawn-gate.js', timeout: 5 },
+          ] },
+        ],
+      },
+    });
+
+    await mergeHookRegistrations(fixtureDir, false, realpathSync(join(import.meta.dirname, "..", "..", "..")));
+    const settings = await readSettings(fixtureDir);
+    const commands = Object.values(settings.hooks as Record<string, MatcherBlock[]>).flatMap((blocks) =>
+      blocks.flatMap((block) => block.hooks.map((hook) => hook.command)));
+    expect(commands.filter((command) => command.includes("detekt-pre-commit.sh"))).toEqual([
+      '"$CLAUDE_PROJECT_DIR"/.claude/hooks/detekt-pre-commit.sh',
+    ]);
+    expect(commands.filter((command) => command.includes("bash-cli-spawn-gate.js"))).toEqual([
+      'node "$CLAUDE_PROJECT_DIR"/.claude/hooks/l0-source-hook-launcher.js bash-cli-spawn-gate.js',
+    ]);
   });
 
   // Assertion 4: Write|Edit|Bash block CREATED with correct L0 entries
@@ -210,8 +243,8 @@ describe("mergeHookRegistrations()", () => {
     expect(cmds.some((c) => c.includes("specialist-task-completion-gate.js"))).toBe(true);
   });
 
-  // Assertion 6: Grep|Glob|Bash|Read combined matcher unchanged
-  it("does not modify the Grep|Glob|Bash|Read combined matcher block", async () => {
+  // Assertion 6: source-coupled requester gate converges to the launcher.
+  it("converges the Grep|Glob|Bash|Read requester gate to the portable launcher", async () => {
     await writeSettings(fixtureDir, FULL_L1_SETTINGS);
 
     await mergeHookRegistrations(fixtureDir);
@@ -221,9 +254,9 @@ describe("mergeHookRegistrations()", () => {
     const cpBlock = preToolUse.find((b) => b.matcher === "Grep|Glob|Bash|Read");
 
     expect(cpBlock).toBeDefined();
-    expect(JSON.stringify(cpBlock)).toBe(
-      JSON.stringify(FULL_L1_SETTINGS.hooks.PreToolUse[0]),
-    );
+    expect(cpBlock!.hooks.map((hook) => hook.command)).toEqual([
+      'node "$CLAUDE_PROJECT_DIR"/.claude/hooks/l0-source-hook-launcher.js context-provider-gate.js',
+    ]);
   });
 
   // M7/WP4 (dispatch arch-testing-20260808T142647Z, Section 6): four additive L0
@@ -234,7 +267,7 @@ describe("mergeHookRegistrations()", () => {
   // subagent-start-context-bundle.js (existing SubagentStart capture hook).
   // Total required registrations: 10 (6 pre-existing + 4 new).
 
-  it("M7/WP4: recognizes the ALREADY-PRESENT context-provider-gate.js under Grep|Glob|Bash|Read as satisfied — reports it in skipped, never duplicates its command (proves the merge actually looked at this entry, not merely that the block happened not to change)", async () => {
+  it("M7/WP4: migrates the pre-existing local context-provider gate to one portable registration", async () => {
     await writeSettings(fixtureDir, FULL_L1_SETTINGS);
 
     const result = await mergeHookRegistrations(fixtureDir);
@@ -242,14 +275,15 @@ describe("mergeHookRegistrations()", () => {
     const matchedSkip = result.skipped.filter(
       (s) => s.matcher === "Grep|Glob|Bash|Read" && s.file === "context-provider-gate.js",
     );
-    expect(matchedSkip).toHaveLength(1);
-    expect(result.added.some((a) => a.file === "context-provider-gate.js")).toBe(false);
+    expect(matchedSkip).toHaveLength(0);
+    expect(result.added.some((a) => a.file === "context-provider-gate.js")).toBe(true);
 
     const settings = await readSettings(fixtureDir);
     const preToolUse = (settings.hooks as Record<string, MatcherBlock[]>)["PreToolUse"];
     const cpBlock = preToolUse.find((b) => b.matcher === "Grep|Glob|Bash|Read");
     const cpCmds = cpBlock!.hooks.map((h) => h.command);
     expect(cpCmds.filter((c) => c.includes("context-provider-gate.js"))).toHaveLength(1);
+    expect(cpCmds[0]).toContain("l0-source-hook-launcher.js context-provider-gate.js");
   });
 
   it("M7/WP4: appends runtime-consultation-target-gate.js AND context-provider-write-gate.js to the existing Bash block, alongside branch-guard/push-authorization/commit-scope, without disturbing detekt-pre-commit.sh or creating a second Bash block", async () => {
@@ -314,7 +348,7 @@ describe("mergeHookRegistrations()", () => {
     // retirement-trigger (the same subagent-start-context-bundle.js, ALSO
     // registered under SubagentStop) — see dispatch Section 6 and
     // m7-completeness-verdict-2026-08-09.md Block 4 point 1.
-    expect(result2.skipped).toHaveLength(11);
+    expect(result2.skipped).toHaveLength(14);
 
     // Verify no duplicates in any PreToolUse block
     const settings = await readSettings(fixtureDir);
@@ -361,7 +395,7 @@ describe("mergeHookRegistrations()", () => {
 
     const result = await mergeHookRegistrations(fixtureDir);
 
-    expect(result.added).toHaveLength(11); // 6 pre-existing + 4 M7/WP4 + 1 SubagentStop
+    expect(result.added).toHaveLength(14);
     expect(existsSync(join(fixtureDir, ".claude", "settings.json"))).toBe(true);
 
     const settings = await readSettings(fixtureDir);
@@ -375,7 +409,7 @@ describe("mergeHookRegistrations()", () => {
     const result = await mergeHookRegistrations(fixtureDir, true);
 
     expect(result.dryRun).toBe(true);
-    expect(result.added).toHaveLength(11); // 6 pre-existing + 4 M7/WP4 + 1 SubagentStop
+    expect(result.added).toHaveLength(14);
 
     // File must still be the empty object we wrote
     const settings = await readSettings(fixtureDir);
@@ -470,6 +504,20 @@ describe("mergeHookRegistrations()", () => {
     expect(commands).toContain(
       'node "$CLAUDE_PROJECT_DIR"/.claude/hooks/l0-source-hook-launcher.js context-provider-gate.js',
     );
+  });
+
+  it("preserves arbitrary commands that merely mention an owned hook basename", async () => {
+    const arbitrary = 'node -e "console.log(\'bash-cli-spawn-gate.js\')"';
+    await writeSettings(fixtureDir, {
+      hooks: { PreToolUse: [{ matcher: "Bash", hooks: [{ type: "command", command: arbitrary, timeout: 7 }] }] },
+    });
+
+    await mergeHookRegistrations(fixtureDir, false, realpathSync(join(import.meta.dirname, "..", "..", "..")));
+
+    const settings = await readSettings(fixtureDir);
+    const commands = (settings.hooks as Record<string, MatcherBlock[]>).PreToolUse.flatMap((block) => block.hooks);
+    expect(commands).toContainEqual(expect.objectContaining({ command: arbitrary }));
+    expect(commands.filter((hook) => hook.command === arbitrary)).toHaveLength(1);
   });
 
   // Extra coverage: output format

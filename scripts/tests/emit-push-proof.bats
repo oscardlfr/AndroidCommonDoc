@@ -153,15 +153,11 @@ write_valid_bats_handoff() {
   local generated_at
   generated_at="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
   mkdir -p "$ACDOC"
-  local suffix digest run_id path
-  for suffix in a b; do
-    run_id="wave-a-fixture-$$-${RANDOM}-${suffix}"
-    path="$ACDOC/bats-result.${run_id}.env"
-    # Deterministic full-suite runs may produce byte-identical TAP logs. Their
-    # retained-artifact identities still differ because each run owns a
-    # distinct artifact; content hashes are integrity, not run identity.
-    digest="cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
-    {
+  local digest run_id path
+  run_id="wave-a-fixture-$$-${RANDOM}"
+  path="$ACDOC/bats-result.${run_id}.env"
+  digest="cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+  {
     printf 'BATS_OK=%s\n'           "42"
     printf 'BATS_NOT_OK=%s\n'       "0"
     printf 'BATS_EXPECTED=%s\n'     "42"
@@ -173,9 +169,8 @@ write_valid_bats_handoff() {
     printf 'BATS_RUN_ID=%s\n'       "$run_id"
     printf 'BATS_GENERATED_AT=%s\n' "$generated_at"
     printf 'BATS_SCOPE=%s\n'        "full"
-    } > "$path"
-    write_bats_provenance "$path" "$digest"
-  done
+  } > "$path"
+  write_bats_provenance "$path" "$digest"
 }
 
 # write_custom_bats_handoff <head> <generated_at> <ok> <not_ok> <expected> <complete>
@@ -187,12 +182,11 @@ write_custom_bats_handoff() {
   local complete="$6" verdict="$7" scope="$8" run_id="${9:-custom-$$-${RANDOM}}"
   local total=$(( ok + not_ok ))
   mkdir -p "$ACDOC"
-  local suffix digest actual_id path
-  for suffix in a b; do
-    actual_id="${run_id}-${suffix}"
-    path="$ACDOC/bats-result.${actual_id}.env"
-    if [[ "$suffix" == a ]]; then digest="cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"; else digest="eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"; fi
-    {
+  local digest actual_id path
+  actual_id="$run_id"
+  path="$ACDOC/bats-result.${actual_id}.env"
+  digest="cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+  {
     printf 'BATS_OK=%s\n'           "$ok"
     printf 'BATS_NOT_OK=%s\n'       "$not_ok"
     printf 'BATS_EXPECTED=%s\n'     "$expected"
@@ -204,9 +198,8 @@ write_custom_bats_handoff() {
     printf 'BATS_RUN_ID=%s\n'       "$actual_id"
     printf 'BATS_GENERATED_AT=%s\n' "$generated_at"
     printf 'BATS_SCOPE=%s\n'        "$scope"
-    } > "$path"
-    write_bats_provenance "$path" "$digest"
-  done
+  } > "$path"
+  write_bats_provenance "$path" "$digest"
 }
 
 # clear_handoffs — removes every handoff written so far (including the default golden
@@ -657,6 +650,7 @@ PYEOF
   write_quality_gate_report '[{"step":"path-manifest-audit","ran":true,"result":"PASS","reason":"All touched files in manifest. CLASS=HARNESS matches PLAN.md."}]'
   run bash -c "CLAUDE_WAVE_SLUG='test-slug' bash '$EMITTER' --subcommand run-qg --repo-root '$REPO'"
   [ "$status" -eq 0 ]
+  [ "$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["bats_evidence"]["agreement_count"])' "$ACDOC/push-proof.json")" = "1" ]
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -942,6 +936,40 @@ PYEOF
   run bash -c "CLAUDE_WAVE_SLUG='test-slug' bash '$EMITTER' --subcommand run-qg --repo-root '$REPO'"
   [ "$status" -eq 2 ]
   [[ "$output" == *"test-suite-evidence-absent"* ]]
+}
+
+@test "#EP-EV4a BLOCK: handoff bound to the wrong plan digest → test-suite-evidence-provenance" {
+  write_plan "test-slug"
+  write_arch_verdicts "test-slug"
+  write_quality_gate_report
+  python3 - "$ACDOC" <<'PYEOF'
+import glob, pathlib, sys
+path = pathlib.Path(glob.glob(f"{sys.argv[1]}/bats-result.*.env")[0])
+text = path.read_text(encoding="utf-8")
+lines = ["BATS_PLAN_DIGEST=" + ("f" * 64) if line.startswith("BATS_PLAN_DIGEST=") else line
+         for line in text.splitlines()]
+path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+PYEOF
+  run bash -c "CLAUDE_WAVE_SLUG='test-slug' bash '$EMITTER' --subcommand run-qg --repo-root '$REPO'"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"test-suite-evidence-provenance"* ]]
+}
+
+@test "#EP-EV4b BLOCK: handoff bound to the wrong wave slug → test-suite-evidence-provenance" {
+  write_plan "test-slug"
+  write_arch_verdicts "test-slug"
+  write_quality_gate_report
+  python3 - "$ACDOC" <<'PYEOF'
+import glob, pathlib, sys
+path = pathlib.Path(glob.glob(f"{sys.argv[1]}/bats-result.*.env")[0])
+text = path.read_text(encoding="utf-8")
+lines = ["BATS_WAVE_SLUG=other-wave" if line.startswith("BATS_WAVE_SLUG=") else line
+         for line in text.splitlines()]
+path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+PYEOF
+  run bash -c "CLAUDE_WAVE_SLUG='test-slug' bash '$EMITTER' --subcommand run-qg --repo-root '$REPO'"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"test-suite-evidence-provenance"* ]]
 }
 
 # ─────────────────────────────────────────────────────────────────────────────

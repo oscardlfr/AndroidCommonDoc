@@ -1,18 +1,22 @@
 # AndroidCommonDoc Backlog
 
 > **Last updated**: 2026-09-27
-> **Roadmap baseline**: `develop@c5ee193e1f726d270577c9256ea7cb09b481508b` (PR #251). **H1, G0, ordered Waves 1–7, and the bounded first-consumer hardening follow-up are SHIPPED.**
-> **Current delivery**: PR #251 closed the 13 first-consumer runtime findings without modifying a product repository. There is no numbered wave marked `NEXT`; the prioritized residual queue below is the only executable roadmap. **R33 remains deferred.**
+> **Roadmap baseline**: `develop@51598ecfbf7e2db8781521acc1ba94e3a84108f2` (PR #252). **H1, G0, ordered Waves 1–7, first-consumer hardening, and its bounded stabilization are SHIPPED.**
+> **Current delivery**: PR #252 shipped the post-#251 consumer stabilization without modifying a product repository. Four newly reproduced post-#252 convergence defects form one bounded in-progress stabilization below; they are not an open-ended consumer-finding stream. There is no numbered wave marked `NEXT`. **R33 remains deferred.**
 > **Source of truth**: this file owns ordering and scope. `git log`, merged PRs, and `project_*shipped.md` memory entries own historical detail.
 
 ## Operating contract
 
 - The load-bearing portability floor is **validated disk artifacts**. Runtime messaging is an optional acceleration layer.
 - Adapter delivery, message text, an MCP return value, or a live peer saying “GO” is never evidence. Only a valid, correlated result artifact counts as a protocol-valid consultation answer; phase and push authorization still require their own contracts.
-- Waves 1–7 were executed in order and shipped through PR #250; their bounded first-consumer stabilization shipped through PR #251.
+- Waves 1–7 were executed in order and shipped through PR #250; first-consumer hardening shipped through PR #251 and its bounded stabilization through PR #252.
 - Re-audit observations and file counts at each wave's starting HEAD. Post-G0 counts below were recorded by PR #245 at `619d9a7`; they are a planning baseline, not permanent truth.
 - Each wave must have one frozen scope, explicit no-go boundaries, proportional tests, and a shipped memory entry before the backlog advances.
 - Rich runtimes may add `SendMessage`, persistent peers, MCP invocation, app-server threads, or wakeups; failure or absence of those capabilities must not invalidate the disk floor.
+- `PRUNEABLE` marks a temporary execution summary, never authority to delete an
+  active backlog ID, accepted PLAN/verdict/evidence, operational runbook, or shipped
+  record. Once its PR ships, replace the temporary block with one concise shipped
+  entry and remove the duplicated workstream detail.
 
 ## Gate 0 — completed prerequisite (not counted among the seven waves)
 
@@ -78,11 +82,11 @@ The items below are residuals discovered during or after that acceptance. Live
 DawSync validation reopened finding 10 and expanded the recovery contract before
 this stabilization could be reviewed.
 
-## Current stabilization closure — pending review
+## PR #252 consumer stabilization — SHIPPED
 
-The `codex/docs-backlog-consumer-stabilization` change closes the following
-post-#251 defects locally. They are removed from the executable queue, but do
-not become shipped history until their PR merges.
+PR #252 was squash-merged as
+`51598ecfbf7e2db8781521acc1ba94e3a84108f2`. It closed the following
+post-#251 defects and moved them out of the executable queue.
 
 | Closed item | Local evidence |
 |---|---|
@@ -102,7 +106,29 @@ and `:core-result:allTests` pass. The audit first exposed a missing
 Generating its registry with the canonical tool restored the disk contract; a
 fresh runtime preflight/apply/idempotency cycle now reports **L1**.
 
-## Active backlog after PR #251
+## Bounded post-#252 consumer-contract convergence — PRUNEABLE / IN PROGRESS
+
+The next DawSync acceptance exposed four related installation/dispatch gaps. The
+closure is deliberately bounded: repair the upstream L0 contract once, prove the
+same matrix in clean L1 and L2 fixtures, and stop adding ad-hoc downstream
+mitigations.
+
+All three workstreams below are temporary and explicitly `PRUNEABLE`. They may be
+collapsed only after the PR merges and the shipped commit/evidence is recorded;
+the active P0/P1/P2 queue below is not pruneable.
+
+| Temporary workstream | Lifecycle | Bounded closure |
+|---|---|---|
+| WS-A — sync-state convergence | **PRUNEABLE — IN PROGRESS** | Ordinary and runtime no-op applies preserve `l0-manifest.json` byte-for-byte, including `last_synced`. Runtime-owned Detekt hooks install executable and repair/report mode-only drift without rewriting the manifest; conflicting bytes still fail closed. |
+| WS-B — portable hook and skill dispatch | **PRUNEABLE — IN PROGRESS** | Source-reference `bash-cli-spawn-gate.js` through the consumer hook launcher, then install `.claude/runtime/l0-entrypoint-launcher.cjs` and make all five control-plane skills call that exact local path in L0, L1, and L2. Missing, ambiguous, or drifted pins fail closed. |
+| WS-C — consumer acceptance and operations | **PRUNEABLE — IN PROGRESS** | Prove WS-A/WS-B with positive and negative tests, a pre-existing wrong-mode fixture, byte-idempotent second passes, and a persistent-flow smoke from clean L1 and L2 fixtures. Keep exact install, launch, fallback, and refresh documentation synchronized without editing DawSync. |
+
+DawSync remains evidence and a consumer; no product-repository edit is part of
+this closure. After merge, prune this three-row execution view and retain only the
+shipped summary, commit/PR identity, durable evidence pointers, and any genuinely
+open backlog IDs.
+
+## Active backlog after PR #252
 
 Priority is impact, not implementation size. Every item needs an accepted PLAN,
 negative and positive tests, and a clean-consumer acceptance when it changes a
@@ -124,7 +150,9 @@ consumer-facing contract.
 | `BL-CONS-P1-05` | **`L0_SYNC` changes over-trigger consumer CI**. A clean auto-sync merge tree was classified `FULL` solely because generated `l0-manifest.json` was an `unmapped executable path`, forcing the complete product matrix. | Add a fail-closed `L0_SYNC` class for machine-proven sync-only changes. It must validate manifest schema/digests, generated inventory/parity, runtime sync, and the relevant smoke tests. Any malformed manifest, undeclared path, mixed product change, missing provenance, or classifier error remains `FULL`. Add positive sync-only and all negative downgrade-bypass cases. | L0 owns the portable policy/template; consumers may implement their local classifier without weakening the unknown-path fallback. |
 | `BL-CONS-P1-06` | **Root-source human-consent boundary is undecided**. The runtime can derive a binding from observed session/worktree/PLAN identity without a request-scoped human confirmation, while other roadmap text calls true human/OS authentication out of contract. | Decide the threat model first. If required, design a request-bound confirmation, mint-time gate, and dispatch-time freshness/scope check backed by a capability an AI cannot self-assert. Otherwise remove the stronger claim and document the explicit boundary. | Architecture decision; do not implement a prose-only or self-signed “human” artifact. |
 | `BL-CONS-P1-07` | **Windows drive-letter confinement remains brittle in `write-coordination-artifact.sh`**. Two incorrect path behaviors currently cancel each other. | Correct absolute drive-letter classification and physical/lexical confinement atomically, with outside-root and fallback-tier negatives. | Do not port only the R131 normalization; preserve fail-closed behavior at every cut point. |
-| `BL-QG-P1-01` | **Quality-gate session ordering permits expensive evidence to become stale before minting**. A manually initialized wave reached VERIFY_FINAL and produced two complete Bats handoffs before `emit-qg-result.sh --init`; QG correctly rejected them by freshness, and missing `CLASS`/`Path Manifest` was detected only after the reruns. | Provide one canonical orchestration entrypoint that preflights `CLASS`, exact Path Manifest, clean HEAD, and architect verdict bindings, initializes the QG session, then runs/selects the two full handoffs exactly once. Reject incomplete planning before any expensive suite starts. | Separate workflow-hardening PLAN; do not weaken freshness, path audit, or the two-run agreement requirement. |
+| `BL-QG-P1-01` | **Quality-gate session ordering can make the one expensive local full run stale before minting**. The first consumer ran Bats before explicit QG initialization/wave binding, so otherwise-green evidence carried unusable provenance; planning defects were detected only after the cost was paid. | Provide one canonical orchestration entrypoint that preflights `CLASS`, exact Path Manifest, clean HEAD, architect verdict bindings, and explicit wave/PLAN inputs; initializes QG; then runs/selects the one six-shard full aggregate exactly once. Reject incomplete planning before any expensive suite starts. | Separate workflow-hardening PLAN; do not weaken freshness, path audit, aggregate completeness, or required GitHub `CI Gate` merge authority. |
+| `BL-QG-P1-02` | **A valid PLAN amendment cannot supersede its stale PREP verdict**. The protocol requires stale PREP authority to be superseded, but `write-verdict` rejects the superseding record because the old and new `plan_sha256` differ (`superseded-binding-mismatch`), forcing a fresh wave slug instead of the documented same-wave recovery. | Define one narrow PLAN-transition supersession contract: verify the old record and lineage, require the new PLAN/request/HEAD binding to be current, publish atomically, and reject cross-wave, cross-role, cross-phase, unrelated-request, or unproven old records. Add positive amended-PLAN recovery and every mismatch negative. | Separate workflow-hardening PLAN; do not relax ordinary binding equality or mix this with runtime stabilization. |
+| `BL-QG-P1-03` | **Verdict checker result depends on project-root spelling**. The same valid record produced `INTERNAL_ERROR` with a relative project root and PASS with the canonical absolute root. | Normalize and confine the project root once, or reject relative input explicitly with a stable validation error. Prove relative, absolute, symlink/alias, missing, and outside-root cases return deterministic equivalent policy outcomes. | Separate workflow-hardening PLAN; no runtime dependency. |
 
 ### P2 — bounded hardening and governance
 
@@ -548,6 +576,12 @@ Any merge/deprecate/delete requires: no unique outcome; replacement parity acros
 
 **Status**: SHIPPED — PR #250, merged at `develop@dfc48cf`.
 
+**Policy supersession (2026-09-27)**: the shipped provenance machinery remains,
+but its historical default of two local full runs is superseded. Current policy is
+one complete six-shard local aggregate for push plus required GitHub `CI Gate` for
+merge. The historical bullets below describe PR #250 and are retained as history,
+not current operator instructions.
+
 **Plan**: `.planning/wave-structured-verdict-evidence-contract/PLAN.md`, current raw-byte SHA-256 `aac4ad96d2b7c8fb947df7591996ccc33504b667860d2d5420a9ec01800d2240` (the digest bound by the final local acceptance). Its planning-only header records the pre-execution state; the later direct user instruction authorized implementation without treating that header as current execution authority.
 
 **Objective**: replace substring/token-based PREP and VERIFY-FINAL acceptance with a strict, correlated verdict record whose decision, rationale, evidence references/digests, role, PLAN, and HEAD are machine-validated.
@@ -746,7 +780,8 @@ The following are historical, not executable backlog items:
 
 ## Shipped (recent)
 
-- **First-consumer runtime hardening** — MERGED `develop@c5ee193e` (2026-09-27), PR #251. Closed all 13 post-PR-#250 consumer findings with source-referenced runtime hooks, executable-mode repair, topology/YAML closure, exact launch/recovery documentation, atomic Claude host recertification, bounded certification startup, isolated R131 fixtures, and clean consumer/worktree acceptance. The prioritized queue above contains only newly discovered residuals.
+- **Post-first-consumer stabilization** — MERGED `develop@51598ec` (2026-09-27), PR #252. Closed malformed-settings fail-open behavior, bounded safe one-shot recovery, positive effort telemetry enforcement, formal-wave Bats fixture isolation, manifest-aware portable hook registrations, ordinary/runtime composition, CLI discovery side effects, and deterministic adapter checks. The bounded post-#252 convergence block above contains only the four subsequently reproduced installation/dispatch gaps.
+- **First-consumer runtime hardening** — MERGED `develop@c5ee193e` (2026-09-27), PR #251. Closed all 13 post-PR-#250 consumer findings with source-referenced runtime hooks, executable-mode repair, topology/YAML closure, exact launch/recovery documentation, atomic Claude host recertification, bounded certification startup, isolated R131 fixtures, and clean consumer/worktree acceptance.
 - **Wave 2 — Workflow Expression & Input Boundary Audit** — MERGED `develop@fa7f6cf8` (2026-09-21), PR #249 (`fa7f6cf8`, "fix(ci): harden workflow input boundaries"); merge tree byte-identical to the approved PR head tree `7e634353`. Hardened raw untrusted GitHub expression interpolation across the ten audited workflows/templates (shell and `github-script` bodies routed through `env:` boundaries, quoted at consumption) plus `qg-path-audit.sh` H2/H3/table-form parser hardening. 30/30 required checks passed, 0 unresolved review threads, CLEAN merge state; full Bats 3391/3391 (`qg-linux-canonical` six-shard profile), MCP Vitest 2665/2665, ESLint 0 errors, three independent architect VERIFY-FINAL verdicts APPROVE. PLAN digest `8f5e1849f42af77b4c0fcffa3e2f884c70adf6c1e564b261203ce3611cd50a05`; full record in memory `project_wave_workflow_input_boundary_audit_shipped.md`. HTML escaping is tracked only as `BL-CONS-P2-01`; R33 native stays `PENDING_EXTERNAL_RELEASE`.
 - **Wave 1 — Portable Runtime Collaboration & Persistent Role Lifecycle** — MERGED `develop@b5d7ed46` (2026-09-19). PR #246 `1b3eebe5` (2026-09-15, portable mixed-host consultation + consumer sync, 204 internal CommonJS modules across the 3 stable facades), PR #247 `2a98bc17` (2026-09-19, macOS stabilization: per-platform host-certificate coexistence, symlink-identity and TMPDIR-path-budget fixes), PR #248 `b5d7ed46` (2026-09-19, macOS follow-ups: ctimeNs identity gap, config.toml parse hardening, parallel Bats orchestrator, zombie-liveness fix). Windows live qualification: P4 QUALIFIED, P5 LIVE_QUALIFIED (attempt N13), P6 QUALIFIED (attempt 3). Mandatory post-Wave-1 qualification checkpoint COMPLETE, zero P0/P1 findings (one non-blocking fast-follow: planner→context-provider bootstrap-edge gap); full record in memory `project_wave_portable_runtime_collaboration_lifecycle_shipped.md` and `project_post_wave1_agent_skill_behavioral_qualification.md`. R33 native stays `PENDING_EXTERNAL_RELEASE`.
 - **G0 — Reusable Workflow Input Boundary Hardening** — MERGED `619d9a7`, PR #245 (2026-07-12). Closed the four targeted reusable workflows with namespaced environment boundaries, quoted shell consumption, checkout hardening, a run-block extractor, and a 13-test regression fence; owner-recorded final QG at `c7ba941` was 2,042 Bats / 2,607 Vitest before squash. Its mapped follow-ups closed in Waves 1, 2, 6, and 7.

@@ -13,7 +13,7 @@ description: >
   into a downstream project with version tracking. / Ejecutar /sync-l0 o el
   CLI para materializar habilidades, agentes y comandos L0 en un proyecto
   descendente con seguimiento de versión.
-last_updated: "2026-09-05"
+last_updated: "2026-09-27"
 ---
 
 # Step 4 — Sync skills
@@ -64,13 +64,13 @@ Manifest updated: l0-manifest.json
 | `.claude/skills/` | 33 SKILL.md files with `l0_source` / `l0_hash` headers |
 | `.claude/agents/` | 12 agent markdown files |
 | `.claude/commands/` | 32 command markdown files |
-| `l0-manifest.json` | Updated `checksums` and `last_synced` |
+| `l0-manifest.json` | Updated `checksums` and `last_synced` when effective managed state changes |
 
-> **Note — scripts are not copied.** Skills invoke scripts from the L0
-> installation using `$ANDROID_COMMON_DOC/scripts/...`. The env var must be
-> set in every shell session (and in CI). If it is missing, skills fail with
-> an explicit `ANDROID_COMMON_DOC is not set` error. See
-> [Step 1](01-install-l0.md) for how to persist it in your shell profile.
+> **Runtime exception.** General toolkit scripts are not copied. Runtime mode
+> installs the standalone consumer-local entrypoint and hook launchers; they
+> resolve only the manifest-declared L0 tooling source. Runtime skills never use
+> `ANDROID_COMMON_DOC`, a guessed sibling, or model-authored toolkit discovery as
+> authority.
 
 ### Optional collaboration runtime
 
@@ -81,7 +81,14 @@ To enable the Claude/Codex collaboration runtime in an L1 or L2 consumer, first 
 /sync-l0 --runtime
 ```
 
-Runtime mode does not copy source-coupled runtime code. It pins the toolkit commit and executable-content digest, installs ten canonical role definitions plus a standalone consumer launcher, and registers hooks through that launcher. The launcher resolves the one local L0 tooling source from `l0-manifest.json`, including from linked worktrees, so consumer settings contain no user, Node installation, or toolkit checkout path. It never uses `ANDROID_COMMON_DOC` as an authority fallback. Missing, remote, ambiguous, symlinked, or drifted sources and customized owned runtime files fail closed without overwrite. Do not combine runtime mode with prune, force, or migration flags. An explicit start also requires one unambiguous PLAN in the consumer; the read-only dashboard never creates one.
+Runtime mode does not copy source-coupled runtime code. It pins the toolkit commit and executable-content digest, installs ten canonical role definitions, `.claude/runtime/l0-entrypoint-launcher.cjs`, and the standalone source-hook launcher. Runtime skills use the entrypoint launcher; source-coupled hooks use the hook launcher. Both resolve the one local L0 tooling source from `l0-manifest.json`, including from linked worktrees, so consumer settings and skill commands contain no user, Node installation, or toolkit checkout path. L0 self-hosts through the same checked-in entrypoint-launcher path. Neither launcher uses `ANDROID_COMMON_DOC` as an authority fallback. Missing, remote, ambiguous, symlinked, or drifted sources and customized owned runtime files fail closed without overwrite. Do not combine runtime mode with prune, force, or migration flags. An explicit start also requires one unambiguous PLAN in the consumer; the read-only dashboard never creates one.
+
+Run ordinary sync before runtime sync after every deliberate L0 revision change.
+If manifest-tracked state is unchanged and no executable repair is pending, the
+second apply is a true no-op: `l0-manifest.json` and `last_synced` remain unchanged.
+Runtime-owned Detekt hooks are installed as executable; mode-only drift is repaired
+and reported separately without rewriting the manifest, while content conflicts
+fail closed.
 
 ### Version-tracking headers
 
@@ -166,13 +173,13 @@ Manifest updated: l0-manifest.json
 | `.claude/skills/` | 33 ficheros SKILL.md con cabeceras `l0_source` / `l0_hash` |
 | `.claude/agents/` | 12 ficheros markdown de agentes |
 | `.claude/commands/` | 32 ficheros markdown de comandos |
-| `l0-manifest.json` | `checksums` y `last_synced` actualizados |
+| `l0-manifest.json` | `checksums` y `last_synced` actualizados solo cuando cambia el estado gestionado efectivo |
 
-> **Nota — los scripts no se copian.** Las skills invocan los scripts desde la
-> instalación L0 usando `$ANDROID_COMMON_DOC/scripts/...`. La variable de entorno
-> debe estar definida en cada sesión de shell (y en CI). Si falta, las skills fallan
-> con un error explícito `ANDROID_COMMON_DOC is not set`. Ver
-> [Paso 1](01-install-l0.md) para persistirla en el perfil de shell.
+> **Excepción del runtime.** Los scripts generales del toolkit no se copian. El
+> modo runtime instala launchers autónomos en el consumidor para entrypoints y
+> hooks; ambos resuelven únicamente la fuente L0/tooling declarada en el manifest.
+> Las skills de runtime no usan `ANDROID_COMMON_DOC`, rutas sibling supuestas ni
+> descubrimiento del toolkit redactado por el modelo como autoridad.
 
 ### Runtime de colaboración opcional
 
@@ -183,7 +190,15 @@ Para habilitar el runtime Claude/Codex en un consumidor L1 o L2, declara una ún
 /sync-l0 --runtime
 ```
 
-Este modo no copia el código del runtime. Fija el commit y el digest del contenido ejecutable del toolkit, instala diez roles canónicos y un launcher autónomo en el consumidor, y registra mediante él los hooks acoplados a la fuente. El launcher resuelve la única fuente local `L0`/`tooling` de `l0-manifest.json`, también desde worktrees enlazados, por lo que `settings.json` no contiene rutas del usuario, de Node ni del checkout del toolkit. No usa `ANDROID_COMMON_DOC` como autoridad alternativa. Fuentes ausentes, remotas, ambiguas o con deriva y archivos runtime personalizados fallan de forma cerrada sin sobrescritura. No combines este modo con prune, force o migraciones. El inicio explícito requiere además un único PLAN inequívoco en el consumidor; el dashboard de solo lectura nunca fabrica uno.
+Este modo no copia el código acoplado del runtime. Fija el commit y el digest del contenido ejecutable del toolkit, instala diez roles canónicos, `.claude/runtime/l0-entrypoint-launcher.cjs` y el launcher autónomo de hooks. Las skills usan el primero y los hooks acoplados a la fuente usan el segundo. Ambos resuelven la única fuente local `L0`/`tooling` de `l0-manifest.json`, también desde worktrees enlazados, por lo que `settings.json` y los comandos de skills no contienen rutas del usuario, de Node ni del checkout del toolkit. L0 usa para sí mismo la misma ruta de launcher incluida en el repositorio. Ninguno usa `ANDROID_COMMON_DOC` como autoridad alternativa. Fuentes ausentes, remotas, ambiguas o con deriva y archivos runtime personalizados fallan de forma cerrada sin sobrescritura. No combines este modo con prune, force o migraciones. El inicio explícito requiere además un único PLAN inequívoco en el consumidor; el dashboard de solo lectura nunca fabrica uno.
+
+Tras cambiar deliberadamente la revisión de L0, ejecuta primero el sync ordinario
+y después el sync de runtime. Si no cambia el estado registrado en el manifest ni
+hay una reparación ejecutable pendiente, el segundo apply es un no-op real:
+`l0-manifest.json` y `last_synced` permanecen intactos. Los hooks Detekt gestionados
+por runtime se instalan ejecutables; una deriva solo de modo se repara y se reporta
+por separado sin reescribir el manifest, y un conflicto de contenido falla de
+forma cerrada.
 
 ### Cabeceras de seguimiento de versión
 

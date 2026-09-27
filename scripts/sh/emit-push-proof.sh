@@ -48,7 +48,7 @@
 #                 .head == pushed_sha, AND (W7) the same completeness predicate run-qg
 #                 persists: not_ok==0 && scope=='full' && complete==True && total==expected
 #                 && ok>0. Mirrors verify-push-proof.ps1 and push-authorization-gate.js,
-#                 all three now at equivalent rigor.
+#                 Bash and PowerShell verifiers now enforce equivalent proof rigor.
 #
 #                 IMPORTANT: verify-proof does NOT re-evaluate predicates. Predicate
 #                 consistency was enforced at mint (run-qg) and is bound cryptographically
@@ -267,10 +267,22 @@ except Exception:
   # Always exits 0 — meaning lives in evidence.status (ok|stale|absent|malformed),
   # checked by name below (test-suite-evidence-*), never by this call's exit code.
   local bats_evidence_json
+  local min_local_bats_runs
+  min_local_bats_runs="$(python3 - "$MANIFEST_PATH" << 'PYEOF'
+import json, sys
+manifest = json.load(open(sys.argv[1], encoding='utf-8'))
+step = next((s for s in manifest.get('required_steps', []) if s.get('id') == 'test-suite'), {})
+print((step.get('evidence') or {}).get('min_local_runs', ''))
+PYEOF
+)"
+  if [[ "$min_local_bats_runs" != "1" ]]; then
+    echo "[emit-push-proof] ERROR: manifest-evidence-drift: test-suite.evidence.min_local_runs must be 1" >&2
+    exit 2
+  fi
   bats_evidence_json="$(bash "$SCRIPT_DIR/lib/bats-handoff.sh" select \
       --repo-root "$REPO_ROOT" --head "$head_sha" --since "$report_started_at" \
       --require-scope full --wave-slug "${wave_slug:-none}" --plan-digest "$plan_digest" \
-      --require-agreeing 2 --format json)"
+      --require-agreeing "$min_local_bats_runs" --format json)"
 
   # All validation + predicate enforcement in one Python pass.
   # Predicate evaluation is mirrored from the bash eval_predicate design
@@ -304,7 +316,8 @@ with open(manifest_path, encoding='utf-8') as f:
     manifest = json.load(f)
 
 # manifest-evidence-drift (W6): the mint HARDCODES {require_scope:'full',
-# max_not_ok:0, require_complete:True} in the test-suite-evidence-* checks below
+# max_not_ok:0, require_complete:True, min_local_runs:1,
+# remote_merge_check:'CI Gate'} in the test-suite-evidence-* checks below
 # (Wave A) -- the manifest's own declared test-suite.evidence sub-object is
 # advisory/documentation only, never read at runtime (reading it here would let a
 # manifest edit alone loosen enforcement). This guard is a drift-guard, not a new
@@ -315,8 +328,10 @@ _ts_step = next((s for s in manifest.get('required_steps', []) if s.get('id') ==
 _ts_evidence = (_ts_step or {}).get('evidence') or {}
 if (_ts_evidence.get('require_scope') != 'full'
         or _ts_evidence.get('max_not_ok') != 0
-        or _ts_evidence.get('require_complete') is not True):
-    die(f"manifest-evidence-drift: test-suite.evidence must be require_scope='full', max_not_ok=0, require_complete=true; got {_ts_evidence!r}")
+        or _ts_evidence.get('require_complete') is not True
+        or _ts_evidence.get('min_local_runs') != 1
+        or _ts_evidence.get('remote_merge_check') != 'CI Gate'):
+    die(f"manifest-evidence-drift: test-suite.evidence must require one full local run plus remote merge check 'CI Gate'; got {_ts_evidence!r}")
 
 diff_list = [l for l in diff_files.splitlines() if l.strip()]
 
@@ -505,7 +520,7 @@ if _test_suite_entry is not None and _test_suite_entry.get('result') == 'PASS':
     elif _evidence_status == 'provenance-mismatch':
         die("test-suite-evidence-provenance: fresh runs disagree on bound provenance or counts")
     elif _evidence_status == 'insufficient-agreement':
-        die("test-suite-evidence-agreement: fewer than two independent agreeing full runs")
+        die("test-suite-evidence-agreement: no qualifying complete local full run")
     elif _evidence_status != 'ok':
         die(f"test-suite-evidence-absent: bats evidence status={_evidence_status!r} (expected 'ok')")
 
@@ -521,14 +536,14 @@ if _test_suite_entry is not None and _test_suite_entry.get('result') == 'PASS':
         die(f"test-suite-evidence-partial: bats evidence complete={_evidence.get('complete')!r} (expected true)")
     if _evidence.get('not_ok', 1) != 0:
         die(f"test-suite-evidence-dirty: bats evidence not_ok={_evidence.get('not_ok')!r} (expected 0)")
-    if _evidence.get('agreement_count', 0) < 2:
-        die(f"test-suite-evidence-agreement: independent agreeing runs={_evidence.get('agreement_count')!r} (expected >=2)")
+    _local_run_count = _evidence.get('agreement_count', 0)
+    if not isinstance(_local_run_count, int) or isinstance(_local_run_count, bool) or _local_run_count < 1:
+        die(f"test-suite-evidence-agreement: qualifying local runs={_local_run_count!r} (expected >=1)")
     _run_ids = [x for x in str(_evidence.get('run_ids', '')).split(',') if x]
-    if len(set(_run_ids)) < 2:
-        die(f"test-suite-evidence-reused: run_ids={_run_ids!r} do not prove two independent runs")
     _log_identities = [x for x in str(_evidence.get('log_identities', '')).split(',') if x]
-    if len(set(_log_identities)) < 2:
-        die(f"test-suite-evidence-reused: log_identities={_log_identities!r} do not prove two independent retained artifacts")
+    if (len(set(_run_ids)) != _local_run_count
+            or len(set(_log_identities)) != _local_run_count):
+        die(f"test-suite-evidence-reused: local_run_count={_local_run_count!r}, run_ids={_run_ids!r}, log_identities={_log_identities!r} must identify the same distinct local evidence set")
 
     # Sanity floor (Amendment A, REQUIRED) -- "a guard that cannot fail is worse than none".
     # Die-code choice matters, not just die-vs-pass: ok<=0/expected<=0 means nothing ran
@@ -1047,9 +1062,9 @@ except Exception:
     _ev = {}
 # Exactly {run_id, head, ok, not_ok, expected, scope, generated_at, complete,
 # total} -- no filesystem paths (bats-handoff.sh's CLI never emits one). complete
-# and total are additive (W7) so all three verifiers (this script's own
-# verify_proof, push-authorization-gate.js's in-JS fallback, verify-push-proof.ps1)
-# can re-derive the SAME completeness predicate at push time instead of trusting
+# and total are additive (W7) so both proof verifiers (this script's own
+# verify_proof and verify-push-proof.ps1) can re-derive the SAME completeness
+# predicate at push time instead of trusting
 # an unpersisted "ok" count alone. status remains the CLI's own selection
 # metadata and is intentionally NOT persisted into the proof. schema_version
 # stays 1 (additive, not a breaking shape change).
@@ -1209,8 +1224,8 @@ if recomputed != proof.get('report_digest'):
 # permissively -- this closes that gap. This is the design doc's "8th check" (counting
 # schema_version..report_digest as checks 1-7; this file's own comment numbering above
 # additionally counts "Load proof" as step 1, so this lands as "-- 9." here). Mirrors
-# the rigor of the other two verifiers (verify-push-proof.ps1, push-authorization-
-# gate.js) -- all three now carry equivalent rigor, including the W7 completeness
+# the rigor of the PowerShell verifier -- both now carry equivalent rigor,
+# including the W7 completeness
 # predicate (not_ok==0 && scope=='full' && complete==True && total==expected &&
 # ok>0), not just presence + head.
 bats_evidence = proof.get('bats_evidence')
@@ -1231,14 +1246,18 @@ if _bv_total != _bv_expected:
 _bv_ok = bats_evidence.get('ok', 0)
 if not (isinstance(_bv_ok, int) and _bv_ok > 0):
     die(f"bats-evidence-floor: bats_evidence.ok ({_bv_ok!r}) fails sanity floor (must be > 0)")
-if bats_evidence.get('agreement_count', 0) < 2:
-    die(f"bats-evidence-agreement: independent agreeing runs ({bats_evidence.get('agreement_count')!r}) < 2")
+_ts_step = next((s for s in manifest.get('required_steps', []) if s.get('id') == 'test-suite'), {})
+_ts_evidence = _ts_step.get('evidence') or {}
+if _ts_evidence.get('min_local_runs') != 1 or _ts_evidence.get('remote_merge_check') != 'CI Gate':
+    die(f"manifest-evidence-drift: expected min_local_runs=1 and remote_merge_check='CI Gate'; got {_ts_evidence!r}")
+_local_run_count = bats_evidence.get('agreement_count', 0)
+if not isinstance(_local_run_count, int) or isinstance(_local_run_count, bool) or _local_run_count < 1:
+    die(f"bats-evidence-agreement: qualifying local runs ({_local_run_count!r}) < 1")
 _run_ids = [x for x in str(bats_evidence.get('run_ids', '')).split(',') if x]
-if len(set(_run_ids)) < 2:
-    die(f"bats-evidence-reused: run_ids={_run_ids!r} do not prove independent runs")
 _log_identities = [x for x in str(bats_evidence.get('log_identities', '')).split(',') if x]
-if len(set(_log_identities)) < 2:
-    die(f"bats-evidence-reused: log_identities={_log_identities!r} do not prove independent retained artifacts")
+if (len(set(_run_ids)) != _local_run_count
+        or len(set(_log_identities)) != _local_run_count):
+    die(f"bats-evidence-reused: local_run_count={_local_run_count!r}, run_ids={_run_ids!r}, log_identities={_log_identities!r} must identify the same distinct local evidence set")
 
 print("[emit-push-proof] verify-proof: PASS", file=sys.stderr)
 PYEOF

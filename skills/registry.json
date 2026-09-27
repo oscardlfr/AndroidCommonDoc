@@ -754,7 +754,7 @@
       "description": "Analyze external content and extract patterns for routing to docs. Use when asked to ingest an article, URL, or pasted content.",
       "category": "guides",
       "tier": "extended",
-      "hash": "sha256:c45c275468828303da3934091b37bcd6251df933a4fff446cd37d94d609172c2",
+      "hash": "sha256:b0ba98d2390a42fb4a8f59c6ffa9772f2319d25ee3c6587bed1621a991f16839",
       "dependencies": [],
       "frontmatter": {
         "name": "ingest-content",
@@ -788,7 +788,7 @@
       "description": "Show project context dashboard. Optionally ensures the persistent support plane with --orchestrate <slug> flag.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:8fc73e18b224a25583a3db69482f44ce4255df8b3abb1d37ee35bdbf9d752ae4",
+      "hash": "sha256:dee3a1e143c8fef0a8f453d18ef9ec646c71cf5bfe95e7c4b52f1182e62ef0f3",
       "dependencies": [],
       "frontmatter": {
         "name": "init-session",
@@ -958,7 +958,7 @@
       "description": "Monitor upstream doc sources for version drift and deprecations. Use when asked to check for outdated dependencies or doc freshness.",
       "category": "guides",
       "tier": "extended",
-      "hash": "sha256:36173e2507c7a5a29f0eded8f7924f084bc8cd3c4ef5647b9b0106e8134b1ffc",
+      "hash": "sha256:e433b65b4d28175a3f54a7b017bd34c60fa35f3c4e32bd9d3007a130330c61e3",
       "dependencies": [],
       "frontmatter": {
         "name": "monitor-docs",
@@ -1076,16 +1076,16 @@
       "name": "quality-gate",
       "type": "skill",
       "path": "skills/quality-gate/SKILL.md",
-      "description": "Run the canonical quality-gate protocol for the active wave and mint push authority only from current structured verdicts and two agreeing full Bats runs.",
+      "description": "Run the canonical quality-gate protocol for the active wave with one full local Bats aggregate; required GitHub CI Gate remains merge authority.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:4d2d52fa35c54834101bea80771c85b09c495965a1890f0713e4501aad0737a1",
+      "hash": "sha256:1485f2d48c6b619990ad014a95080fd5929335f6a8951805e15a460dbe650c50",
       "dependencies": [
         "scripts/sh/emit-push-proof.sh"
       ],
       "frontmatter": {
         "name": "quality-gate",
-        "description": "Run the canonical quality-gate protocol for the active wave and mint push authority only from current structured verdicts and two agreeing full Bats runs.",
+        "description": "Run the canonical quality-gate protocol for the active wave with one full local Bats aggregate; required GitHub CI Gate remains merge authority.",
         "intent": [
           "quality-gate",
           "verification",
@@ -1164,7 +1164,7 @@
       "description": "Resume session with a CEO/CTO dashboard — shows status by department from last session.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:12e8cd5fa748669af5b49563d5de70f0908e2a3c586f82f52e1caa8029ce01c9",
+      "hash": "sha256:cc5646317c1840f2b70f165f3fbcee1c93c31f380e9359da6180cb98ff0c3035",
       "dependencies": [],
       "frontmatter": {
         "name": "resume-work",
@@ -1495,7 +1495,7 @@
       "description": "Synchronize L0 assets, and optionally install the source-referenced collaboration runtime in an L1/L2 consumer.",
       "category": "guides",
       "tier": "extended",
-      "hash": "sha256:f30bd9980dca76ab212e8763936aa452be64036e42cfd547e7c939963f28969a",
+      "hash": "sha256:6c6e3da8275d6e986b5550fff0bf5a82341bcd52af994f97755d602793ebe3e0",
       "dependencies": [],
       "frontmatter": {
         "name": "sync-l0",
@@ -1865,7 +1865,7 @@
       "description": "Smart task routing through the canonical runtime collaboration entrypoint.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:e4195766eb8f4b4111e5cb4228af39bc60bfd419fef15028c96682d033487424",
+      "hash": "sha256:76001579ddd71d364044921fbf0c0248679729ff293898f6c7e9a0d01fa22971",
       "dependencies": [],
       "frontmatter": {
         "name": "work",
@@ -2731,7 +2731,7 @@
       "description": "QG owner (Phase 3). Runs sequential verification on the final committed HEAD after VERIFY-FINAL architect approval. Reports structured PASS/FAIL.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:fc58e5f9436881f38e56c4dd24d88d754512b88b47700dc478a368395a0125a4",
+      "hash": "sha256:cb2370fe4a4a2ef05c1ad05b6c506781d8dc0b87342ea20a5d61f66761bff667",
       "dependencies": [],
       "frontmatter": {
         "name": "quality-gater",
@@ -2747,7 +2747,7 @@
           "detekt"
         ],
         "token_budget": 3000,
-        "template_version": "2.26.0"
+        "template_version": "2.27.0"
       }
     },
     {

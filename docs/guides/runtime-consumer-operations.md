@@ -28,21 +28,49 @@ node build/sync/sync-l0-cli.js --project-root /absolute/path/to/consumer --runti
 node build/sync/sync-l0-cli.js --project-root /absolute/path/to/consumer --runtime
 ```
 
-`--runtime` installs the consumer-owned wave topology and records a digest of the
-toolkit runtime closure. Hooks that import L0 modules are not copied partially.
-Instead, the consumer receives the standalone
+`--runtime` installs the consumer-owned wave topology, the standalone
+`.claude/runtime/l0-entrypoint-launcher.cjs`, and a digest of the toolkit runtime
+closure. Every runtime skill invokes that consumer-local entrypoint launcher; L0
+uses the same checked-in path for self-hosting. Hooks that import L0 modules are
+not copied partially. Instead, the consumer also receives the standalone
 `.claude/hooks/l0-source-hook-launcher.js`; registrations call that stable local
-launcher, which resolves the one local L0 tooling source from `l0-manifest.json`
-at execution time. No Node installation path, user home, or toolkit checkout is
-serialized into consumer `settings.json`. Standalone hooks remain copyable.
+hook launcher. Both launchers resolve the one local L0 tooling source from
+`l0-manifest.json` at execution time. The runtime entrypoint launcher additionally
+verifies the installed runtime pin and content before forwarding; the source-hook
+launcher confines source resolution and delegates the selected hook without itself
+certifying the runtime installation.
+No Node installation path, user home, or toolkit checkout is serialized into
+consumer `settings.json` or generated skill commands. Standalone hooks remain copyable.
 Remote, missing, ambiguous, or symlinked source targets fail closed. Re-run both
 commands after changing toolkit revisions. A managed topology from an older sync is updated automatically only
 when its current bytes still match the checksum recorded by that sync. Local
 topology drift or a customized role remains a conflict and is never overwritten.
 
 The shell hook installer also verifies executable mode. An identical Detekt hook
-that lost its executable bit is repaired without `--force`; differing bytes fail
-and require review.
+that lost its executable bit is repaired without `--force` and reported as an
+executable repair; the mode-only repair does not rewrite the manifest. Differing
+bytes fail and require review. A repeated ordinary or runtime sync with no
+manifest-tracked change and no pending mode repair preserves `l0-manifest.json`
+byte-for-byte, including `last_synced`, so a verification pass does not dirty the
+consumer.
+
+### Runtime skill invocation and failure behavior
+
+The five control-plane skills (`/init-session`, `/resume-work`, `/work`,
+`/ingest-content`, and `/monitor-docs`) use this exact command shape:
+
+```bash
+'<resolved-node>' '<consumer-root>/.claude/runtime/l0-entrypoint-launcher.cjs' 'execute' '--entrypoint' '<skill-name>' '--project-root' '<consumer-root>' '--intent' '<base64url canonical JSON>'
+```
+
+`consumer-root` is the literal absolute repository root for L0, L1, and L2. The
+model must not discover the sibling toolkit, call
+`scripts/lib/runtime-collaboration-entrypoints.cjs` directly, or substitute
+`$PWD`, `$(pwd)`, `ANDROID_COMMON_DOC`, or another ambient path. A missing local
+launcher, missing/ambiguous/remote/symlinked L0 tooling source, commit or digest
+drift, or missing executable closure is a closed failure. Do not fall back to a
+dashboard-only imitation. Refresh the toolkit checkout deliberately, then rerun
+ordinary sync followed by runtime sync and restart the host.
 
 ## Launch Claude from a consumer
 
@@ -79,6 +107,24 @@ platform compilation target, enumerate the checkout's actual tasks (for example,
 Authenticated entrypoint commands use the renderer's canonical POSIX form: every
 token is single-quoted. Do not rewrite those commands with POSIX double quotes;
 the boundary intentionally sends non-canonical forms through ordinary approval.
+
+## Full quality-gate ownership
+
+The `quality-gater` owns one canonical local full Bats execution. Focused tests are
+the development loop; after the PLAN, path manifest, clean HEAD, architect verdict
+bindings, and QG session are current, it invokes `run-bats-sharded.cjs` once with
+six shards at max parallelism six and explicit `--wave-slug` plus `--plan`. Only
+the verified full aggregate authorizes the feature-branch push; individual shard
+handoffs do not.
+
+The local aggregate validates the exact branch HEAD and authorizes publishing it.
+Under strict branch protection, required GitHub `CI Gate` validates the PR merge
+candidate updated with `develop` and authorizes merge; it is not a claim that CI
+tested the byte-identical local SHA. Do not run a second local full suite to
+manufacture agreement, and never merge while `CI Gate` is absent, pending,
+cancelled, or red. The former two-local-run contract is
+superseded; freshness, exact HEAD/PLAN binding, full-roster completeness, and
+fail-closed evidence validation remain unchanged.
 
 ## Recovery when startup customizations interfere
 

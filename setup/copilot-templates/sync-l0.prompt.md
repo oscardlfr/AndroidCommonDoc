@@ -33,14 +33,23 @@ Synchronize L0 assets, and optionally install the source-referenced collaboratio
 4. **Materializes** copies with version tracking headers:
    - Skills and agents: `l0_source`, `l0_hash`, `l0_synced` injected into YAML frontmatter
    - Commands: HTML comment header with source, hash, synced date
-5. **Updates** manifest checksums and `last_synced` timestamp
+5. **Updates** manifest checksums and `last_synced` only when manifest-tracked
+   managed state changes. A no-op apply preserves `l0-manifest.json` byte-for-byte.
 
 With `--runtime`, the CLI additionally installs the closed runtime consumer contract:
 
 - Pins the exact toolkit commit and executable-content digest in `manifest.runtime`.
-- Registers the required hooks by absolute path to the L0 source; runtime code is not copied into the consumer.
+- Installs `.claude/runtime/l0-entrypoint-launcher.cjs` plus the standalone
+  source-hook launcher. Both resolve the one manifest-declared local L0 tooling
+  source at execution time; settings and skills do not embed a host-specific
+  toolkit or Node installation path.
+- Registers source-coupled hooks through the source-hook launcher; their L0
+  module closure is never copied partially into the consumer.
 - Installs the ten canonical runtime role templates byte-for-byte and records their checksums.
 - Preserves unrelated settings and local files, rejects customized runtime-role or hook conflicts, and is idempotent.
+- Reconciles owned executable modes as well as content. Identical Detekt hooks
+  that lost their executable bit are reported as executable repairs without
+  rewriting the manifest; conflicting bytes fail closed.
 - Rejects missing/remote/ambiguous L0 sources and never falls back to `ANDROID_COMMON_DOC`.
 - Rejects `--prune`, `--force`, `--force-l0-managed`, and `--auto-migrate` in runtime mode.
 
@@ -95,6 +104,10 @@ Mode: additive (no removes)
 Sync complete: 70 added, 0 updated, 0 removed, 0 unchanged (70 total)
 Manifest updated: l0-manifest.json
 ```
+
+On a repeated no-op apply, the report says the manifest is unchanged and neither
+its bytes nor `last_synced` move. This makes ordinary and runtime refresh safe to
+run in automation without dirtying a clean consumer.
 
 With `--prune`:
 ```
@@ -154,13 +167,22 @@ When editing a template:
 
 ## Hook Propagation (F7 — BL-W47-prep-8)
 
-Ordinary `/sync-l0` copies standalone `.claude/hooks/*.js` files from L0 to the destination project. Hooks that import the L0 runtime closure are never copied partially: ordinary and runtime sync register those entrypoints by canonical absolute L0 path.
+Ordinary `/sync-l0` copies standalone `.claude/hooks/*.js` files from L0 to the
+destination project. Hooks that import the L0 runtime closure are never copied
+partially: whenever the ordinary or runtime hook matrix selects one, its
+registration goes through the consumer-local source-hook launcher.
 
 **Behavior**:
 - Standalone `*.js` files are copied to the destination `.claude/hooks/`
-- Source-coupled hooks remain in L0 and receive canonical absolute registrations
+- Source-coupled hooks remain in L0 and receive portable launcher registrations;
+  this includes `bash-cli-spawn-gate.js` as well as every hook whose relative
+  imports leave `.claude/hooks/`
 - Project-local hooks (not present in L0) are never touched
 - Missing L0 hooks dir is handled gracefully (no error, no copies)
+
+Runtime mode additionally owns the executable Detekt shell hooks. It installs
+them with mode `0755` and repairs mode-only drift on refresh. A mode repair is an
+effective update even when file content is unchanged.
 
 **Excluding hooks**: add hook filenames to `selection.exclude_hooks` in `l0-manifest.json`:
 
@@ -232,3 +254,8 @@ Future direction: `<!-- L1-LOCAL -->` marker in agent files will designate proje
 - Hook propagation is additive — project-local hooks are never removed
 - `--runtime --dry-run` performs no writes, including when validation fails
 - Runtime consumers require their own unambiguous PLAN before an explicit start; a read-only dashboard may report that prerequisite but never manufactures a PLAN
+- L0, L1, and L2 invoke runtime skills through
+  `<consumer-root>/.claude/runtime/l0-entrypoint-launcher.cjs`. Missing launcher,
+  source ambiguity, commit/digest drift, or a missing executable closure fails
+  closed. The recovery is ordinary sync followed by runtime sync; direct L0
+  invocation, `ANDROID_COMMON_DOC`, and guessed sibling paths are not fallbacks.

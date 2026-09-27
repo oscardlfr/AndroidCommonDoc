@@ -197,10 +197,10 @@ proof = {
     "bats_evidence": {
         "run_id": "canonical-run", "head": head, "ok": 10, "not_ok": 0,
         "expected": 10, "scope": "full", "generated_at": ts,
-        "complete": True, "total": 10, "agreement_count": 2,
-        "run_ids": "canonical-run,independent-run",
-        "log_digests": ("a" * 64) + "," + ("b" * 64),
-        "log_identities": ("c" * 64) + "," + ("d" * 64),
+        "complete": True, "total": 10, "agreement_count": 1,
+        "run_ids": "canonical-run",
+        "log_digests": "a" * 64,
+        "log_identities": "c" * 64,
     },
 }
 with open(proof_path, "w", encoding="utf-8") as f:

@@ -65,7 +65,9 @@
 #   the enumeration/candidacy loop that used to live inline here now has one shared,
 #   bats-tested implementation): HEAD-match + run-id non-empty + BATS_GENERATED_AT >=
 #   started_at + completeness fields well-formed + full scope required.
-#   If BH_STATUS != ok, falls back to re-grepping the TAP log with the same 4-part check.
+#   When a canonical wave PLAN exists, selection is additionally bound to that exact
+#   wave/PLAN digest and one qualifying local run is mandatory; invalid handoffs never
+#   fall back to an unbound shared TAP log. PLAN-less legacy fixtures retain fallback.
 #   SECURITY: handoff files are parsed key-by-key — NOT blindly sourced (see lib/bats-handoff.sh).
 
 set -euo pipefail
@@ -288,10 +290,25 @@ STARTED_AT=${STARTED_AT:-}
 # Selection is delegated entirely to lib/bats-handoff.sh (Step 1) — the enumeration +
 # candidacy loop that used to live here now has a single, shared, bats-tested
 # implementation. BH_STATUS is one of ok|stale|scope-mismatch|absent|malformed; BH_*
-# fields are populated only when BH_STATUS==ok. full-scope required: quality-gater
-# always invokes run-bats.sh with no positional targets (see run-bats.sh's BATS_SCOPE
-# derivation).
-select_bats_handoff --repo-root "$PROJECT_ROOT" --head "$HEAD" --since "$STARTED_AT" --require-scope full
+# fields are populated only when BH_STATUS==ok. Full-scope is mandatory. A real wave
+# PLAN activates strict provenance selection so this orchestrator-facing summary cannot
+# claim green from evidence that the push-proof mint will later reject.
+STRICT_HANDOFF=false
+PLAN_PATH="$PROJECT_ROOT/.planning/wave-${WAVE_SLUG}/PLAN.md"
+if [[ -f "$PLAN_PATH" ]]; then
+    if [[ -L "$PLAN_PATH" ]]; then
+        echo "[emit-qg-result] ERROR: canonical PLAN.md must not be a symlink: $PLAN_PATH" >&2
+        exit 1
+    fi
+    PLAN_DIGEST="$(node -e 'const fs=require("fs"),c=require("crypto");process.stdout.write(c.createHash("sha256").update(fs.readFileSync(process.argv[1])).digest("hex"))' "$PLAN_PATH")"
+    STRICT_HANDOFF=true
+    select_bats_handoff --repo-root "$PROJECT_ROOT" --head "$HEAD" --since "$STARTED_AT" \
+        --require-scope full --wave-slug "$WAVE_SLUG" --plan-digest "$PLAN_DIGEST" \
+        --require-agreeing 1
+else
+    select_bats_handoff --repo-root "$PROJECT_ROOT" --head "$HEAD" --since "$STARTED_AT" \
+        --require-scope full
+fi
 
 # ── Source suite_summary from best valid handoff (or fallback) ────────────────
 BATS_EVIDENCE=false
@@ -328,7 +345,7 @@ if [[ "$BH_STATUS" == "ok" ]]; then
         BATS_EVIDENCE=true
     fi
 
-else
+elif [[ "$STRICT_HANDOFF" == "false" ]]; then
     # ── Fallback: re-grep the TAP log + same 4-part completeness assertion ────────
     _head_candidates="$(count_head_candidates --repo-root "$PROJECT_ROOT" --head "$HEAD")"
     echo "[emit-qg-result] INFO: no qualifying handoff (status=$BH_STATUS, ${_head_candidates} candidate(s) for this HEAD) — falling back to TAP log: $BATS_LOG_PATH" >&2
@@ -369,6 +386,9 @@ else
             # plan_count != 1 → BATS_COMPLETE stays false (incomplete/malformed)
         fi
     fi
+else
+    _head_candidates="$(count_head_candidates --repo-root "$PROJECT_ROOT" --head "$HEAD")"
+    echo "[emit-qg-result] ERROR: strict wave/PLAN-bound handoff selection failed (status=$BH_STATUS, ${_head_candidates} candidate(s) for this HEAD); shared TAP fallback is disabled" >&2
 fi
 
 # suite_summary.bats_verdict (D3 fix): pass|fail from not_ok alone, independent of

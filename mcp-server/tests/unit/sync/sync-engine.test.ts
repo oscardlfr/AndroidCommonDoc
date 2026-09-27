@@ -569,6 +569,36 @@ Run instructions
     expect(new Date(updatedManifest.last_synced).getTime()).not.toBeNaN();
   });
 
+  it("preserves manifest bytes and reports manifestChanged=false on a no-op sync", async () => {
+    const manifest = makeManifest({ sources: [{ layer: "L0", path: l0Root, role: "tooling" }] });
+    const manifestPath = join(projectRoot, "l0-manifest.json");
+    await writeFile(manifestPath, JSON.stringify(manifest, null, 2) + "\n");
+
+    const first = await syncL0(projectRoot, l0Root);
+    expect(first.manifestChanged).toBe(true);
+    const bytesAfterFirst = await readFile(manifestPath, "utf8");
+    const second = await syncL0(projectRoot, l0Root);
+
+    expect(second.manifestChanged).toBe(false);
+    expect(await readFile(manifestPath, "utf8")).toBe(bytesAfterFirst);
+  });
+
+  it("treats checksum key order as semantic no-op and preserves existing bytes", async () => {
+    const manifest = makeManifest({ sources: [{ layer: "L0", path: l0Root, role: "tooling" }] });
+    const manifestPath = join(projectRoot, "l0-manifest.json");
+    await writeFile(manifestPath, JSON.stringify(manifest, null, 2) + "\n");
+    expect((await syncL0(projectRoot, l0Root)).manifestChanged).toBe(true);
+    const installed = JSON.parse(await readFile(manifestPath, "utf8"));
+    installed.checksums = Object.fromEntries(Object.entries(installed.checksums).reverse());
+    const reorderedBytes = JSON.stringify(installed, null, 2) + "\n";
+    await writeFile(manifestPath, reorderedBytes);
+
+    const noOp = await syncL0(projectRoot, l0Root);
+
+    expect(noOp.manifestChanged).toBe(false);
+    expect(await readFile(manifestPath, "utf8")).toBe(reorderedBytes);
+  });
+
   it("skips files listed in l2_specific", async () => {
     // Create a project-specific command that should NOT be touched
     await mkdir(join(projectRoot, ".claude", "commands"), { recursive: true });
@@ -884,7 +914,7 @@ describe("syncL0 safety guardrails", () => {
 
     const report = await syncL0(projectRoot, l0Root);
     // No detekt baseline in registry → no warning expected
-    expect(report.warnings.filter(w => w.includes("detekt"))).toHaveLength(0);
+    expect(report.warnings.filter(w => w.includes("detekt-l0-base"))).toHaveLength(0);
   });
 
   it("report includes l0Commit when L0 is a git repo", async () => {

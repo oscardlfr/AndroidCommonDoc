@@ -8,8 +8,8 @@ layer: L0
 parent: quality-gater-hub
 category: agents
 description: "Normative local CI reproduction profiles for Linux CI, canonical QG evidence, and native Windows validation"
-version: 1
-last_updated: "2026-09-21"
+version: 2
+last_updated: "2026-09-27"
 assumes_read: quality-gate-protocol
 token_budget: 900
 ---
@@ -49,12 +49,37 @@ byte. Required GitHub checks remain authoritative for runner-specific behavior.
 
 ## `qg-linux-canonical`
 
-The six-shard `scripts/tools/run-bats-sharded.cjs` run plus selection through
+One six-shard `scripts/tools/run-bats-sharded.cjs` invocation plus selection through
 `scripts/sh/lib/bats-handoff.sh` is the canonical local quality-gate evidence path.
+Use `--shard-count 6 --max-parallel 6` and pass both `--wave-slug
+"$CLAUDE_WAVE_SLUG"` and `--plan
+"$PWD/.planning/wave-${CLAUDE_WAVE_SLUG}/PLAN.md"` explicitly. The invocation
+must produce one complete `BATS_SCOPE=full` aggregate; its child shard handoffs
+are implementation evidence, not additional full runs.
+
+```bash
+: "${CLAUDE_WAVE_SLUG:?set the active wave slug}"
+QG_PLAN="$PWD/.planning/wave-${CLAUDE_WAVE_SLUG}/PLAN.md"
+[[ -f "$QG_PLAN" && ! -L "$QG_PLAN" ]] || exit 2
+bash scripts/sh/emit-qg-result.sh --init \
+  --slug "$CLAUDE_WAVE_SLUG" --project-root "$PWD"
+node scripts/tools/run-bats-sharded.cjs \
+  --project-root "$PWD" --suite-root "$PWD/scripts/tests" \
+  --shard-count 6 --max-parallel 6 \
+  --wave-slug "$CLAUDE_WAVE_SLUG" --plan "$QG_PLAN"
+```
+
 It MUST obey the same clean-checkout, non-root, Node 24, in-container dependency,
 and `mcp-server` build requirements above. It proves full-roster completeness and
 handoff selection, but MUST NOT be described as an exact replay of the four-shard
 GitHub workflow.
+
+This local aggregate validates the exact branch HEAD and authorizes publishing it.
+Under strict branch protection, the required GitHub `CI Gate` validates the PR
+merge candidate updated with `develop` and authorizes merge. The two checks do not
+claim a byte-identical subject SHA. Do not execute the canonical local suite twice
+merely to simulate independence; the second authority is CI, not a duplicate local
+process.
 
 ## `windows-native`
 

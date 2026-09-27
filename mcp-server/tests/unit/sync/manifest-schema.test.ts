@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from "vitest";
-import { writeFile, readFile, mkdtemp, rm } from "node:fs/promises";
+import { writeFile, readFile, mkdtemp, rm, readdir } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import {
@@ -461,6 +461,7 @@ describe("writeManifest", () => {
 
     const content = await readFile(fp, "utf-8");
     expect(content).toBe(JSON.stringify(m, null, 2) + "\n");
+    expect((await readdir(tmpDir)).filter((name) => name.endsWith(".tmp"))).toEqual([]);
   });
 });
 

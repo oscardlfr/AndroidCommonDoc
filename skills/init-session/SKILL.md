@@ -23,10 +23,18 @@ The `<slug>` is required when `--orchestrate` is passed. Example: `/init-session
 All dashboard and support-plane operations enter through the shared product flow:
 
 ```bash
-'<resolved-node>' '<toolkit-root>/scripts/lib/runtime-collaboration-entrypoints.cjs' 'execute' '--entrypoint' 'init-session' '--project-root' '<consumer-root>' '--intent' '<base64url canonical JSON>'
+'<resolved-node>' '<consumer-root>/.claude/runtime/l0-entrypoint-launcher.cjs' 'execute' '--entrypoint' 'init-session' '--project-root' '<consumer-root>' '--intent' '<base64url canonical JSON>'
 ```
 
-The Bash call must be one standalone direct Node command. For L0, `toolkit-root` and `consumer-root` are the current repository. For an installed runtime consumer, resolve `toolkit-root` only from the single local `layer=L0, role=tooling` source in `l0-manifest.json`; `consumer-root` remains the literal absolute application repository. Use the resolved Node executable. Never use `$(pwd)`, `$PWD`, `cd`, environment fallbacks, shell variables, command substitution, pipes, redirects, or command separators in this authenticated entrypoint call.
+The Bash call must be one standalone direct Node command. `consumer-root` is the
+literal absolute repository root for L0, L1, and L2; L0 installs and uses the same
+consumer-local launcher as downstream projects. The launcher alone resolves and
+verifies the manifest-pinned L0 runtime before forwarding the command. Use the
+resolved Node executable. Never resolve the toolkit in model prose, invoke the L0
+entrypoint directly, or use `$(pwd)`, `$PWD`, `cd`, environment fallbacks, shell
+variables, command substitution, pipes, redirects, or command separators. If the
+launcher is absent or rejects the pin, fail closed and run the documented ordinary
+sync plus runtime refresh; do not fall back to a guessed toolkit path.
 
 Encode exactly `{"mode":"dashboard"}` for the read-only form or canonical `{"mode":"start","wave_slug":"<slug>"}` for orchestration. The shared entrypoint initializes/validates the control-plane state and derives the lifecycle role set itself. Treat `READY` as a proven dashboard result, execute only returned `ACTION_REQUIRED` actions through the runtime adapter, and report `BLOCKED|UNAVAILABLE|FAILED` without inventing readiness.
 
