@@ -425,14 +425,15 @@ EOF
 @test "#RB19 two runs retain distinct immutable BATS_LOG artifacts and identities" {
     write_fake_npx
 
-    run env PATH="$WORK_DIR/bin:$PATH" bash "$SCRIPT" --project-root "$WORK_DIR" --log "$LOG"
+    run env PATH="$WORK_DIR/bin:$PATH" bash "$SCRIPT" --project-root "$WORK_DIR"
     [ "$status" -eq 0 ]
-    run env PATH="$WORK_DIR/bin:$PATH" bash "$SCRIPT" --project-root "$WORK_DIR" --log "$LOG"
+    run env PATH="$WORK_DIR/bin:$PATH" bash "$SCRIPT" --project-root "$WORK_DIR"
     [ "$status" -eq 0 ]
 
     local handoffs=("$WORK_DIR"/.androidcommondoc/bats-result.*.env)
     [ "${#handoffs[@]}" -eq 2 ]
-    local log_a log_b identity_a identity_b
+    local canonical_work_dir log_a log_b identity_a identity_b
+    canonical_work_dir="$(cd "$WORK_DIR" && pwd -P)"
     log_a="$(grep '^BATS_LOG=' "${handoffs[0]}" | cut -d= -f2-)"
     log_b="$(grep '^BATS_LOG=' "${handoffs[1]}" | cut -d= -f2-)"
     identity_a="$(grep '^BATS_LOG_IDENTITY=' "${handoffs[0]}" | cut -d= -f2-)"
@@ -440,6 +441,9 @@ EOF
 
     [ -f "$log_a" ]
     [ -f "$log_b" ]
+    [[ "$log_a" == "$canonical_work_dir/.androidcommondoc/suite-bats."*.log ]]
+    [[ "$log_b" == "$canonical_work_dir/.androidcommondoc/suite-bats."*.log ]]
+    [ -f "$canonical_work_dir/.androidcommondoc/suite-bats.log" ]
     [ "$log_a" != "$log_b" ]
     [ "$identity_a" != "$identity_b" ]
     cmp -s "$log_a" "$log_b"
