@@ -170,6 +170,16 @@ function assertNoInjection(command, cwd, label) {
   console.log('PASS: ' + label);
 }
 
+function assertDenied(command, cwd, expectedReason, label) {
+  const event = baseEvent(command, cwd);
+  const result = runHook(event);
+  assert.strictEqual(result.status, 0, label + ': hook exit code');
+  const body = JSON.parse(result.stdout);
+  assert.strictEqual(body.hookSpecificOutput.permissionDecision, 'deny', label + ': permission decision');
+  assert.match(body.hookSpecificOutput.permissionDecisionReason, expectedReason, label + ': denial reason');
+  console.log('PASS: ' + label);
+}
+
 // Case 1: exact documented relative bare command is allowed/rewritten.
 {
   assertAdmittedAndConsume('case-1-relative-bare-command', (ctx) =>
@@ -254,11 +264,17 @@ function assertNoInjection(command, cwd, label) {
   }
 }
 
-// Case 4: exact relative token with cwd set to a different absolute directory receives no injection.
+// Case 4: the exact relative token remains recognizable outside its owner cwd
+// and is denied fail-closed instead of falling through to ordinary approval.
 {
   const command = 'node ' + RELATIVE_ENTRYPOINT_CLI_PATH + ' execute --entrypoint monitor-docs --project-root '
     + PORTABLE_REPO_ROOT + ' --intent ' + monitorDocsIntent();
-  assertNoInjection(command, path.resolve(REPO_ROOT, '..'), 'case-4-mismatched-cwd');
+  assertDenied(
+    command,
+    path.resolve(REPO_ROOT, '..'),
+    /\[R131\/P3\] L0 relative collaboration entrypoint is foreign\./,
+    'case-4-mismatched-cwd',
+  );
   passed += 1;
 }
 
