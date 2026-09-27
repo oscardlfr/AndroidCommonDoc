@@ -15,6 +15,7 @@ const path = require('node:path');
 const test = require('node:test');
 
 const rbs = require(path.resolve(__dirname, '../tools/run-bats-sharded.cjs'));
+const { stableReadArtifact } = require(path.resolve(__dirname, '../lib/evidence-run-record.cjs'));
 
 // ── computeTargetDigest ─────────────────────────────────────────────────
 
@@ -344,6 +345,74 @@ test('validateShardResult fails closed: malformed run id cannot influence retain
   const out = validate(baseHandoff({ BATS_RUN_ID: '../escape' }), ['x.bats', 'y.bats']);
   assert.equal(out.ok, false);
   assert.equal(out.reason, 'SHARD_RUN_ID_MALFORMED');
+});
+
+// ── validateShardLogArtifacts ─────────────────────────────────────────────
+
+function artifactFixture(t) {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'rbs-artifacts-'));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const live = path.join(root, 'suite-bats.shard0.stamp.log');
+  const retained = path.join(root, 'suite-bats.shard0-run.log');
+  fs.writeFileSync(live, '1..1\nok 1 retained\n');
+  fs.copyFileSync(live, retained);
+  const admitted = stableReadArtifact(retained, { root });
+  return {
+    root,
+    live,
+    retained,
+    handoff: baseHandoff({
+      BATS_LOG: retained,
+      BATS_LOG_DIGEST: admitted.sha256,
+      BATS_LOG_IDENTITY: admitted.identity,
+    }),
+  };
+}
+
+test('validateShardLogArtifacts returns retained bytes only after stable digest, identity, and live-byte agreement', (t) => {
+  const fixture = artifactFixture(t);
+  const out = rbs.validateShardLogArtifacts({
+    handoff: fixture.handoff, expectedLogPath: fixture.live, root: fixture.root,
+  });
+  assert.equal(out.ok, true);
+  assert.equal(out.bytes.toString('utf8'), '1..1\nok 1 retained\n');
+});
+
+test('validateShardLogArtifacts fails closed when the canonical retained file is absent', (t) => {
+  const fixture = artifactFixture(t);
+  fs.unlinkSync(fixture.retained);
+  const out = rbs.validateShardLogArtifacts({
+    handoff: fixture.handoff, expectedLogPath: fixture.live, root: fixture.root,
+  });
+  assert.deepEqual(out, { ok: false, reason: 'SHARD_LOG_ARTIFACT_UNREADABLE' });
+});
+
+test('validateShardLogArtifacts fails closed when retained bytes do not match the published digest', (t) => {
+  const fixture = artifactFixture(t);
+  fs.writeFileSync(fixture.retained, '1..1\nok 1 tampered\n');
+  const out = rbs.validateShardLogArtifacts({
+    handoff: fixture.handoff, expectedLogPath: fixture.live, root: fixture.root,
+  });
+  assert.deepEqual(out, { ok: false, reason: 'SHARD_LOG_DIGEST_MISMATCH' });
+});
+
+test('validateShardLogArtifacts fails closed when the retained identity is not the published identity', (t) => {
+  const fixture = artifactFixture(t);
+  const out = rbs.validateShardLogArtifacts({
+    handoff: { ...fixture.handoff, BATS_LOG_IDENTITY: 'f'.repeat(64) },
+    expectedLogPath: fixture.live,
+    root: fixture.root,
+  });
+  assert.deepEqual(out, { ok: false, reason: 'SHARD_LOG_IDENTITY_MISMATCH' });
+});
+
+test('validateShardLogArtifacts fails closed when live and retained logs diverge', (t) => {
+  const fixture = artifactFixture(t);
+  fs.writeFileSync(fixture.live, '1..1\nok 1 changed-live\n');
+  const out = rbs.validateShardLogArtifacts({
+    handoff: fixture.handoff, expectedLogPath: fixture.live, root: fixture.root,
+  });
+  assert.deepEqual(out, { ok: false, reason: 'SHARD_LIVE_RETAINED_LOG_MISMATCH' });
 });
 
 // ── aggregateHandoffs ────────────────────────────────────────────────────
