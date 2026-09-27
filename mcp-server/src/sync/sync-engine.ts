@@ -89,6 +89,38 @@ export interface SyncOptions {
   runtime?: boolean;
 }
 
+/** Files owned by the runtime installation, not by the ordinary registry sync. */
+const RUNTIME_CONSUMER_FILES = [
+  ".claude/hooks/l0-source-hook-launcher.js",
+  ".claude/registry/wave-topology.yaml",
+] as const;
+
+const L0_SOURCE_HOOK_LAUNCHER = "l0-source-hook-launcher.js";
+
+function portableSourceHookCommand(file: string): string {
+  return `node "$CLAUDE_PROJECT_DIR"/.claude/hooks/${L0_SOURCE_HOOK_LAUNCHER} ${file}`;
+}
+
+/** Match only the exact two-JSON-string command emitted by runtime v1 before
+ * portable launchers. The old toolkit may no longer exist (or may belong to a
+ * different host), so the grammar and bounded hook suffix are the authority. */
+function isLegacyAbsoluteHookCommand(command: string, file: string): boolean {
+  const match = command.match(/^("(?:[^"\\]|\\.)*")\s+("(?:[^"\\]|\\.)*")$/);
+  if (!match) return false;
+  try {
+    const executable = JSON.parse(match[1]) as unknown;
+    const target = JSON.parse(match[2]) as unknown;
+    if (typeof executable !== "string" || typeof target !== "string") return false;
+    const executableName = path.posix.basename(executable.replace(/\\/g, "/"));
+    if (!/^node(?:\.exe)?$/i.test(executableName)) return false;
+    const normalized = target.replace(/\\/g, "/");
+    const absolute = path.isAbsolute(target) || /^[A-Za-z]:\//.test(normalized);
+    return absolute && normalized.endsWith(`/.claude/hooks/${file}`);
+  } catch {
+    return false;
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Resolution
 // ---------------------------------------------------------------------------
@@ -261,8 +293,11 @@ export async function computeSyncActions(
   }
 
   // Detect orphaned entries (in checksums but not in resolved dest paths)
+  const runtimeManagedPaths = manifest.runtime?.enabled === true
+    ? new Set<string>(RUNTIME_CONSUMER_FILES)
+    : new Set<string>();
   for (const [checksumPath, hash] of Object.entries(manifest.checksums)) {
-    if (!resolvedDestPaths.has(checksumPath)) {
+    if (!resolvedDestPaths.has(checksumPath) && !runtimeManagedPaths.has(checksumPath)) {
       // Create a synthetic entry for the orphaned file
       // checksumPath is the dest path (e.g. .claude/skills/test/SKILL.md)
       const name = extractNameFromPath(checksumPath);
@@ -421,6 +456,7 @@ export async function resolveL0Source(
   for (const base of bases) {
     const resolved = path.resolve(base, l0Source);
     try {
+      if ((await lstat(resolved)).isSymbolicLink()) continue;
       await access(path.join(resolved, "skills", "registry.json"));
       const canonical = await realpath(resolved);
       await access(path.join(canonical, "skills", "registry.json"));
@@ -446,6 +482,7 @@ export async function resolveL0Source(
   if (envPath) {
     const resolved = path.resolve(envPath);
     try {
+      if ((await lstat(resolved)).isSymbolicLink()) throw new Error("symlinked L0 source");
       await access(path.join(resolved, "skills", "registry.json"));
       return resolved;
     } catch {
@@ -498,6 +535,7 @@ function gitMainCheckoutBases(projectRoot: string): string[] {
 async function validateL0Path(l0Path: string): Promise<void> {
   const registryPath = path.join(l0Path, "skills", "registry.json");
   try {
+    if ((await lstat(l0Path)).isSymbolicLink()) throw new Error("symlinked L0 source");
     await access(registryPath);
   } catch {
     throw new Error(
@@ -830,6 +868,58 @@ function hasValidHookStructure(hooks: unknown): hooks is SettingsHooks {
   );
 }
 
+async function readHookSettingsOrThrow(settingsPath: string): Promise<ClaudeSettings> {
+  let raw: string;
+  try {
+    raw = await readFile(settingsPath, "utf-8");
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") return {};
+    throw new Error(
+      `Cannot read ${settingsPath}; refusing to sync without preserving the existing settings: ${
+        err instanceof Error ? err.message : String(err)
+      }`,
+    );
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch (err) {
+    throw new Error(
+      `Malformed JSON in ${settingsPath}; repair it before syncing: ${
+        err instanceof Error ? err.message : String(err)
+      }`,
+    );
+  }
+  if (!isJsonObject(parsed)) {
+    throw new Error(`Malformed settings root in ${settingsPath}; expected a JSON object`);
+  }
+  if (parsed.hooks !== undefined && !hasValidHookStructure(parsed.hooks)) {
+    throw new Error(`Malformed hooks structure in ${settingsPath}; refusing to overwrite consumer settings`);
+  }
+  return parsed as ClaudeSettings;
+}
+
+async function writeSettingsAtomically(settingsPath: string, settings: ClaudeSettings): Promise<void> {
+  const directory = path.dirname(settingsPath);
+  await mkdir(directory, { recursive: true });
+  const temporaryPath = path.join(
+    directory,
+    `.settings.json.${process.pid}.${Date.now()}.${Math.random().toString(16).slice(2)}.tmp`,
+  );
+  try {
+    await writeFile(temporaryPath, JSON.stringify(settings, null, 2) + "\n", "utf-8");
+    await rename(temporaryPath, settingsPath);
+  } catch (err) {
+    try {
+      await unlink(temporaryPath);
+    } catch {
+      // The temp file may not have been created or may already have been renamed.
+    }
+    throw err;
+  }
+}
+
 const RUNTIME_CORE_HOOK_FILES = [
   "context-provider-gate.js", "context-provider-write-gate.js",
   "runtime-consultation-target-gate.js", "agent-spawn-execution-gate.js",
@@ -842,10 +932,6 @@ const RUNTIME_ROLE_TEMPLATES = [
   "arch-platform", "arch-testing", "arch-integration", "context-provider",
   "doc-updater", "toolkit-specialist", "test-specialist", "verifier",
   "quality-gater", "planner",
-] as const;
-
-const RUNTIME_CONSUMER_FILES = [
-  ".claude/registry/wave-topology.yaml",
 ] as const;
 
 const RUNTIME_HOOK_REGISTRATIONS: readonly (HookRegistrationEntry & { timeout: number })[] = [
@@ -1025,13 +1111,10 @@ export async function installRuntimeConsumer(
     }
     const nextSettings: ClaudeSettings = JSON.parse(JSON.stringify(settings));
     if (!nextSettings.hooks) nextSettings.hooks = {};
-    const nodePath = await realpath(process.execPath);
-    // Forward slashes are accepted by Node on Windows and avoid serializing
-    // JSON escape backslashes into the shell command stored in settings.json.
-    // JSON.stringify still supplies robust quoting for spaces on every host.
-    const quoteCommandPath = (value: string): string => JSON.stringify(value.replace(/\\/g, "/"));
     const desiredByFile = new Map<string, string>(RUNTIME_CORE_HOOK_FILES.map((file) => [
-      file, `${quoteCommandPath(nodePath)} ${quoteCommandPath(path.join(toolkit, ".claude", "hooks", file))}`,
+      file, SOURCE_REFERENCED_HOOK_FILES.has(file)
+        ? portableSourceHookCommand(file)
+        : `node "$CLAUDE_PROJECT_DIR"/.claude/hooks/${file}`,
     ]));
     const legacyFor = (file: string): string => `node "$CLAUDE_PROJECT_DIR"/.claude/hooks/${file}`;
     for (const [event, blocks] of Object.entries(nextSettings.hooks)) {
@@ -1044,7 +1127,9 @@ export async function installRuntimeConsumer(
             candidate.event === event && candidate.matcher === block.matcher && candidate.file === file &&
             hook.command === desiredByFile.get(file));
           if (desiredRegistration) { retained.push(hook); continue; }
-          if (hook.command !== legacyFor(file)) return { ok: false, reason: `runtime-hook-conflict:${file}`, dryRun };
+          if (hook.command !== legacyFor(file) && !isLegacyAbsoluteHookCommand(hook.command, file)) {
+            return { ok: false, reason: `runtime-hook-conflict:${file}`, dryRun };
+          }
         }
         block.hooks = retained;
       }
@@ -1102,16 +1187,15 @@ export async function installRuntimeConsumer(
     }
 
     if (!dryRun) {
-      await mkdir(path.dirname(settingsPath), { recursive: true });
-      await writeFile(settingsPath, JSON.stringify(nextSettings, null, 2) + "\n", "utf8");
-      for (const write of roleWrites) {
-        await mkdir(path.dirname(write.destination), { recursive: true });
-        await writeFile(write.destination, write.content, "utf8");
-      }
       for (const write of consumerFileWrites) {
         await mkdir(path.dirname(write.destination), { recursive: true });
         await writeFile(write.destination, write.content, "utf8");
       }
+      for (const write of roleWrites) {
+        await mkdir(path.dirname(write.destination), { recursive: true });
+        await writeFile(write.destination, write.content, "utf8");
+      }
+      await writeSettingsAtomically(settingsPath, nextSettings);
       manifest.runtime = {
         schema: "runtime-consumer/v1", enabled: true, consumer_layer: consumerLayer,
         toolkit_commit: toolkitCommit, toolkit_content_sha256: inventory.digest,
@@ -1254,29 +1338,17 @@ export async function mergeHookRegistrations(
   const settingsPath = path.join(projectRoot, '.claude', 'settings.json');
   const result: MergeHookRegistrationsResult = { added: [], skipped: [], dryRun };
 
-  let settings: ClaudeSettings;
-
-  // Read existing settings.json — seed empty structure on missing file or malformed JSON
-  try {
-    const raw = await readFile(settingsPath, 'utf-8');
-    try {
-      settings = JSON.parse(raw) as ClaudeSettings;
-    } catch {
-      // Malformed JSON — fail-open: warn and seed empty structure
-      logger.warn(`mergeHookRegistrations: malformed JSON in ${settingsPath} — seeding empty structure`);
-      settings = { hooks: { PreToolUse: [] } };
-    }
-  } catch {
-    // File missing — seed empty structure
-    settings = { hooks: { PreToolUse: [] } };
-  }
+  // A genuinely missing file is a new installation. Every other read/parse/
+  // shape failure is consumer-owned state and must fail closed: silently
+  // replacing it would erase permissions, hooks, or authentication settings.
+  const settings = await readHookSettingsOrThrow(settingsPath);
+  let settingsChanged = false;
 
   if (!settings.hooks) {
     settings.hooks = {};
   }
 
   const excludeSet = new Set(excludeHooks);
-  const canonicalNode = l0Root ? await realpath(process.execPath) : process.execPath;
   const canonicalL0Root = l0Root ? await realpath(l0Root) : undefined;
 
   for (const entry of L0_REQUIRED_HOOK_REGISTRATIONS) {
@@ -1287,8 +1359,11 @@ export async function mergeHookRegistrations(
     }
     const sourceReferenced = Boolean(canonicalL0Root) && SOURCE_REFERENCED_HOOK_FILES.has(file);
     const command = sourceReferenced
-      ? `${JSON.stringify(canonicalNode.replace(/\\/g, "/"))} ${JSON.stringify(path.join(canonicalL0Root!, ".claude", "hooks", file).replace(/\\/g, "/"))}`
+      ? portableSourceHookCommand(file)
       : `node "$CLAUDE_PROJECT_DIR"/.claude/hooks/${file}`;
+    const runtimeManaged = canonicalL0Root && RUNTIME_CORE_HOOK_FILES.includes(
+      file as typeof RUNTIME_CORE_HOOK_FILES[number],
+    );
 
     // Ensure the event array exists
     if (!settings.hooks[event]) {
@@ -1296,31 +1371,46 @@ export async function mergeHookRegistrations(
     }
     const eventArray: MatcherBlock[] = settings.hooks[event];
 
-    // Find existing matcher block — exact string match (no second block with same matcher)
-    let matcherBlock = eventArray.find((b) => b.matcher === matcher);
+    // Consumers may already contain duplicate blocks for the same matcher.
+    // Search every such block for idempotency; adding to only the first while
+    // ignoring an exact registration in a later block creates duplicates.
+    const matchingBlocks = eventArray.filter((b) => b.matcher === matcher);
+    let matcherBlock = matchingBlocks[0];
     if (!matcherBlock) {
       matcherBlock = { matcher, hooks: [] };
       eventArray.push(matcherBlock);
+      matchingBlocks.push(matcherBlock);
+      settingsChanged = true;
     }
 
-    // Idempotency check: scan existing commands for this hook's basename
-    if (sourceReferenced) {
+    // Migrate both the broken partial-copy registration and the old
+    // host-specific absolute registration to the portable consumer launcher.
+    if (sourceReferenced || runtimeManaged) {
       const legacy = `node "$CLAUDE_PROJECT_DIR"/.claude/hooks/${file}`;
-      matcherBlock.hooks = matcherBlock.hooks.filter((hook) => hook.command !== legacy);
+      for (const block of matchingBlocks) {
+        const retained = block.hooks.filter((hook) =>
+          !(sourceReferenced && hook.command === legacy) &&
+          !((sourceReferenced || runtimeManaged) && isLegacyAbsoluteHookCommand(hook.command, file)));
+        if (retained.length !== block.hooks.length) {
+          block.hooks = retained;
+          settingsChanged = true;
+        }
+      }
     }
-    const alreadyPresent = matcherBlock.hooks.some((h) => h.command === command);
+    const alreadyPresent = matchingBlocks.some((block) =>
+      block.hooks.some((hook) => hook.command === command));
 
     if (alreadyPresent) {
       result.skipped.push({ event, matcher, file });
     } else {
       matcherBlock.hooks.push({ type: 'command', command, timeout: 5 });
+      settingsChanged = true;
       result.added.push({ event, matcher, file });
     }
   }
 
-  if (!dryRun && result.added.length > 0) {
-    await mkdir(path.dirname(settingsPath), { recursive: true });
-    await writeFile(settingsPath, JSON.stringify(settings, null, 2) + '\n', 'utf-8');
+  if (!dryRun && settingsChanged) {
+    await writeSettingsAtomically(settingsPath, settings);
   }
 
   return result;
@@ -1612,6 +1702,12 @@ export async function syncMultiSource(
 
   const manifestPath = path.join(projectRoot, "l0-manifest.json");
   const manifest = await readManifest(manifestPath);
+  if (!options.runtime) {
+    // Preflight consumer-owned settings before any registry materialisation or
+    // manifest write. A malformed/unreadable file must leave the entire sync
+    // transaction at zero writes.
+    await readHookSettingsOrThrow(path.join(projectRoot, ".claude", "settings.json"));
+  }
   const orderedSources = getOrderedSources(manifest);
 
   // Collect registries from all sources
@@ -2029,6 +2125,11 @@ export async function syncL0(
 
   const manifestPath = path.join(projectRoot, "l0-manifest.json");
   const manifest = await readManifest(manifestPath);
+  if (!options.runtime) {
+    // See syncMultiSource(): ordinary sync is destructive only after the
+    // consumer settings boundary has been proven readable and well-formed.
+    await readHookSettingsOrThrow(path.join(projectRoot, ".claude", "settings.json"));
+  }
 
   // Generate registry from L0 root
   const registry = await generateRegistry(l0Root);

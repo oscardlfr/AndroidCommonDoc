@@ -12,13 +12,13 @@
  *   5. PreToolUse TaskUpdate block created with correct L0 entry
  *   6. Grep|Glob|Bash|Read combined matcher unchanged
  *   7. Idempotency: second call produces no duplicates
- *   8. Malformed JSON: fail-open, no silent crash
+ *   8. Malformed/unreadable JSON: fail closed and preserve consumer bytes
  */
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { writeFile, mkdir, rm, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { existsSync } from "node:fs";
+import { existsSync, realpathSync } from "node:fs";
 import { mergeHookRegistrations } from "../../src/sync/sync-engine.js";
 
 // ---------------------------------------------------------------------------
@@ -325,24 +325,34 @@ describe("mergeHookRegistrations()", () => {
     }
   });
 
-  // Assertion 8: malformed JSON fail-open
-  it("fails open on malformed JSON — warns, seeds empty structure, adds 10 entries", async () => {
+  // Assertion 8: malformed JSON fails closed
+  it("rejects malformed JSON and preserves the consumer bytes", async () => {
     const claudeDir = join(fixtureDir, ".claude");
     await mkdir(claudeDir, { recursive: true });
-    await writeFile(join(claudeDir, "settings.json"), "{ this is not valid json }", "utf-8");
+    const malformed = "{ this is not valid json }";
+    const settingsPath = join(claudeDir, "settings.json");
+    await writeFile(settingsPath, malformed, "utf-8");
 
-    // Should not throw
-    const result = await mergeHookRegistrations(fixtureDir);
+    await expect(mergeHookRegistrations(fixtureDir)).rejects.toThrow(/Malformed JSON/);
+    expect(await readFile(settingsPath, "utf-8")).toBe(malformed);
+  });
 
-    // 11 gates: 6 pre-existing + 4 M7/WP4 + 1 Part C retirement-trigger
-    // (SubagentStop) — see dispatch Section 6. A blank seed has none of them
-    // pre-satisfied, unlike the FULL_L1_SETTINGS fixture.
-    expect(result.added).toHaveLength(11);
-    expect(result.skipped).toHaveLength(0);
+  it("rejects an unreadable settings path without replacing it", async () => {
+    const settingsPath = join(fixtureDir, ".claude", "settings.json");
+    await mkdir(settingsPath, { recursive: true });
 
-    // Output must be valid JSON
-    const raw = await readFile(join(claudeDir, "settings.json"), "utf-8");
-    expect(() => JSON.parse(raw)).not.toThrow();
+    await expect(mergeHookRegistrations(fixtureDir)).rejects.toThrow(/Cannot read/);
+    expect(existsSync(settingsPath)).toBe(true);
+  });
+
+  it("rejects malformed hook shapes instead of normalising them", async () => {
+    const settings = { permissions: { deny: ["Bash(rm -rf *)"] }, hooks: { PreToolUse: "not-an-array" } };
+    await writeSettings(fixtureDir, settings);
+    const settingsPath = join(fixtureDir, ".claude", "settings.json");
+    const before = await readFile(settingsPath, "utf-8");
+
+    await expect(mergeHookRegistrations(fixtureDir)).rejects.toThrow(/Malformed hooks structure/);
+    expect(await readFile(settingsPath, "utf-8")).toBe(before);
   });
 
   // Extra coverage: missing settings.json (creates from scratch)
@@ -393,6 +403,73 @@ describe("mergeHookRegistrations()", () => {
     const settings = await readSettings(fixtureDir);
     const preToolUse = (settings.hooks as Record<string, Array<{ matcher: string }>>)["PreToolUse"];
     expect(preToolUse.filter((b) => b.matcher === "Bash")).toHaveLength(1);
+  });
+
+  it("recognizes an exact registration in a later duplicate matcher block", async () => {
+    await writeSettings(fixtureDir, {});
+    await mergeHookRegistrations(fixtureDir, false, fixtureDir);
+    const seeded = await readSettings(fixtureDir) as { hooks: Record<string, MatcherBlock[]> };
+    const bashBlocks = seeded.hooks.PreToolUse.filter((block) => block.matcher === "Bash");
+    const sourceHook = bashBlocks[0].hooks.find((hook) =>
+      hook.command.includes("context-provider-write-gate.js"));
+    expect(sourceHook).toBeDefined();
+    bashBlocks[0].hooks = bashBlocks[0].hooks.filter((hook) => hook !== sourceHook);
+    seeded.hooks.PreToolUse.push({ matcher: "Bash", hooks: [sourceHook!] });
+    await writeSettings(fixtureDir, seeded);
+
+    const result = await mergeHookRegistrations(fixtureDir, false, fixtureDir);
+    expect(result.added.some((entry) => entry.file === "context-provider-write-gate.js")).toBe(false);
+    expect(result.skipped.some((entry) => entry.file === "context-provider-write-gate.js")).toBe(true);
+
+    const after = await readSettings(fixtureDir) as { hooks: Record<string, MatcherBlock[]> };
+    const occurrences = after.hooks.PreToolUse
+      .filter((block) => block.matcher === "Bash")
+      .flatMap((block) => block.hooks)
+      .filter((hook) => hook.command.includes("context-provider-write-gate.js"));
+    expect(occurrences).toHaveLength(1);
+  });
+
+  it("migrates an exact legacy absolute source registration to the portable launcher", async () => {
+    const runtimeCommand = `${JSON.stringify(realpathSync(process.execPath).replace(/\\/g, "/"))} ${
+      JSON.stringify(join(realpathSync(fixtureDir), ".claude", "hooks", "context-provider-gate.js").replace(/\\/g, "/"))
+    }`;
+    await writeSettings(fixtureDir, {
+      hooks: { PreToolUse: [{ matcher: "Grep|Glob|Bash|Read", hooks: [{ type: "command", command: runtimeCommand, timeout: 5 }] }] },
+    });
+
+    const result = await mergeHookRegistrations(fixtureDir, false, fixtureDir);
+    expect(result.added.some((entry) => entry.file === "context-provider-gate.js")).toBe(true);
+
+    const after = await readSettings(fixtureDir) as { hooks: Record<string, MatcherBlock[]> };
+    const occurrences = after.hooks.PreToolUse
+      .flatMap((block) => block.hooks)
+      .filter((hook) => hook.command.includes("context-provider-gate.js"));
+    expect(occurrences).toHaveLength(1);
+    expect(occurrences[0].command).toBe(
+      'node "$CLAUDE_PROJECT_DIR"/.claude/hooks/l0-source-hook-launcher.js context-provider-gate.js',
+    );
+  });
+
+  it("preserves a custom absolute command that was not emitted by the legacy Node runtime", async () => {
+    const customCommand = `${JSON.stringify("/usr/bin/bash")} ${JSON.stringify(
+      "/custom/toolkit/.claude/hooks/context-provider-gate.js",
+    )}`;
+    await writeSettings(fixtureDir, {
+      hooks: {
+        PreToolUse: [{
+          matcher: "Grep|Glob|Bash|Read",
+          hooks: [{ type: "command", command: customCommand, timeout: 5 }],
+        }],
+      },
+    });
+
+    await mergeHookRegistrations(fixtureDir, false, fixtureDir);
+    const after = await readSettings(fixtureDir) as { hooks: Record<string, MatcherBlock[]> };
+    const commands = after.hooks.PreToolUse.flatMap((block) => block.hooks).map((hook) => hook.command);
+    expect(commands).toContain(customCommand);
+    expect(commands).toContain(
+      'node "$CLAUDE_PROJECT_DIR"/.claude/hooks/l0-source-hook-launcher.js context-provider-gate.js',
+    );
   });
 
   // Extra coverage: output format

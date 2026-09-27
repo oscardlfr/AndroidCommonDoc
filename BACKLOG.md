@@ -1,15 +1,15 @@
 # AndroidCommonDoc Backlog
 
-> **Last updated**: 2026-09-26
-> **Roadmap baseline**: `develop@dfc48cf` (PR #250). **H1, G0, and ordered Waves 1–7 are SHIPPED.**
-> **Current delivery**: **Waves 1–7 are SHIPPED**. Waves 3–7 merged through PR #250 at `dfc48cf8488cf661704f8a312093c663c34db0bb`; their pre-integration evidence remains historical context in `docs/agents/waves-3-7-implementation-closeout.md`. The first real L2 consumer then exposed the runtime portability/host-version defects tracked below. **R33 remains deferred.**
+> **Last updated**: 2026-09-27
+> **Roadmap baseline**: `develop@c5ee193e1f726d270577c9256ea7cb09b481508b` (PR #251). **H1, G0, ordered Waves 1–7, and the bounded first-consumer hardening follow-up are SHIPPED.**
+> **Current delivery**: PR #251 closed the 13 first-consumer runtime findings without modifying a product repository. There is no numbered wave marked `NEXT`; the prioritized residual queue below is the only executable roadmap. **R33 remains deferred.**
 > **Source of truth**: this file owns ordering and scope. `git log`, merged PRs, and `project_*shipped.md` memory entries own historical detail.
 
 ## Operating contract
 
 - The load-bearing portability floor is **validated disk artifacts**. Runtime messaging is an optional acceleration layer.
 - Adapter delivery, message text, an MCP return value, or a live peer saying “GO” is never evidence. Only a valid, correlated result artifact counts as a protocol-valid consultation answer; phase and push authorization still require their own contracts.
-- Waves 1–7 were executed in order and are shipped through PR #250. Post-merge consumer defects are fixed as bounded follow-ups with their own clean-consumer acceptance.
+- Waves 1–7 were executed in order and shipped through PR #250; their bounded first-consumer stabilization shipped through PR #251.
 - Re-audit observations and file counts at each wave's starting HEAD. Post-G0 counts below were recorded by PR #245 at `619d9a7`; they are a planning baseline, not permanent truth.
 - Each wave must have one frozen scope, explicit no-go boundaries, proportional tests, and a shipped memory entry before the backlog advances.
 - Rich runtimes may add `SendMessage`, persistent peers, MCP invocation, app-server threads, or wakeups; failure or absence of those capabilities must not invalidate the disk floor.
@@ -28,18 +28,14 @@
 - Added newline-guarded `GITHUB_ENV` script paths, `persist-credentials: false` on primary/toolkit checkouts, Bash-array argument construction where applicable, and a run-block extractor plus a 13-test regression fence.
 - Closed the scoped H1/CodeRabbit documentation nits without changing H1 push behavior.
 - Owner-recorded final QG at PR head `c7ba941`: 2,042 Bats PASS / 0 FAIL, 2,607 Vitest PASS, three architect VERIFY-FINAL verdicts, proof mint and pre-push verification PASS before squash to `619d9a7`.
-- Preserved the broader security/doc/portability findings below as deferred fast-follows; none blocks Wave 1.
+- Preserved the broader security/doc/portability findings for their owning waves; those dispositions are now historical.
 
-## Post-G0 fast-follows — retained, deferred, and outside Wave 1
+## Post-G0 fast-follows — historical closure
 
-| Fast-follow | Priority | Exact retained scope | Owner / sequencing |
-|---|---|---|---|
-| `l0-release-assets.yml` `tag_name` boundary | HIGH | Three shell sites at the PR #245 baseline (`L45`, `L46`, `L142`) consume `github.event.inputs.tag_name`; the workflow has `contents: write` and therefore needs focused validation before its next release use | Wave 2. If a release must run first, land the focused fix before that release; do not pull it into Wave 1 |
-| Broader workflow input audit | LOW/MED | 36 remaining run-block `${{ inputs.* }}` sites across eight workflows: `readme-audit.yml` (19), `doc-audit.yml` (3), `doc-monitor.yml` (1), `reusable-architecture-guards.yml` (1), `reusable-check-outdated.yml` (3), `reusable-kmp-safety-check.yml` (3), `reusable-audit-report.yml` (3), and `reusable-commit-lint.yml` (3) | Wave 2; recount at its starting HEAD |
-| README count/table reconciliation | LOW/MED | Revalidated at `619d9a7`: 21 findings (0 HIGH, 15 MEDIUM, 6 LOW) — project-tree scripts `50→63`, guides `28→29`, sub-docs `97→102`, 12 missing script rows, four misclassified library rows, and incomplete agents/testing hub coverage | Wave 7 global baseline closure; no standalone micro-wave |
-| qg-local-green grep portability | LOW | GNU-only BRE `\s`/`\+` usages in `scripts/tests/session-coverage.bats:63,109` and `scripts/tests/script-utils.bats:267`; convert to POSIX/ERE and sweep siblings. Canonical GNU grep is green; Apple grep exposes the latent gap | Independent portability fast-follow; never part of adapter scope |
-| Post-#245 documentation precision | LOW | State exact hook-manifest exemptions as `refs/heads/{develop,master,main}`; distinguish pre-commit gate-check reason codes from usage/environment errors; reconcile the README PS1-only wording at its current equivalents of former `L21`/`L963` | Wave 7; never part of adapter implementation |
-| BL-W4-8 documentation/test nits | LOW | Stale line cite in `arch-dispatch-modes.md`; C7.3 test name vs actual `docs/agents/` scope; named-team negation recognizes `never` but not `Do NOT` | Behavioral matcher/test mechanics in Wave 6; wording/cites in Wave 7; no standalone wave |
+The release-input boundary and broader workflow audit shipped in Wave 2. README,
+documentation precision, and BL-W4-8 closed in Waves 6–7. The macOS grep
+portability conversion shipped in Wave 1 (`1b3eebe5`). These items are historical
+inputs, not retained work and must not be scheduled again.
 
 ## Ordered seven-wave program
 
@@ -56,41 +52,98 @@
 
 ---
 
-## Post-PR #250 first-consumer hardening
+## PR #251 first-consumer hardening — SHIPPED
 
 The first real L2 consumer of `dfc48cf` found a coherent portability failure
-cluster. The active follow-up owns only L0 upstream fixes; no product repository
-is modified.
+cluster. PR #251 (`c5ee193e1f726d270577c9256ea7cb09b481508b`) fixed the
+causes upstream in L0, exercised clean-consumer and linked-worktree fixtures,
+and did not modify a product repository.
 
-| Finding | Root contract | Follow-up state |
+| Finding | Root contract | Shipped state |
 |---:|---|---|
-| 1 | Source-coupled hooks must execute from L0, never as partial consumer copies | Corrected in follow-up; clean-consumer execution test added |
-| 2 | Installed shell hooks must be executable and self-repair identical mode drift | Corrected in follow-up; positive/conflict Bats coverage added |
-| 3 | Consumer launch requires explicit `--add-dir <L0-root>` | Corrected in operations guide/getting-started |
-| 4 | Documented entrypoints must use canonical single-quoted POSIX rendering | Corrected in canonical skills and mirrors |
-| 5 | Runtime installation owns `.claude/registry/wave-topology.yaml` | Corrected with conflict, checksum, and idempotency coverage |
-| 6 | YAML resolves from the toolkit runtime closure | Corrected; consumer-no-`mcp-server` fixture added |
-| 7–8 | Exact binary pinning needs one safe probe→qualification→atomic-publish flow | Corrected with recertification CLI; no manual certificate deletion/editing |
-| 9 | R131 must not read mutable real-repository `.planning/` | Corrected with isolated one-plan consumer fixture |
-| 10 | Requested effort is not effective effort | Corrected: effective stays null until observed; explicit inactive init fails effort-controlled certification |
-| 11 | Spawn→`system/init` needs a bounded deadline | Corrected with startup watchdog and silent-child negative test |
-| 12 | Normal, safe-mode, bare, and print modes need distinct recovery guidance | Corrected in operations guide |
-| 13 | Acceptance must execute from a clean consumer and linked worktree | Corrected with real `git worktree add` and runtime fixtures |
+| 1 | Source-coupled hooks must execute from L0, never as partial consumer copies | **CLOSED by #251** — source reference plus clean-consumer execution coverage |
+| 2 | Installed shell hooks must be executable and self-repair identical mode drift | **CLOSED by #251** — positive/conflict mode coverage |
+| 3 | Consumer launch requires explicit `--add-dir <L0-root>` | **CLOSED by #251** — operations and getting-started guidance |
+| 4 | Documented entrypoints must use canonical single-quoted POSIX rendering | **CLOSED by #251** — canonical skills and mirrors |
+| 5 | Runtime installation owns `.claude/registry/wave-topology.yaml` | **CLOSED by #251** — conflict, checksum, and idempotency coverage |
+| 6 | YAML resolves from the toolkit runtime closure | **CLOSED by #251** — consumer fixture has no `mcp-server` tree |
+| 7–8 | Exact binary pinning needs one safe probe→qualification→atomic-publish flow | **CLOSED by #251** — recertification CLI; no manual certificate surgery |
+| 9 | R131 must not read mutable real-repository `.planning/` | **CLOSED by #251** — isolated one-plan fixture |
+| 10 | Requested effort is not effective effort | **REOPENED by consumer validation; pending in current stabilization** — #251 separated requested/observed/effective and rejected explicit inactive telemetry, but still admitted absent telemetry |
+| 11 | Spawn→`system/init` needs a bounded deadline | **CLOSED by #251** — certification startup watchdog and silent-child negative test |
+| 12 | Normal, safe-mode, bare, and print modes need distinct recovery guidance | **CLOSED by #251** — operations runbook |
+| 13 | Acceptance must execute from a clean consumer and linked worktree | **CLOSED by #251** — real worktree and runtime fixtures |
 
-**New retained residual from live 2.1.283 testing**: safe-mode/one-shot prompts
-do not enforce a filesystem read scope; a model may still issue a repository-wide
-search outside stated ownership. A future bounded security slice must define an
-enforceable Read/Bash path allowlist before claiming one-shot scope confinement.
-This is not solved by stronger prompt wording and is not conflated with the
-consumer-runtime distribution repairs above.
+The items below are residuals discovered during or after that acceptance. Live
+DawSync validation reopened finding 10 and expanded the recovery contract before
+this stabilization could be reviewed.
 
-**New retained Gradle operational residual**: validation commands sharing one
-worktree/build tree must be serialized unless their Gradle and build directories
-are genuinely isolated. Concurrent runs produced a false unresolved-reference
-cascade that passed when rerun alone. A future runner hardening slice should reject
-or isolate same-worktree concurrency. Task selection must also come from the
-checkout's enumerated Gradle tasks; the runtime must not invent a platform target
-such as `macosX64` when only `macosArm64` is configured.
+## Current stabilization closure — pending review
+
+The `codex/docs-backlog-consumer-stabilization` change closes the following
+post-#251 defects locally. They are removed from the executable queue, but do
+not become shipped history until their PR merges.
+
+| Closed item | Local evidence |
+|---|---|
+| `BL-CONS-P0-02` malformed settings fail-open | Missing settings may seed a file; malformed JSON/root/hooks, directory paths, and non-`ENOENT` failures preserve consumer state and abort before sync writes. Settings replacement is atomic. |
+| `BL-CONS-P1-02` silent recovery one-shot | `claude-safe-one-shot.cjs` applies bounded init/activity/total deadlines, exact none/read/repair `--tools` profiles verified against `system/init`, partial streaming, terminal-result/accounting/subagent receipts, budget-error classification, and incomplete-accounting evidence after forced termination. |
+| Finding 10 effort effectiveness | Effort-controlled certification requires positive active telemetry plus an observed value equal to the request. False, absent, mismatched, or conflicting inherited `CLAUDE_CODE_EFFORT_LEVEL` evidence fails closed before authority is claimed; the recovery launcher rejects ambiguous CLI/environment selection and the transport-only probe cannot publish an effort claim. |
+| Formal-wave Bats fixture isolation | Wave-resolution fixtures now clear or explicitly override inherited `CLAUDE_WAVE_SLUG`, proving their intended fallback/CLI-precedence contracts even when the full suite runs inside a named QG wave. |
+| Host-specific source-hook registrations | A standalone consumer launcher resolves the one manifest-declared local L0 source across normal checkouts and linked worktrees. Remote, unresolved, ambiguous, unsupported, and symlinked targets fail closed; prior generated absolute registrations migrate. |
+| Ordinary/runtime composition | Runtime-owned topology survives ordinary prune; repeated ordinary/runtime dry-runs are clean; generated settings contain no developer home or Node installation path. |
+| Unsafe CLI discovery | `--help`/`-h` are zero-write; unknown/missing arguments fail; dry-run does not claim to update the manifest. |
+| Adapter determinism defects | macOS/POSIX frontmatter parsing and isolated non-mutating `generate-all.sh --check` are covered. Full atomic publication remains open as `BL-CONS-P1-01`. |
+
+Consumer acceptance was repeated from an isolated `shared-kmp-libs` worktree:
+ordinary sync, runtime sync, second-pass idempotency, a source-coupled hook launch,
+and `:core-result:allTests` pass. The audit first exposed a missing
+`skills/registry.json`, which made the intended L1 repository classify as L2.
+Generating its registry with the canonical tool restored the disk contract; a
+fresh runtime preflight/apply/idempotency cycle now reports **L1**.
+
+## Active backlog after PR #251
+
+Priority is impact, not implementation size. Every item needs an accepted PLAN,
+negative and positive tests, and a clean-consumer acceptance when it changes a
+consumer-facing contract.
+
+### P0 — evidence integrity and consumer data safety
+
+| ID | Open problem | Minimum professional closure | Dependencies |
+|---|---|---|---|
+| `BL-CONS-P0-01` | **False-perfect KMP coverage**. A real `kmp-test changed --json --test-type desktop --coverage-tool kover` run returned exit 0 and 6/6 tests while every module was `no_xml`, `modules_contributing=0`, `missed_lines=0`, and `warnings=[]`. L0 wrappers also prefer any global `kmp-test` without verifying the documented v0.14.0 contract, and the coverage post-processor derives a percentage and `CLASSES_ANALYZED` from test totals. | Resolve the effective runner version against an explicit supported contract; preserve coverage diagnostics through `changed`/`parallel`; reject a requested coverage result with zero contributing modules or missing XML; compute coverage only from genuine coverage fields. Add global-old-version, pinned fallback, `no_xml`, zero-contributor, mixed-contributor, POSIX, PowerShell, and clean-consumer tests. | Coordinate upstream `kmp-test-runner` fixes with the L0 wrappers; no QG or coverage skill may claim a percentage from this envelope meanwhile. |
+
+### P1 — runtime reliability, confinement, and proportional CI
+
+| ID | Open problem | Minimum professional closure | Dependencies |
+|---|---|---|---|
+| `BL-CONS-P1-01` | **Destructive/non-atomic adapters**. Copilot generators write tracked outputs directly and orphan cleanup can delete during the same incomplete run; a mid-generation failure can leave a partially rewritten adapter set. | Generate into a confined staging tree, validate the complete set, then publish atomically; retain the prior valid set on any failure. Orphan deletion must require exact generator ownership and run only after successful validation. Add cut-point failures, invalid source/frontmatter, hand-written orphan, symlink/path escape, and successful replacement tests. | One shared publication primitive for all active adapters; preserve current output bytes on success. |
+| `BL-CONS-P1-03` | **No enforceable one-shot read scope**. Safe-mode/print prompts do not constrain filesystem reads or Bash traversal. | Define and prove an enforceable Read/Bash path capability or allowlist before claiming scope confinement; prompt wording alone is insufficient. | Requires a host permission primitive or a wrapper that can enforce paths rather than merely request them. |
+| `BL-CONS-P1-04` | **Same-worktree Gradle interference and invented targets**. Concurrent validation in one build tree produced false unresolved references; target selection inferred `macosX64` where only `macosArm64` existed. | Serialize same-worktree builds or isolate Gradle/build directories, and derive invocations only from enumerated tasks/targets. Test contention, isolated parallelism, single-architecture native projects, and rerun determinism. | Build on the corrected runner contract from `BL-CONS-P0-01`. |
+| `BL-CONS-P1-05` | **`L0_SYNC` changes over-trigger consumer CI**. A clean auto-sync merge tree was classified `FULL` solely because generated `l0-manifest.json` was an `unmapped executable path`, forcing the complete product matrix. | Add a fail-closed `L0_SYNC` class for machine-proven sync-only changes. It must validate manifest schema/digests, generated inventory/parity, runtime sync, and the relevant smoke tests. Any malformed manifest, undeclared path, mixed product change, missing provenance, or classifier error remains `FULL`. Add positive sync-only and all negative downgrade-bypass cases. | L0 owns the portable policy/template; consumers may implement their local classifier without weakening the unknown-path fallback. |
+| `BL-CONS-P1-06` | **Root-source human-consent boundary is undecided**. The runtime can derive a binding from observed session/worktree/PLAN identity without a request-scoped human confirmation, while other roadmap text calls true human/OS authentication out of contract. | Decide the threat model first. If required, design a request-bound confirmation, mint-time gate, and dispatch-time freshness/scope check backed by a capability an AI cannot self-assert. Otherwise remove the stronger claim and document the explicit boundary. | Architecture decision; do not implement a prose-only or self-signed “human” artifact. |
+| `BL-CONS-P1-07` | **Windows drive-letter confinement remains brittle in `write-coordination-artifact.sh`**. Two incorrect path behaviors currently cancel each other. | Correct absolute drive-letter classification and physical/lexical confinement atomically, with outside-root and fallback-tier negatives. | Do not port only the R131 normalization; preserve fail-closed behavior at every cut point. |
+| `BL-QG-P1-01` | **Quality-gate session ordering permits expensive evidence to become stale before minting**. A manually initialized wave reached VERIFY_FINAL and produced two complete Bats handoffs before `emit-qg-result.sh --init`; QG correctly rejected them by freshness, and missing `CLASS`/`Path Manifest` was detected only after the reruns. | Provide one canonical orchestration entrypoint that preflights `CLASS`, exact Path Manifest, clean HEAD, and architect verdict bindings, initializes the QG session, then runs/selects the two full handoffs exactly once. Reject incomplete planning before any expensive suite starts. | Separate workflow-hardening PLAN; do not weaken freshness, path audit, or the two-run agreement requirement. |
+
+### P2 — bounded hardening and governance
+
+| ID | Open problem | Minimum professional closure | Trigger / dependency |
+|---|---|---|---|
+| `BL-CONS-P2-01` | `reusable-audit-report.yml` renders raw `project`, `layer`, and `cve_high` into downloadable HTML. | Escape rendered text with `html.escape(..., quote=True)` and prove hostile tags/attributes are absent from the artifact. | Independent bounded security-output fix. |
+| `BL-CONS-P2-02` | The documented draft-only `planner → context-provider` bootstrap edge is rejected by the shipped role policy, which permits only `arch-* → context-provider`. | Choose either one exact draft-only exception with negative role/phase tests or correct the documentation; never open general specialist access. | Owner decision before code. |
+| `BL-CONS-P2-03` | PowerShell `run-qg` has no restored security-critical parity path. | Implement and qualify only on an environment with real `pwsh`; retain identical failure/authority semantics. | Windows-capable execution environment. |
+| `BL-GOV-P2-01` | **Future work/evidence/decision management pattern**. L0 lacks one concise operational view that connects an accepted work item to its current evidence, superseded attempts, decisions, blockers, and terminal outcome. | Future design task only: evaluate the useful work/evidence/decision pattern demonstrated in DawSync, generalize it without product coupling, and decide whether it belongs above existing PLAN/verdict/evidence records as an index rather than a competing authority. Define migration, retention, query, and single-source-of-truth rules before any implementation. | Do not implement in the documentation-reconciliation change; requires a separate approved PLAN and consumer-neutral prototype. |
+
+### Blocked and trigger-only
+
+- **R33 native** remains `PENDING_EXTERNAL_RELEASE`; do not schedule it before
+  the required platform release exists.
+- Upstream Agent Teams notification reporting requires a minimal live repro.
+- macOS shell/hook, Gradle truststore, and Xcode/iOS smoke checks require their
+  owning platform validation window.
+- Product/plugin/OSS packaging ideas remain outside the L0 runtime stabilization
+  sequence until a concrete product or release trigger exists.
 
 ---
 
@@ -98,7 +151,7 @@ such as `macosX64` when only `macosArm64` is configured.
 
 **Class**: HARNESS
 
-**Status**: SHIPPED — MERGED to `develop@b5d7ed46`. PR #246 (`1b3eebe5`, "portable mixed-host consultation and consumer sync"), PR #247 (`2a98bc17`, macOS stabilization: F-24 per-platform host-certificate coexistence, symlink-identity and TMPDIR path-budget fixes), PR #248 (`b5d7ed46`, macOS follow-ups: ctimeNs identity-check gap, config.toml parse hardening, parallel Bats orchestrator, zombie-process liveness fix for `S16-HOSTBRIDGE-LIVENESS-NO-SAME-TICK-STALE-01`). Windows live qualification (P4/P5/P6) recorded in memory `project_portable_runtime_p4_qualified_p5_p6_blocked.md` and `project_portable_runtime_p5_five_attempts_exhausted.md`; full ship record in memory `project_wave_portable_runtime_collaboration_lifecycle_shipped.md`. A real, non-blocking Wave-1 fast-follow was found during the post-Wave-1 checkpoint: the documented `planner → context-provider` bootstrap-only consultation edge (this section, above) does not exist in the shipped role-authority policy (`scripts/lib/runtime-consultation/protocol/request.cjs:76-80`'s `assertRolePolicy` only allows `arch-*`-prefixed source roles to target `context-provider`) — tracked in memory `project_post_wave1_agent_skill_behavioral_qualification.md`, needs an owner decision between extending the code or correcting this section's text. R33 native remains `PENDING_EXTERNAL_RELEASE` (unchanged, out of Wave 1 scope).
+**Status**: SHIPPED — MERGED to `develop@b5d7ed46`. PR #246 (`1b3eebe5`, "portable mixed-host consultation and consumer sync"), PR #247 (`2a98bc17`, macOS stabilization: F-24 per-platform host-certificate coexistence, symlink-identity and TMPDIR path-budget fixes), PR #248 (`b5d7ed46`, macOS follow-ups: ctimeNs identity-check gap, config.toml parse hardening, parallel Bats orchestrator, zombie-process liveness fix for `S16-HOSTBRIDGE-LIVENESS-NO-SAME-TICK-STALE-01`). Windows live qualification (P4/P5/P6) recorded in memory `project_portable_runtime_p4_qualified_p5_p6_blocked.md` and `project_portable_runtime_p5_five_attempts_exhausted.md`; full ship record in memory `project_wave_portable_runtime_collaboration_lifecycle_shipped.md`. The post-Wave-1 checkpoint found the non-blocking documented `planner → context-provider` bootstrap-edge mismatch now owned canonically by `BL-CONS-P2-02`; it is not a reason to reopen Wave 1. R33 native remains `PENDING_EXTERNAL_RELEASE` (unchanged, out of Wave 1 scope).
 
 ### Objective
 
@@ -404,7 +457,7 @@ In the capability-proven persistent default profile, lifecycle acceptance additi
 
 **Status**: COMPLETE (2026-09-20). Zero P0/P1 Wave-1 lifecycle/consultation/authority/ingestion defects found — the Wave-1 stabilization batch was not triggered. One non-blocking Wave-1 fast-follow was found (planner→context-provider bootstrap-edge gap, see Wave 1 section Status line above). Full behavior matrix, skill/command disposition census, and routing decisions recorded in memory `project_post_wave1_agent_skill_behavioral_qualification.md`. This unblocks the Wave 2 promotion below.
 
-**Promotion gate**: Wave 2 cannot become NEXT until this checkpoint completes and every finding has an owner. A P0/P1 Wave-1 defect in consultation, lifecycle, disk authority, or ingestion returns to one bounded Wave-1 stabilization batch; it must not create a chain of micro-waves.
+**Historical promotion gate**: Wave 2 could not be promoted until this checkpoint completed and every finding had an owner. A P0/P1 Wave-1 defect in consultation, lifecycle, disk authority, or ingestion would have returned to one bounded Wave-1 stabilization batch rather than creating a chain of micro-waves.
 
 **Objective**: prove on AndroidCommonDoc and a representative KMP consumer that the restored collaboration behaves as intended, then reconcile observed behavior against git history, merged plans/PRs, README, agent documentation, skills, commands, adapters, MCP surfaces, tests, and durable memory.
 
@@ -460,7 +513,7 @@ Any merge/deprecate/delete requires: no unique outcome; replacement parity acros
 
 **Class**: SECURITY / HARNESS
 
-**Status**: SHIPPED — MERGED to `develop@fa7f6cf8` (2026-09-21). PR #249 (`fa7f6cf8`, "fix(ci): harden workflow input boundaries"), squash-merged; merge tree byte-identical to the approved PR head tree `7e634353`. 30/30 required checks passed, 0 unresolved review threads, CLEAN merge state before merge; PLAN digest `8f5e1849f42af77b4c0fcffa3e2f884c70adf6c1e564b261203ce3611cd50a05`. Scope matches the ten audited workflows/templates recorded in `CHANGELOG.md` (the eight-workflow census below plus `l0-release-assets.yml` and `setup/templates/workflows/l0-auto-sync.yml`), together with `qg-path-audit.sh` H2/H3/table-form parser hardening and the new `docs/agents/quality-gate-local-ci-reproduction.md`. Evidence: full Bats 3391/3391 (`qg-linux-canonical` six-shard profile), MCP Vitest 2665/2665, ESLint 0 errors, documentation/registry/secret-scan/path-manifest validation PASS, three independent architect VERIFY-FINAL verdicts APPROVE. Local/CI reproduction now documents three distinct profiles — `ci-linux-equivalent` (four-shard), `qg-linux-canonical` (six-shard), `windows-native` — never conflate them; macOS remains intentionally skipped for `develop`-targeted PRs. Full record in memory `project_wave_workflow_input_boundary_audit_shipped.md`. R33 native remains `PENDING_EXTERNAL_RELEASE` (unchanged, out of Wave 2 scope). The HTML-escaping residual below remains open and separately owned — not closed by this status.
+**Status**: SHIPPED — MERGED to `develop@fa7f6cf8` (2026-09-21). PR #249 (`fa7f6cf8`, "fix(ci): harden workflow input boundaries"), squash-merged; merge tree byte-identical to the approved PR head tree `7e634353`. 30/30 required checks passed, 0 unresolved review threads, CLEAN merge state before merge; PLAN digest `8f5e1849f42af77b4c0fcffa3e2f884c70adf6c1e564b261203ce3611cd50a05`. Scope matches the ten audited workflows/templates recorded in `CHANGELOG.md` (the eight-workflow census below plus `l0-release-assets.yml` and `setup/templates/workflows/l0-auto-sync.yml`), together with `qg-path-audit.sh` H2/H3/table-form parser hardening and the new `docs/agents/quality-gate-local-ci-reproduction.md`. Evidence: full Bats 3391/3391 (`qg-linux-canonical` six-shard profile), MCP Vitest 2665/2665, ESLint 0 errors, documentation/registry/secret-scan/path-manifest validation PASS, three independent architect VERIFY-FINAL verdicts APPROVE. Local/CI reproduction now documents three distinct profiles — `ci-linux-equivalent` (four-shard), `qg-linux-canonical` (six-shard), `windows-native` — never conflate them; macOS remains intentionally skipped for `develop`-targeted PRs. Full record in memory `project_wave_workflow_input_boundary_audit_shipped.md`. R33 native remains `PENDING_EXTERNAL_RELEASE` (unchanged, out of Wave 2 scope). The HTML-escaping residual is owned canonically by `BL-CONS-P2-01`; it does not reopen Wave 2.
 
 **Objective**: inventory and harden every untrusted GitHub Actions value that crosses into a shell or privileged workflow operation, extending G0 from its focused fix to a repository-wide trust-boundary contract.
 
@@ -650,72 +703,30 @@ Any merge/deprecate/delete requires: no unique outcome; replacement parity acros
 
 ---
 
-## Residuals mapped to the ordered program
+## Historical consolidation and incubators
 
-Historical text below is not an instruction to execute old wave plans literally. Re-audit each item at the target wave's starting HEAD.
+The shipped seven-wave program closed the old portable-coordination loop,
+workflow-input census, weak verdict tokens, evidence reproducibility, command
+push detector, phase mechanization, topology pilot, BL-W4-8/10/11, Wave 39
+W19-#3/#4/#6, and BL-W36-02/03. Wave 40's generic L2-hardening premise was
+superseded by the real consumer exercise and PR #251. BL-W47 Ex-PR6 and the old
+dead-skill cleanup are not executable without new evidence.
 
-| Finding / historical entry | Current disposition | Roadmap home |
-|---|---|---|
-| Agent-team completion notification drop | Upstream/runtime report remains optional; local liveness/consultation behavior belongs here | Wave 1; upstream report independent |
-| Portable Coordination Artifacts have no general consumer/wakeup/result loop | Closed by shipped Wave 1 runtime and its Windows/macOS qualification | Wave 1 |
-| BL-W4-12 orchestrator can forge architect-shaped verdict path | Portable policy/evidence boundary locally closed by Waves 3 and 5; true human/OS actor authentication remains explicitly out of contract | Waves 1, 3, 5 |
-| Broad workflow input/expression inventory after targeted H1 follow-up | Closed by shipped Wave 2 | Wave 2 |
-| Wave A unbacked `APPROVED-PREP` / weak VERIFY-FINAL substring acceptance | Locally closed by request-bound `verdict/v1`; ships on this integration | Wave 3 |
-| Wave A evidence reproducibility / rerun-until-green concern | Locally closed by provenance-bound agreement selection and two-run acceptance | Wave 4 |
-| Bats unsafe project-root and stale protocol metadata prose | Locally closed and covered by portable project-root/provenance tests | Wave 4 |
-| H1 command-string push detector | Locally replaced by parsed advisory intent plus Git-hook-owned enforcement | Wave 5 |
-| BL-W4-10 class-aware phase mechanization | Locally closed by the persisted wave control plane | Wave 6 |
-| BL-W4-11 README + `/work` + `/init-session` fixed-roster drift | Locally closed by class-aware routing, qualified surfaces, and reconciled docs/catalog | Waves 1, 6, 7 |
-| BL-W47 Topology Pilot / Wave 39 topology debt | Completed with measured class-policy result; no old TeamCreate assumption revived | Wave 6 |
-| BL-W4-8 Bats test-authoring hygiene (three small doc/test naming issues) | Closed where behavioral/documentation ownership applied; no standalone cleanup wave created | Wave 6 behavior; Wave 7 wording/cites |
-| BL-W36-04 stash/baseline methodology | Re-audit against current diff/baseline tooling | Wave 4 if still reproducible |
-| BL-W32-04 context-provider zombie observation | Reproduce during Wave 1 and mandatory qualification; Wave-1 defect gets one stabilization batch, topology-only residual routes onward | Wave 1 + qualification; conditionally Wave 6 |
-| Historical collaboration/documentation behavior drift | Reconstruct expected vs observed behavior; do not treat old prose as authority or silently lose useful semantics | Mandatory post-Wave-1 qualification; findings route to Waves 1–7 |
-| Skill/command overlap, aliases, hard-coded runtime calls, dead-skill candidates | Telemetry currently lacks reliable per-skill attribution; zero deletion decisions now | Qualification census → Wave 6 behavior/migration → Wave 7 catalog |
-| README/AGENTS/doc index audit revalidated at `619d9a7` | Superseded and locally closed by Wave 7: README audit 0 findings; generated operational catalog and surface qualification pass | Wave 7 global closure |
+The following remain trigger-only and are deliberately not duplicated in the
+P0/P1/P2 queue:
 
-## Independent / incubator backlog
-
-These items are not allowed to interrupt Waves 1-7 unless a concrete blocker or security trigger changes priority.
-
-| Item | Status / trigger |
-|---|---|
-| Upstream agent-teams notification delivery report | LOW/MED; file only with a minimal runtime repro; not a local harness blocker |
-| PS1 `run-qg` restoration | MED; requires an environment with `pwsh` and security-critical parity tests |
-| Duplicate `MAX_LINES = 435` policy in shell/TypeScript validators | LOW; centralize when either validator next changes |
-| Commit-lint semantics duplicated across hook, mint, JS gate, and CI comparison point | LOW/MED; shared-helper design, not part of messaging |
-| RTK template sweep | Deferred; requires separate explicit user approval before any template edits |
-| BL-W36-check `/release-build-verify` promotion candidate | Trigger-only; revisit only when a concrete release need or measured gap appears |
-| BL-W47-WATCHER release-trigger watcher | Incubator; independent product/tooling wave |
-| BL-W47-RENDER headless Compose render-to-PNG loop | Incubator; Desktop JVM first, separate product/tooling wave |
-| Consumer `settings.json` validation against the shipped hook manifest | Optional follow-up only; `docs/agents/hook-manifest.md` itself is already shipped |
-| macOS zsh/hooks sweep | Migration resolved; full shell/hook sweep still needs current evidence |
-| macOS Gradle truststore check | Verify one full build without legacy flags |
-| Same-worktree concurrent Gradle guard | Reject concurrency or isolate Gradle/build directories; preserve the serial operational rule until implemented |
-| Gradle platform-target discovery | Enumerate actual tasks/targets before invocation; never infer a sibling architecture target |
-| Xcode/iOS target smoke test | Run when an owning KMP validation wave is scheduled |
-| `~/.gradle/gradle.properties` hygiene | Re-verify the Mac-local configuration without copying Windows flags |
-| L2 consumer product alignment / future agents / plugin v0.2.1 | Long-term, trigger-driven; retain source memory entries |
-
-## Legacy candidates — re-audit before scheduling
-
-Do not preserve old ordering merely because a wave number exists. These tracks predate Waves A/C/H1 and the realignment; each needs a fresh problem statement, current evidence, and consolidation decision.
-
-| Legacy track | Disposition |
-|---|---|
-| Wave 39 `W19-#3` / `W19-#4` / `W19-#6` | Session teardown, `/work` phase rewrite, and PREP/EXECUTE dispatch modes map to Wave 6 after re-audit |
-| Wave 39 `BL-W36-02` / `BL-W36-03` | Re-audit and close/document in Wave 7 if still current |
-| Wave 39 `BL-W36-04` | Stash/baseline methodology maps conditionally to Wave 4 after reproduction |
-| Wave 39 `BL-W37-03` / `BL-W37-04` | Empty-Bats reusable workflow and immutable L0 workflow pinning remain L1/supply-chain follow-ups |
-| Wave 39 housekeeping / modularization paso 2 | Independent cleanup; require a current inventory before scheduling |
-| Wave 40 — Wave 17 L2 hardening | Re-audit against current L2 consumer and final harness contracts after Wave 7 |
-| Wave 41 — Plugin v0.2.0 generalization | Product/plugin roadmap; independent of harness ordering |
-| Wave 42 — OSS Phase 1 modularization | Product/packaging roadmap; independent of harness ordering |
-| Wave 43 — Wave 18 hypothesis triage | Data-triggered only; use current metrics before scheduling |
-| BL-W47 Ex-PR6 HOLD checkpoint / council design | Re-audit after Wave 6; do not revive superseded adaptive-harness mechanics |
-| Dead-skill pruning | Not an independent cleanup: qualification evidence first, Wave 6 owns behavior/migration, Wave 7 owns final catalog; no deletion from current telemetry |
-| SF-prep-19-B TDD bundling protocol | Policy candidate only; revisit with current QG evidence rather than replaying the old warning |
-| Platform-shift Mac follow-ups | Migration itself resolved; four concrete checks are retained in Independent / incubator above |
+- `BL-W36-04` stash/baseline methodology: reproduce against current tooling
+  before proposing work.
+- `BL-W37-03/04`: L1/supply-chain ownership for empty-Bats workflow behavior
+  and immutable L0 workflow pinning.
+- Duplicate `MAX_LINES = 435` and commit-lint semantics: opportunistic shared
+  helper work only when an owning implementation changes.
+- RTK template sweep: requires separate explicit user approval.
+- Release watcher, headless Compose rendering, plugin generalization, OSS
+  packaging, and hypothesis triage: product/tooling roadmap with a concrete
+  trigger, not runtime stabilization.
+- Skill deletion: requires reliable attributed telemetry across at least two
+  consumer cycles; current evidence authorizes no deletion.
 
 ## Completed / stale entries compacted from Active
 
@@ -730,31 +741,16 @@ The following are historical, not executable backlog items:
 - **BL-W47-HOOK-MANIFEST** (`1d9355f`) — the canonical hook-classification document shipped; only optional consumer-settings validation remains.
 - **Wave 38 content ingestion** (`0db5773`, PR #242) — shipped; do not schedule the old content list again.
 - **Platform Shift** — environment migration shipped and macOS-primary operation confirmed; Windows-only items are dead.
-- **H1 — Push Authority Bootstrap** (`1e0be41`, PR #243) — shipped. Only its explicitly deferred detector redesign remains, mapped to Wave 5.
-- **G0 — Reusable Workflow Input Boundary Hardening** (`619d9a7`, PR #245) — shipped. Its focused four-workflow boundary is closed; the exact broader census, release `tag_name` risk, README drift, grep portability, and documentation precision follow-ups remain mapped above.
-
-## Memory ledger update plan
-
-This tracked roadmap update changes `BACKLOG.md` only. Wave 2's shipped history is factual; Wave 3's gitignored PLAN is planning state and authorizes no implementation. Queued-wave memory must be updated by the owning implementation wave or checkpoint, not speculatively marked shipped here.
-
-| Milestone | Required memory action |
-|---|---|
-| G0 shipped backfill | Reconcile `project_followup_ci_harden_workflow_inputs_queued.md` with PR #245, `619d9a7`, final evidence, and the retained residual inventory; keep `project_wave_push_authority_bootstrap_shipped.md` unchanged except for a factual follow-up link if needed |
-| Wave 1 | Add portable-runtime-collaboration/lifecycle shipped memory; refresh Portable Coordination Artifacts, ingestion, session/topology, skills-entrypoint, and harness-audit memories with exact roles/connectors, reuse/respawn measurements, and degraded-mode proof |
-| Post-Wave-1 qualification | Add `project_post_wave1_agent_skill_behavioral_qualification.md` with historical/observed behavior matrix, runtime scenarios, skill dispositions, measured cost, and owning-wave routing |
-| Wave 2 | Add workflow-input-boundary audit shipped memory with a machine-generated inventory and privileged-workflow review |
-| Wave 3 | Add structured-verdict contract shipped memory; amend evidence-integrity/phase memories with migration semantics |
-| Wave 4 | Add reproducibility/Bats-provenance shipped memory; amend Wave A/C/QG memories without reopening resolved findings |
-| Wave 5 | Add native-push/peer-policy shipped memory; link H1's intentionally deferred detector item to its closure |
-| Wave 6 | Add class-aware phase/topology/skill-control-plane shipped memory; consolidate obsolete Wave 19/BL-W47 topology records, skill/command migration decisions, and pilot measurements |
-| Wave 7 | Add documentation/operational-baseline closure memory; reconcile roadmap, README-audit, skill/command, runtime-adapter, topology, ingestion, QG, and harness-audit memories with the final demonstrated baseline |
+- **H1 — Push Authority Bootstrap** (`1e0be41`, PR #243) — shipped; its deferred detector redesign closed in Wave 5.
+- **G0 — Reusable Workflow Input Boundary Hardening** (`619d9a7`, PR #245) — shipped. Its focused boundary and mapped Wave-2/Wave-7 follow-ups are closed.
 
 ## Shipped (recent)
 
-- **Wave 2 — Workflow Expression & Input Boundary Audit** — MERGED `develop@fa7f6cf8` (2026-09-21), PR #249 (`fa7f6cf8`, "fix(ci): harden workflow input boundaries"); merge tree byte-identical to the approved PR head tree `7e634353`. Hardened raw untrusted GitHub expression interpolation across the ten audited workflows/templates (shell and `github-script` bodies routed through `env:` boundaries, quoted at consumption) plus `qg-path-audit.sh` H2/H3/table-form parser hardening. 30/30 required checks passed, 0 unresolved review threads, CLEAN merge state; full Bats 3391/3391 (`qg-linux-canonical` six-shard profile), MCP Vitest 2665/2665, ESLint 0 errors, three independent architect VERIFY-FINAL verdicts APPROVE. PLAN digest `8f5e1849f42af77b4c0fcffa3e2f884c70adf6c1e564b261203ce3611cd50a05`; full record in memory `project_wave_workflow_input_boundary_audit_shipped.md`. Explicit residual remains open and separately owned: `reusable-audit-report.yml` downloadable-HTML escaping (`html.escape(..., quote=True)`, not yet applied). R33 native stays `PENDING_EXTERNAL_RELEASE`.
+- **First-consumer runtime hardening** — MERGED `develop@c5ee193e` (2026-09-27), PR #251. Closed all 13 post-PR-#250 consumer findings with source-referenced runtime hooks, executable-mode repair, topology/YAML closure, exact launch/recovery documentation, atomic Claude host recertification, bounded certification startup, isolated R131 fixtures, and clean consumer/worktree acceptance. The prioritized queue above contains only newly discovered residuals.
+- **Wave 2 — Workflow Expression & Input Boundary Audit** — MERGED `develop@fa7f6cf8` (2026-09-21), PR #249 (`fa7f6cf8`, "fix(ci): harden workflow input boundaries"); merge tree byte-identical to the approved PR head tree `7e634353`. Hardened raw untrusted GitHub expression interpolation across the ten audited workflows/templates (shell and `github-script` bodies routed through `env:` boundaries, quoted at consumption) plus `qg-path-audit.sh` H2/H3/table-form parser hardening. 30/30 required checks passed, 0 unresolved review threads, CLEAN merge state; full Bats 3391/3391 (`qg-linux-canonical` six-shard profile), MCP Vitest 2665/2665, ESLint 0 errors, three independent architect VERIFY-FINAL verdicts APPROVE. PLAN digest `8f5e1849f42af77b4c0fcffa3e2f884c70adf6c1e564b261203ce3611cd50a05`; full record in memory `project_wave_workflow_input_boundary_audit_shipped.md`. HTML escaping is tracked only as `BL-CONS-P2-01`; R33 native stays `PENDING_EXTERNAL_RELEASE`.
 - **Wave 1 — Portable Runtime Collaboration & Persistent Role Lifecycle** — MERGED `develop@b5d7ed46` (2026-09-19). PR #246 `1b3eebe5` (2026-09-15, portable mixed-host consultation + consumer sync, 204 internal CommonJS modules across the 3 stable facades), PR #247 `2a98bc17` (2026-09-19, macOS stabilization: per-platform host-certificate coexistence, symlink-identity and TMPDIR-path-budget fixes), PR #248 `b5d7ed46` (2026-09-19, macOS follow-ups: ctimeNs identity gap, config.toml parse hardening, parallel Bats orchestrator, zombie-liveness fix). Windows live qualification: P4 QUALIFIED, P5 LIVE_QUALIFIED (attempt N13), P6 QUALIFIED (attempt 3). Mandatory post-Wave-1 qualification checkpoint COMPLETE, zero P0/P1 findings (one non-blocking fast-follow: planner→context-provider bootstrap-edge gap); full record in memory `project_wave_portable_runtime_collaboration_lifecycle_shipped.md` and `project_post_wave1_agent_skill_behavioral_qualification.md`. R33 native stays `PENDING_EXTERNAL_RELEASE`.
-- **G0 — Reusable Workflow Input Boundary Hardening** — MERGED `619d9a7`, PR #245 (2026-07-12). Closed the four targeted reusable workflows with namespaced environment boundaries, quoted shell consumption, checkout hardening, a run-block extractor, and a 13-test regression fence; owner-recorded final QG at `c7ba941` was 2,042 Bats / 2,607 Vitest before squash. Broader workflow, release `tag_name`, README, grep-portability, and documentation-precision findings remain explicitly deferred above.
-- **H1 — Push Authority Bootstrap** — MERGED `1e0be41`, PR #243 (2026-07-11). Installed-hook identity is required by the QG mint and Claude push gate; in-JS proof fallback removed. Command detector intentionally deferred to Wave 5.
+- **G0 — Reusable Workflow Input Boundary Hardening** — MERGED `619d9a7`, PR #245 (2026-07-12). Closed the four targeted reusable workflows with namespaced environment boundaries, quoted shell consumption, checkout hardening, a run-block extractor, and a 13-test regression fence; owner-recorded final QG at `c7ba941` was 2,042 Bats / 2,607 Vitest before squash. Its mapped follow-ups closed in Waves 1, 2, 6, and 7.
+- **H1 — Push Authority Bootstrap** — MERGED `1e0be41`, PR #243 (2026-07-11). Installed-hook identity is required by the QG mint and Claude push gate; in-JS proof fallback removed. Its command-detector redesign closed in Wave 5.
 - **Portable Ingestion + Wave 38 Content** — MERGED `0db5773`, PR #242 (2026-07-11).
 - **Wave C — QG Artifact Binding** — MERGED `7428b81`, PR #241.
 - **Wave A — QG Evidence Integrity** — MERGED `19db9d2`, PR #240.
@@ -764,9 +760,9 @@ For full history use `git log` and the corresponding `project_*shipped.md` memor
 
 ## How to use this document
 
-1. Start with the first row marked **NEXT** — currently Wave 3 — and re-audit its mapped findings at current `develop` after its PLAN is explicitly accepted.
-2. Treat the post-Wave-1 Agent & Skill Behavioral Restoration Qualification as completed historical evidence; Wave 2 is already shipped and must not be reopened implicitly.
-3. After the checkpoint, and after each later shipment, promote exactly one subsequent numbered wave to **NEXT**; do not reopen G0 or execute historical entries literally.
-4. Freeze one plan/path manifest, preserve the wave's no-go boundary, and avoid standalone micro-waves for routine cleanup.
-5. On completion, record final PR/commit/tests in memory, move the wave to Shipped, and promote the next eligible row.
-6. If a real security or release blocker requires reordering, document the evidence and dependency explicitly rather than silently changing the sequence.
+1. Select from **Active backlog after PR #251**, normally highest priority first; there is no legacy numbered `NEXT` wave.
+2. Reproduce the selected item independently at current `develop`, accept one bounded PLAN, and freeze its exact path manifest before implementation.
+3. Preserve the item's dependencies and fail-closed acceptance. Do not combine unrelated P0/P1 entries merely to reduce PR count.
+4. Treat Waves 1–7, G0, and PR #251 as shipped history; do not reopen them implicitly or execute old wave prose literally.
+5. On completion, record final PR/commit/tests, move only the closed ID to shipped history, and reprioritize remaining evidence.
+6. Trigger-only work enters the active queue only with the stated current evidence and an explicit owner.

@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { writeFile, readFile, mkdtemp, rm, mkdir, access, realpath } from "node:fs/promises";
+import { writeFile, readFile, mkdtemp, rm, mkdir, access, realpath, symlink } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { execFileSync } from "node:child_process";
@@ -252,6 +252,25 @@ describe("computeSyncActions", () => {
     expect(removeActions[0].registryEntry.path).toBe(".claude/commands/old-tool.md");
   });
 
+  it("never treats runtime-owned topology as an ordinary-sync orphan", async () => {
+    const manifest = makeManifest({
+      checksums: {
+        ".claude/skills/test/SKILL.md": "sha256:testhash",
+        ".claude/registry/wave-topology.yaml": "sha256:runtimehash",
+      },
+      runtime: {
+        schema: "runtime-consumer/v1",
+        enabled: true,
+        consumer_layer: "L2",
+        toolkit_commit: "a".repeat(40),
+        toolkit_content_sha256: "b".repeat(64),
+      },
+    });
+    const actions = await computeSyncActions([skillA], manifest);
+    expect(actions.filter((action) => action.action === "remove")).toHaveLength(0);
+    expect(actions.some((action) => action.registryEntry.path === ".claude/registry/wave-topology.yaml")).toBe(false);
+  });
+
   it("regression: skills with source-path checksums (skills/) are treated as 'add', not 'unchanged'", async () => {
     // Before the fix: checksums were written with source paths (skills/test/SKILL.md)
     // computeSyncActions would look up by dest path (.claude/skills/test/SKILL.md) → miss
@@ -419,6 +438,25 @@ Run instructions
   afterEach(async () => {
     await rm(projectRoot, { recursive: true, force: true });
     await rm(l0Root, { recursive: true, force: true });
+  });
+
+  it("fails before every sync write when consumer settings JSON is malformed", async () => {
+    const manifest = makeManifest({ sources: [{ layer: "L0", path: l0Root, role: "tooling" }] });
+    const manifestPath = join(projectRoot, "l0-manifest.json");
+    const manifestBytes = JSON.stringify(manifest, null, 2);
+    await writeFile(manifestPath, manifestBytes);
+    const settingsPath = join(projectRoot, ".claude", "settings.json");
+    await mkdir(join(projectRoot, ".claude"), { recursive: true });
+    const malformed = "{ consumer-owned malformed settings";
+    await writeFile(settingsPath, malformed, "utf-8");
+
+    await expect(syncL0(projectRoot, l0Root)).rejects.toThrow(/Malformed JSON/);
+
+    expect(await readFile(settingsPath, "utf-8")).toBe(malformed);
+    expect(await readFile(manifestPath, "utf-8")).toBe(manifestBytes);
+    await expect(access(join(projectRoot, ".claude", "skills", "test", "SKILL.md"))).rejects.toThrow();
+    await expect(access(join(projectRoot, ".claude", "agents", "test-specialist.md"))).rejects.toThrow();
+    await expect(access(join(projectRoot, ".claude", "commands", "run.md"))).rejects.toThrow();
   });
 
   it("creates directories if missing (skills/name/, .claude/agents/, .claude/commands/)", async () => {
@@ -1380,6 +1418,18 @@ describe("resolveL0Source", () => {
     await mkdir(emptyDir, { recursive: true });
 
     await expect(resolveL0Source(emptyDir, tempDir)).rejects.toThrow(
+      /does not contain skills\/registry\.json/,
+    );
+  });
+
+  it.skipIf(process.platform === "win32")("rejects an absolute L0 source that is a symlink", async () => {
+    const fakeL0 = join(tempDir, "l0");
+    const linkedL0 = join(tempDir, "l0-link");
+    await mkdir(join(fakeL0, "skills"), { recursive: true });
+    await writeFile(join(fakeL0, "skills", "registry.json"), "{}");
+    await symlink(fakeL0, linkedL0, "dir");
+
+    await expect(resolveL0Source(linkedL0, tempDir)).rejects.toThrow(
       /does not contain skills\/registry\.json/,
     );
   });

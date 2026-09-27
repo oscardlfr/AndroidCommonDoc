@@ -464,6 +464,10 @@ const stopOwnedTokens = P4_SUPPORT_ROLES.map((role) => [
   '--project-root', projectRoot, '--role', role, '--reason', 'session-close',
 ]);
 const stopOwnedCommands = stopOwnedTokens.map(directCommand);
+const requestedEffortLevel = transportProfile === 'native-claude-cli' ? 'high' : null;
+const inheritedEffortLevel = typeof process.env.CLAUDE_CODE_EFFORT_LEVEL === 'string'
+  && process.env.CLAUDE_CODE_EFFORT_LEVEL.trim() !== ''
+  ? process.env.CLAUDE_CODE_EFFORT_LEVEL.trim() : null;
 
 const state = {
   schema: 'androidcommondoc/p4-live-run-state/v1',
@@ -482,7 +486,7 @@ const state = {
   probe_nonce: probeNonce,
   requested_model: requestedModel,
   effort_profile: transportProfile === 'native-claude-cli' ? {
-    requested: 'high',
+    requested: requestedEffortLevel,
     effective: null,
     control: '--effort',
     expected_observed: 'high',
@@ -490,6 +494,9 @@ const state = {
     per_turn_effort_active: null,
     verification: 'unproven',
     observation_source: 'assistant.effort-if-emitted',
+    environment_inherited: inheritedEffortLevel,
+    environment_effective: requestedEffortLevel,
+    environment_policy: 'explicit-cli-and-environment-match',
   } : null,
   sequence: 0,
   scenario: p5Scenario
@@ -976,6 +983,18 @@ env.CLAUDE_CODE_DISABLE_AUTO_MEMORY = '1';
 env.TEMP = runRoot;
 env.TMP = runRoot;
 env.TMPDIR = runRoot;
+if (requestedEffortLevel !== null) {
+  if (inheritedEffortLevel !== null && inheritedEffortLevel !== requestedEffortLevel) {
+    state.status = 'HOST_EFFORT_AUTHORITY_CONFLICT';
+    state.invalidation_reason = `CLAUDE_CODE_EFFORT_LEVEL=${inheritedEffortLevel} conflicts with requested effort ${requestedEffortLevel}.`;
+    state.finished_at = new Date().toISOString();
+    writeState();
+    process.stderr.write(`P4_LIVE_STATE=${statePath}\n`);
+    process.stderr.write(`${state.invalidation_reason}\n`);
+    process.exit(1);
+  }
+  env.CLAUDE_CODE_EFFORT_LEVEL = requestedEffortLevel;
+}
 
 let childCommand = process.execPath;
 let childArgs = [selectedChild, '--session-id', sessionId, '--operation', operation, '--probe-nonce', probeNonce];
@@ -996,8 +1015,9 @@ if (transportProfile === 'native-claude-cli') {
   const settingsPath = path.join(runRoot, 'settings.json');
   const baseArgv = [
     '-p', '--verbose', '--input-format', 'stream-json', '--output-format', 'stream-json',
+    '--include-partial-messages',
     '--include-hook-events', '--replay-user-messages', '--no-session-persistence',
-    '--session-id', sessionId, '--model', requestedModel, '--effort', 'high',
+    '--session-id', sessionId, '--model', requestedModel, '--effort', requestedEffortLevel,
       '--settings', settingsPath, '--setting-sources', '', '--strict-mcp-config',
   ];
   let nativeArgv;
@@ -1089,12 +1109,14 @@ if (transportProfile === 'native-claude-cli') {
     executable_realpath: fs.realpathSync(nativeClaudeExecutable),
     executable_sha256: crypto.createHash('sha256').update(fs.readFileSync(nativeClaudeExecutable)).digest('hex'),
     requested_model: requestedModel,
-    effort_requested: 'high',
+    effort_requested: requestedEffortLevel,
     effort_effective: null,
     effort_control: '--effort',
     effort_expected_observed: 'high',
     effort_observed: null,
     per_turn_effort_active: null,
+    effort_environment_inherited: inheritedEffortLevel,
+    effort_environment_effective: requestedEffortLevel,
     foreground: true,
     persistence: 'no-session-persistence',
   } : null;
@@ -3717,6 +3739,10 @@ function handleFrame(event) {
       return fail('HOST_PIN_MISMATCH',
         `Observed effort ${observedEffort || 'absent'} did not match the pinned default ${state.effort_profile.expected_observed}.`);
     }
+    if (observedEffort === null) {
+      return fail('HOST_EFFORT_UNPROVEN',
+        'An effort-controlled assistant frame did not report effective effort telemetry.');
+    }
   }
   if (event.type === 'system' && event.subtype === 'init' && !state.host_identity_observation) {
     if (!validateInit(event)) return fail('INVALID_SYSTEM_INIT_EVIDENCE', 'system/init failed the bounded offline host-shape contract.');
@@ -3729,8 +3755,12 @@ function handleFrame(event) {
       state.effort_profile.per_turn_effort_active = typeof event.per_turn_effort_active === 'boolean'
         ? event.per_turn_effort_active : null;
       if (state.cli_pin) state.cli_pin.per_turn_effort_active = state.effort_profile.per_turn_effort_active;
-      if (operation === 'entrypoint-protocol' && state.effort_profile.per_turn_effort_active === false) {
-        return fail('HOST_EFFORT_INACTIVE', 'system/init reported per_turn_effort_active:false for an effort-controlled certification.');
+      if (operation === 'entrypoint-protocol' && state.effort_profile.per_turn_effort_active !== true) {
+        return fail(state.effort_profile.per_turn_effort_active === false
+          ? 'HOST_EFFORT_INACTIVE' : 'HOST_EFFORT_UNPROVEN',
+        state.effort_profile.per_turn_effort_active === false
+          ? 'system/init reported per_turn_effort_active:false for an effort-controlled certification.'
+          : 'system/init did not positively report per_turn_effort_active:true for an effort-controlled certification.');
       }
     }
     if (transportProfile === 'native-claude-cli' && operation === 'entrypoint-protocol') {

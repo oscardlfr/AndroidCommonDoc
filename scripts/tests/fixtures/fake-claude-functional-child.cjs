@@ -1002,7 +1002,7 @@ const initEvent = {
   capabilities: scenario === 'p4-missing-interrupt-capability'
     ? []
     : ['interrupt_receipt_v1', 'interrupt_cancel_queued_v1', 'msg_lifecycle_v1'],
-  ...(scenario === 'effort-inactive' ? { per_turn_effort_active: false } : {}),
+  per_turn_effort_active: scenario === 'effort-inactive' ? false : true,
 };
 if (scenario !== 'startup-silent' && !(directRole && scenario === 'direct-role-init-after-input')) emit(initEvent);
 if (scenario === 'wrong-session-frame' || scenario === 'hcp-wrong-session') {

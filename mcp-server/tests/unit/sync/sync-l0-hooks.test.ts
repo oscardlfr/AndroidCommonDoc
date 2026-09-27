@@ -129,7 +129,7 @@ describe("source-referenced runtime installation", () => {
     await rm(projectRoot, { recursive: true, force: true });
   });
 
-  it("preflights without writes, then installs exact roles and absolute owned hook registrations idempotently", async () => {
+  it("preflights without writes, then installs exact roles and portable owned hook registrations idempotently", async () => {
     const dry = await installRuntimeConsumer(projectRoot, REAL_L0_ROOT, { dryRun: true });
     expect(dry.ok).toBe(true);
     await expect(readFile(join(projectRoot, ".claude", "settings.json"), "utf8")).rejects.toThrow();
@@ -153,6 +153,7 @@ describe("source-referenced runtime installation", () => {
     expect(inventoryPaths.has("scripts/lib/verdict-artifact-confinement.cjs")).toBe(true);
     expect(inventoryPaths.has("scripts/lib/verdict-artifact-store.cjs")).toBe(true);
     expect(inventoryPaths.has(".claude/registry/wave-topology.yaml")).toBe(true);
+    expect(inventoryPaths.has(".claude/hooks/l0-source-hook-launcher.js")).toBe(true);
     const verifierInventory = runtimeContext.computeRuntimeToolkitInventory(REAL_L0_ROOT);
     expect(verifierInventory.ok).toBe(true);
     expect(first.inventory).toEqual(verifierInventory.entries);
@@ -165,16 +166,22 @@ describe("source-referenced runtime installation", () => {
     const commands = Object.values(settings.hooks).flatMap((blocks: any) =>
       blocks.flatMap((block: any) => block.hooks.map((hook: any) => hook.command)));
     expect(commands.filter((command: string) => command.includes("agent-spawn-execution-gate.js"))).toHaveLength(1);
-    expect(commands.find((command: string) => command.includes("agent-spawn-execution-gate.js"))).toContain(REAL_L0_ROOT.replace(/\\/g, "/"));
+    expect(commands.find((command: string) => command.includes("agent-spawn-execution-gate.js"))).toBe(
+      'node "$CLAUDE_PROJECT_DIR"/.claude/hooks/l0-source-hook-launcher.js agent-spawn-execution-gate.js',
+    );
     expect(installedHooks.find((hook: any) => hook.command.includes("agent-spawn-execution-gate.js"))?.timeout)
       .toBeGreaterThanOrEqual(30);
-    expect(commands.some((command: string) => command.includes("$CLAUDE_PROJECT_DIR") && command.includes("agent-spawn"))).toBe(false);
+    expect(commands.every((command: string) => !command.includes(REAL_L0_ROOT.replace(/\\/g, "/")))).toBe(true);
+    expect(commands.every((command: string) => !command.includes(process.execPath.replace(/\\/g, "/")))).toBe(true);
+    expect(await readFile(join(projectRoot, ".claude", "hooks", "l0-source-hook-launcher.js"), "utf8"))
+      .toBe(await readFile(join(REAL_L0_ROOT, ".claude", "hooks", "l0-source-hook-launcher.js"), "utf8"));
     const manifest = JSON.parse(await readFile(join(projectRoot, "l0-manifest.json"), "utf8"));
     expect(manifest.runtime.consumer_layer).toBe("L2");
     expect(manifest.runtime.toolkit_content_sha256).toBe(first.toolkitContentDigest);
     expect(await readFile(join(projectRoot, ".claude", "registry", "wave-topology.yaml"), "utf8"))
       .toBe(await readFile(join(REAL_L0_ROOT, ".claude", "registry", "wave-topology.yaml"), "utf8"));
     expect(manifest.checksums[".claude/registry/wave-topology.yaml"]).toMatch(/^sha256:[0-9a-f]{64}$/);
+    expect(manifest.checksums[".claude/hooks/l0-source-hook-launcher.js"]).toMatch(/^sha256:[0-9a-f]{64}$/);
 
     const bytesBefore = await readFile(join(projectRoot, ".claude", "settings.json"), "utf8");
     const second = await installRuntimeConsumer(projectRoot, REAL_L0_ROOT);

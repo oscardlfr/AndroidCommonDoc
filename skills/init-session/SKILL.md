@@ -49,7 +49,7 @@ When `--orchestrate <slug>` is passed:
 
 ## Steps
 
-1. **Read project manifest**: Load `l0-manifest.json` if it exists. Extract `layer`, `topology`, and `selection` fields.
+1. **Read project manifest and classify the layer**: Load `l0-manifest.json` if it exists and extract only fields that actually exist in manifest v2 (`topology`, `selection`, and optional `runtime`). Never read a top-level `layer` field; manifest v2 has none. Derive the project layer with the canonical `classifyRepo` markers: `skills/registry.json` + `mcp-server/` and no manifest = L0; registry + manifest = L1; manifest without registry = L2. When a valid `runtime-consumer/v1` block is present, report its `consumer_layer` separately as the certified runtime role and flag any disagreement with marker-based classification instead of silently choosing one.
 2. **Read module map**: Load `MODULE_MAP.md` if it exists. Count modules and list key ones.
 3. **Scan agents**: Read all `.claude/agents/*.md` files. Count agents and group them by `domain:` frontmatter field.
 4. **Scan skills**: Read all `.claude/commands/*.md` files. Count available skills.

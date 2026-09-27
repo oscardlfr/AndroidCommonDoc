@@ -81,7 +81,7 @@ To enable the Claude/Codex collaboration runtime in an L1 or L2 consumer, first 
 /sync-l0 --runtime
 ```
 
-Runtime mode does not copy runtime code. It pins the toolkit commit and executable-content digest, installs ten canonical role definitions, and registers hooks by absolute path to the declared L0 source. It never uses `ANDROID_COMMON_DOC` as an authority fallback. Missing, remote, ambiguous, or drifted sources and customized owned runtime files fail closed without overwrite. Do not combine runtime mode with prune, force, or migration flags. An explicit start also requires one unambiguous PLAN in the consumer; the read-only dashboard never creates one.
+Runtime mode does not copy source-coupled runtime code. It pins the toolkit commit and executable-content digest, installs ten canonical role definitions plus a standalone consumer launcher, and registers hooks through that launcher. The launcher resolves the one local L0 tooling source from `l0-manifest.json`, including from linked worktrees, so consumer settings contain no user, Node installation, or toolkit checkout path. It never uses `ANDROID_COMMON_DOC` as an authority fallback. Missing, remote, ambiguous, symlinked, or drifted sources and customized owned runtime files fail closed without overwrite. Do not combine runtime mode with prune, force, or migration flags. An explicit start also requires one unambiguous PLAN in the consumer; the read-only dashboard never creates one.
 
 ### Version-tracking headers
 
@@ -183,7 +183,7 @@ Para habilitar el runtime Claude/Codex en un consumidor L1 o L2, declara una ún
 /sync-l0 --runtime
 ```
 
-Este modo no copia el código del runtime. Fija el commit y el digest del contenido ejecutable del toolkit, instala diez roles canónicos y registra los hooks mediante rutas absolutas a la fuente L0 declarada. No usa `ANDROID_COMMON_DOC` como autoridad alternativa. Fuentes ausentes, remotas, ambiguas o con deriva y archivos runtime personalizados fallan de forma cerrada sin sobrescritura. No combines este modo con prune, force o migraciones. El inicio explícito requiere además un único PLAN inequívoco en el consumidor; el dashboard de solo lectura nunca fabrica uno.
+Este modo no copia el código del runtime. Fija el commit y el digest del contenido ejecutable del toolkit, instala diez roles canónicos y un launcher autónomo en el consumidor, y registra mediante él los hooks acoplados a la fuente. El launcher resuelve la única fuente local `L0`/`tooling` de `l0-manifest.json`, también desde worktrees enlazados, por lo que `settings.json` no contiene rutas del usuario, de Node ni del checkout del toolkit. No usa `ANDROID_COMMON_DOC` como autoridad alternativa. Fuentes ausentes, remotas, ambiguas o con deriva y archivos runtime personalizados fallan de forma cerrada sin sobrescritura. No combines este modo con prune, force o migraciones. El inicio explícito requiere además un único PLAN inequívoco en el consumidor; el dashboard de solo lectura nunca fabrica uno.
 
 ### Cabeceras de seguimiento de versión
 

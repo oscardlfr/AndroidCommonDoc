@@ -15,6 +15,16 @@ const CORE_HOOK_FILES = Object.freeze([
   'runtime-host-session-start.js', 'bash-cli-spawn-gate.js',
   'premature-execution-gate.js', 'tool-use-logger.js',
 ]);
+const SOURCE_REFERENCED_HOOK_FILES = new Set([
+  'agent-spawn-execution-gate.js', 'context-provider-gate.js',
+  'premature-execution-gate.js', 'runtime-consultation-target-gate.js',
+  'runtime-host-boundary.js', 'runtime-host-session-start.js',
+  'subagent-start-context-bundle.js',
+]);
+const CONSUMER_FILES = Object.freeze([
+  '.claude/hooks/l0-source-hook-launcher.js',
+  '.claude/registry/wave-topology.yaml',
+]);
 const ROLE_TEMPLATES = Object.freeze([
   'arch-platform', 'arch-testing', 'arch-integration', 'context-provider',
   'doc-updater', 'toolkit-specialist', 'test-specialist', 'verifier',
@@ -168,6 +178,7 @@ function computeRuntimeToolkitInventory(toolkitRoot) {
     '.claude/settings.json', '.claude/model-profiles.json', 'setup/claude-host-contract.json',
     'mcp-server/package-lock.json',
     ...CORE_HOOK_FILES.map((file) => `.claude/hooks/${file}`),
+    '.claude/hooks/l0-source-hook-launcher.js',
     '.claude/registry/wave-topology.yaml',
     ...ROLE_TEMPLATES.map((role) => `.claude/agents/${role}.md`),
     ...['init-session', 'resume-work', 'work', 'ingest-content', 'monitor-docs'].map((skill) => `skills/${skill}/SKILL.md`),
@@ -200,11 +211,10 @@ function computeRuntimeToolkitInventory(toolkitRoot) {
   };
 }
 
-function expectedHookCommand(toolkitRoot, file) {
-  let nodePath;
-  try { nodePath = fs.realpathSync(process.execPath); } catch { return null; }
-  const quote = (value) => JSON.stringify(value.replace(/\\/g, '/'));
-  return `${quote(nodePath)} ${quote(path.join(toolkitRoot, '.claude', 'hooks', file))}`;
+function expectedHookCommand(_toolkitRoot, file) {
+  return SOURCE_REFERENCED_HOOK_FILES.has(file)
+    ? `node "$CLAUDE_PROJECT_DIR"/.claude/hooks/l0-source-hook-launcher.js ${file}`
+    : `node "$CLAUDE_PROJECT_DIR"/.claude/hooks/${file}`;
 }
 
 function verifyRuntimeConsumerInstallation(consumerRoot, options) {
@@ -241,6 +251,13 @@ function verifyRuntimeConsumerInstallation(consumerRoot, options) {
       const consumer = fs.readFileSync(path.join(context.consumerRoot, '.claude', 'agents', `${role}.md`));
       if (!source.equals(consumer)) return fail('runtime-role-template-mismatch');
     } catch { return fail('runtime-role-template-missing'); }
+  }
+  for (const relative of CONSUMER_FILES) {
+    try {
+      const source = fs.readFileSync(path.join(context.toolkitRoot, relative));
+      const consumer = fs.readFileSync(path.join(context.consumerRoot, relative));
+      if (!source.equals(consumer)) return fail('runtime-consumer-file-mismatch');
+    } catch { return fail('runtime-consumer-file-missing'); }
   }
   if (options && options.verifyContent === true) {
     let commit;
