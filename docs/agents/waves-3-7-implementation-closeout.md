@@ -8,8 +8,8 @@ layer: L0
 parent: agents-hub
 category: agents
 description: "Pre-integration implementation closeout for the ordered Waves 3-7 harness program."
-version: 1
-last_updated: "2026-09-26"
+version: 2
+last_updated: "2026-09-27"
 ---
 
 # Waves 3–7 implementation closeout
@@ -17,10 +17,31 @@ last_updated: "2026-09-26"
 This record preserves the committed, locally verified pre-integration baseline. The work subsequently merged through PR #250 at `develop@dfc48cf8488cf661704f8a312093c663c34db0bb` and is now `SHIPPED`; the acceptance evidence below remains historical and is not a claim that the first downstream-consumer exercise was complete.
 
 The first real L2 consumer after merge exposed bounded runtime distribution,
-worktree, launch-documentation, and Claude host-recertification defects. Those
-are post-merge defects, not reasons to rewrite this frozen acceptance record;
-they are tracked by the consumer-hardening follow-up and its clean consumer
-fixtures.
+worktree, launch-documentation, and Claude host-recertification defects. PR #251
+closed all 13 findings upstream at
+`develop@c5ee193e1f726d270577c9256ea7cb09b481508b`, with clean-consumer and
+linked-worktree fixtures. Those post-merge defects are not reasons to rewrite
+the frozen PR #250 acceptance record, and they are no longer an active
+consumer-hardening follow-up.
+
+## Post-merge consumer stabilization
+
+PR #251 shipped the following bounded closure without modifying a product
+repository:
+
+- source-referenced hooks and executable-mode repair;
+- required `--add-dir`, canonical POSIX entrypoints, and recovery-mode guidance;
+- installed wave topology plus toolkit-owned YAML dependency resolution;
+- probe-derived qualification and atomic Claude host-certificate publication;
+- honest requested/observed/effective effort, bounded certification startup,
+  and an isolated R131 fixture; and
+- acceptance from both a clean consumer and a real linked worktree.
+
+The P0/P1/P2 reconciliation in `BACKLOG.md` contains only newly discovered
+post-#251 work. This stabilization change closes malformed `settings.json`
+handling and operational one-shot silence; false-perfect coverage evidence,
+non-atomic adapter publication, proportional `L0_SYNC` CI classification, and
+the remaining active residuals do not reopen the 13 closed findings.
 
 ## Delivered contracts
 
@@ -74,9 +95,9 @@ implementation was committed as `4face7b2`:
 - TypeScript build, ESLint (zero errors), operational-surface qualification,
   generated-catalog equality, README audit, and `git diff --check` passed.
 
-This establishes `LOCALLY VERIFIED` for Waves 3-7. It does not establish
-`SHIPPED`; integration review, commits, PR checks, merge, and post-merge durable
-memory remain separate steps.
+At the time this evidence was produced it established `LOCALLY VERIFIED`, not
+`SHIPPED`. PR #250 subsequently completed integration, and PR #251 completed
+the bounded downstream-consumer stabilization described above.
 
 ## Deferred and excluded
 

@@ -788,7 +788,7 @@
       "description": "Show project context dashboard. Optionally ensures the persistent support plane with --orchestrate <slug> flag.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:173e9b2077c04d7d407180de3dc8c2932eb52bf12ec259f2e77972ddd7afaa76",
+      "hash": "sha256:8fc73e18b224a25583a3db69482f44ce4255df8b3abb1d37ee35bdbf9d752ae4",
       "dependencies": [],
       "frontmatter": {
         "name": "init-session",

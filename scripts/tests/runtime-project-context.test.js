@@ -15,6 +15,16 @@ const {
 const TOOLKIT_ROOT = fs.realpathSync(path.resolve(__dirname, '../..'));
 const PIN = { schema: 'runtime-consumer/v1', enabled: true, consumer_layer: 'L2',
   toolkit_commit: 'a'.repeat(40), toolkit_content_sha256: 'b'.repeat(64) };
+const SOURCE_REFERENCED_HOOK_FILES = new Set([
+  'agent-spawn-execution-gate.js', 'context-provider-gate.js',
+  'premature-execution-gate.js', 'runtime-consultation-target-gate.js',
+  'runtime-host-boundary.js', 'runtime-host-session-start.js',
+  'subagent-start-context-bundle.js',
+]);
+const CONSUMER_FILES = [
+  '.claude/hooks/l0-source-hook-launcher.js',
+  '.claude/registry/wave-topology.yaml',
+];
 
 function fixture(layer = 'L2') {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'runtime consumer '));
@@ -47,8 +57,11 @@ function installFixture(f) {
   for (const role of ROLE_TEMPLATES) {
     fs.copyFileSync(path.join(TOOLKIT_ROOT, '.claude', 'agents', `${role}.md`), path.join(agents, `${role}.md`));
   }
-  const quote = (value) => JSON.stringify(value.replace(/\\/g, '/'));
-  const nodePath = fs.realpathSync(process.execPath);
+  for (const relative of CONSUMER_FILES) {
+    const destination = path.join(f.root, relative);
+    fs.mkdirSync(path.dirname(destination), { recursive: true });
+    fs.copyFileSync(path.join(TOOLKIT_ROOT, relative), destination);
+  }
   const hooks = {};
   for (const [event, matcher, file, timeout] of HOOK_MATRIX) {
     if (!hooks[event]) hooks[event] = [];
@@ -56,7 +69,9 @@ function installFixture(f) {
     if (!block) { block = { matcher, hooks: [] }; hooks[event].push(block); }
     block.hooks.push({
       type: 'command',
-      command: `${quote(nodePath)} ${quote(path.join(TOOLKIT_ROOT, '.claude', 'hooks', file))}`,
+      command: SOURCE_REFERENCED_HOOK_FILES.has(file)
+        ? `node "$CLAUDE_PROJECT_DIR"/.claude/hooks/l0-source-hook-launcher.js ${file}`
+        : `node "$CLAUDE_PROJECT_DIR"/.claude/hooks/${file}`,
       timeout,
     });
   }
@@ -200,6 +215,10 @@ test('P3-RUNTIME-INSTALL exact source hooks, role bytes, commit and content pin 
     installFixture(f);
     fs.appendFileSync(path.join(f.root, '.claude', 'agents', 'arch-platform.md'), '\nchanged\n');
     assert.strictEqual(verifyRuntimeConsumerInstallation(f.root).reason, 'runtime-role-template-mismatch');
+
+    installFixture(f);
+    fs.appendFileSync(path.join(f.root, '.claude', 'hooks', 'l0-source-hook-launcher.js'), '\nchanged\n');
+    assert.strictEqual(verifyRuntimeConsumerInstallation(f.root).reason, 'runtime-consumer-file-mismatch');
 
     installFixture(f);
     f.manifest.runtime.toolkit_content_sha256 = '0'.repeat(64);

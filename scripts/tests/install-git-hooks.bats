@@ -91,7 +91,7 @@ _seed_canonical_pre_push_hook() {
   printf '#!/usr/bin/env bash\n' > "$TMP_REPO/scripts/example.sh"
   git -C "$TMP_REPO" add .planning/wave-fixture/PLAN.md .planning/wave-fixture/CLASS scripts/example.sh
 
-  run bash -c "VERBOSE=1 bash '$TMP_REPO/.git/hooks/pre-commit' '$TMP_REPO' 2>&1"
+  run env -u CLAUDE_WAVE_SLUG bash -c "VERBOSE=1 bash '$TMP_REPO/.git/hooks/pre-commit' '$TMP_REPO' 2>&1"
   [ "$status" -eq 0 ]
   [[ "$output" == *"Gate 3: wave=fixture class=HARNESS"* ]]
   [[ "$output" != *"wave-slug.sh not found"* ]]

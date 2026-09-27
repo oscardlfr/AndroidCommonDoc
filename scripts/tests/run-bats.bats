@@ -425,9 +425,11 @@ EOF
 @test "#RB19 two runs retain distinct immutable BATS_LOG artifacts and identities" {
     write_fake_npx
 
-    run env PATH="$WORK_DIR/bin:$PATH" bash "$SCRIPT" --project-root "$WORK_DIR"
+    run env CLAUDE_WAVE_SLUG=inherited-wave PATH="$WORK_DIR/bin:$PATH" \
+        bash "$SCRIPT" --project-root "$WORK_DIR" --wave-slug none
     [ "$status" -eq 0 ]
-    run env PATH="$WORK_DIR/bin:$PATH" bash "$SCRIPT" --project-root "$WORK_DIR"
+    run env CLAUDE_WAVE_SLUG=inherited-wave PATH="$WORK_DIR/bin:$PATH" \
+        bash "$SCRIPT" --project-root "$WORK_DIR" --wave-slug none
     [ "$status" -eq 0 ]
 
     local handoffs=("$WORK_DIR"/.androidcommondoc/bats-result.*.env)

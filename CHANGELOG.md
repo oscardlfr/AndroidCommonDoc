@@ -5,7 +5,24 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 
 ## [Unreleased]
 
-### Fixed (first L2 consumer runtime hardening)
+### Fixed (post-#251 consumer stabilization)
+
+- Consumer hook registrations now use a standalone manifest-aware launcher instead of host-specific Node and toolkit paths. It supports linked worktrees, migrates the former generated absolute commands, and fails closed for remote, unresolved, ambiguous, or symlinked L0 sources.
+- Ordinary sync and runtime sync now compose idempotently: runtime-owned topology survives ordinary prune, source-coupled hooks are never duplicated, malformed consumer settings fail before writes, and settings publication uses atomic replacement.
+- `sync-l0-cli` now treats `--help` as a zero-write operation, rejects unknown or incomplete arguments, and reports dry-run manifest state accurately.
+- Added a bounded `claude-safe-one-shot.cjs` recovery launcher with retained evidence, exact no-tool/read/repair capability profiles, partial streaming, init-tool verification, terminal usage/cost/subagent receipts, budget-error classification, and distinct timeout/early-exit/success outcomes.
+- Effort-controlled Claude certification now requires positive active telemetry and an observed value equal to the request; inactive, absent, or mismatched effort fails closed without weakening the transport-only host probe.
+- Recovery and certification reject contradictory inherited `CLAUDE_CODE_EFFORT_LEVEL` authority before spawning Claude and align the child environment with the explicit per-invocation effort selector.
+- Wave-sensitive Bats fixtures now isolate or explicitly override an inherited `CLAUDE_WAVE_SLUG`, so the same full suite is deterministic inside a formal quality-gate wave.
+- Copilot agent frontmatter parsing is now POSIX-compatible on macOS, and `adapters/generate-all.sh --check` verifies generated output from an isolated staging tree without mutating the checkout.
+
+### Changed (post-PR #251 roadmap reconciliation)
+
+- Marked the 13 first-consumer runtime findings closed at `develop@c5ee193e` and removed the stale `NEXT Wave 3` instruction without reopening the shipped PR #251 scope.
+- Replaced duplicated historical residuals with one prioritized P0/P1/P2 queue. This change closes malformed `settings.json` handling and silent operational recovery; the remaining queue records false-perfect `kmp-test`/`no_xml` coverage, non-atomic adapter publication, fail-closed proportional `L0_SYNC` CI, filesystem scope enforcement, Gradle isolation/target discovery, and bounded hardening work.
+- Added a future-only governance task to evaluate a consumer-neutral work/evidence/decision index above the existing PLAN/verdict/evidence authorities; this documentation change does not implement or authorize that design.
+
+### Fixed (first L2 consumer runtime hardening — PR #251)
 
 - Ordinary sync now keeps hooks with L0-relative imports source-referenced instead of copying broken entrypoints; the push gate resolves its verifier/canonical Git hook from the toolkit while validating the consumer repository.
 - Runtime installation now owns and digests `wave-topology.yaml`; `wave-control-plane.cjs` loads YAML from the toolkit, and clean consumers no longer need a fake `mcp-server/node_modules` tree.
@@ -15,7 +32,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 - Canonical skill examples use the exact single-quoted POSIX entrypoint form, and consumer launch documentation requires `claude --add-dir <L0-root>`.
 - R131 host-boundary coverage now uses an isolated one-plan consumer fixture instead of the repository's mutable `.planning/` tree.
 
-### Added (Claude host compatibility and recovery)
+### Added (Claude host compatibility and recovery — PR #251)
 
 - Added one-command Claude host recertification: capability capture, genuine probe, evidence-derived qualification, atomic replacement of a previously verified same-platform package, and post-publication verification. Claude version is parsed from `--version`, not inferred from an installation path.
 - Added spawn-to-`system/init` timeout enforcement. Requested, observed, and effective effort are now separate; effective effort remains unproven until telemetry exists, and `per_turn_effort_active:false` fails effort-controlled entrypoint certification.

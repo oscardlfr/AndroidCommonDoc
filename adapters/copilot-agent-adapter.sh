@@ -101,6 +101,30 @@ map_tools() {
   echo "$copilot_tools"
 }
 
+# Read one scalar from the first YAML frontmatter block. Keep this parser
+# deliberately small because agent metadata is restricted to single-line
+# scalars here, but keep it POSIX: macOS/BSD awk does not implement `\s`.
+# Surrounding single or double quotes are removed; embedded content is left
+# byte-for-byte unchanged.
+frontmatter_scalar() {
+  local file="$1"
+  local key="$2"
+  awk -v key="$key" '
+    /^---$/ { block++; next }
+    block == 1 && index($0, key ":") == 1 {
+      value = $0
+      sub(/^[^:]*:[[:space:]]*/, "", value)
+      first = substr(value, 1, 1)
+      last = substr(value, length(value), 1)
+      if (length(value) >= 2 && first == last && (first == "\"" || first == "\047")) {
+        value = substr(value, 2, length(value) - 2)
+      }
+      print value
+      exit
+    }
+  ' "$file"
+}
+
 # ── Skill summary inlining ────────────────────────────────────────────────────
 
 get_skill_summary() {
@@ -114,7 +138,7 @@ get_skill_summary() {
 
   # Extract description from frontmatter
   local desc
-  desc=$(awk '/^---$/{n++; next} n==1 && /^description:/{sub(/^description:\s*"?/,""); sub(/"?\s*$/,""); print; exit}' "$skill_file")
+  desc=$(frontmatter_scalar "$skill_file" "description")
 
   echo "- **/$skill_name**: $desc"
 }
@@ -143,9 +167,9 @@ for agent_file in "$CLAUDE_AGENTS_DIR"/*.md; do
 
   # ── Parse Claude frontmatter ──────────────────────────────────────────────
 
-  name=$(awk '/^---$/{n++; next} n==1 && /^name:/{gsub(/^name:\s*/,""); print; exit}' "$agent_file")
-  description=$(awk '/^---$/{n++; next} n==1 && /^description:/{sub(/^description:\s*"?/,""); sub(/"?\s*$/,""); print; exit}' "$agent_file")
-  claude_tools=$(awk '/^---$/{n++; next} n==1 && /^tools:/{sub(/^tools:\s*/,""); print; exit}' "$agent_file")
+  name=$(frontmatter_scalar "$agent_file" "name")
+  description=$(frontmatter_scalar "$agent_file" "description")
+  claude_tools=$(frontmatter_scalar "$agent_file" "tools")
 
   # Extract skills list
   skills=$(awk '

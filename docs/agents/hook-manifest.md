@@ -2,9 +2,9 @@
 scope: [agents, hooks, workflow]
 sources: [androidcommondoc]
 targets: [all]
-version: 5
-last_updated: "2026-09-26"
-description: "Consumer hook manifest: classifies all 39 L0 hook files as consumer-required / consumer-optional / l0-internal"
+version: 6
+last_updated: "2026-09-27"
+description: "Consumer hook manifest: classifies all 40 L0 hook files as consumer-required / consumer-optional / l0-internal"
 slug: hook-manifest
 status: active
 layer: L0
@@ -18,7 +18,7 @@ category: agents
 
 Hooks are defense-in-depth around four canonical contracts: structured verdict validation, provenance agreement, parsed shell intent, and persisted wave phase. Hooks may deny a malformed request early, but they do not replace the durable authority: verdict JSON controls phase approval, the Git `pre-push` hook controls transport, and the Wave-1 lifecycle controls peers. See [Verdict Evidence Schema](verdict-evidence-schema.md), [Evidence Provenance Contract](evidence-provenance-contract.md), [Push Authority Policy](push-authority-policy.md), and [Wave Control Plane](wave-control-plane.md).
 
-Reference classification for all 39 hook files in `.claude/hooks/`. Consumers use this to reconcile their `settings.json` against the full L0 hook set.
+Reference classification for all 40 hook files in `.claude/hooks/`. Consumers use this to reconcile their `settings.json` against the full L0 hook set.
 
 > **CI-enforced** — the `hook-manifest-coverage` job in `.github/workflows/drift-audit.yml` fails the build if the hook table below drifts from `.claude/hooks/` (a missing, phantom, or duplicated hook). The table is the source of truth for coverage.
 
@@ -36,11 +36,11 @@ These are two separate steps — both must be completed for a hook to be active.
 
 **File copy (propagation)**:
 - Standalone `.js` hooks are copied to the consumer by `/sync-l0`. Opt out per-hook via `selection.exclude_hooks` in `l0-manifest.json`.
-- `.js` hooks importing `../../scripts/lib/**` remain in L0 and are registered by absolute toolkit path. Copying only their entrypoint would create a guaranteed `MODULE_NOT_FOUND` consumer hook. The same `exclude_hooks` entry prevents a new source-coupled registration; sync remains additive and does not silently remove an already adopted registration.
+- `.js` hooks importing `../../scripts/lib/**` remain in L0. The consumer receives only the standalone `l0-source-hook-launcher.js`, whose registration resolves the manifest-declared local L0 source at execution time. Copying only a source-coupled entrypoint would create a guaranteed `MODULE_NOT_FOUND`; embedding an absolute toolkit path would make the consumer host-specific. The same `exclude_hooks` entry prevents a new source-coupled registration; sync remains additive and does not silently remove an already adopted registration.
 - `.sh` hooks: NOT in `/sync-l0` scope. `setup/install-hooks.sh` copies exactly 3 files: `detekt-post-write.sh`, `detekt-pre-commit.sh`, `branch-guard.js`.
 
 **settings.json registration**:
-- `/sync-l0` additively registers the required hook set. Source-coupled hooks use the absolute resolved L0 checkout; standalone hooks use the consumer copy. Exact legacy local registrations are migrated without deleting unrelated user hooks.
+- `/sync-l0` additively registers the required hook set. Source-coupled hooks use the consumer-local launcher; standalone hooks use their consumer copy. Exact legacy local and generated absolute registrations are migrated without deleting unrelated user hooks.
 - `install-hooks.sh` auto-registers exactly **2** hooks via python JSON merge: `detekt-post-write.sh` (PostToolUse `Write|Edit`) and `detekt-pre-commit.sh` (PreToolUse `Bash`).
 - `branch-guard.js` is copied by `install-hooks.sh` but **not registered**.
 - Optional hooks and remaining `.sh` hooks still require explicit adoption.
@@ -58,7 +58,7 @@ This subsection documents verification methodology only; it does not assert that
 
 ## Hook Table
 
-### JavaScript Hooks (35)
+### JavaScript Hooks (36)
 
 | Hook | Status | Rationale |
 |------|--------|-----------|
@@ -72,6 +72,7 @@ This subsection documents verification methodology only; it does not assert that
 | `runtime-host-session-start.js` | consumer-required | Session startup: captures the host session identity required by the retained-host boundary before runtime collaboration begins |
 | `agent-spawn-execution-gate.js` | consumer-required | Topology: PreToolUse gate on the `Agent` tool, main-orchestrator context only. Before a real `Agent()` call executes for a genuine role-lifecycle action ("owning" call — some pending action truly exists for the exact `subagent_type` named), atomically reserves that action via a no-clobber execution-claim record, revalidating binding/PLAN/session/role/expiry fresh. Every other `Agent()` call ("non-owning" — the overwhelming majority of ordinary ad-hoc specialist/architect dispatch) is silent pass-through with zero side effects, governed only by other hooks (`agent-spawn-validator.js` etc.) — see [runtime-messaging-drivers](runtime-messaging-drivers.md) |
 | `hook-control-plane-utils.js` | l0-internal | Shared CommonJS runtime dependency for propagated hooks; copy with importing hooks, never register in `settings.json` |
+| `l0-source-hook-launcher.js` | l0-internal | Standalone consumer trampoline for source-coupled hooks; register the launcher command, never the launcher itself as an event hook |
 | `coordination-artifact.js` | l0-internal | Shared CommonJS runtime dependency for propagated hooks (read/validate coordination artifacts — consult/result/request/approval/stop/message; writes are owned by `write-coordination-artifact.sh`, not this module); copy with importing hooks, never register in `settings.json` — see [coordination-artifact-schema](coordination-artifact-schema.md) |
 | `premature-execution-gate.js` | consumer-required | Gating: blocks specialist Write/Edit/Bash before a current request-bound PREP approval and bounded specialist dispatch |
 | `branch-guard.js` | consumer-required | Branch protection: blocks write-git ops on develop/master — see [branch-guard](branch-guard.md) |

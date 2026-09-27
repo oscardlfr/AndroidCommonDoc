@@ -70,6 +70,22 @@ interface CliArgs {
   runtime: boolean;
 }
 
+const USAGE = `Usage:
+  sync-l0 [--project-root <path>] [--l0-root <path>] [--prune] [--force]
+          [--dry-run] [--auto-migrate] [--force-l0-managed] [--runtime]
+
+Options:
+  --project-root PATH   Downstream project root (default: current directory)
+  --l0-root PATH        Explicit AndroidCommonDoc checkout
+  --prune               Remove managed orphan files
+  --force               Permit destructive actions that require confirmation
+  --dry-run             Report the plan without writing files
+  --auto-migrate        Apply eligible manifest migrations
+  --force-l0-managed    Replace locally drifted L0-owned templates
+  --runtime             Install or refresh the source-referenced runtime
+  -h, --help            Show this help and exit without reading or writing a project
+`;
+
 function parseArgs(argv: string[]): CliArgs {
   let projectRoot = process.cwd();
   let l0Root: string | undefined;
@@ -81,10 +97,12 @@ function parseArgs(argv: string[]): CliArgs {
   let runtime = false;
 
   for (let i = 2; i < argv.length; i++) {
-    if (argv[i] === "--project-root" && argv[i + 1]) {
+    if (argv[i] === "--project-root") {
+      if (!argv[i + 1] || argv[i + 1].startsWith("--")) throw new Error("--project-root requires a path");
       projectRoot = path.resolve(argv[i + 1]);
       i++;
-    } else if (argv[i] === "--l0-root" && argv[i + 1]) {
+    } else if (argv[i] === "--l0-root") {
+      if (!argv[i + 1] || argv[i + 1].startsWith("--")) throw new Error("--l0-root requires a path");
       l0Root = path.resolve(argv[i + 1]);
       i++;
     } else if (argv[i] === "--prune") {
@@ -99,6 +117,8 @@ function parseArgs(argv: string[]): CliArgs {
       forceL0Managed = true;
     } else if (argv[i] === "--runtime") {
       runtime = true;
+    } else {
+      throw new Error(`Unknown option: ${argv[i]}`);
     }
   }
 
@@ -140,6 +160,7 @@ async function ensureManifest(
   projectRoot: string,
   l0RootOverride?: string,
   runtimeMode = false,
+  dryRun = false,
 ): Promise<{ l0Root: string; isMultiSource: boolean; clonedDirs: string[] }> {
   const manifestPath = path.join(projectRoot, "l0-manifest.json");
 
@@ -178,6 +199,9 @@ async function ensureManifest(
       console.log(`Created flat manifest: L0=${relativePath}`);
     }
 
+    if (dryRun) {
+      throw new Error("Dry-run requires an existing l0-manifest.json; run once without --dry-run to create it");
+    }
     await writeFile(manifestPath, JSON.stringify(manifest, null, 2) + "\n", "utf-8");
   }
 
@@ -235,6 +259,10 @@ async function ensureManifest(
 // ---------------------------------------------------------------------------
 
 async function main(): Promise<void> {
+  if (process.argv.includes("--help") || process.argv.includes("-h")) {
+    process.stdout.write(`${USAGE}\n`);
+    return;
+  }
   const { projectRoot, l0Root: l0RootArg, prune, force, dryRun, autoMigrate, forceL0Managed, runtime } = parseArgs(process.argv);
 
   console.log(`Sync → ${projectRoot}`);
@@ -249,7 +277,7 @@ async function main(): Promise<void> {
     }
   }
 
-  const { l0Root, isMultiSource, clonedDirs } = await ensureManifest(projectRoot, l0RootArg, runtime);
+  const { l0Root, isMultiSource, clonedDirs } = await ensureManifest(projectRoot, l0RootArg, runtime, dryRun);
 
   try {
 
@@ -384,7 +412,9 @@ async function main(): Promise<void> {
   console.log(
     `Sync complete: ${report.added} added, ${report.updated} updated, ${report.removed} removed, ${report.unchanged} unchanged (${total} total)`,
   );
-  console.log(`Manifest updated: l0-manifest.json`);
+  process.stdout.write(`${dryRun
+    ? "Manifest unchanged: l0-manifest.json (dry-run)"
+    : "Manifest updated: l0-manifest.json"}\n`);
 
   if (report.errors.length > 0) {
     process.exit(1);

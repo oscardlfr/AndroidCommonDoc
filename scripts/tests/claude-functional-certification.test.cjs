@@ -26,10 +26,12 @@ function runScenario(scenario, options = {}) {
     if (options.operation) launcherArgs.push('--operation', options.operation);
     if (options.transportProfile) launcherArgs.push('--transport-profile', options.transportProfile);
     if (Array.isArray(options.launcherArgs)) launcherArgs.push(...options.launcherArgs);
+    const launcherEnv = { ...process.env };
+    delete launcherEnv.CLAUDE_CODE_EFFORT_LEVEL;
     const child = spawn(process.execPath, launcherArgs, {
       cwd: scenarioProjectRoot,
       env: {
-        ...process.env,
+        ...launcherEnv,
         P4_CERT_OFFLINE_TEST: '1',
         P4_CERT_OFFLINE_FAKE_CHILD: fakeChild,
         P4_CERT_FAKE_SCENARIO: scenario,
@@ -1148,9 +1150,12 @@ test('NATIVE-ENTRYPOINT runs entrypoint-protocol through the pinned native launc
     control: '--effort',
     expected_observed: 'high',
     observed: 'high',
-    per_turn_effort_active: null,
+    per_turn_effort_active: true,
     verification: 'observed',
     observation_source: 'assistant.effort-if-emitted',
+    environment_inherited: null,
+    environment_effective: 'high',
+    environment_policy: 'explicit-cli-and-environment-match',
   });
   assert.equal(run.state.native_argv.filter((value) => value === '--append-system-prompt').length, 1);
   assert.deepEqual(Object.keys(run.state.native_agent_definitions).sort(), Object.keys(nativeAgents).sort());
@@ -2099,13 +2104,14 @@ test('CFC-PIN rejects observed effort drift before relaying an owning action set
   assert.equal(run.state.action_relay_count, 0);
 });
 
-test('CFC-PIN records --effort as requested but unproven when Claude emits no effort telemetry', async () => {
+test('CFC-PIN fails an effort-controlled entrypoint certification when effort telemetry is absent', async () => {
   const run = await runScenario('p4-effort-telemetry-absent', {
     operation: 'entrypoint-protocol',
     transportProfile: 'native-claude-cli',
     nativeFixture: true,
   });
-  assert.equal(run.code, 0, run.stderr);
+  assert.notEqual(run.code, 0, run.stderr);
+  assert.equal(run.state.status, 'HOST_EFFORT_UNPROVEN');
   const effortIndex = run.state.native_argv.indexOf('--effort');
   assert.notEqual(effortIndex, -1);
   assert.equal(run.state.native_argv[effortIndex + 1], 'high');
@@ -2122,6 +2128,34 @@ test('CFC-PIN fails an effort-controlled entrypoint certification when init repo
   assert.equal(run.state.status, 'HOST_EFFORT_INACTIVE');
   assert.equal(run.state.effort_profile.per_turn_effort_active, false);
   assert.equal(run.state.effort_profile.effective, null);
+});
+
+test('CFC-PIN rejects a conflicting inherited effort authority before Claude starts', async () => {
+  const run = await runScenario('success', {
+    operation: 'entrypoint-protocol',
+    transportProfile: 'native-claude-cli',
+    nativeFixture: true,
+    extraEnv: { CLAUDE_CODE_EFFORT_LEVEL: 'max' },
+  });
+  assert.notEqual(run.code, 0);
+  assert.equal(run.state.status, 'HOST_EFFORT_AUTHORITY_CONFLICT');
+  assert.equal(run.state.pid, undefined);
+  assert.equal(run.state.effort_profile.environment_inherited, 'max');
+  assert.equal(run.state.effort_profile.environment_effective, 'high');
+  assert.match(run.state.invalidation_reason, /conflicts with requested effort high/);
+});
+
+test('CFC-PIN accepts matching CLI and environment effort authorities', async () => {
+  const run = await runScenario('success', {
+    operation: 'entrypoint-protocol',
+    transportProfile: 'native-claude-cli',
+    nativeFixture: true,
+    extraEnv: { CLAUDE_CODE_EFFORT_LEVEL: 'high' },
+  });
+  assert.equal(run.code, 0, run.stderr);
+  assert.equal(run.state.effort_profile.environment_inherited, 'high');
+  assert.equal(run.state.effort_profile.environment_effective, 'high');
+  assert.equal(run.state.effort_profile.observed, 'high');
 });
 
 test('CFC-RELAY keeps bootstrap bytes out of the model proposal while requiring canonical observed execution', async () => {

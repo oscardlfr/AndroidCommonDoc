@@ -19,8 +19,8 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, readFileSync, writeFileSync, realpathSync } from "node:fs";
-import { installRuntimeConsumer, resolveL0Source } from "../../src/sync/sync-engine.js";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { installRuntimeConsumer, resolveL0Source, syncL0 } from "../../src/sync/sync-engine.js";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -66,6 +66,66 @@ describe("sync-l0 end-to-end CLI", () => {
 
   afterEach(async () => {
     await rm(fixtureDir, { recursive: true, force: true });
+  });
+
+  it("--help is a zero-write operation", async () => {
+    const manifestPath = join(fixtureDir, "l0-manifest.json");
+    const before = await readFile(manifestPath, "utf8");
+    const result = spawnSync(process.execPath, [CLI_PATH, "--help"], {
+      cwd: fixtureDir, encoding: "utf8", timeout: 10000,
+    });
+
+    expect(result.status, result.stderr).toBe(0);
+    expect(result.stdout).toContain("Usage:");
+    expect(result.stdout).not.toContain("Sync →");
+    expect(await readFile(manifestPath, "utf8")).toBe(before);
+    expect(await readdir(join(fixtureDir, ".claude", "hooks"))).toEqual([]);
+  });
+
+  it("rejects unknown options without touching the project", async () => {
+    const manifestPath = join(fixtureDir, "l0-manifest.json");
+    const before = await readFile(manifestPath, "utf8");
+    const result = spawnSync(process.execPath, [CLI_PATH, "--definitely-unknown"], {
+      cwd: fixtureDir, encoding: "utf8", timeout: 10000,
+    });
+
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain("Unknown option");
+    expect(await readFile(manifestPath, "utf8")).toBe(before);
+    expect(await readdir(join(fixtureDir, ".claude", "hooks"))).toEqual([]);
+  });
+
+  it("dry-run reports that the manifest is unchanged and performs no writes", async () => {
+    const manifestPath = join(fixtureDir, "l0-manifest.json");
+    const before = await readFile(manifestPath, "utf8");
+    const result = spawnSync(process.execPath, [CLI_PATH, "--project-root", fixtureDir, "--dry-run"], {
+      encoding: "utf8", timeout: 60000,
+    });
+
+    expect(result.status, result.stderr).toBe(0);
+    expect(result.stdout).toContain("Manifest unchanged: l0-manifest.json (dry-run)");
+    expect(result.stdout).not.toContain("Manifest updated:");
+    expect(await readFile(manifestPath, "utf8")).toBe(before);
+    expect(await readdir(join(fixtureDir, ".claude", "hooks"))).toEqual([]);
+  });
+
+  it("dry-run without a manifest fails closed and performs no writes", async () => {
+    const manifestPath = join(fixtureDir, "l0-manifest.json");
+    await rm(manifestPath);
+    const rootBefore = await readdir(fixtureDir);
+
+    const result = spawnSync(process.execPath, [
+      CLI_PATH,
+      "--project-root", fixtureDir,
+      "--l0-root", L0_ROOT,
+      "--dry-run",
+    ], { encoding: "utf8", timeout: 60000 });
+
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain("Dry-run requires an existing l0-manifest.json");
+    expect(existsSync(manifestPath)).toBe(false);
+    expect(await readdir(fixtureDir)).toEqual(rootBefore);
+    expect(await readdir(join(fixtureDir, ".claude", "hooks"))).toEqual([]);
   });
 
   it("exits 0 and hooks land in .claude/hooks/", () => {
@@ -130,8 +190,10 @@ describe("sync-l0 end-to-end CLI", () => {
     expect(commands.some((command: string) => command.includes("premature-execution-gate.js"))).toBe(false);
   });
 
-  it("registers source-coupled hooks from L0 and executes the push gate in a clean consumer", () => {
-    const legacyCommand = 'node "$CLAUDE_PROJECT_DIR"/.claude/hooks/push-authorization-gate.js';
+  it("registers source-coupled hooks through the portable launcher and executes the push gate", () => {
+    const legacyCommand = `${JSON.stringify(process.execPath)} ${JSON.stringify(
+      "/stale-host/AndroidCommonDoc/.claude/hooks/push-authorization-gate.js",
+    )}`;
     writeFileSync(join(fixtureDir, ".claude", "settings.json"), JSON.stringify({
       hooks: { PreToolUse: [{ matcher: "Bash", hooks: [{ type: "command", command: legacyCommand }] }] },
     }, null, 2));
@@ -146,13 +208,18 @@ describe("sync-l0 end-to-end CLI", () => {
       blocks.flatMap((block: any) => block.hooks.map((hook: any) => hook.command)));
     const pushCommands = commands.filter((command: string) => command.includes("push-authorization-gate.js"));
     expect(pushCommands).toHaveLength(1);
-    expect(pushCommands[0]).toContain(realpathSync(L0_ROOT).replace(/\\/g, "/"));
-    expect(pushCommands[0].startsWith(JSON.stringify(realpathSync(process.execPath).replace(/\\/g, "/"))))
-      .toBe(true);
-    expect(pushCommands[0]).not.toContain("$CLAUDE_PROJECT_DIR");
+    expect(pushCommands[0]).toBe(
+      'node "$CLAUDE_PROJECT_DIR"/.claude/hooks/l0-source-hook-launcher.js push-authorization-gate.js',
+    );
+    expect(pushCommands[0]).not.toContain(L0_ROOT.replace(/\\/g, "/"));
+    expect(pushCommands[0]).not.toContain(process.execPath.replace(/\\/g, "/"));
     expect(existsSync(join(fixtureDir, ".claude", "hooks", "push-authorization-gate.js"))).toBe(false);
+    expect(existsSync(join(fixtureDir, ".claude", "hooks", "l0-source-hook-launcher.js"))).toBe(true);
 
-    const hook = spawnSync(process.execPath, [join(L0_ROOT, ".claude", "hooks", "push-authorization-gate.js")], {
+    const hook = spawnSync(process.execPath, [
+      join(fixtureDir, ".claude", "hooks", "l0-source-hook-launcher.js"),
+      "push-authorization-gate.js",
+    ], {
       cwd: fixtureDir,
       env: { ...process.env, CLAUDE_PROJECT_DIR: fixtureDir },
       input: JSON.stringify({ tool_name: "Bash", tool_input: { command: "echo healthy" } }),
@@ -235,6 +302,24 @@ describe("sync source and managed runtime file boundaries", () => {
       expect(conflict.ok).toBe(false);
       expect(conflict.reason).toBe(`runtime-consumer-file-conflict:${topologyRelative}`);
       expect(await readFile(topologyPath, "utf8")).toBe(consumerDrift);
+    } finally {
+      await rm(consumer, { recursive: true, force: true });
+    }
+  });
+
+  it("ordinary prune preserves files owned by an installed runtime", async () => {
+    const consumer = await mkdtemp(join(tmpdir(), "runtime-topology-prune-"));
+    const topologyRelative = ".claude/registry/wave-topology.yaml";
+    const topologyPath = join(consumer, topologyRelative);
+    try {
+      await writeFile(join(consumer, "l0-manifest.json"), makeManifest(L0_ROOT), "utf8");
+      const installed = await installRuntimeConsumer(consumer, L0_ROOT);
+      expect(installed.ok).toBe(true);
+      const topologyBefore = await readFile(topologyPath, "utf8");
+
+      const ordinary = await syncL0(consumer, L0_ROOT, { prune: true, force: true });
+      expect(ordinary.removedPaths).not.toContain(topologyRelative);
+      expect(await readFile(topologyPath, "utf8")).toBe(topologyBefore);
     } finally {
       await rm(consumer, { recursive: true, force: true });
     }
