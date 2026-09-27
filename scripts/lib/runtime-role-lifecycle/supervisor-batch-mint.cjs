@@ -107,7 +107,7 @@ function mintSupervisorBatchUnderTransaction(projectRoot, pair, repoId, worktree
     }
 
     const batched = mintBatchedSupervisorStartAction(projectRoot, pair, repoId, worktreeId, planDigest, generationId, codexGroup.map((s) => s.role), bindingExpiryIso);
-    if (!batched.ok) return { ok: false, reason: 'mint-failed' };
+    if (!batched.ok) return { ok: false, reason: 'mint-failed:' + String(batched.reason || 'unknown') };
 
     const transitioned = [];
     for (const spawn of codexGroup) {
@@ -209,7 +209,7 @@ function mintBatchedSupervisorStartAction(projectRoot, pair, repoId, worktreeId,
     resolvedNodePath(), bridgePath, actionId, coordRoot, sortedUniqueRoles, retainedServiceExpiry,
   );
   const mintResult = mintRoleLifecycleAction(projectRoot, actionId, 'supervisor-start', 'host-process', repoId, worktreeId, planDigest, policyDigest, generationId, null, payload, expiresAtIso);
-  if (!mintResult.ok) return { ok: false };
+  if (!mintResult.ok) return { ok: false, reason: 'action-mint-failed:' + String(mintResult.reason || 'unknown') };
   return { ok: true, actionId: mintResult.actionId, action: mintResult.action };
 }
 

@@ -112,6 +112,7 @@ function baseEnv(extra) {
     HOME: NEUTRAL_HOME,
     USERPROFILE: NEUTRAL_HOME,
     CODEX_CLI_PATH: '',
+    RUNTIME_ROLE_LIFECYCLE_TEST_DIAGNOSTICS: '1',
   }, extra || {});
   // os.homedir() follows USERPROFILE on Windows and HOME on POSIX. Tests use
   // HOME as their portable fixture input, so mirror an explicit override when
@@ -126,23 +127,36 @@ function baseEnv(extra) {
 
 function runCli(args, envExtra) {
   let stdout;
+  let stderr = '';
   let status = 0;
   try {
     stdout = execFileSync('node', [IMPL].concat(args), { encoding: 'utf8', env: baseEnv(envExtra) });
   } catch (err) {
     stdout = err.stdout;
+    stderr = err.stderr || '';
     status = err.status;
   }
   const lines = stdout.trim().split('\n');
-  const result = JSON.parse(lines[lines.length - 1]);
-  return { status, result };
+  let result;
+  try {
+    result = JSON.parse(lines[lines.length - 1]);
+  } catch (err) {
+    process.stderr.write('[runtime-role-lifecycle test] malformed stdout bytes='
+      + Buffer.byteLength(stdout, 'utf8') + ' boundary='
+      + JSON.stringify(stdout.slice(8160, 8240)) + '\n');
+    throw err;
+  }
+  if (result.detail_code === 'INTERNAL_ERROR' && stderr) process.stderr.write(stderr);
+  return { status, result, stderr };
 }
 
 function runCliAsync(args, envExtra) {
   return new Promise((resolve) => {
-    execFile('node', [IMPL].concat(args), { encoding: 'utf8', env: baseEnv(envExtra) }, (err, stdout) => {
+    execFile('node', [IMPL].concat(args), { encoding: 'utf8', env: baseEnv(envExtra) }, (err, stdout, stderr) => {
       const lines = stdout.trim().split('\n');
-      resolve({ status: err ? err.code : 0, result: JSON.parse(lines[lines.length - 1]) });
+      const result = JSON.parse(lines[lines.length - 1]);
+      if (result.detail_code === 'INTERNAL_ERROR' && stderr) process.stderr.write(stderr);
+      resolve({ status: err ? err.code : 0, result, stderr: stderr || '' });
     });
   });
 }

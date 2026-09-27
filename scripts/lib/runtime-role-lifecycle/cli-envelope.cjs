@@ -114,8 +114,16 @@ function makeResult(command, code, status, detailCode, bindings, actions, operat
  * @returns {never}
  */
 function emitAndExit(result) {
-  process.stdout.write(`${JSON.stringify(result)}\n`);
-  process.exit(result.code);
+  // `process.stdout.write()` is asynchronous when stdout is a pipe. Calling
+  // `process.exit()` immediately afterwards can truncate a large action
+  // envelope (observed at 8192 bytes on Node 20), leaving consumers with
+  // invalid JSON. Exit only after the stream confirms the complete line was
+  // flushed; `exitCode` also preserves the intended status if a host delays
+  // or replaces the callback during orderly stream shutdown.
+  process.exitCode = result.code;
+  process.stdout.write(`${JSON.stringify(result)}\n`, () => {
+    process.exit(result.code);
+  });
 }
 
 /**
