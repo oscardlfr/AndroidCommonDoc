@@ -86,8 +86,9 @@ function hookPayload(event: string, matcher: string, projectRoot: string): strin
 }
 
 /**
- * Execute every emitted hook registration through the same POSIX shell surface
- * Claude uses. Policy denials may legitimately return a non-zero status for a
+ * Execute every emitted hook registration through the POSIX shell surface
+ * Claude uses, resolving Bash from PATH so the smoke also runs under Git for
+ * Windows. Policy denials may legitimately return a non-zero status for a
  * synthetic event with no authority, so status alone is not asserted. Missing
  * scripts, Node module-loader failures, syntax failures and signals are always
  * installation failures and must fail this smoke.
@@ -100,7 +101,7 @@ function smokeEveryEmittedHook(projectRoot: string): void {
       for (const hook of block.hooks ?? []) {
         const command = String(hook.command);
         attempts.push(`${event}:${block.matcher}:${command}`);
-        const result = spawnSync("/bin/bash", ["-c", command], {
+        const result = spawnSync("bash", ["-c", command], {
           cwd: projectRoot,
           env: { ...process.env, CLAUDE_PROJECT_DIR: projectRoot, CLAUDE_WAVE_SLUG: "" },
           input: hookPayload(event, String(block.matcher), projectRoot),
