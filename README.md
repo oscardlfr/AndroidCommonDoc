@@ -26,7 +26,7 @@ Cross-platform scripts, AI agent skills (Claude Code + GitHub Copilot), 28 custo
 
 > **L1/L2 runtime consumers:** install and launch with the exact procedure in [Runtime consumer operations](docs/guides/runtime-consumer-operations.md), including required `claude --add-dir <L0-root>`, worktree behavior, safe-mode recovery, and atomic Claude host recertification.
 
-> **Consumer stabilization status:** [PR #251](https://github.com/oscardlfr/AndroidCommonDoc/pull/251) closed the 13 first-consumer install, worktree, launch, and recertification findings at `develop@c5ee193e`. Newly discovered evidence and safety gaps are prioritized separately in [BACKLOG.md](BACKLOG.md); they do not reopen that shipped closure. Until `BL-CONS-P0-01` lands, a requested coverage run with `modules_contributing=0` or only `no_xml` modules is **not** valid coverage evidence, even when its tests pass.
+> **Consumer stabilization status:** [PR #251](https://github.com/oscardlfr/AndroidCommonDoc/pull/251) closed the 13 first-consumer findings; [PR #252](https://github.com/oscardlfr/AndroidCommonDoc/pull/252) shipped the bounded follow-up at `develop@51598ec`. The four subsequently reproduced install/dispatch gaps are grouped into three temporary `PRUNEABLE` workstreams in [BACKLOG.md](BACKLOG.md); after merge they collapse to one shipped record rather than becoming an open-ended downstream patch stream. Until `BL-CONS-P0-01` lands, a requested coverage run with `modules_contributing=0` or only `no_xml` modules is **not** valid coverage evidence, even when its tests pass.
 
 > **Platform support:** All skills, agents, and Detekt rules work on both **Android-only (AGP 8.x)** and **KMP (AGP 9.0+)** projects. A small subset is KMP-only (noted below).
 
@@ -64,6 +64,7 @@ Development history beyond the CHANGELOG — summarized from memory + commit log
 | Wave | Date | PR | Theme |
 |------|------|----|-------|
 | First-consumer hardening | 2026-09-27 | [#251](https://github.com/oscardlfr/AndroidCommonDoc/pull/251) | Source-referenced runtime sync, worktree-safe paths, executable hooks, topology/YAML closure, exact recovery guidance, and atomic Claude host recertification. |
+| Consumer stabilization | 2026-09-27 | [#252](https://github.com/oscardlfr/AndroidCommonDoc/pull/252) | Manifest-aware portable hook launch, safe one-shot recovery, effort telemetry enforcement, atomic settings, ordinary/runtime composition, and deterministic adapter checks. |
 | Waves 3–7 | 2026-09-22 | [#250](https://github.com/oscardlfr/AndroidCommonDoc/pull/250) | Structured verdict authority, reproducible evidence, native push authority, class-aware wave control plane, and operational baseline closure. |
 | Wave 2 | 2026-09-21 | [#249](https://github.com/oscardlfr/AndroidCommonDoc/pull/249) | Repository-wide workflow input-boundary hardening. |
 | Wave 1 stabilization | 2026-09-20 | [#246](https://github.com/oscardlfr/AndroidCommonDoc/pull/246)–[#248](https://github.com/oscardlfr/AndroidCommonDoc/pull/248) | Portable runtime collaboration, macOS certificate/path stabilization, parallel Bats, and process-liveness fixes. |
@@ -244,7 +245,7 @@ Downstream projects maintain local copies of L0 skills via the **registry + mani
 /sync-l0 --runtime
 ```
 
-Runtime mode requires an existing manifest with exactly one local `L0` source whose role is `tooling`. It pins the toolkit commit and executable-content digest, installs the ten canonical runtime role definitions, and registers the closed hook matrix through a consumer-local launcher that resolves L0 from the manifest. Source-coupled runtime code is not copied into the application, and consumer settings contain no host-specific Node or toolkit path. The operation is idempotent; use `--runtime --dry-run` for a write-free preflight. Runtime mode rejects remote/ambiguous sources, local runtime-role or owned-hook conflicts, and all prune/force/migration flags.
+Runtime mode requires an existing manifest with exactly one local `L0` source whose role is `tooling`. It pins the toolkit commit and executable-content digest, installs the ten canonical runtime role definitions, routes runtime skills through `.claude/runtime/l0-entrypoint-launcher.cjs`, and registers source-coupled hooks through the separate consumer-local hook launcher. Both resolve L0 from the manifest. Source-coupled runtime code is not copied into the application, and consumer settings/skills contain no host-specific Node or toolkit path. A repeated no-op preserves manifest bytes and `last_synced`; mode-only drift in owned executable hooks is repaired. Use `--runtime --dry-run` for a write-free preflight. Runtime mode rejects remote/ambiguous sources, local runtime-role or owned-hook conflicts, and all prune/force/migration flags.
 
 ---
 

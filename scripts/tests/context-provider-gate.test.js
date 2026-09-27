@@ -23,6 +23,7 @@ const HOOK = path.resolve(__dirname, '../../.claude/hooks/context-provider-gate.
 const rll = require(path.resolve(__dirname, '../lib/runtime-role-lifecycle.cjs'));
 const rc = require(path.resolve(__dirname, '../lib/runtime-consultation.cjs'));
 const rbc = require(path.resolve(__dirname, '../lib/runtime-bridge-codex.cjs'));
+const runtimeProjectContext = require(path.resolve(__dirname, '../lib/runtime-project-context.cjs'));
 const {
   primeClaudeId01V2ActorProof,
   claudeId01V2SessionEvidenceFor,
@@ -4151,6 +4152,152 @@ function findRequesterBindingPathByActorInstanceId(proj, actorInstanceId) {
 }
 
 console.log('\nAll context-provider-gate tests passed.');
+
+// Consumer entrypoint commands are admitted only through the installed,
+// inventory-bound adapter.  A consumer cannot bypass that verification by
+// naming the sibling toolkit target directly; L0 self-use retains its direct
+// canonical surface.
+{
+  const consumer = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'acd-entrypoint-gate-consumer-')));
+  try {
+    assert.strictEqual(spawnSync('git', ['init', '--quiet', consumer]).status, 0);
+    fs.mkdirSync(path.join(consumer, '.planning', 'wave-entrypoint-gate'), { recursive: true });
+    fs.writeFileSync(path.join(consumer, '.planning', 'wave-entrypoint-gate', 'PLAN.md'), '# Entrypoint gate fixture\n');
+    const manifest = {
+      version: 2,
+      sources: [{ layer: 'L0', path: path.relative(consumer, path.resolve(__dirname, '../..')), role: 'tooling' }],
+      runtime: {
+        schema: 'runtime-consumer/v1', enabled: true, consumer_layer: 'L2',
+        toolkit_commit: 'a'.repeat(40), toolkit_content_sha256: 'b'.repeat(64),
+      },
+    };
+    fs.writeFileSync(path.join(consumer, 'l0-manifest.json'), JSON.stringify(manifest));
+    const intent = Buffer.from(JSON.stringify({ mode: 'dashboard' }), 'utf8').toString('base64url');
+    const direct = rll.renderPosixDirect([
+      'node', path.resolve(__dirname, '../lib/runtime-collaboration-entrypoints.cjs'), 'execute',
+      '--entrypoint', 'init-session', '--project-root', consumer, '--intent', intent,
+    ]);
+    const rejected = runHook({
+      tool_name: 'Bash', tool_input: { command: direct }, session_id: 'consumer-direct-entrypoint',
+      agent_type: '', agent_id: '', cwd: consumer,
+    }, { CLAUDE_PROJECT_DIR: consumer });
+    assertPreToolUseDeny(rejected, 'CONSUMER-ENTRYPOINT-DIRECT-BYPASS');
+    assert.match(
+      JSON.parse(rejected.stdout).hookSpecificOutput.permissionDecisionReason,
+      /must invoke its installed L0 entrypoint launcher/,
+      'a consumer direct-target attempt must be rejected for the adapter bypass itself',
+    );
+
+    const legacyRelative = rll.renderPosixDirect([
+      'node', 'scripts/lib/runtime-collaboration-entrypoints.cjs', 'execute',
+      '--entrypoint', 'init-session', '--project-root', consumer, '--intent', intent,
+    ]);
+    const rejectedLegacy = runHook({
+      tool_name: 'Bash', tool_input: { command: legacyRelative }, session_id: 'consumer-legacy-entrypoint',
+      agent_type: '', agent_id: '', cwd: consumer,
+    }, { CLAUDE_PROJECT_DIR: consumer });
+    assertPreToolUseDeny(rejectedLegacy, 'CONSUMER-ENTRYPOINT-LEGACY-RELATIVE-BYPASS');
+    assert.match(
+      JSON.parse(rejectedLegacy.stdout).hookSpecificOutput.permissionDecisionReason,
+      /legacy relative entrypoint is unsupported; invoke its installed L0 entrypoint launcher/,
+      'the old consumer-relative command must fail closed instead of falling through to ordinary Bash approval',
+    );
+
+    const inventory = runtimeProjectContext.computeRuntimeToolkitInventory(path.resolve(__dirname, '../..'));
+    assert.strictEqual(inventory.ok, true, 'entrypoint gate fixture requires a valid toolkit inventory');
+    manifest.runtime.toolkit_commit = spawnSync('git', ['rev-parse', 'HEAD'], {
+      cwd: path.resolve(__dirname, '../..'), encoding: 'utf8',
+    }).stdout.trim();
+    manifest.runtime.toolkit_content_sha256 = inventory.digest;
+    fs.writeFileSync(path.join(consumer, 'l0-manifest.json'), JSON.stringify(manifest));
+    for (const relative of [
+      '.claude/runtime/l0-entrypoint-launcher.cjs',
+      '.claude/hooks/l0-source-hook-launcher.js',
+      '.claude/hooks/detekt-post-write.sh',
+      '.claude/hooks/detekt-pre-commit.sh',
+      '.claude/registry/wave-topology.yaml',
+    ]) {
+      const destination = path.join(consumer, relative);
+      fs.mkdirSync(path.dirname(destination), { recursive: true });
+      fs.copyFileSync(path.join(path.resolve(__dirname, '../..'), relative), destination);
+      if (relative.endsWith('.sh')) fs.chmodSync(destination, 0o755);
+    }
+    for (const role of runtimeProjectContext.ROLE_TEMPLATES) {
+      const destination = path.join(consumer, '.claude/agents', role + '.md');
+      fs.mkdirSync(path.dirname(destination), { recursive: true });
+      fs.copyFileSync(path.join(path.resolve(__dirname, '../..'), '.claude/agents', role + '.md'), destination);
+    }
+    const sourceReferenced = new Set([
+      'agent-spawn-execution-gate.js', 'bash-cli-spawn-gate.js', 'context-provider-gate.js',
+      'premature-execution-gate.js', 'runtime-consultation-target-gate.js',
+      'runtime-host-boundary.js', 'runtime-host-session-start.js', 'subagent-start-context-bundle.js',
+    ]);
+    const hooks = {};
+    for (const [event, matcher, file, timeout] of runtimeProjectContext.HOOK_MATRIX) {
+      if (!hooks[event]) hooks[event] = [];
+      let block = hooks[event].find((candidate) => candidate.matcher === matcher);
+      if (!block) { block = { matcher, hooks: [] }; hooks[event].push(block); }
+      const hookCommand = sourceReferenced.has(file)
+        ? `node "$CLAUDE_PROJECT_DIR"/.claude/hooks/l0-source-hook-launcher.js ${file}`
+        : file.endsWith('.sh')
+          ? `"$CLAUDE_PROJECT_DIR"/.claude/hooks/${file}`
+          : `node "$CLAUDE_PROJECT_DIR"/.claude/hooks/${file}`;
+      block.hooks.push({ type: 'command', command: hookCommand, timeout });
+    }
+    fs.writeFileSync(path.join(consumer, '.claude/settings.json'), JSON.stringify({ hooks }));
+    const launcherCommand = rll.renderPosixDirect([
+      'node', path.join(consumer, '.claude/runtime/l0-entrypoint-launcher.cjs'), 'execute',
+      '--entrypoint', 'monitor-docs', '--project-root', consumer,
+      '--intent', Buffer.from(JSON.stringify({ scope: 'all' }), 'utf8').toString('base64url'),
+    ]);
+    const admittedLauncher = runHook({
+      tool_name: 'Bash', tool_input: { command: launcherCommand }, session_id: 'consumer-launcher-entrypoint',
+      agent_type: '', agent_id: '', cwd: consumer,
+    }, { CLAUDE_PROJECT_DIR: consumer });
+    assertPreToolUseDeny(admittedLauncher, 'CONSUMER-ENTRYPOINT-LAUNCHER-QUALIFIED');
+    assert.match(
+      JSON.parse(admittedLauncher.stdout).hookSpecificOutput.permissionDecisionReason,
+      /genuine claude-sonnet-5 host composition evidence is unavailable/,
+      'a qualified launcher must pass adapter verification and reach ordinary host-composition admission',
+    );
+
+    const l0Root = path.resolve(__dirname, '../..');
+    const l0Direct = rll.renderPosixDirect([
+      'node', path.resolve(__dirname, '../lib/runtime-collaboration-entrypoints.cjs'), 'execute',
+      '--entrypoint', 'init-session', '--project-root', l0Root, '--intent', intent,
+    ]);
+    const retained = runHook({
+      tool_name: 'Bash', tool_input: { command: l0Direct }, session_id: 'l0-direct-entrypoint',
+      agent_type: '', agent_id: '', cwd: l0Root,
+    }, { CLAUDE_PROJECT_DIR: l0Root });
+    const retainedBody = retained.stdout.trim() ? JSON.parse(retained.stdout) : null;
+    assert.ok(
+      !retainedBody || !/must invoke its installed L0 entrypoint launcher/.test(
+        retainedBody.hookSpecificOutput && retainedBody.hookSpecificOutput.permissionDecisionReason || '',
+      ),
+      'L0 self-use must retain the canonical direct target instead of being classified as a consumer bypass',
+    );
+
+    const l0Relative = rll.renderPosixDirect([
+      'node', 'scripts/lib/runtime-collaboration-entrypoints.cjs', 'execute',
+      '--entrypoint', 'init-session', '--project-root', l0Root, '--intent', intent,
+    ]);
+    const retainedRelative = runHook({
+      tool_name: 'Bash', tool_input: { command: l0Relative }, session_id: 'l0-relative-entrypoint',
+      agent_type: '', agent_id: '', cwd: l0Root,
+    }, { CLAUDE_PROJECT_DIR: l0Root });
+    const retainedRelativeBody = retainedRelative.stdout.trim() ? JSON.parse(retainedRelative.stdout) : null;
+    assert.ok(
+      !retainedRelativeBody || !/legacy relative entrypoint is unsupported/.test(
+        retainedRelativeBody.hookSpecificOutput && retainedRelativeBody.hookSpecificOutput.permissionDecisionReason || '',
+      ),
+      'L0 self-use must retain its legacy relative surface while consumers fail closed',
+    );
+    console.log('CONSUMER-ENTRYPOINT direct and legacy-relative bypasses rejected while L0 self-use is retained: PASS');
+  } finally {
+    fs.rmSync(consumer, { recursive: true, force: true });
+  }
+}
 
 // Sixteenth correction RED: the four newly frozen lifecycle entrypoints must
 // be owned by this hook.  These cases begin at the real PreToolUse surface and

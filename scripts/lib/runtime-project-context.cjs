@@ -9,6 +9,7 @@ const TOOLKIT_ROOT = fs.realpathSync(path.resolve(__dirname, '../..'));
 const HEX40 = /^[0-9a-f]{40}$/;
 const HEX64 = /^[0-9a-f]{64}$/;
 const CORE_HOOK_FILES = Object.freeze([
+  'detekt-post-write.sh', 'detekt-pre-commit.sh',
   'context-provider-gate.js', 'context-provider-write-gate.js',
   'runtime-consultation-target-gate.js', 'agent-spawn-execution-gate.js',
   'subagent-start-context-bundle.js', 'runtime-host-boundary.js',
@@ -17,13 +18,21 @@ const CORE_HOOK_FILES = Object.freeze([
 ]);
 const SOURCE_REFERENCED_HOOK_FILES = new Set([
   'agent-spawn-execution-gate.js', 'context-provider-gate.js',
+  'bash-cli-spawn-gate.js',
   'premature-execution-gate.js', 'runtime-consultation-target-gate.js',
   'runtime-host-boundary.js', 'runtime-host-session-start.js',
   'subagent-start-context-bundle.js',
 ]);
 const CONSUMER_FILES = Object.freeze([
+  '.claude/runtime/l0-entrypoint-launcher.cjs',
   '.claude/hooks/l0-source-hook-launcher.js',
+  '.claude/hooks/detekt-post-write.sh',
+  '.claude/hooks/detekt-pre-commit.sh',
   '.claude/registry/wave-topology.yaml',
+]);
+const EXECUTABLE_CONSUMER_FILES = new Set([
+  '.claude/hooks/detekt-post-write.sh',
+  '.claude/hooks/detekt-pre-commit.sh',
 ]);
 const ROLE_TEMPLATES = Object.freeze([
   'arch-platform', 'arch-testing', 'arch-integration', 'context-provider',
@@ -31,6 +40,8 @@ const ROLE_TEMPLATES = Object.freeze([
   'quality-gater', 'planner',
 ]);
 const HOOK_MATRIX = Object.freeze([
+  ['PostToolUse', 'Write|Edit', 'detekt-post-write.sh', 30],
+  ['PreToolUse', 'Bash', 'detekt-pre-commit.sh', 60],
   ['SessionStart', 'startup', 'runtime-host-session-start.js', 20],
   ['PreToolUse', 'Write|Edit|Bash', 'premature-execution-gate.js', 5],
   ['PreToolUse', 'Bash', 'bash-cli-spawn-gate.js', 5],
@@ -178,8 +189,7 @@ function computeRuntimeToolkitInventory(toolkitRoot) {
     '.claude/settings.json', '.claude/model-profiles.json', 'setup/claude-host-contract.json',
     'mcp-server/package-lock.json',
     ...CORE_HOOK_FILES.map((file) => `.claude/hooks/${file}`),
-    '.claude/hooks/l0-source-hook-launcher.js',
-    '.claude/registry/wave-topology.yaml',
+    ...CONSUMER_FILES,
     ...ROLE_TEMPLATES.map((role) => `.claude/agents/${role}.md`),
     ...['init-session', 'resume-work', 'work', 'ingest-content', 'monitor-docs'].map((skill) => `skills/${skill}/SKILL.md`),
     ...['init-session', 'resume-work', 'work', 'ingest-content', 'monitor-docs'].map((command) => `.claude/commands/${command}.md`),
@@ -197,10 +207,12 @@ function computeRuntimeToolkitInventory(toolkitRoot) {
       const absolute = path.join(root, relative);
       const stat = fs.lstatSync(absolute);
       if (!stat.isFile() || stat.isSymbolicLink()) return fail('runtime-toolkit-inventory-invalid');
+      const executable = EXECUTABLE_CONSUMER_FILES.has(relative);
       entries.push({
         relative_path: relative.replace(/\\/g, '/'),
         kind: 'file',
         sha256: crypto.createHash('sha256').update(fs.readFileSync(absolute)).digest('hex'),
+        ...(executable ? { mode: process.platform === 'win32' ? 0o755 : stat.mode & 0o777 } : {}),
       });
     }
   } catch { return fail('runtime-toolkit-inventory-invalid'); }
@@ -214,7 +226,29 @@ function computeRuntimeToolkitInventory(toolkitRoot) {
 function expectedHookCommand(_toolkitRoot, file) {
   return SOURCE_REFERENCED_HOOK_FILES.has(file)
     ? `node "$CLAUDE_PROJECT_DIR"/.claude/hooks/l0-source-hook-launcher.js ${file}`
-    : `node "$CLAUDE_PROJECT_DIR"/.claude/hooks/${file}`;
+    : file.endsWith('.sh')
+      ? `"$CLAUDE_PROJECT_DIR"/.claude/hooks/${file}`
+      : `node "$CLAUDE_PROJECT_DIR"/.claude/hooks/${file}`;
+}
+
+function isOwnedHookCommand(command) {
+  return CORE_HOOK_FILES.some((file) => {
+    if (command === expectedHookCommand(TOOLKIT_ROOT, file) ||
+        command === `node "$CLAUDE_PROJECT_DIR"/.claude/hooks/${file}` ||
+        command === `node "$CLAUDE_PROJECT_DIR"/.claude/hooks/l0-source-hook-launcher.js ${file}` ||
+        command === `"$ANDROID_COMMON_DOC"/.claude/hooks/${file}` ||
+        command === `"$ANDROID_COMMON_DOC/.claude/hooks/${file}"`) return true;
+    const match = command.match(/^("(?:[^"\\]|\\.)*")\s+("(?:[^"\\]|\\.)*")$/);
+    if (!match) return false;
+    try {
+      const executable = JSON.parse(match[1]);
+      const target = JSON.parse(match[2]);
+      return typeof executable === 'string' && typeof target === 'string' &&
+        /^node(?:\.exe)?$/i.test(path.posix.basename(executable.replace(/\\/g, '/'))) &&
+        (path.isAbsolute(target) || /^[A-Za-z]:\//.test(target.replace(/\\/g, '/'))) &&
+        target.replace(/\\/g, '/').endsWith(`/.claude/hooks/${file}`);
+    } catch { return false; }
+  });
 }
 
 function verifyRuntimeConsumerInstallation(consumerRoot, options) {
@@ -240,7 +274,7 @@ function verifyRuntimeConsumerInstallation(consumerRoot, options) {
         if (!hook || typeof hook !== 'object' || hook.type !== 'command' || typeof hook.command !== 'string') continue;
         const key = JSON.stringify([event, block.matcher, hook.command, hook.timeout]);
         if (desired.has(key)) desired.set(key, desired.get(key) + 1);
-        else if (CORE_HOOK_FILES.some((file) => hook.command.includes(file))) return fail('runtime-hook-registration-conflict');
+        else if (isOwnedHookCommand(hook.command)) return fail('runtime-hook-registration-conflict');
       }
     }
   }
@@ -257,6 +291,10 @@ function verifyRuntimeConsumerInstallation(consumerRoot, options) {
       const source = fs.readFileSync(path.join(context.toolkitRoot, relative));
       const consumer = fs.readFileSync(path.join(context.consumerRoot, relative));
       if (!source.equals(consumer)) return fail('runtime-consumer-file-mismatch');
+      if (process.platform !== 'win32' && EXECUTABLE_CONSUMER_FILES.has(relative) &&
+          (fs.statSync(path.join(context.consumerRoot, relative)).mode & 0o777) !== 0o755) {
+        return fail('runtime-consumer-file-mode-mismatch');
+      }
     } catch { return fail('runtime-consumer-file-missing'); }
   }
   if (options && options.verifyContent === true) {

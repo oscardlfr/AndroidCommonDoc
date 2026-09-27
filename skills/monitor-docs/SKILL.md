@@ -33,10 +33,17 @@ Additional skill-specific arguments (not in params.json):
 Monitoring enters through the shared product flow:
 
 ```bash
-'<resolved-node>' '<toolkit-root>/scripts/lib/runtime-collaboration-entrypoints.cjs' 'execute' '--entrypoint' 'monitor-docs' '--project-root' '<consumer-root>' '--intent' '<base64url canonical JSON>'
+'<resolved-node>' '<consumer-root>/.claude/runtime/l0-entrypoint-launcher.cjs' 'execute' '--entrypoint' 'monitor-docs' '--project-root' '<consumer-root>' '--intent' '<base64url canonical JSON>'
 ```
 
-The Bash call must be one standalone direct Node command. For L0, both roots are the current repository. For a runtime consumer, derive `toolkit-root` only from the single local `layer=L0, role=tooling` manifest source and keep `consumer-root` as the literal absolute application repository. Use the resolved Node executable; do not use environment fallbacks, command substitution, wrappers, pipes, redirects, or command separators.
+The Bash call must be one standalone direct Node command. `consumer-root` is the
+literal absolute repository root for L0, L1, and L2; L0 installs and uses the same
+consumer-local launcher as downstream projects. The launcher alone resolves and
+verifies the manifest-pinned L0 runtime. Use the resolved Node executable; never
+resolve or call the toolkit entrypoint directly, and do not use `$PWD`, `$(pwd)`,
+environment fallbacks, command substitution, wrappers, pipes, redirects, or command
+separators. A missing launcher or rejected pin is a closed failure: refresh ordinary
+sync and runtime sync instead of guessing a toolkit path.
 
 The decoded intent is exactly `{"scope":"<safe scope>"}`. The result contains observations and proposals only; it never converts a proposal into approval or writes documentation. Surface `BLOCKED|UNAVAILABLE|FAILED` unchanged.
 

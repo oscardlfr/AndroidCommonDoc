@@ -16,7 +16,8 @@
  */
 
 import { z } from "zod";
-import { readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
+import path from "node:path";
 
 // ---------------------------------------------------------------------------
 // Layer source schema (v2)
@@ -198,7 +199,23 @@ export async function readManifest(filePath: string): Promise<Manifest> {
 
 export async function writeManifest(filePath: string, manifest: Manifest): Promise<void> {
   const json = JSON.stringify(manifest, null, 2) + "\n";
-  await writeFile(filePath, json, "utf-8");
+  const directory = path.dirname(filePath);
+  await mkdir(directory, { recursive: true });
+  const temporaryPath = path.join(
+    directory,
+    `.l0-manifest.json.${process.pid}.${Date.now()}.${Math.random().toString(16).slice(2)}.tmp`,
+  );
+  try {
+    await writeFile(temporaryPath, json, "utf-8");
+    await rename(temporaryPath, filePath);
+  } catch (error) {
+    try {
+      await unlink(temporaryPath);
+    } catch {
+      // The temporary file may not exist or may already have been renamed.
+    }
+    throw error;
+  }
 }
 
 // ---------------------------------------------------------------------------

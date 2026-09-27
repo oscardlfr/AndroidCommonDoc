@@ -1,10 +1,11 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { mkdtemp, rm, mkdir, writeFile, readFile } from "node:fs/promises";
+import { mkdtemp, rm, mkdir, writeFile, readFile, chmod, stat, readdir } from "node:fs/promises";
 import { join, relative, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import { spawnSync } from "node:child_process";
 import { createRequire } from "node:module";
-import { syncHooks, installRuntimeConsumer } from "../../../src/sync/sync-engine.js";
+import { createHash } from "node:crypto";
+import { syncHooks, installRuntimeConsumer, syncL0 } from "../../../src/sync/sync-engine.js";
 
 const REAL_L0_ROOT = resolve(import.meta.dirname, "../../../..");
 const localRequire = createRequire(import.meta.url);
@@ -105,15 +106,72 @@ describe("syncHooks", () => {
   });
 
   it("keeps hooks with L0-relative imports source-referenced", async () => {
-    await createL0Root(l0Root, ["push-authorization-gate.js", "standalone.js"]);
+    await createL0Root(l0Root, ["push-authorization-gate.js", "bash-cli-spawn-gate.js", "standalone.js"]);
     await createProjectRoot(projectRoot);
 
     const result = await syncHooks(l0Root, projectRoot, []);
 
     expect(result.skipped).toContain("push-authorization-gate.js");
+    expect(result.skipped).toContain("bash-cli-spawn-gate.js");
     expect(result.copied).toContain("standalone.js");
     await expect(readFile(join(projectRoot, ".claude", "hooks", "push-authorization-gate.js"), "utf8"))
       .rejects.toThrow();
+  });
+
+  it("manages the two Detekt shell hooks by exact bytes and repairs POSIX mode without overwriting conflicts", async () => {
+    await createL0Root(l0Root, ["detekt-post-write.sh", "detekt-pre-commit.sh"]);
+    await createProjectRoot(projectRoot);
+    const post = join(projectRoot, ".claude", "hooks", "detekt-post-write.sh");
+    const pre = join(projectRoot, ".claude", "hooks", "detekt-pre-commit.sh");
+    await writeFile(post, "// hook: detekt-post-write.sh\n", "utf8");
+    await writeFile(pre, "consumer-owned\n", "utf8");
+    await chmod(post, 0o644);
+    await chmod(pre, 0o644);
+
+    const result = await syncHooks(l0Root, projectRoot);
+
+    if (process.platform !== "win32") {
+      expect(result.repaired).toContain("detekt-post-write.sh");
+      expect((await stat(post)).mode & 0o777).toBe(0o755);
+    }
+    expect(result.conflicts).toContain("detekt-pre-commit.sh");
+    expect(await readFile(pre, "utf8")).toBe("consumer-owned\n");
+    if (process.platform !== "win32") expect((await stat(pre)).mode & 0o777).toBe(0o644);
+  });
+
+  it("reports Detekt mode repair in dry-run without changing bytes or mode", async () => {
+    await createL0Root(l0Root, ["detekt-post-write.sh"]);
+    await createProjectRoot(projectRoot);
+    const destination = join(projectRoot, ".claude", "hooks", "detekt-post-write.sh");
+    await writeFile(destination, "// hook: detekt-post-write.sh\n", "utf8");
+    await chmod(destination, 0o644);
+
+    const result = await syncHooks(l0Root, projectRoot, [], true);
+    if (process.platform !== "win32") {
+      expect(result.repaired).toEqual(["detekt-post-write.sh"]);
+      expect((await stat(destination)).mode & 0o777).toBe(0o644);
+    }
+    expect(await readFile(destination, "utf8")).toBe("// hook: detekt-post-write.sh\n");
+  });
+
+  it("keeps every hook with an external relative dependency source-referenced", async () => {
+    await createProjectRoot(projectRoot);
+    const hookDir = join(REAL_L0_ROOT, ".claude", "hooks");
+    const externallyCoupled: string[] = [];
+    for (const filename of (await readdir(hookDir)).filter((name) => name.endsWith(".js"))) {
+      const source = await readFile(join(hookDir, filename), "utf8");
+      if (/require\(["']\.\.\/\.\.\//.test(source) || /from\s+["']\.\.\/\.\.\//.test(source) ||
+          /path\.join\(__dirname,\s*["']\.\.["'],\s*["']\.\.["']/.test(source)) {
+        externallyCoupled.push(filename);
+      }
+    }
+    expect(externallyCoupled).toContain("bash-cli-spawn-gate.js");
+
+    const result = await syncHooks(REAL_L0_ROOT, projectRoot);
+    for (const filename of externallyCoupled) {
+      expect(result.skipped, filename).toContain(filename);
+      await expect(readFile(join(projectRoot, ".claude", "hooks", filename))).rejects.toThrow();
+    }
   });
 });
 
@@ -137,7 +195,7 @@ describe("source-referenced runtime installation", () => {
     const first = await installRuntimeConsumer(projectRoot, REAL_L0_ROOT);
     expect(first.ok).toBe(true);
     expect(first.consumerLayer).toBe("L2");
-    expect(first.registrations).toBe(14);
+    expect(first.registrations).toBe(16);
     expect(first.toolkitContentDigest).toMatch(/^[0-9a-f]{64}$/);
     const inventoryPaths = new Set(first.inventory?.map((entry) => entry.relative_path));
     expect(inventoryPaths.has("scripts/lib/runtime-consultation.cjs")).toBe(true);
@@ -154,6 +212,10 @@ describe("source-referenced runtime installation", () => {
     expect(inventoryPaths.has("scripts/lib/verdict-artifact-store.cjs")).toBe(true);
     expect(inventoryPaths.has(".claude/registry/wave-topology.yaml")).toBe(true);
     expect(inventoryPaths.has(".claude/hooks/l0-source-hook-launcher.js")).toBe(true);
+    expect(first.inventory?.find((entry) => entry.relative_path === ".claude/hooks/detekt-pre-commit.sh")?.mode)
+      .toBe(0o755);
+    expect(first.inventory?.find((entry) => entry.relative_path === ".claude/hooks/l0-source-hook-launcher.js")?.mode)
+      .toBeUndefined();
     const verifierInventory = runtimeContext.computeRuntimeToolkitInventory(REAL_L0_ROOT);
     expect(verifierInventory.ok).toBe(true);
     expect(first.inventory).toEqual(verifierInventory.entries);
@@ -182,13 +244,156 @@ describe("source-referenced runtime installation", () => {
       .toBe(await readFile(join(REAL_L0_ROOT, ".claude", "registry", "wave-topology.yaml"), "utf8"));
     expect(manifest.checksums[".claude/registry/wave-topology.yaml"]).toMatch(/^sha256:[0-9a-f]{64}$/);
     expect(manifest.checksums[".claude/hooks/l0-source-hook-launcher.js"]).toMatch(/^sha256:[0-9a-f]{64}$/);
+    for (const file of ["detekt-post-write.sh", "detekt-pre-commit.sh"]) {
+      const relative = `.claude/hooks/${file}`;
+      expect(await readFile(join(projectRoot, relative), "utf8")).toBe(await readFile(join(REAL_L0_ROOT, relative), "utf8"));
+      expect(manifest.checksums[relative]).toMatch(/^sha256:[0-9a-f]{64}$/);
+      if (process.platform !== "win32") expect((await stat(join(projectRoot, relative))).mode & 0o777).toBe(0o755);
+    }
 
     const bytesBefore = await readFile(join(projectRoot, ".claude", "settings.json"), "utf8");
+    const manifestBytesBefore = await readFile(join(projectRoot, "l0-manifest.json"), "utf8");
     const second = await installRuntimeConsumer(projectRoot, REAL_L0_ROOT);
     expect(second.ok).toBe(true);
     expect(second.addedRoles).toEqual([]);
     expect(second.migratedRoles).toEqual([]);
+    expect(second.manifestChanged).toBe(false);
     expect(await readFile(join(projectRoot, ".claude", "settings.json"), "utf8")).toBe(bytesBefore);
+    expect(await readFile(join(projectRoot, "l0-manifest.json"), "utf8")).toBe(manifestBytesBefore);
+  });
+
+  it("reports a runtime mode-only repair without rewriting the manifest", async () => {
+    const installed = await installRuntimeConsumer(projectRoot, REAL_L0_ROOT);
+    expect(installed.ok).toBe(true);
+    const manifestPath = join(projectRoot, "l0-manifest.json");
+    const hookPath = join(projectRoot, ".claude", "hooks", "detekt-pre-commit.sh");
+    const manifestBefore = await readFile(manifestPath, "utf8");
+    await chmod(hookPath, 0o644);
+
+    const dryRun = await installRuntimeConsumer(projectRoot, REAL_L0_ROOT, { dryRun: true });
+    expect(dryRun.ok).toBe(true);
+    expect(dryRun.manifestChanged).toBe(false);
+    if (process.platform !== "win32") {
+      expect(dryRun.repairedExecutables).toEqual([".claude/hooks/detekt-pre-commit.sh"]);
+      expect((await stat(hookPath)).mode & 0o777).toBe(0o644);
+    }
+
+    const repaired = await installRuntimeConsumer(projectRoot, REAL_L0_ROOT);
+
+    expect(repaired.ok).toBe(true);
+    expect(repaired.manifestChanged).toBe(false);
+    if (process.platform !== "win32") {
+      expect(repaired.repairedExecutables).toEqual([".claude/hooks/detekt-pre-commit.sh"]);
+      expect((await stat(hookPath)).mode & 0o777).toBe(0o755);
+    }
+    expect(await readFile(manifestPath, "utf8")).toBe(manifestBefore);
+  });
+
+  it("keeps ordinary-runtime-ordinary-runtime manifest bytes stable", async () => {
+    const firstOrdinary = await syncL0(projectRoot, REAL_L0_ROOT);
+    expect(firstOrdinary.errors).toEqual([]);
+    expect((await syncL0(projectRoot, REAL_L0_ROOT, { runtime: true })).errors).toEqual([]);
+    const firstRuntime = await installRuntimeConsumer(projectRoot, REAL_L0_ROOT);
+    expect(firstRuntime.ok).toBe(true);
+    const manifestPath = join(projectRoot, "l0-manifest.json");
+    const stableBytes = await readFile(manifestPath, "utf8");
+
+    const secondOrdinary = await syncL0(projectRoot, REAL_L0_ROOT);
+    expect(secondOrdinary.errors).toEqual([]);
+    expect(secondOrdinary.manifestChanged).toBe(false);
+    expect(await readFile(manifestPath, "utf8")).toBe(stableBytes);
+
+    expect((await syncL0(projectRoot, REAL_L0_ROOT, { runtime: true })).errors).toEqual([]);
+    const secondRuntime = await installRuntimeConsumer(projectRoot, REAL_L0_ROOT);
+    expect(secondRuntime.ok).toBe(true);
+    expect(secondRuntime.manifestChanged).toBe(false);
+    expect(await readFile(manifestPath, "utf8")).toBe(stableBytes);
+  });
+
+  it("does not preserve unknown or forged runtime-owned checksums", async () => {
+    expect((await installRuntimeConsumer(projectRoot, REAL_L0_ROOT)).ok).toBe(true);
+    const manifestPath = join(projectRoot, "l0-manifest.json");
+    const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
+    manifest.checksums[".claude/registry/wave-topology.yaml"] = `sha256:${"0".repeat(64)}`;
+    manifest.checksums[".claude/runtime/foreign.bin"] = `sha256:${"1".repeat(64)}`;
+    await writeFile(manifestPath, JSON.stringify(manifest, null, 2) + "\n");
+
+    const ordinary = await syncL0(projectRoot, REAL_L0_ROOT);
+    expect(ordinary.errors).toEqual([]);
+    const reconciled = JSON.parse(await readFile(manifestPath, "utf8"));
+    expect(reconciled.checksums[".claude/registry/wave-topology.yaml"]).toBeUndefined();
+    expect(reconciled.checksums[".claude/runtime/foreign.bin"]).toBeUndefined();
+  });
+
+  it("preserves a verified previous runtime asset through ordinary sync so runtime can upgrade it", async () => {
+    expect((await installRuntimeConsumer(projectRoot, REAL_L0_ROOT)).ok).toBe(true);
+    const manifestPath = join(projectRoot, "l0-manifest.json");
+    const relativeAsset = ".claude/runtime/l0-entrypoint-launcher.cjs";
+    const assetPath = join(projectRoot, relativeAsset);
+    const previousBytes = "// previous qualified runtime launcher\n";
+    await writeFile(assetPath, previousBytes, "utf8");
+    const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
+    const previousChecksum = `sha256:${createHash("sha256").update(previousBytes).digest("hex")}`;
+    manifest.checksums[relativeAsset] = previousChecksum;
+    manifest.runtime.toolkit_commit = "0".repeat(40);
+    manifest.runtime.toolkit_content_sha256 = "1".repeat(64);
+    await writeFile(manifestPath, JSON.stringify(manifest, null, 2) + "\n");
+
+    const ordinary = await syncL0(projectRoot, REAL_L0_ROOT);
+    expect(ordinary.errors).toEqual([]);
+    const afterOrdinary = JSON.parse(await readFile(manifestPath, "utf8"));
+    expect(afterOrdinary.checksums[relativeAsset]).toBe(previousChecksum);
+    expect(await readFile(assetPath, "utf8")).toBe(previousBytes);
+
+    const upgraded = await installRuntimeConsumer(projectRoot, REAL_L0_ROOT);
+    expect(upgraded.ok).toBe(true);
+    expect(await readFile(assetPath, "utf8")).toBe(
+      await readFile(join(REAL_L0_ROOT, relativeAsset), "utf8"),
+    );
+    const upgradedManifest = JSON.parse(await readFile(manifestPath, "utf8"));
+    expect(upgradedManifest.checksums[relativeAsset]).not.toBe(previousChecksum);
+    expect(upgradedManifest.runtime.toolkit_commit).not.toBe("0".repeat(40));
+    expect(upgradedManifest.runtime.toolkit_content_sha256).not.toBe("1".repeat(64));
+  });
+
+  it("drops missing and drifted assets but preserves content ownership across mode drift", async () => {
+    expect((await installRuntimeConsumer(projectRoot, REAL_L0_ROOT)).ok).toBe(true);
+    const manifestPath = join(projectRoot, "l0-manifest.json");
+    const missing = ".claude/runtime/l0-entrypoint-launcher.cjs";
+    const drifted = ".claude/hooks/detekt-pre-commit.sh";
+    const wrongMode = ".claude/hooks/detekt-post-write.sh";
+    await rm(join(projectRoot, missing));
+    await writeFile(join(projectRoot, drifted), "#!/bin/sh\necho drift\n", "utf8");
+    await chmod(join(projectRoot, drifted), 0o755);
+    await chmod(join(projectRoot, wrongMode), 0o644);
+
+    const ordinaryRuntimePhase = await syncL0(projectRoot, REAL_L0_ROOT, { runtime: true });
+    expect(ordinaryRuntimePhase.errors).toEqual([]);
+    const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
+    expect(manifest.checksums[missing]).toBeUndefined();
+    expect(manifest.checksums[drifted]).toBeUndefined();
+    expect(manifest.checksums[wrongMode]).toMatch(/^sha256:[0-9a-f]{64}$/);
+  });
+
+  it("CLI runtime mode repairs 0644 without rewriting a content-stable manifest", async () => {
+    const cli = join(REAL_L0_ROOT, "mcp-server", "build", "sync", "sync-l0-cli.js");
+    const args = [cli, "--project-root", projectRoot, "--l0-root", REAL_L0_ROOT, "--runtime"];
+    const initial = spawnSync(process.execPath, args, { encoding: "utf8", timeout: 60000 });
+    expect(initial.status, initial.stderr || initial.stdout).toBe(0);
+    const manifestPath = join(projectRoot, "l0-manifest.json");
+    const hookPath = join(projectRoot, ".claude", "hooks", "detekt-pre-commit.sh");
+    const manifestBefore = await readFile(manifestPath, "utf8");
+    await chmod(hookPath, 0o644);
+
+    const result = spawnSync(process.execPath, args, { encoding: "utf8", timeout: 60000 });
+
+    expect(result.status, result.stderr || result.stdout).toBe(0);
+    if (process.platform !== "win32") {
+      expect(result.stdout).toContain("Runtime executable mode repaired: .claude/hooks/detekt-pre-commit.sh");
+      expect((await stat(hookPath)).mode & 0o777).toBe(0o755);
+    }
+    expect(result.stdout).toContain("Manifest unchanged: l0-manifest.json (no effective changes)");
+    expect(await readFile(manifestPath, "utf8")).toBe(manifestBefore);
   });
 
   it("runs the wave control plane from a clean consumer with no consumer mcp-server", async () => {
@@ -232,6 +437,22 @@ describe("source-referenced runtime installation", () => {
     expect(conflict.ok).toBe(false);
     expect(conflict.reason).toBe("runtime-role-conflict:arch-platform");
     expect(await readFile(join(projectRoot, ".claude", "agents", "arch-platform.md"), "utf8")).toBe(roleBefore);
+  });
+
+  it("preserves arbitrary commands that only mention an owned hook basename", async () => {
+    const arbitrary = 'node -e "console.log(\'bash-cli-spawn-gate.js\')"';
+    await mkdir(join(projectRoot, ".claude"), { recursive: true });
+    await writeFile(join(projectRoot, ".claude", "settings.json"), JSON.stringify({
+      hooks: { PreToolUse: [{ matcher: "Bash", hooks: [{ type: "command", command: arbitrary, timeout: 9 }] }] },
+    }, null, 2) + "\n");
+
+    const installed = await installRuntimeConsumer(projectRoot, REAL_L0_ROOT);
+    expect(installed.ok).toBe(true);
+    const settings = JSON.parse(await readFile(join(projectRoot, ".claude", "settings.json"), "utf8"));
+    const commands = Object.values(settings.hooks).flatMap((blocks: any) =>
+      blocks.flatMap((block: any) => block.hooks.map((hook: any) => hook.command)));
+    expect(commands.filter((command: string) => command === arbitrary)).toHaveLength(1);
+    expect(runtimeContext.verifyRuntimeConsumerInstallation(projectRoot).ok).toBe(true);
   });
 
   it("wires --runtime through the built CLI, keeps dry-run write-free, and qualifies a second idempotent sync", async () => {

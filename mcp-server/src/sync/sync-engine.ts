@@ -17,7 +17,7 @@
  * - Registry existence is validated before any sync operations
  */
 
-import { readFile, writeFile, mkdir, unlink, access, lstat, readdir, rename, copyFile, realpath } from "node:fs/promises";
+import { readFile, writeFile, mkdir, unlink, access, lstat, readdir, rename, copyFile, realpath, chmod } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import path from "node:path";
@@ -69,6 +69,8 @@ export interface SyncReport {
   removedPaths: string[];
   /** Files with local edits that were not overwritten (dest paths) */
   conflictPaths: string[];
+  /** True only when this invocation rewrote l0-manifest.json. */
+  manifestChanged: boolean;
 }
 
 /** Options for sync behavior */
@@ -91,14 +93,70 @@ export interface SyncOptions {
 
 /** Files owned by the runtime installation, not by the ordinary registry sync. */
 const RUNTIME_CONSUMER_FILES = [
+  ".claude/runtime/l0-entrypoint-launcher.cjs",
   ".claude/hooks/l0-source-hook-launcher.js",
+  ".claude/hooks/detekt-post-write.sh",
+  ".claude/hooks/detekt-pre-commit.sh",
   ".claude/registry/wave-topology.yaml",
 ] as const;
+
+const EXECUTABLE_CONSUMER_FILES = new Set<string>([
+  ".claude/hooks/detekt-post-write.sh",
+  ".claude/hooks/detekt-pre-commit.sh",
+]);
 
 const L0_SOURCE_HOOK_LAUNCHER = "l0-source-hook-launcher.js";
 
 function portableSourceHookCommand(file: string): string {
   return `node "$CLAUDE_PROJECT_DIR"/.claude/hooks/${L0_SOURCE_HOOK_LAUNCHER} ${file}`;
+}
+
+function consumerHookCommand(file: string): string {
+  return file.endsWith(".sh")
+    ? `"$CLAUDE_PROJECT_DIR"/.claude/hooks/${file}`
+    : `node "$CLAUDE_PROJECT_DIR"/.claude/hooks/${file}`;
+}
+
+function manifestStateWithoutTimestamp(manifest: Manifest): string {
+  const snapshot = {
+    ...manifest,
+    last_synced: undefined,
+    checksums: Object.fromEntries(
+      Object.entries(manifest.checksums).sort(([left], [right]) => left.localeCompare(right)),
+    ),
+  };
+  return JSON.stringify(snapshot);
+}
+
+/** Preserve only the closed runtime-owned checksum set when each consumer
+ * asset content still matches its previously recorded checksum. File mode is
+ * reconciled separately by the runtime installer/verifier and does not revoke
+ * content ownership. This deliberately
+ * permits a qualified old runtime to survive ordinary sync so the runtime
+ * installer can perform the subsequent toolkit upgrade atomically. */
+async function collectQualifiedRuntimeChecksums(
+  projectRoot: string,
+  manifest: Manifest,
+): Promise<Record<string, string>> {
+  if (!manifest.runtime?.enabled) return {};
+  const owned = [
+    ...RUNTIME_ROLE_TEMPLATES.map((role) => `.claude/agents/${role}.md`),
+    ...RUNTIME_CONSUMER_FILES,
+  ];
+  const preserved: Record<string, string> = {};
+  for (const relative of owned) {
+    try {
+      const destinationPath = path.join(projectRoot, relative);
+      const destinationInfo = await lstat(destinationPath);
+      if (!destinationInfo.isFile() || destinationInfo.isSymbolicLink()) continue;
+      const destinationBytes = await readFile(destinationPath);
+      const observed = `sha256:${createHash("sha256").update(destinationBytes).digest("hex")}`;
+      if (manifest.checksums[relative] === observed) preserved[relative] = observed;
+    } catch {
+      // Missing/unreadable/drifted runtime assets are not blessed by ordinary sync.
+    }
+  }
+  return preserved;
 }
 
 /** Match only the exact two-JSON-string command emitted by runtime v1 before
@@ -119,6 +177,25 @@ function isLegacyAbsoluteHookCommand(command: string, file: string): boolean {
   } catch {
     return false;
   }
+}
+
+function isLegacyToolkitShellHookCommand(command: string, file: string): boolean {
+  if (!file.endsWith(".sh")) return false;
+  return command === `"$ANDROID_COMMON_DOC"/.claude/hooks/${file}` ||
+    command === `"$ANDROID_COMMON_DOC/.claude/hooks/${file}"`;
+}
+
+/** Classify only commands emitted by an owned installer version. Basename
+ * mentions inside arbitrary shell/Node commands are deliberately ignored. */
+function classifyOwnedHookCommand(
+  command: string,
+  files: readonly string[],
+): string | undefined {
+  return files.find((file) =>
+    command === consumerHookCommand(file) ||
+    command === portableSourceHookCommand(file) ||
+    isLegacyAbsoluteHookCommand(command, file) ||
+    isLegacyToolkitShellHookCommand(command, file));
 }
 
 // ---------------------------------------------------------------------------
@@ -740,6 +817,7 @@ interface HookRegistrationEntry {
   readonly event: string;
   readonly matcher: string;
   readonly file: string;
+  readonly timeout?: number;
 }
 
 /**
@@ -759,10 +837,13 @@ interface HookRegistrationEntry {
  * grows to 11.
  */
 const L0_REQUIRED_HOOK_REGISTRATIONS: readonly HookRegistrationEntry[] = [
+  { event: 'PostToolUse', matcher: 'Write|Edit', file: 'detekt-post-write.sh', timeout: 30 },
+  { event: 'PreToolUse', matcher: 'Bash', file: 'detekt-pre-commit.sh', timeout: 60 },
   { event: 'PreToolUse', matcher: 'Write|Edit|Bash', file: 'team-completeness-gate.js' },
   { event: 'PreToolUse', matcher: 'TaskUpdate',      file: 'specialist-task-completion-gate.js' },
   { event: 'PreToolUse', matcher: 'Write|Edit|Bash', file: 'premature-execution-gate.js' },
   { event: 'PreToolUse', matcher: 'Bash',            file: 'branch-guard.js' },
+  { event: 'PreToolUse', matcher: 'Bash',            file: 'bash-cli-spawn-gate.js' },
   { event: 'PreToolUse', matcher: 'Bash',            file: 'push-authorization-gate.js' },
   { event: 'PreToolUse', matcher: 'Bash',            file: 'commit-scope-validation-gate.js' },
   { event: 'PreToolUse', matcher: 'Grep|Glob|Bash|Read', file: 'context-provider-gate.js' },
@@ -782,6 +863,7 @@ const L0_REQUIRED_HOOK_REGISTRATIONS: readonly HookRegistrationEntry[] = [
 const SOURCE_REFERENCED_HOOK_FILES = new Set([
   "agent-spawn-execution-gate.js",
   "architect-verdict-presence-gate.js",
+  "bash-cli-spawn-gate.js",
   "context-provider-gate.js",
   "premature-execution-gate.js",
   "push-authorization-gate.js",
@@ -921,6 +1003,7 @@ async function writeSettingsAtomically(settingsPath: string, settings: ClaudeSet
 }
 
 const RUNTIME_CORE_HOOK_FILES = [
+  "detekt-post-write.sh", "detekt-pre-commit.sh",
   "context-provider-gate.js", "context-provider-write-gate.js",
   "runtime-consultation-target-gate.js", "agent-spawn-execution-gate.js",
   "subagent-start-context-bundle.js", "runtime-host-boundary.js",
@@ -935,6 +1018,8 @@ const RUNTIME_ROLE_TEMPLATES = [
 ] as const;
 
 const RUNTIME_HOOK_REGISTRATIONS: readonly (HookRegistrationEntry & { timeout: number })[] = [
+  { event: "PostToolUse", matcher: "Write|Edit", file: "detekt-post-write.sh", timeout: 30 },
+  { event: "PreToolUse", matcher: "Bash", file: "detekt-pre-commit.sh", timeout: 60 },
   { event: "SessionStart", matcher: "startup", file: "runtime-host-session-start.js", timeout: 20 },
   { event: "PreToolUse", matcher: "Write|Edit|Bash", file: "premature-execution-gate.js", timeout: 5 },
   { event: "PreToolUse", matcher: "Bash", file: "bash-cli-spawn-gate.js", timeout: 5 },
@@ -955,6 +1040,8 @@ export interface RuntimeToolkitInventoryEntry {
   relative_path: string;
   kind: "file";
   sha256: string;
+  /** POSIX mode is security-relevant only for executable consumer assets. */
+  mode?: number;
 }
 
 async function collectInventoryDirectory(root: string, relativeDir: string, out: string[]): Promise<void> {
@@ -1019,9 +1106,11 @@ export async function computeRuntimeToolkitInventory(toolkitRoot: string): Promi
     const absolute = path.join(canonicalRoot, relative);
     const info = await lstat(absolute);
     if (!info.isFile() || info.isSymbolicLink()) throw new Error(`runtime inventory entry is not a regular file: ${relative}`);
+    const executable = EXECUTABLE_CONSUMER_FILES.has(relative);
     inventory.push({
       relative_path: relative.replace(/\\/g, "/"), kind: "file",
       sha256: createHash("sha256").update(await readFile(absolute)).digest("hex"),
+      ...(executable ? { mode: process.platform === "win32" ? 0o755 : info.mode & 0o777 } : {}),
     });
   }
   const digest = createHash("sha256").update(JSON.stringify(inventory), "utf8").digest("hex");
@@ -1039,6 +1128,8 @@ export interface RuntimeConsumerInstallResult {
   addedRoles?: string[];
   migratedRoles?: string[];
   registrations?: number;
+  manifestChanged?: boolean;
+  repairedExecutables?: string[];
 }
 
 /**
@@ -1114,22 +1205,30 @@ export async function installRuntimeConsumer(
     const desiredByFile = new Map<string, string>(RUNTIME_CORE_HOOK_FILES.map((file) => [
       file, SOURCE_REFERENCED_HOOK_FILES.has(file)
         ? portableSourceHookCommand(file)
-        : `node "$CLAUDE_PROJECT_DIR"/.claude/hooks/${file}`,
+        : consumerHookCommand(file),
     ]));
-    const legacyFor = (file: string): string => `node "$CLAUDE_PROJECT_DIR"/.claude/hooks/${file}`;
+    const retainedDesired = new Set<string>();
     for (const [event, blocks] of Object.entries(nextSettings.hooks)) {
       for (const block of blocks) {
         const retained: HookCommandEntry[] = [];
         for (const hook of block.hooks) {
-          const file = RUNTIME_CORE_HOOK_FILES.find((candidate) => hook.command.includes(candidate));
+          const file = classifyOwnedHookCommand(hook.command, RUNTIME_CORE_HOOK_FILES);
           if (!file) { retained.push(hook); continue; }
           const desiredRegistration = RUNTIME_HOOK_REGISTRATIONS.some((candidate) =>
             candidate.event === event && candidate.matcher === block.matcher && candidate.file === file &&
-            hook.command === desiredByFile.get(file));
-          if (desiredRegistration) { retained.push(hook); continue; }
-          if (hook.command !== legacyFor(file) && !isLegacyAbsoluteHookCommand(hook.command, file)) {
-            return { ok: false, reason: `runtime-hook-conflict:${file}`, dryRun };
+            hook.type === "command" && hook.command === desiredByFile.get(file) &&
+            hook.timeout === candidate.timeout);
+          if (desiredRegistration) {
+            const desiredKey = `${event}\0${block.matcher}\0${file}`;
+            if (!retainedDesired.has(desiredKey)) {
+              retainedDesired.add(desiredKey);
+              retained.push(hook);
+            }
+            continue;
           }
+          // Any non-desired command reaching this branch matched the bounded
+          // owned grammar above, so it is a stale/duplicate owned registration
+          // and is removed before the exact matrix is rebuilt.
         }
         block.hooks = retained;
       }
@@ -1166,13 +1265,22 @@ export async function installRuntimeConsumer(
     }
 
     const consumerFileWrites: Array<{ relative: string; destination: string; content: string }> = [];
+    const executableRepairs: string[] = [];
     for (const relative of RUNTIME_CONSUMER_FILES) {
       const source = path.join(toolkit, relative);
       const destination = path.join(consumer, relative);
       const content = await readFile(source, "utf8");
       try {
         const existing = await readFile(destination, "utf8");
-        if (existing === content) continue;
+        if (existing === content) {
+          if (EXECUTABLE_CONSUMER_FILES.has(relative)) {
+            const info = await lstat(destination);
+            if (process.platform !== "win32" && (info.mode & 0o777) !== 0o755) {
+              executableRepairs.push(destination);
+            }
+          }
+          continue;
+        }
         const recorded = manifest.checksums[relative];
         const existingDigest = `sha256:${createHash("sha256").update(existing).digest("hex")}`;
         if (recorded !== existingDigest) {
@@ -1186,16 +1294,21 @@ export async function installRuntimeConsumer(
       consumerFileWrites.push({ relative, destination, content });
     }
 
+    const manifestBefore = manifestStateWithoutTimestamp(manifest);
     if (!dryRun) {
       for (const write of consumerFileWrites) {
         await mkdir(path.dirname(write.destination), { recursive: true });
         await writeFile(write.destination, write.content, "utf8");
+        if (EXECUTABLE_CONSUMER_FILES.has(write.relative)) await chmod(write.destination, 0o755);
       }
+      for (const destination of executableRepairs) await chmod(destination, 0o755);
       for (const write of roleWrites) {
         await mkdir(path.dirname(write.destination), { recursive: true });
         await writeFile(write.destination, write.content, "utf8");
       }
-      await writeSettingsAtomically(settingsPath, nextSettings);
+      if (JSON.stringify(nextSettings) !== JSON.stringify(settings)) {
+        await writeSettingsAtomically(settingsPath, nextSettings);
+      }
       manifest.runtime = {
         schema: "runtime-consumer/v1", enabled: true, consumer_layer: consumerLayer,
         toolkit_commit: toolkitCommit, toolkit_content_sha256: inventory.digest,
@@ -1207,14 +1320,21 @@ export async function installRuntimeConsumer(
       for (const relative of RUNTIME_CONSUMER_FILES) {
         manifest.checksums[relative] = `sha256:${createHash("sha256").update(await readFile(path.join(toolkit, relative))).digest("hex")}`;
       }
-      await writeManifest(manifestPath, manifest);
+      if (manifestStateWithoutTimestamp(manifest) !== manifestBefore) {
+        manifest.last_synced = new Date().toISOString();
+        await writeManifest(manifestPath, manifest);
+      }
     }
+    const manifestChanged = !dryRun && manifestStateWithoutTimestamp(manifest) !== manifestBefore;
     return {
       ok: true, dryRun, consumerLayer, toolkitCommit, toolkitContentDigest: inventory.digest,
       inventory: inventory.entries,
       addedRoles: roleWrites.filter((write) => !write.migration).map((write) => write.role),
       migratedRoles: roleWrites.filter((write) => write.migration).map((write) => write.role),
       registrations: RUNTIME_HOOK_REGISTRATIONS.length,
+      manifestChanged,
+      repairedExecutables: executableRepairs.map((destination) =>
+        path.relative(consumer, destination).replace(/\\/g, "/")),
     };
   } catch (err) {
     return { ok: false, reason: err instanceof Error ? err.message : String(err), dryRun };
@@ -1350,6 +1470,50 @@ export async function mergeHookRegistrations(
 
   const excludeSet = new Set(excludeHooks);
   const canonicalL0Root = l0Root ? await realpath(l0Root) : undefined;
+  const desiredCommandFor = (file: string): string =>
+    SOURCE_REFERENCED_HOOK_FILES.has(file)
+      ? portableSourceHookCommand(file)
+      : consumerHookCommand(file);
+
+  // Converge registrations owned by this sync contract before adding missing
+  // entries. Exact registrations are kept once; known legacy/local forms and
+  // duplicates are removed. Commands outside the bounded owned grammars stay
+  // consumer-owned and are never silently deleted.
+  const retainedOwned = new Set<string>();
+  const managedFiles = [...new Set(L0_REQUIRED_HOOK_REGISTRATIONS.map((entry) => entry.file))];
+  for (const [event, blocks] of Object.entries(settings.hooks)) {
+    for (const block of blocks) {
+      const retained: HookCommandEntry[] = [];
+      for (const hook of block.hooks) {
+        const file = classifyOwnedHookCommand(hook.command, managedFiles);
+        if (!file) { retained.push(hook); continue; }
+        const desired = desiredCommandFor(file);
+        const spec = L0_REQUIRED_HOOK_REGISTRATIONS.find((entry) =>
+          entry.event === event && entry.matcher === block.matcher && entry.file === file);
+        const desiredTimeout = spec?.timeout ?? 5;
+        if (spec && hook.type === "command" && hook.command === desired && hook.timeout === desiredTimeout) {
+          const key = `${event}\0${block.matcher}\0${file}`;
+          if (!retainedOwned.has(key)) {
+            retainedOwned.add(key);
+            retained.push(hook);
+          } else {
+            settingsChanged = true;
+          }
+          continue;
+        }
+        const recognizedOwned = hook.command === consumerHookCommand(file) ||
+          hook.command === portableSourceHookCommand(file) ||
+          isLegacyAbsoluteHookCommand(hook.command, file) ||
+          isLegacyToolkitShellHookCommand(hook.command, file);
+        if (recognizedOwned) {
+          settingsChanged = true;
+          continue;
+        }
+        retained.push(hook);
+      }
+      block.hooks = retained;
+    }
+  }
 
   for (const entry of L0_REQUIRED_HOOK_REGISTRATIONS) {
     const { event, matcher, file } = entry;
@@ -1357,10 +1521,8 @@ export async function mergeHookRegistrations(
       result.skipped.push({ event, matcher, file });
       continue;
     }
-    const sourceReferenced = Boolean(canonicalL0Root) && SOURCE_REFERENCED_HOOK_FILES.has(file);
-    const command = sourceReferenced
-      ? portableSourceHookCommand(file)
-      : `node "$CLAUDE_PROJECT_DIR"/.claude/hooks/${file}`;
+    const sourceReferenced = SOURCE_REFERENCED_HOOK_FILES.has(file);
+    const command = desiredCommandFor(file);
     const runtimeManaged = canonicalL0Root && RUNTIME_CORE_HOOK_FILES.includes(
       file as typeof RUNTIME_CORE_HOOK_FILES[number],
     );
@@ -1386,7 +1548,7 @@ export async function mergeHookRegistrations(
     // Migrate both the broken partial-copy registration and the old
     // host-specific absolute registration to the portable consumer launcher.
     if (sourceReferenced || runtimeManaged) {
-      const legacy = `node "$CLAUDE_PROJECT_DIR"/.claude/hooks/${file}`;
+      const legacy = consumerHookCommand(file);
       for (const block of matchingBlocks) {
         const retained = block.hooks.filter((hook) =>
           !(sourceReferenced && hook.command === legacy) &&
@@ -1403,7 +1565,7 @@ export async function mergeHookRegistrations(
     if (alreadyPresent) {
       result.skipped.push({ event, matcher, file });
     } else {
-      matcherBlock.hooks.push({ type: 'command', command, timeout: 5 });
+      matcherBlock.hooks.push({ type: 'command', command, timeout: entry.timeout ?? 5 });
       settingsChanged = true;
       result.added.push({ event, matcher, file });
     }
@@ -1702,6 +1864,7 @@ export async function syncMultiSource(
 
   const manifestPath = path.join(projectRoot, "l0-manifest.json");
   const manifest = await readManifest(manifestPath);
+  const manifestStateBefore = manifestStateWithoutTimestamp(manifest);
   if (!options.runtime) {
     // Preflight consumer-owned settings before any registry materialisation or
     // manifest write. A malformed/unreadable file must leave the entire sync
@@ -1791,6 +1954,7 @@ export async function syncMultiSource(
     l0Commit: getGitCommit(resolvedPaths[orderedSources[0].layer] ?? ""),
     removedPaths: [],
     conflictPaths: [],
+    manifestChanged: false,
     sourceCount: orderedSources.length,
     sourceCounts,
     overrides,
@@ -1923,7 +2087,35 @@ export async function syncMultiSource(
     );
   }
 
-  if (!dryRun) {
+  // Reconcile hooks and settings before publishing the manifest. A hook
+  // conflict or settings failure must never bless a partially reconciled
+  // consumer by advancing checksums/last_synced.
+  const msL0Root = resolvedPaths[orderedSources[0].layer] ?? "";
+  if (msL0Root) {
+    const hookResult = options.runtime ? { copied: [], skipped: [], errors: [] }
+      : await syncHooks(msL0Root, projectRoot, manifest.selection?.exclude_hooks ?? [], dryRun);
+    for (const err of hookResult.errors) report.errors.push(`Hook sync: ${err}`);
+    if ("repaired" in hookResult && hookResult.repaired.length > 0) {
+      report.warnings.push(
+        `Hook executable mode ${dryRun ? "would be repaired" : "repaired"}: ${hookResult.repaired.join(", ")}`,
+      );
+    }
+  }
+
+  if (report.errors.length === 0) {
+    const msMergeResult = options.runtime
+      ? { added: [], skipped: [], dryRun }
+      : await mergeHookRegistrations(
+        projectRoot, dryRun, msL0Root, manifest.selection?.exclude_hooks ?? [],
+      );
+    if (msMergeResult.added.length > 0) {
+      report.warnings.push(
+        `Hook registrations added to settings.json: ${msMergeResult.added.map((entry) => entry.file).join(", ")}`,
+      );
+    }
+  }
+
+  if (!dryRun && report.errors.length === 0) {
     // Conflicted entries keep their old checksum (file wasn't updated)
     const conflictDests = new Set(report.conflictPaths);
     const newChecksums: Record<string, string> = {};
@@ -1936,10 +2128,10 @@ export async function syncMultiSource(
         newChecksums[dest] = entry.hash;
       }
     }
-
-    manifest.checksums = newChecksums;
-    manifest.last_synced = new Date().toISOString();
-    await writeManifest(manifestPath, manifest);
+    Object.assign(
+      newChecksums,
+      await collectQualifiedRuntimeChecksums(projectRoot, manifest),
+    );
 
     // Post-sync verification
     for (const planEntry of actions) {
@@ -1956,28 +2148,15 @@ export async function syncMultiSource(
         }
       }
     }
-  }
 
-  // Hook propagation (F5 — BL-W47-prep-10): syncHooks inside syncMultiSource
-  const msL0Root = resolvedPaths[orderedSources[0].layer] ?? "";
-  if (msL0Root) {
-    const hookResult = options.runtime ? { copied: [], skipped: [], errors: [] }
-      : await syncHooks(msL0Root, projectRoot, manifest.selection?.exclude_hooks ?? [], dryRun);
-    for (const err of hookResult.errors) {
-      report.warnings.push(`Hook sync: ${err}`);
+    if (report.errors.length === 0) {
+      manifest.checksums = newChecksums;
+      if (manifestStateWithoutTimestamp(manifest) !== manifestStateBefore) {
+        manifest.last_synced = new Date().toISOString();
+        await writeManifest(manifestPath, manifest);
+        report.manifestChanged = true;
+      }
     }
-  }
-
-  // Hook registration merge (F1 — BL-W47-prep-11): additive merge into settings.json
-  const msMergeResult = options.runtime
-    ? { added: [], skipped: [], dryRun }
-    : await mergeHookRegistrations(
-      projectRoot, dryRun, msL0Root, manifest.selection?.exclude_hooks ?? [],
-    );
-  if (msMergeResult.added.length > 0) {
-    report.warnings.push(
-      `Hook registrations added to settings.json: ${msMergeResult.added.map((e) => e.file).join(', ')}`,
-    );
   }
 
   return report;
@@ -2125,6 +2304,7 @@ export async function syncL0(
 
   const manifestPath = path.join(projectRoot, "l0-manifest.json");
   const manifest = await readManifest(manifestPath);
+  const manifestStateBefore = manifestStateWithoutTimestamp(manifest);
   if (!options.runtime) {
     // See syncMultiSource(): ordinary sync is destructive only after the
     // consumer settings boundary has been proven readable and well-formed.
@@ -2173,6 +2353,7 @@ export async function syncL0(
     l0Commit: getGitCommit(l0Root),
     removedPaths: [],
     conflictPaths: [],
+    manifestChanged: false,
   };
 
   // ── Fix #1 + #5: Count removes and apply threshold ────────────────────
@@ -2294,7 +2475,31 @@ export async function syncL0(
     );
   }
 
-  if (!dryRun) {
+  // Reconcile hooks/settings first; only a fully successful reconciliation may
+  // publish new manifest checksums or last_synced.
+  const slHookResult = options.runtime ? { copied: [], skipped: [], errors: [] }
+    : await syncHooks(l0Root, projectRoot, manifest.selection?.exclude_hooks ?? [], dryRun);
+  for (const err of slHookResult.errors) report.errors.push(`Hook sync: ${err}`);
+  if ("repaired" in slHookResult && slHookResult.repaired.length > 0) {
+    report.warnings.push(
+      `Hook executable mode ${dryRun ? "would be repaired" : "repaired"}: ${slHookResult.repaired.join(", ")}`,
+    );
+  }
+
+  if (report.errors.length === 0) {
+    const slMergeResult = options.runtime
+      ? { added: [], skipped: [], dryRun }
+      : await mergeHookRegistrations(
+        projectRoot, dryRun, l0Root, manifest.selection?.exclude_hooks ?? [],
+      );
+    if (slMergeResult.added.length > 0) {
+      report.warnings.push(
+        `Hook registrations added to settings.json: ${slMergeResult.added.map((entry) => entry.file).join(", ")}`,
+      );
+    }
+  }
+
+  if (!dryRun && report.errors.length === 0) {
     // Update manifest checksums keyed by dest path
     // Conflicted entries keep their old checksum (file wasn't updated)
     const conflictDests = new Set(report.conflictPaths);
@@ -2309,10 +2514,10 @@ export async function syncL0(
         newChecksums[dest] = entry.hash;
       }
     }
-
-    manifest.checksums = newChecksums;
-    manifest.last_synced = new Date().toISOString();
-    await writeManifest(manifestPath, manifest);
+    Object.assign(
+      newChecksums,
+      await collectQualifiedRuntimeChecksums(projectRoot, manifest),
+    );
 
     // Post-sync verification
     for (const planEntry of actions) {
@@ -2329,25 +2534,15 @@ export async function syncL0(
         }
       }
     }
-  }
 
-  // Hook propagation (F5 — BL-W47-prep-10): syncHooks called inside syncL0
-  const slHookResult = options.runtime ? { copied: [], skipped: [], errors: [] }
-    : await syncHooks(l0Root, projectRoot, manifest.selection?.exclude_hooks ?? [], dryRun);
-  for (const err of slHookResult.errors) {
-    report.warnings.push(`Hook sync: ${err}`);
-  }
-
-  // Hook registration merge (F1 — BL-W47-prep-11): additive merge into settings.json
-  const slMergeResult = options.runtime
-    ? { added: [], skipped: [], dryRun }
-    : await mergeHookRegistrations(
-      projectRoot, dryRun, l0Root, manifest.selection?.exclude_hooks ?? [],
-    );
-  if (slMergeResult.added.length > 0) {
-    report.warnings.push(
-      `Hook registrations added to settings.json: ${slMergeResult.added.map((e) => e.file).join(', ')}`,
-    );
+    if (report.errors.length === 0) {
+      manifest.checksums = newChecksums;
+      if (manifestStateWithoutTimestamp(manifest) !== manifestStateBefore) {
+        manifest.last_synced = new Date().toISOString();
+        await writeManifest(manifestPath, manifest);
+        report.manifestChanged = true;
+      }
+    }
   }
 
   return report;
@@ -2421,6 +2616,8 @@ export async function detectMigrations(
 /** Result of a hook sync operation */
 export interface HookSyncResult {
   copied: string[];
+  repaired: string[];
+  conflicts: string[];
   skipped: string[];
   errors: string[];
 }
@@ -2447,7 +2644,7 @@ export async function syncHooks(
   excludeHooks: string[] = [],
   dryRun = false,
 ): Promise<HookSyncResult> {
-  const result: HookSyncResult = { copied: [], skipped: [], errors: [] };
+  const result: HookSyncResult = { copied: [], repaired: [], conflicts: [], skipped: [], errors: [] };
   const l0HooksDir = path.join(l0Root, ".claude", "hooks");
   const destHooksDir = path.join(projectRoot, ".claude", "hooks");
   const excludeSet = new Set(excludeHooks);
@@ -2455,7 +2652,8 @@ export async function syncHooks(
   let entries: string[];
   try {
     const dirEntries = await readdir(l0HooksDir);
-    entries = dirEntries.filter((f) => f.endsWith(".js"));
+    entries = dirEntries.filter((f) =>
+      f.endsWith(".js") || f === "detekt-post-write.sh" || f === "detekt-pre-commit.sh");
   } catch {
     // L0 hooks dir missing — not an error, just nothing to sync
     return result;
@@ -2470,14 +2668,45 @@ export async function syncHooks(
       result.skipped.push(filename);
       continue;
     }
-    if (dryRun) {
-      result.copied.push(filename);
-      continue;
-    }
     try {
+      const source = path.join(l0HooksDir, filename);
+      const destination = path.join(destHooksDir, filename);
+      if (filename.endsWith(".sh")) {
+        const sourceBytes = await readFile(source);
+        let destinationBytes: Buffer | undefined;
+        try { destinationBytes = await readFile(destination); }
+        catch (error) {
+          if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+        }
+        if (destinationBytes && !sourceBytes.equals(destinationBytes)) {
+          result.conflicts.push(filename);
+          result.errors.push(`Conflict: ${filename} differs from the toolkit`);
+          continue;
+        }
+        if (!destinationBytes) {
+          result.copied.push(filename);
+          if (!dryRun) {
+            await copyFile(source, destination);
+            await chmod(destination, 0o755);
+          }
+          continue;
+        }
+        const info = await lstat(destination);
+        if (process.platform !== "win32" && (info.mode & 0o777) !== 0o755) {
+          result.repaired.push(filename);
+          if (!dryRun) await chmod(destination, 0o755);
+        } else {
+          result.skipped.push(filename);
+        }
+        continue;
+      }
+      if (dryRun) {
+        result.copied.push(filename);
+        continue;
+      }
       await copyFile(
-        path.join(l0HooksDir, filename),
-        path.join(destHooksDir, filename),
+        source,
+        destination,
       );
       result.copied.push(filename);
     } catch (err) {

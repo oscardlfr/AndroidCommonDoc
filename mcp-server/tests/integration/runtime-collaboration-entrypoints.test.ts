@@ -824,10 +824,10 @@ describe("P3 runtime-collaboration-entrypoints (RED)", () => {
     for (const [skillDir, entrypointValue] of Object.entries(skillEntrypoints)) {
       const skillPath = path.join(ROOT, "skills", skillDir, "SKILL.md");
       const text = fs.readFileSync(skillPath, "utf8");
-      expect(text).toContain("'<resolved-node>' '<toolkit-root>/scripts/lib/runtime-collaboration-entrypoints.cjs' 'execute'");
+      expect(text).toContain("'<resolved-node>' '<consumer-root>/.claude/runtime/l0-entrypoint-launcher.cjs' 'execute'");
       expect(text).toContain(`'--entrypoint' '${entrypointValue}'`);
       expect(text).toContain("consumer-root");
-      expect(text).toContain("toolkit-root");
+      expect(text).not.toContain("'<toolkit-root>/scripts/lib/runtime-collaboration-entrypoints.cjs'");
       if (skillDir === "work") {
         expect(text).not.toMatch(/TeamCreate/);
         expect(text).not.toMatch(/SendMessage/);

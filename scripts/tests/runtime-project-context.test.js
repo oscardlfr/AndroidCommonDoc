@@ -17,12 +17,16 @@ const PIN = { schema: 'runtime-consumer/v1', enabled: true, consumer_layer: 'L2'
   toolkit_commit: 'a'.repeat(40), toolkit_content_sha256: 'b'.repeat(64) };
 const SOURCE_REFERENCED_HOOK_FILES = new Set([
   'agent-spawn-execution-gate.js', 'context-provider-gate.js',
+  'bash-cli-spawn-gate.js',
   'premature-execution-gate.js', 'runtime-consultation-target-gate.js',
   'runtime-host-boundary.js', 'runtime-host-session-start.js',
   'subagent-start-context-bundle.js',
 ]);
 const CONSUMER_FILES = [
+  '.claude/runtime/l0-entrypoint-launcher.cjs',
   '.claude/hooks/l0-source-hook-launcher.js',
+  '.claude/hooks/detekt-post-write.sh',
+  '.claude/hooks/detekt-pre-commit.sh',
   '.claude/registry/wave-topology.yaml',
 ];
 
@@ -61,6 +65,7 @@ function installFixture(f) {
     const destination = path.join(f.root, relative);
     fs.mkdirSync(path.dirname(destination), { recursive: true });
     fs.copyFileSync(path.join(TOOLKIT_ROOT, relative), destination);
+    if (relative.endsWith('.sh')) fs.chmodSync(destination, 0o755);
   }
   const hooks = {};
   for (const [event, matcher, file, timeout] of HOOK_MATRIX) {
@@ -71,7 +76,9 @@ function installFixture(f) {
       type: 'command',
       command: SOURCE_REFERENCED_HOOK_FILES.has(file)
         ? `node "$CLAUDE_PROJECT_DIR"/.claude/hooks/l0-source-hook-launcher.js ${file}`
-        : `node "$CLAUDE_PROJECT_DIR"/.claude/hooks/${file}`,
+        : file.endsWith('.sh')
+          ? `"$CLAUDE_PROJECT_DIR"/.claude/hooks/${file}`
+          : `node "$CLAUDE_PROJECT_DIR"/.claude/hooks/${file}`,
       timeout,
     });
   }
@@ -210,7 +217,15 @@ test('P3-RUNTIME-INSTALL exact source hooks, role bytes, commit and content pin 
     const settings = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
     settings.hooks.SessionStart[0].hooks[0].command += ' --changed';
     fs.writeFileSync(settingsPath, JSON.stringify(settings));
-    assert.strictEqual(verifyRuntimeConsumerInstallation(f.root).reason, 'runtime-hook-registration-conflict');
+    assert.strictEqual(verifyRuntimeConsumerInstallation(f.root).reason, 'runtime-hook-registration-missing');
+
+    installFixture(f);
+    const withArbitraryMention = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
+    withArbitraryMention.hooks.PreToolUse[0].hooks.push({
+      type: 'command', command: 'node -e "console.log(\'bash-cli-spawn-gate.js\')"', timeout: 9,
+    });
+    fs.writeFileSync(settingsPath, JSON.stringify(withArbitraryMention));
+    assert.strictEqual(verifyRuntimeConsumerInstallation(f.root).ok, true);
 
     installFixture(f);
     fs.appendFileSync(path.join(f.root, '.claude', 'agents', 'arch-platform.md'), '\nchanged\n');
@@ -219,6 +234,15 @@ test('P3-RUNTIME-INSTALL exact source hooks, role bytes, commit and content pin 
     installFixture(f);
     fs.appendFileSync(path.join(f.root, '.claude', 'hooks', 'l0-source-hook-launcher.js'), '\nchanged\n');
     assert.strictEqual(verifyRuntimeConsumerInstallation(f.root).reason, 'runtime-consumer-file-mismatch');
+
+    if (process.platform !== 'win32') {
+      installFixture(f);
+      fs.chmodSync(path.join(f.root, '.claude', 'hooks', 'detekt-pre-commit.sh'), 0o644);
+      assert.strictEqual(
+        verifyRuntimeConsumerInstallation(f.root).reason,
+        'runtime-consumer-file-mode-mismatch',
+      );
+    }
 
     installFixture(f);
     f.manifest.runtime.toolkit_content_sha256 = '0'.repeat(64);

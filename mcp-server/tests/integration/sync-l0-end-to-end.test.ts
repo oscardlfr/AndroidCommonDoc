@@ -14,12 +14,12 @@
  * cannot detect (prep-8 F7 root cause: CLI orchestration gap).
  */
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { writeFile, mkdir, rm, readdir, access, mkdtemp, readFile } from "node:fs/promises";
+import { writeFile, mkdir, rm, readdir, access, mkdtemp, readFile, chmod, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { installRuntimeConsumer, resolveL0Source, syncL0 } from "../../src/sync/sync-engine.js";
 
 // ---------------------------------------------------------------------------
@@ -46,6 +46,78 @@ function makeManifest(l0RelPath: string): string {
     checksums: {},
     l2_specific: { commands: [], agents: [], skills: [] },
   }, null, 2);
+}
+
+function runGit(cwd: string, args: string[]): ReturnType<typeof spawnSync> {
+  const result = spawnSync("git", args, { cwd, encoding: "utf8", timeout: 30000 });
+  expect(result.status, `git ${args.join(" ")} failed: ${result.stderr}`).toBe(0);
+  return result;
+}
+
+function runSyncCli(projectRoot: string, runtime = false): ReturnType<typeof spawnSync> {
+  const args = [CLI_PATH, "--project-root", projectRoot];
+  if (runtime) args.push("--runtime");
+  const result = spawnSync(process.execPath, args, { encoding: "utf8", timeout: 120000 });
+  expect(result.status, `sync CLI failed: ${result.stdout}\n${result.stderr}`).toBe(0);
+  return result;
+}
+
+function hookPayload(event: string, matcher: string, projectRoot: string): string {
+  let toolName = "Bash";
+  let toolInput: Record<string, unknown> = { command: "echo hook-smoke" };
+  if (!matcher.split("|").includes("Bash")) {
+    toolName = matcher.split("|").find((candidate) => candidate !== ".*") ?? "Write";
+    toolInput = toolName === "Write" || toolName === "Edit"
+      ? { file_path: join(projectRoot, "README.md"), content: "hook smoke" }
+      : toolName === "Grep"
+        ? { pattern: "hook-smoke", path: projectRoot }
+        : { taskId: "hook-smoke", status: "in_progress" };
+  }
+  return JSON.stringify({
+    hook_event_name: event,
+    tool_name: toolName,
+    tool_input: toolInput,
+    tool_response: {},
+    session_id: "sync-e2e-hook-smoke",
+    agent_type: "",
+    agent_id: "",
+    cwd: projectRoot,
+  });
+}
+
+/**
+ * Execute every emitted hook registration through the same POSIX shell surface
+ * Claude uses. Policy denials may legitimately return a non-zero status for a
+ * synthetic event with no authority, so status alone is not asserted. Missing
+ * scripts, Node module-loader failures, syntax failures and signals are always
+ * installation failures and must fail this smoke.
+ */
+function smokeEveryEmittedHook(projectRoot: string): void {
+  const settings = JSON.parse(readFileSync(join(projectRoot, ".claude", "settings.json"), "utf8"));
+  const attempts: string[] = [];
+  for (const [event, blocks] of Object.entries(settings.hooks ?? {}) as Array<[string, any[]]>) {
+    for (const block of blocks) {
+      for (const hook of block.hooks ?? []) {
+        const command = String(hook.command);
+        attempts.push(`${event}:${block.matcher}:${command}`);
+        const result = spawnSync("/bin/bash", ["-c", command], {
+          cwd: projectRoot,
+          env: { ...process.env, CLAUDE_PROJECT_DIR: projectRoot, CLAUDE_WAVE_SLUG: "" },
+          input: hookPayload(event, String(block.matcher), projectRoot),
+          encoding: "utf8",
+          timeout: 30000,
+        });
+        const output = `${result.stdout ?? ""}\n${result.stderr ?? ""}`;
+        expect(result.error, `hook failed to launch: ${attempts.at(-1)}\n${output}`).toBeUndefined();
+        expect(result.signal, `hook terminated by signal: ${attempts.at(-1)}\n${output}`).toBeNull();
+        expect([126, 127], `hook executable missing: ${attempts.at(-1)}\n${output}`).not.toContain(result.status);
+        expect(output, `hook loader failure: ${attempts.at(-1)}`).not.toMatch(
+          /MODULE_NOT_FOUND|ERR_MODULE_NOT_FOUND|Cannot find module|Cannot find package|SyntaxError:/,
+        );
+      }
+    }
+  }
+  expect(attempts.length, "the runtime must emit a non-empty hook matrix").toBeGreaterThan(10);
 }
 
 // ---------------------------------------------------------------------------
@@ -160,6 +232,37 @@ describe("sync-l0 end-to-end CLI", () => {
     expect(checksumKeys.length, "checksums should be populated after sync").toBeGreaterThan(0);
   });
 
+  it("keeps l0-manifest.json byte-identical and reports unchanged on a second no-op sync", () => {
+    const args = [CLI_PATH, "--project-root", fixtureDir];
+    const first = spawnSync(process.execPath, args, { encoding: "utf8", timeout: 60000 });
+    expect(first.status, first.stderr).toBe(0);
+    const manifestPath = join(fixtureDir, "l0-manifest.json");
+    const bytesAfterFirst = readFileSync(manifestPath, "utf8");
+
+    const second = spawnSync(process.execPath, args, { encoding: "utf8", timeout: 60000 });
+    expect(second.status, second.stderr).toBe(0);
+    expect(second.stdout).toContain("Manifest unchanged: l0-manifest.json (no effective changes)");
+    expect(readFileSync(manifestPath, "utf8")).toBe(bytesAfterFirst);
+  });
+
+  it("does not publish the manifest when a managed shell hook conflicts", async () => {
+    const manifestPath = join(fixtureDir, "l0-manifest.json");
+    const before = await readFile(manifestPath, "utf8");
+    await writeFile(
+      join(fixtureDir, ".claude", "hooks", "detekt-pre-commit.sh"),
+      "#!/usr/bin/env bash\necho consumer-owned\n",
+      "utf8",
+    );
+
+    const result = spawnSync(process.execPath, [CLI_PATH, "--project-root", fixtureDir], {
+      encoding: "utf8", timeout: 60000,
+    });
+
+    expect(result.status).not.toBe(0);
+    expect(result.stderr + result.stdout).toContain("detekt-pre-commit.sh differs from the toolkit");
+    expect(await readFile(manifestPath, "utf8")).toBe(before);
+  });
+
   it("exclude_hooks skips listed hook files", () => {
     // Write manifest that excludes premature-execution-gate.js
     const rel = require("node:path").relative(fixtureDir, L0_ROOT).replace(/\\/g, "/");
@@ -229,6 +332,136 @@ describe("sync-l0 end-to-end CLI", () => {
     expect(hook.status, hook.stderr).toBe(0);
     expect(hook.stderr).not.toContain("MODULE_NOT_FOUND");
   });
+});
+
+describe("clean L1/L2 consumer convergence through the real CLI", () => {
+  const cases = [
+    { layer: "L1" as const, linkedWorktree: false },
+    { layer: "L2" as const, linkedWorktree: true },
+  ];
+
+  it.each(cases)(
+    "$layer ordinary+runtime converges hooks, executable modes and a byte-idempotent manifest",
+    async ({ layer, linkedWorktree }) => {
+      const fixtureRoot = await mkdtemp(join(tmpdir(), `sync-l0-${layer.toLowerCase()}-matrix-`));
+      const mainRoot = linkedWorktree ? join(fixtureRoot, "main-consumer") : join(fixtureRoot, "consumer");
+      const projectRoot = linkedWorktree ? join(fixtureRoot, "linked-consumer") : mainRoot;
+      try {
+        await mkdir(mainRoot, { recursive: true });
+        runGit(mainRoot, ["init", "-q"]);
+        runGit(mainRoot, ["config", "user.email", "sync-e2e@example.invalid"]);
+        runGit(mainRoot, ["config", "user.name", "Sync E2E"]);
+        await writeFile(join(mainRoot, "README.md"), "# Consumer fixture\n", "utf8");
+        runGit(mainRoot, ["add", "."]);
+        runGit(mainRoot, ["commit", "-qm", "fixture: initialize consumer"]);
+
+        if (linkedWorktree) {
+          runGit(mainRoot, ["worktree", "add", "-q", "-b", "sync-e2e-linked", projectRoot]);
+          const gitDir = runGit(projectRoot, ["rev-parse", "--git-dir"]).stdout.trim();
+          expect(gitDir.replace(/\\/g, "/")).toContain("/.git/worktrees/");
+        }
+
+        if (layer === "L1") {
+          // Runtime layer detection intentionally uses this canonical L1
+          // marker, not a test-only override.
+          await mkdir(join(projectRoot, "skills"), { recursive: true });
+          await writeFile(join(projectRoot, "skills", "registry.json"), "{}\n", "utf8");
+        }
+        await mkdir(join(projectRoot, ".claude"), { recursive: true });
+        await writeFile(join(projectRoot, "l0-manifest.json"), makeManifest(L0_ROOT), "utf8");
+
+        const brokenLocalPush = 'node "$CLAUDE_PROJECT_DIR"/.claude/hooks/push-authorization-gate.js';
+        const staleAbsolutePush = `${JSON.stringify(process.execPath)} ${JSON.stringify(
+          "/stale-host/AndroidCommonDoc/.claude/hooks/push-authorization-gate.js",
+        )}`;
+        await writeFile(join(projectRoot, ".claude", "settings.json"), JSON.stringify({
+          hooks: {
+            PreToolUse: [
+              { matcher: "Bash", hooks: [
+                { type: "command", command: brokenLocalPush, timeout: 5 },
+                { type: "command", command: "printf consumer-owned", timeout: 5 },
+              ] },
+              { matcher: "Bash", hooks: [
+                { type: "command", command: staleAbsolutePush, timeout: 5 },
+              ] },
+            ],
+          },
+        }, null, 2) + "\n", "utf8");
+        runGit(projectRoot, ["add", "."]);
+        runGit(projectRoot, ["commit", "-qm", `fixture: seed ${layer} contract`]);
+
+        runSyncCli(projectRoot);
+        runSyncCli(projectRoot, true);
+
+        const manifestPath = join(projectRoot, "l0-manifest.json");
+        const installedManifest = JSON.parse(await readFile(manifestPath, "utf8"));
+        expect(installedManifest.runtime.consumer_layer).toBe(layer);
+
+        const installedSettings = JSON.parse(
+          await readFile(join(projectRoot, ".claude", "settings.json"), "utf8"),
+        );
+        const commands = Object.values(installedSettings.hooks).flatMap((blocks: any) =>
+          blocks.flatMap((block: any) => block.hooks.map((hook: any) => hook.command)));
+        const portablePush =
+          'node "$CLAUDE_PROJECT_DIR"/.claude/hooks/l0-source-hook-launcher.js push-authorization-gate.js';
+        expect(commands.filter((command: string) => command === portablePush)).toHaveLength(1);
+        expect(commands).not.toContain(brokenLocalPush);
+        expect(commands).not.toContain(staleAbsolutePush);
+        expect(commands).toContain("printf consumer-owned");
+
+        const canonicalProjectRoot = realpathSync(projectRoot);
+        const intent = Buffer.from(JSON.stringify({ scope: "all" }), "utf8").toString("base64url");
+        const entrypoint = spawnSync(process.execPath, [
+          join(canonicalProjectRoot, ".claude", "runtime", "l0-entrypoint-launcher.cjs"),
+          "execute", "--entrypoint", "monitor-docs",
+          "--project-root", canonicalProjectRoot,
+          "--intent", intent,
+        ], {
+          cwd: canonicalProjectRoot,
+          env: { ...process.env, CLAUDE_PROJECT_DIR: canonicalProjectRoot },
+          encoding: "utf8",
+          timeout: 30000,
+        });
+        expect(entrypoint.status, entrypoint.stderr).toBe(6);
+        expect(entrypoint.stderr).not.toMatch(/MODULE_NOT_FOUND|ERR_MODULE_NOT_FOUND/);
+        expect(JSON.parse(entrypoint.stdout.trim())).toMatchObject({
+          schema: "runtime/collaboration-entrypoint-result/v1",
+          entrypoint: "monitor-docs",
+          status: "UNAVAILABLE",
+          detail: "host-composition-unavailable",
+        });
+
+        smokeEveryEmittedHook(projectRoot);
+
+        const executableHooks = ["detekt-pre-commit.sh", "detekt-post-write.sh"];
+        for (const file of executableHooks) {
+          await chmod(join(projectRoot, ".claude", "hooks", file), 0o644);
+        }
+        const repair = runSyncCli(projectRoot, true);
+        expect(repair.stdout + repair.stderr).toMatch(/Runtime executable mode repaired:/);
+        for (const file of executableHooks) {
+          expect((await stat(join(projectRoot, ".claude", "hooks", file))).mode & 0o777).toBe(0o755);
+        }
+
+        const manifestAfterConvergence = await readFile(manifestPath, "utf8");
+        runGit(projectRoot, ["add", "."]);
+        runGit(projectRoot, ["commit", "-qm", "fixture: record converged runtime"]);
+
+        runSyncCli(projectRoot);
+        runSyncCli(projectRoot, true);
+        expect(await readFile(manifestPath, "utf8")).toBe(manifestAfterConvergence);
+        expect(runGit(projectRoot, ["status", "--porcelain"]).stdout).toBe("");
+      } finally {
+        if (linkedWorktree && existsSync(projectRoot)) {
+          spawnSync("git", ["worktree", "remove", "--force", projectRoot], {
+            cwd: mainRoot, encoding: "utf8", timeout: 30000,
+          });
+        }
+        await rm(fixtureRoot, { recursive: true, force: true });
+      }
+    },
+    240000,
+  );
 });
 
 describe("sync source and managed runtime file boundaries", () => {

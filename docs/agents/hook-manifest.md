@@ -36,11 +36,11 @@ These are two separate steps — both must be completed for a hook to be active.
 
 **File copy (propagation)**:
 - Standalone `.js` hooks are copied to the consumer by `/sync-l0`. Opt out per-hook via `selection.exclude_hooks` in `l0-manifest.json`.
-- `.js` hooks importing `../../scripts/lib/**` remain in L0. The consumer receives only the standalone `l0-source-hook-launcher.js`, whose registration resolves the manifest-declared local L0 source at execution time. Copying only a source-coupled entrypoint would create a guaranteed `MODULE_NOT_FOUND`; embedding an absolute toolkit path would make the consumer host-specific. The same `exclude_hooks` entry prevents a new source-coupled registration; sync remains additive and does not silently remove an already adopted registration.
-- `.sh` hooks: NOT in `/sync-l0` scope. `setup/install-hooks.sh` copies exactly 3 files: `detekt-post-write.sh`, `detekt-pre-commit.sh`, `branch-guard.js`.
+- `.js` hooks importing outside `.claude/hooks/` remain in L0. The consumer receives only the standalone `l0-source-hook-launcher.js`, whose registration resolves the manifest-declared local L0 source at execution time. This classification includes `bash-cli-spawn-gate.js`; copying that entrypoint without `scripts/lib/runtime-role-lifecycle.cjs` would guarantee `MODULE_NOT_FOUND`. Embedding an absolute toolkit path would instead make the consumer host-specific. The same `exclude_hooks` entry prevents a new source-coupled registration; sync remains additive and does not silently remove an already adopted registration.
+- Runtime sync owns `detekt-post-write.sh` and `detekt-pre-commit.sh`, installs them with mode `0755`, and repairs mode-only drift on refresh. The legacy `setup/install-hooks.sh` path copies those two files plus `branch-guard.js`; other `.sh` hooks remain outside ordinary hook propagation.
 
 **settings.json registration**:
-- `/sync-l0` additively registers the required hook set. Source-coupled hooks use the consumer-local launcher; standalone hooks use their consumer copy. Exact legacy local and generated absolute registrations are migrated without deleting unrelated user hooks.
+- `/sync-l0` additively registers the required hook set. Source-coupled hooks use the consumer-local source-hook launcher; standalone hooks use their consumer copy. Exact legacy local and generated absolute registrations are migrated without deleting unrelated user hooks. The separate `.claude/runtime/l0-entrypoint-launcher.cjs` is for skill entrypoints and is never registered as an event hook.
 - `install-hooks.sh` auto-registers exactly **2** hooks via python JSON merge: `detekt-post-write.sh` (PostToolUse `Write|Edit`) and `detekt-pre-commit.sh` (PreToolUse `Bash`).
 - `branch-guard.js` is copied by `install-hooks.sh` but **not registered**.
 - Optional hooks and remaining `.sh` hooks still require explicit adoption.
@@ -95,7 +95,7 @@ This subsection documents verification methodology only; it does not assert that
 
 | `kmp-test-runner-gate.js` | l0-internal | Blocks all Gradle test task variants; agents must use kmp-test-runner CLI |
 | `specialist-task-completion-gate.js` | l0-internal | Blocks specialists from marking tasks completed directly |
-| `bash-cli-spawn-gate.js` | l0-internal | Blocks Bash attempts to spawn Claude agents via --agent-id/--team-name CLI flags; covered by `scripts/tests/bash-cli-spawn-gate.bats` (closes a prior zero-coverage gap — proves canonical render/parse round-trip for spaces/apostrophes/metacharacters plus exact pending `session-run --action`, while non-canonical quoting/operators/near-matches/raw-spawn/background variants fail) |
+| `bash-cli-spawn-gate.js` | consumer-required | Blocks Bash attempts to spawn Claude agents via --agent-id/--team-name CLI flags. It imports `scripts/lib/runtime-role-lifecycle.cjs`, so the consumer registration must use `l0-source-hook-launcher.js`; never copy or invoke it as a standalone consumer file. Covered by `scripts/tests/bash-cli-spawn-gate.bats` (canonical render/parse round-trip for spaces/apostrophes/metacharacters plus exact pending `session-run --action`, while non-canonical quoting/operators/near-matches/raw-spawn/background variants fail) |
 | `agent-spawn-validator.js` | l0-internal | Validates subagent_type against agents.manifest.yaml + SHA-256 drift |
 | `registry-rehash-reminder.js` | l0-internal | Emits reminder to run --update-manifest-hash after agent template edits |
 | `kickoff-scope-validator.js` | l0-internal | WARN-only: checks commitlint scopes on *-kickoff.md file writes |
@@ -104,8 +104,8 @@ This subsection documents verification methodology only; it does not assert that
 
 | Hook | Status | Rationale |
 |------|--------|-----------|
-| `detekt-post-write.sh` | consumer-required | Code quality: runs Detekt on every Kotlin Write/Edit |
-| `detekt-pre-commit.sh` | consumer-required | Code quality: validates staged Kotlin files with Detekt before commit |
+| `detekt-post-write.sh` | consumer-required | Code quality: runs Detekt on every Kotlin Write/Edit; runtime sync owns bytes and executable mode |
+| `detekt-pre-commit.sh` | consumer-required | Code quality: validates staged Kotlin files with Detekt before commit; runtime sync owns bytes and executable mode |
 | `compile-fail-pre-commit.sh` | consumer-required | Code quality: blocks commit on staged .kt files containing `error()` patterns (peer of detekt-pre-commit) |
 | `registry-pre-commit.sh` | l0-internal | Auto-rehashes registry when L0 agent template files are staged |
 

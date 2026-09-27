@@ -5,7 +5,31 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 
 ## [Unreleased]
 
-### Fixed (post-#251 consumer stabilization)
+### Fixed (post-#252 consumer-contract convergence)
+
+- Ordinary and runtime no-op sync now preserve `l0-manifest.json` byte-for-byte,
+  including `last_synced`; executable-mode repairs are reported separately and do
+  not rewrite the manifest.
+- Runtime-owned Detekt hooks converge to executable mode on install and refresh,
+  including a pre-existing identical `0644` consumer file, while conflicting
+  content remains fail-closed.
+- `bash-cli-spawn-gate.js` is source-referenced through the manifest-aware hook
+  launcher instead of copied without its `scripts/lib` dependency closure.
+- L0, L1, and L2 runtime skills now invoke the exact consumer-local
+  `.claude/runtime/l0-entrypoint-launcher.cjs`; missing, ambiguous, or drifted
+  runtime pins fail closed and recover through ordinary plus runtime refresh.
+
+### Changed (post-#252 operational contract)
+
+- Runtime installation, launch, no-op refresh, fallback, and pin-failure behavior
+  are documented as one L0/L1/L2 contract. The five control-plane skills no
+  longer ask the model to discover a sibling toolkit entrypoint.
+- Clarified that the quality-gater owns exactly two fresh full Bats handoffs after
+  preflight; development does not run two full pre-suites and then repeat them in
+  QG. Separate backlog items retain canonical QG orchestration, amended-PLAN PREP
+  supersession, and project-root normalization as future workflow hardening.
+
+### Fixed (post-#251 consumer stabilization — PR #252, `51598ec`)
 
 - Consumer hook registrations now use a standalone manifest-aware launcher instead of host-specific Node and toolkit paths. It supports linked worktrees, migrates the former generated absolute commands, and fails closed for remote, unresolved, ambiguous, or symlinked L0 sources.
 - Ordinary sync and runtime sync now compose idempotently: runtime-owned topology survives ordinary prune, source-coupled hooks are never duplicated, malformed consumer settings fail before writes, and settings publication uses atomic replacement.
@@ -16,11 +40,14 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 - Wave-sensitive Bats fixtures now isolate or explicitly override an inherited `CLAUDE_WAVE_SLUG`, so the same full suite is deterministic inside a formal quality-gate wave.
 - Copilot agent frontmatter parsing is now POSIX-compatible on macOS, and `adapters/generate-all.sh --check` verifies generated output from an isolated staging tree without mutating the checkout.
 
-### Changed (post-PR #251 roadmap reconciliation)
+### Changed (post-PR #251 roadmap reconciliation — PR #252)
 
 - Marked the 13 first-consumer runtime findings closed at `develop@c5ee193e` and removed the stale `NEXT Wave 3` instruction without reopening the shipped PR #251 scope.
 - Replaced duplicated historical residuals with one prioritized P0/P1/P2 queue. This change closes malformed `settings.json` handling and silent operational recovery; the remaining queue records false-perfect `kmp-test`/`no_xml` coverage, non-atomic adapter publication, fail-closed proportional `L0_SYNC` CI, filesystem scope enforcement, Gradle isolation/target discovery, and bounded hardening work.
 - Added a future-only governance task to evaluate a consumer-neutral work/evidence/decision index above the existing PLAN/verdict/evidence authorities; this documentation change does not implement or authorize that design.
+- PR #252 was squash-merged to `develop` as
+  `51598ecfbf7e2db8781521acc1ba94e3a84108f2`; the post-#251 items above are
+  shipped history rather than pending backlog.
 
 ### Fixed (first L2 consumer runtime hardening — PR #251)
 

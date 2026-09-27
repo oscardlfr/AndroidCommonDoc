@@ -2,9 +2,11 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import fs from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
+import { createHash } from "node:crypto";
 import {
   mergeRegistries,
   syncMultiSource,
+  installRuntimeConsumer,
   generateKnowledgeCascade,
   resolveAgentTemplate,
   resolveKnowledgeCascade,
@@ -13,6 +15,8 @@ import {
 } from "../../../src/sync/sync-engine.js";
 import type { SkillRegistry, SkillRegistryEntry } from "../../../src/registry/skill-registry.js";
 import { writeManifest, createChainManifest, createDefaultManifest } from "../../../src/sync/manifest-schema.js";
+
+const REAL_L0_ROOT = path.resolve(import.meta.dirname, "../../../..");
 
 // ---------------------------------------------------------------------------
 // Fixtures
@@ -441,6 +445,80 @@ describe("syncMultiSource", () => {
     const manifest = JSON.parse(manifestContent);
     expect(Object.keys(manifest.checksums).length).toBeGreaterThan(0);
     expect(manifest.last_synced).toBeDefined();
+  });
+
+  it("preserves manifest bytes on a no-op multi-source sync", async () => {
+    const manifestPath = path.join(projectRoot, "l0-manifest.json");
+    const first = await syncMultiSource(projectRoot);
+    expect(first.manifestChanged).toBe(true);
+    const bytesAfterFirst = await fs.readFile(manifestPath, "utf8");
+
+    const second = await syncMultiSource(projectRoot);
+    expect(second.manifestChanged).toBe(false);
+    expect(await fs.readFile(manifestPath, "utf8")).toBe(bytesAfterFirst);
+  });
+
+  it("does not publish the manifest when hook reconciliation reports a conflict", async () => {
+    const sourceHooks = path.join(l0Root, ".claude", "hooks");
+    const consumerHooks = path.join(projectRoot, ".claude", "hooks");
+    await fs.mkdir(sourceHooks, { recursive: true });
+    await fs.mkdir(consumerHooks, { recursive: true });
+    await fs.writeFile(path.join(sourceHooks, "detekt-pre-commit.sh"), "#!/bin/sh\necho toolkit\n");
+    await fs.writeFile(path.join(consumerHooks, "detekt-pre-commit.sh"), "#!/bin/sh\necho consumer\n");
+    const manifestPath = path.join(projectRoot, "l0-manifest.json");
+    const before = await fs.readFile(manifestPath, "utf8");
+
+    const report = await syncMultiSource(projectRoot);
+
+    expect(report.errors).toContain("Hook sync: Conflict: detekt-pre-commit.sh differs from the toolkit");
+    expect(report.manifestChanged).toBe(false);
+    expect(await fs.readFile(manifestPath, "utf8")).toBe(before);
+  });
+
+  it("keeps a qualified runtime checksum set stable in a multi-source L1 consumer", async () => {
+    const manifest = createChainManifest([
+      { layer: "L0", path: REAL_L0_ROOT, role: "tooling" },
+      { layer: "L1", path: l1Root, role: "ecosystem" },
+    ]);
+    const manifestPath = path.join(projectRoot, "l0-manifest.json");
+    await writeManifest(manifestPath, manifest);
+    await fs.mkdir(path.join(projectRoot, "skills"), { recursive: true });
+    await fs.writeFile(path.join(projectRoot, "skills", "registry.json"), "{}\n");
+
+    const ordinary = await syncMultiSource(projectRoot);
+    expect(ordinary.errors).toEqual([]);
+    const installed = await installRuntimeConsumer(projectRoot, REAL_L0_ROOT);
+    expect(installed.ok).toBe(true);
+    expect(installed.consumerLayer).toBe("L1");
+    const stableBytes = await fs.readFile(manifestPath, "utf8");
+
+    const secondOrdinary = await syncMultiSource(projectRoot);
+    expect(secondOrdinary.errors).toEqual([]);
+    expect(secondOrdinary.manifestChanged).toBe(false);
+    expect(await fs.readFile(manifestPath, "utf8")).toBe(stableBytes);
+    const secondRuntime = await installRuntimeConsumer(projectRoot, REAL_L0_ROOT);
+    expect(secondRuntime.ok).toBe(true);
+    expect(secondRuntime.manifestChanged).toBe(false);
+    expect(await fs.readFile(manifestPath, "utf8")).toBe(stableBytes);
+
+    const relativeAsset = ".claude/runtime/l0-entrypoint-launcher.cjs";
+    const oldBytes = "// previous L1 runtime asset\n";
+    await fs.writeFile(path.join(projectRoot, relativeAsset), oldBytes);
+    const oldChecksum = `sha256:${createHash("sha256").update(oldBytes).digest("hex")}`;
+    const previousManifest = JSON.parse(await fs.readFile(manifestPath, "utf8"));
+    previousManifest.checksums[relativeAsset] = oldChecksum;
+    previousManifest.runtime.toolkit_commit = "0".repeat(40);
+    previousManifest.runtime.toolkit_content_sha256 = "1".repeat(64);
+    await fs.writeFile(manifestPath, JSON.stringify(previousManifest, null, 2) + "\n");
+
+    expect((await syncMultiSource(projectRoot)).errors).toEqual([]);
+    const preserved = JSON.parse(await fs.readFile(manifestPath, "utf8"));
+    expect(preserved.checksums[relativeAsset]).toBe(oldChecksum);
+    const upgraded = await installRuntimeConsumer(projectRoot, REAL_L0_ROOT);
+    expect(upgraded.ok).toBe(true);
+    expect(await fs.readFile(path.join(projectRoot, relativeAsset), "utf8")).toBe(
+      await fs.readFile(path.join(REAL_L0_ROOT, relativeAsset), "utf8"),
+    );
   });
 
   it("throws on empty registry from any source", async () => {

@@ -412,20 +412,29 @@ async function main(): Promise<void> {
   console.log(
     `Sync complete: ${report.added} added, ${report.updated} updated, ${report.removed} removed, ${report.unchanged} unchanged (${total} total)`,
   );
-  process.stdout.write(`${dryRun
-    ? "Manifest unchanged: l0-manifest.json (dry-run)"
-    : "Manifest updated: l0-manifest.json"}\n`);
-
   if (report.errors.length > 0) {
     process.exit(1);
   }
 
+  let runtimeManifestChanged = false;
   if (runtime) {
     const runtimeResult = await installRuntimeConsumer(projectRoot, l0Root, { dryRun });
     if (!runtimeResult.ok) throw new Error(`Runtime install failed: ${runtimeResult.reason}`);
+    runtimeManifestChanged = runtimeResult.manifestChanged === true;
     console.log(`Runtime consumer: ${runtimeResult.consumerLayer} (${runtimeResult.toolkitContentDigest})`);
+    if ((runtimeResult.repairedExecutables?.length ?? 0) > 0) {
+      console.log(
+        `Runtime executable mode ${dryRun ? "would be repaired" : "repaired"}: ` +
+        runtimeResult.repairedExecutables!.join(", "),
+      );
+    }
     console.log(`Required Claude launch: claude --add-dir ${JSON.stringify(l0Root)}`);
   }
+  process.stdout.write(`${dryRun
+    ? "Manifest unchanged: l0-manifest.json (dry-run)"
+    : report.manifestChanged || runtimeManifestChanged
+      ? "Manifest updated: l0-manifest.json"
+      : "Manifest unchanged: l0-manifest.json (no effective changes)"}\n`);
   } finally {
     // Cleanup temporary clones
     for (const dir of clonedDirs) {
