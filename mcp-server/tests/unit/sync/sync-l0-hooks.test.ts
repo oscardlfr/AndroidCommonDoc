@@ -9,6 +9,7 @@ import { syncHooks, installRuntimeConsumer } from "../../../src/sync/sync-engine
 const REAL_L0_ROOT = resolve(import.meta.dirname, "../../../..");
 const localRequire = createRequire(import.meta.url);
 const runtimeContext = localRequire(join(REAL_L0_ROOT, "scripts", "lib", "runtime-project-context.cjs"));
+const waveControl = localRequire(join(REAL_L0_ROOT, "scripts", "lib", "wave-control-plane.cjs"));
 
 async function writeRuntimeManifest(projectRoot: string): Promise<void> {
   await writeFile(join(projectRoot, "l0-manifest.json"), JSON.stringify({
@@ -102,6 +103,18 @@ describe("syncHooks", () => {
       readFile(join(projectRoot, ".claude", "hooks", "gate-a.js"), "utf-8"),
     ).rejects.toThrow();
   });
+
+  it("keeps hooks with L0-relative imports source-referenced", async () => {
+    await createL0Root(l0Root, ["push-authorization-gate.js", "standalone.js"]);
+    await createProjectRoot(projectRoot);
+
+    const result = await syncHooks(l0Root, projectRoot, []);
+
+    expect(result.skipped).toContain("push-authorization-gate.js");
+    expect(result.copied).toContain("standalone.js");
+    await expect(readFile(join(projectRoot, ".claude", "hooks", "push-authorization-gate.js"), "utf8"))
+      .rejects.toThrow();
+  });
 });
 
 describe("source-referenced runtime installation", () => {
@@ -134,6 +147,12 @@ describe("source-referenced runtime installation", () => {
     expect(inventoryPaths.has("scripts/lib/runtime-consultation/coordination-paths.cjs")).toBe(true);
     expect(inventoryPaths.has("scripts/lib/runtime-role-lifecycle/claude-id01-startup.cjs")).toBe(true);
     expect(inventoryPaths.has("scripts/lib/runtime-bridge-codex/process-identity.cjs")).toBe(true);
+    expect(inventoryPaths.has("scripts/lib/wave-control-plane.cjs")).toBe(true);
+    expect(inventoryPaths.has("scripts/lib/verdict-evidence-contract-cli.cjs")).toBe(true);
+    expect(inventoryPaths.has("scripts/lib/verdict-evidence-contract.cjs")).toBe(true);
+    expect(inventoryPaths.has("scripts/lib/verdict-artifact-confinement.cjs")).toBe(true);
+    expect(inventoryPaths.has("scripts/lib/verdict-artifact-store.cjs")).toBe(true);
+    expect(inventoryPaths.has(".claude/registry/wave-topology.yaml")).toBe(true);
     const verifierInventory = runtimeContext.computeRuntimeToolkitInventory(REAL_L0_ROOT);
     expect(verifierInventory.ok).toBe(true);
     expect(first.inventory).toEqual(verifierInventory.entries);
@@ -153,6 +172,9 @@ describe("source-referenced runtime installation", () => {
     const manifest = JSON.parse(await readFile(join(projectRoot, "l0-manifest.json"), "utf8"));
     expect(manifest.runtime.consumer_layer).toBe("L2");
     expect(manifest.runtime.toolkit_content_sha256).toBe(first.toolkitContentDigest);
+    expect(await readFile(join(projectRoot, ".claude", "registry", "wave-topology.yaml"), "utf8"))
+      .toBe(await readFile(join(REAL_L0_ROOT, ".claude", "registry", "wave-topology.yaml"), "utf8"));
+    expect(manifest.checksums[".claude/registry/wave-topology.yaml"]).toMatch(/^sha256:[0-9a-f]{64}$/);
 
     const bytesBefore = await readFile(join(projectRoot, ".claude", "settings.json"), "utf8");
     const second = await installRuntimeConsumer(projectRoot, REAL_L0_ROOT);
@@ -160,6 +182,32 @@ describe("source-referenced runtime installation", () => {
     expect(second.addedRoles).toEqual([]);
     expect(second.migratedRoles).toEqual([]);
     expect(await readFile(join(projectRoot, ".claude", "settings.json"), "utf8")).toBe(bytesBefore);
+  });
+
+  it("runs the wave control plane from a clean consumer with no consumer mcp-server", async () => {
+    const installed = await installRuntimeConsumer(projectRoot, REAL_L0_ROOT);
+    expect(installed.ok).toBe(true);
+    await mkdir(join(projectRoot, ".planning", "wave-consumer-fixture"), { recursive: true });
+    await writeFile(
+      join(projectRoot, ".planning", "wave-consumer-fixture", "PLAN.md"),
+      "### Wave Class\n\n**Class**: HARNESS\n",
+      "utf8",
+    );
+    for (const args of [
+      ["init", "-q"],
+      ["config", "user.email", "test@example.invalid"],
+      ["config", "user.name", "Test"],
+      ["add", "."],
+      ["commit", "-qm", "fixture"],
+    ]) {
+      const git = spawnSync("git", args, { cwd: projectRoot, encoding: "utf8" });
+      expect(git.status, git.stderr).toBe(0);
+    }
+
+    const state = waveControl.initialize(projectRoot, "consumer-fixture");
+    expect(state.phase).toBe("PREP");
+    await expect(readFile(join(projectRoot, "mcp-server", "node_modules", "yaml"), "utf8"))
+      .rejects.toThrow();
   });
 
   it("leaves malformed settings and customized role bytes untouched", async () => {
@@ -193,6 +241,7 @@ describe("source-referenced runtime installation", () => {
 
       const first = spawnSync(process.execPath, args, { encoding: "utf8" });
       expect(first.status, first.stderr || first.stdout).toBe(0);
+      expect(first.stdout).toContain(`Required Claude launch: claude --add-dir ${JSON.stringify(REAL_L0_ROOT)}`);
       expect(runtimeContext.verifyRuntimeConsumerInstallation(cliRoot, { verifyContent: true }).ok).toBe(true);
       const settingsBefore = await readFile(join(cliRoot, ".claude", "settings.json"), "utf8");
       const second = spawnSync(process.execPath, args, { encoding: "utf8" });
@@ -200,6 +249,42 @@ describe("source-referenced runtime installation", () => {
       expect(await readFile(join(cliRoot, ".claude", "settings.json"), "utf8")).toBe(settingsBefore);
     } finally {
       await rm(cliRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("installs and verifies the runtime from a real linked consumer worktree", async () => {
+    const fixture = await mkdtemp(join(tmpdir(), "runtime-worktree-fixture-"));
+    const mainRoot = join(fixture, "consumer-main");
+    const linkedRoot = join(fixture, "linked", "deep", "consumer-worktree");
+    try {
+      await mkdir(mainRoot, { recursive: true });
+      await writeRuntimeManifest(mainRoot);
+      for (const args of [
+        ["init", "-q"],
+        ["config", "user.email", "test@example.invalid"],
+        ["config", "user.name", "Test"],
+        ["add", "."],
+        ["commit", "-qm", "fixture"],
+      ]) {
+        const git = spawnSync("git", args, { cwd: mainRoot, encoding: "utf8" });
+        expect(git.status, git.stderr).toBe(0);
+      }
+      await mkdir(join(fixture, "linked", "deep"), { recursive: true });
+      const worktree = spawnSync("git", ["worktree", "add", "-q", "-b", "runtime-fixture", linkedRoot], {
+        cwd: mainRoot, encoding: "utf8",
+      });
+      expect(worktree.status, worktree.stderr).toBe(0);
+
+      const cli = join(REAL_L0_ROOT, "mcp-server", "build", "sync", "sync-l0-cli.js");
+      const installed = spawnSync(process.execPath, [cli, "--project-root", linkedRoot, "--runtime"], {
+        encoding: "utf8", timeout: 60000,
+      });
+      expect(installed.status, installed.stderr || installed.stdout).toBe(0);
+      expect(runtimeContext.verifyRuntimeConsumerInstallation(linkedRoot, { verifyContent: true }).ok).toBe(true);
+      expect(await readFile(join(linkedRoot, ".claude", "registry", "wave-topology.yaml"), "utf8"))
+        .toBe(await readFile(join(REAL_L0_ROOT, ".claude", "registry", "wave-topology.yaml"), "utf8"));
+    } finally {
+      await rm(fixture, { recursive: true, force: true });
     }
   });
 

@@ -1,7 +1,8 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { writeFile, readFile, mkdtemp, rm, mkdir, access } from "node:fs/promises";
+import { writeFile, readFile, mkdtemp, rm, mkdir, access, realpath } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
+import { execFileSync } from "node:child_process";
 import type { SkillRegistry, SkillRegistryEntry } from "../../../src/registry/skill-registry.js";
 import type { Manifest } from "../../../src/sync/manifest-schema.js";
 
@@ -1395,6 +1396,28 @@ describe("resolveL0Source", () => {
     expect(resolved).toBe(l0Dir);
   });
 
+  it("resolves a main-checkout-relative sibling source from a linked worktree", async () => {
+    const mainDir = join(tempDir, "consumer-main");
+    const linkedDir = join(tempDir, "linked", "nested", "consumer-worktree");
+    const l0Dir = join(tempDir, "l0");
+    await mkdir(mainDir, { recursive: true });
+    await mkdir(join(l0Dir, "skills"), { recursive: true });
+    await writeFile(join(l0Dir, "skills", "registry.json"), "{}");
+    await writeFile(join(mainDir, "tracked.txt"), "fixture\n");
+    for (const args of [
+      ["init", "-q"],
+      ["config", "user.email", "test@example.invalid"],
+      ["config", "user.name", "Test"],
+      ["add", "."],
+      ["commit", "-qm", "fixture"],
+    ]) execFileSync("git", args, { cwd: mainDir });
+    await mkdir(join(tempDir, "linked", "nested"), { recursive: true });
+    execFileSync("git", ["worktree", "add", "-q", "-b", "fixture-worktree", linkedDir], { cwd: mainDir });
+
+    const resolved = await resolveL0Source("../l0", linkedDir);
+    expect(resolved).toBe(await realpath(l0Dir));
+  });
+
   it("falls back to ANDROID_COMMON_DOC env var", async () => {
     const envL0 = join(tempDir, "env-l0");
     await mkdir(join(envL0, "skills"), { recursive: true });
@@ -1613,8 +1636,7 @@ describe("mergeObservationBoundaryRegistration() -- P1I-OBS-SYNC", () => {
     }
   });
 
-  it("P1I-OBS-SYNC-HOOKS-PROPAGATES-BOUNDARY-UTILITY-03 RED: syncHooks() copies runtime-host-boundary.js from an L0 source, after which registration under all three events succeeds against the now-present utility", async () => {
-    const fn = requireMergeObservationBoundaryRegistration();
+  it("P1I-OBS-SYNC-HOOKS-SOURCE-REFERENCES-BOUNDARY-UTILITY-03: syncHooks() refuses to copy a hook whose runtime closure is not packaged", async () => {
     const l0Root = await mkdtemp(join(tmpdir(), "sync-obs-l0-"));
     const projectRoot = await mkdtemp(join(tmpdir(), "sync-obs-project-"));
     try {
@@ -1623,14 +1645,11 @@ describe("mergeObservationBoundaryRegistration() -- P1I-OBS-SYNC", () => {
       await mkdir(join(projectRoot, ".claude"), { recursive: true });
 
       const hookResult = await syncEngineNs.syncHooks(l0Root, projectRoot, [], false);
-      expect(hookResult.copied).toContain("runtime-host-boundary.js");
+      expect(hookResult.copied).not.toContain("runtime-host-boundary.js");
+      expect(hookResult.skipped).toContain("runtime-host-boundary.js");
       expect(hookResult.errors).toHaveLength(0);
-      const copiedContent = await readFile(join(projectRoot, ".claude", "hooks", "runtime-host-boundary.js"), "utf-8");
-      expect(copiedContent).toContain("L0 source stub");
-
-      const result = await fn(projectRoot, { observationPolicy: { enabled: true } });
-      expect(result.status).toBe("REGISTERED");
-      expect(result.added.filter((a) => a.file === "runtime-host-boundary.js")).toHaveLength(3);
+      await expect(readFile(join(projectRoot, ".claude", "hooks", "runtime-host-boundary.js"), "utf-8"))
+        .rejects.toThrow();
     } finally {
       await rm(l0Root, { recursive: true, force: true });
       await rm(projectRoot, { recursive: true, force: true });

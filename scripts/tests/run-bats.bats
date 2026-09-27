@@ -3,7 +3,7 @@ bats_require_minimum_version 1.5.0
 #
 # Tests for scripts/sh/run-bats.sh (--eval-only --log <path> mode).
 #
-# Coverage map (18 tests). Exit taxonomy (Wave A): 0 clean, 1 tests-failed
+# Coverage map (21 tests). Exit taxonomy (Wave A): 0 clean, 1 tests-failed
 # (not_ok>0), 2 no-evidence-or-incomplete (ok==0, or otherwise incomplete —
 # malformed plan / --expected mismatch / total!=expected / Executed-warning).
 # #RB2/#RB5/#RB6/#RB8/#RB9a/#RB10a/#RB10b are RE-PINNED from exit 1 to exit 2
@@ -32,6 +32,7 @@ bats_require_minimum_version 1.5.0
 #   #RB16 new BATS_SCOPE=targeted + BATS_TARGET_DIGEST matches independent recompute
 #   #RB17 --eval-only writes NO handoff, even with a clean existing log
 #   #RB18 no silent install: bats unresolvable → exit 2 + honest no-evidence handoff
+#   #RB19 each real run retains a distinct immutable log artifact/identity
 #
 # Isolation: every test uses mktemp + teardown rm -rf.
 # NEVER reads live suite logs.
@@ -234,10 +235,11 @@ EOF
 
     # Wave A: no-silent-install prefixes every real bats invocation with --no-install.
     mapfile -t args < "$WORK_DIR/npx-args"
+    canonical_work_dir="$(cd "$WORK_DIR" && pwd -P)"
     [ "${#args[@]}" -eq 3 ]
     [ "${args[0]}" = "--no-install" ]
     [ "${args[1]}" = "bats" ]
-    [ "${args[2]}" = "$WORK_DIR/scripts/tests" ]
+    [ "${args[2]}" = "$canonical_work_dir/scripts/tests" ]
 }
 
 @test "#RB12 EXPLICIT TARGETS: caller-supplied bats targets pass through unchanged" {
@@ -413,4 +415,44 @@ EOF
     [ -f "${handoffs[0]}" ]
     grep -q "^BATS_OK=0$" "${handoffs[0]}"
     grep -q "^BATS_VERDICT=fail$" "${handoffs[0]}"
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# #RB19 two default invocations must retain two distinct log artifacts. The
+# content may legitimately be byte-identical; agreement proves independent
+# runs through distinct stable file identities, not different test output.
+# ────────────────────────────────────────────────────────────────────────────
+@test "#RB19 two runs retain distinct immutable BATS_LOG artifacts and identities" {
+    write_fake_npx
+
+    run env PATH="$WORK_DIR/bin:$PATH" bash "$SCRIPT" --project-root "$WORK_DIR"
+    [ "$status" -eq 0 ]
+    run env PATH="$WORK_DIR/bin:$PATH" bash "$SCRIPT" --project-root "$WORK_DIR"
+    [ "$status" -eq 0 ]
+
+    local handoffs=("$WORK_DIR"/.androidcommondoc/bats-result.*.env)
+    [ "${#handoffs[@]}" -eq 2 ]
+    local canonical_work_dir log_a log_b identity_a identity_b
+    canonical_work_dir="$(cd "$WORK_DIR" && pwd -P)"
+    log_a="$(grep '^BATS_LOG=' "${handoffs[0]}" | cut -d= -f2-)"
+    log_b="$(grep '^BATS_LOG=' "${handoffs[1]}" | cut -d= -f2-)"
+    identity_a="$(grep '^BATS_LOG_IDENTITY=' "${handoffs[0]}" | cut -d= -f2-)"
+    identity_b="$(grep '^BATS_LOG_IDENTITY=' "${handoffs[1]}" | cut -d= -f2-)"
+
+    [ -f "$log_a" ]
+    [ -f "$log_b" ]
+    [[ "$log_a" == "$canonical_work_dir/.androidcommondoc/suite-bats."*.log ]]
+    [[ "$log_b" == "$canonical_work_dir/.androidcommondoc/suite-bats."*.log ]]
+    [ -f "$canonical_work_dir/.androidcommondoc/suite-bats.log" ]
+    [ "$log_a" != "$log_b" ]
+    [ "$identity_a" != "$identity_b" ]
+    cmp -s "$log_a" "$log_b"
+
+    run bash "$BATS_TEST_DIRNAME/../sh/lib/bats-handoff.sh" select \
+        --repo-root "$WORK_DIR" --head unknown --since 1970-01-01T00:00:00Z \
+        --require-scope full --wave-slug none --plan-digest none \
+        --require-agreeing 2 --format json
+    [ "$status" -eq 0 ]
+    [[ "$output" == *'"status":"ok"'* ]]
+    [[ "$output" == *'"agreement_count":2'* ]]
 }

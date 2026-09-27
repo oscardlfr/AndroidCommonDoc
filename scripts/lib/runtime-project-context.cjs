@@ -46,6 +46,23 @@ function fail(reason) {
   return { ok: false, reason };
 }
 
+function sourceResolutionBases(consumerRoot) {
+  const bases = [consumerRoot];
+  try {
+    const commonDir = execFileSync('git', ['rev-parse', '--path-format=absolute', '--git-common-dir'], {
+      cwd: consumerRoot, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'],
+    }).trim();
+    if (path.basename(commonDir) === '.git') {
+      const mainRoot = path.dirname(commonDir);
+      bases.push(mainRoot);
+      if (process.platform === 'darwin' && mainRoot.startsWith('/private/')) {
+        bases.push(mainRoot.slice('/private'.length));
+      }
+    }
+  } catch { /* a non-git fixture has only its literal root */ }
+  return [...new Set(bases)];
+}
+
 function resolveRuntimeProjectContext(consumerRoot) {
   if (typeof consumerRoot !== 'string' || consumerRoot.length === 0) return fail('runtime-consumer-root-invalid');
   let canonicalConsumer;
@@ -89,9 +106,14 @@ function resolveRuntimeProjectContext(consumerRoot) {
   // traversal lands one level too high and yields `/private/Users/...` paths
   // that never exist. Resolve lexically against the root as given; realpath is
   // valid only on the final target. Never build a path by prepending `/private`.
-  let canonicalSource;
-  try { canonicalSource = fs.realpathSync(path.resolve(consumerRoot, l0Sources[0].path)); }
-  catch { return fail('runtime-l0-source-unresolved'); }
+  let canonicalSource = null;
+  for (const base of sourceResolutionBases(consumerRoot)) {
+    try {
+      const candidate = fs.realpathSync(path.resolve(base, l0Sources[0].path));
+      if (candidate === TOOLKIT_ROOT) { canonicalSource = candidate; break; }
+    } catch { /* try the next repository-owned base */ }
+  }
+  if (canonicalSource === null) return fail('runtime-l0-source-unresolved');
   if (canonicalSource !== TOOLKIT_ROOT) return fail('runtime-toolkit-source-mismatch');
 
   const hasRegistry = fs.existsSync(path.join(canonicalConsumer, 'skills', 'registry.json'));
@@ -137,11 +159,16 @@ function computeRuntimeToolkitInventory(toolkitRoot) {
   const files = [
     'scripts/lib/runtime-role-lifecycle.cjs', 'scripts/lib/runtime-host-claude.cjs',
     'scripts/lib/runtime-consultation.cjs', 'scripts/lib/runtime-collaboration-entrypoints.cjs',
+    'scripts/lib/wave-control-plane.cjs',
+    'scripts/lib/verdict-evidence-contract-cli.cjs',
+    'scripts/lib/verdict-evidence-contract.cjs', 'scripts/lib/verdict-artifact-confinement.cjs',
+    'scripts/lib/verdict-artifact-store.cjs',
     'scripts/lib/runtime-collaboration-policy.json', 'scripts/lib/runtime-routing.json',
     'scripts/lib/runtime-bridge-codex.cjs', 'scripts/lib/runtime-project-context.cjs',
     '.claude/settings.json', '.claude/model-profiles.json', 'setup/claude-host-contract.json',
     'mcp-server/package-lock.json',
     ...CORE_HOOK_FILES.map((file) => `.claude/hooks/${file}`),
+    '.claude/registry/wave-topology.yaml',
     ...ROLE_TEMPLATES.map((role) => `.claude/agents/${role}.md`),
     ...['init-session', 'resume-work', 'work', 'ingest-content', 'monitor-docs'].map((skill) => `skills/${skill}/SKILL.md`),
     ...['init-session', 'resume-work', 'work', 'ingest-content', 'monitor-docs'].map((command) => `.claude/commands/${command}.md`),

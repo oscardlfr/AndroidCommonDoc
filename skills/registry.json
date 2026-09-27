@@ -754,7 +754,7 @@
       "description": "Analyze external content and extract patterns for routing to docs. Use when asked to ingest an article, URL, or pasted content.",
       "category": "guides",
       "tier": "extended",
-      "hash": "sha256:65ebcd1e65da59d8d6315932a6a5deb6ce94a0ada342ff175e153159025427c0",
+      "hash": "sha256:c45c275468828303da3934091b37bcd6251df933a4fff446cd37d94d609172c2",
       "dependencies": [],
       "frontmatter": {
         "name": "ingest-content",
@@ -788,7 +788,7 @@
       "description": "Show project context dashboard. Optionally ensures the persistent support plane with --orchestrate <slug> flag.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:8495695f16479180bb19f2d4bf668ab2866c01b250a5d86884de233a175b00f3",
+      "hash": "sha256:173e9b2077c04d7d407180de3dc8c2932eb52bf12ec259f2e77972ddd7afaa76",
       "dependencies": [],
       "frontmatter": {
         "name": "init-session",
@@ -958,7 +958,7 @@
       "description": "Monitor upstream doc sources for version drift and deprecations. Use when asked to check for outdated dependencies or doc freshness.",
       "category": "guides",
       "tier": "extended",
-      "hash": "sha256:4cc6e16a32ef830d07021b4de965a91fc8703abf805fb6a325990d6ba94ff2da",
+      "hash": "sha256:36173e2507c7a5a29f0eded8f7924f084bc8cd3c4ef5647b9b0106e8134b1ffc",
       "dependencies": [],
       "frontmatter": {
         "name": "monitor-docs",
@@ -1164,7 +1164,7 @@
       "description": "Resume session with a CEO/CTO dashboard — shows status by department from last session.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:64a152e56ca64ff842f71e77f1a34254f2ffd90f039d448709fc3ca009e23089",
+      "hash": "sha256:12e8cd5fa748669af5b49563d5de70f0908e2a3c586f82f52e1caa8029ce01c9",
       "dependencies": [],
       "frontmatter": {
         "name": "resume-work",
@@ -1368,14 +1368,14 @@
       "name": "set-model-profile",
       "type": "skill",
       "path": "skills/set-model-profile/SKILL.md",
-      "description": "> Switch the model tier used by all AndroidCommonDoc agents.",
+      "description": "Switch the model tier used by all AndroidCommonDoc agents.",
       "category": "domain",
       "tier": "extended",
       "hash": "sha256:af946e0fc92508c571972e517139474a5af4bb8b4f29561cdb567a4ba581cde1",
       "dependencies": [],
       "frontmatter": {
         "name": "set-model-profile",
-        "description": "> Switch the model tier used by all AndroidCommonDoc agents.",
+        "description": "Switch the model tier used by all AndroidCommonDoc agents.",
         "intent": [
           "model",
           "profile",
@@ -1495,7 +1495,7 @@
       "description": "Synchronize L0 assets, and optionally install the source-referenced collaboration runtime in an L1/L2 consumer.",
       "category": "guides",
       "tier": "extended",
-      "hash": "sha256:21ef1b4c7d3a20e120ae442aecbcfeb7bd281363a446446109bef3b4cfa8778a",
+      "hash": "sha256:f30bd9980dca76ab212e8763936aa452be64036e42cfd547e7c939963f28969a",
       "dependencies": [],
       "frontmatter": {
         "name": "sync-l0",
@@ -1865,7 +1865,7 @@
       "description": "Smart task routing through the canonical runtime collaboration entrypoint.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:6d3fd192f3ed6068f43928792f9c6c779a0a4dc304b48a118cc3e01fcc1c90be",
+      "hash": "sha256:e4195766eb8f4b4111e5cb4228af39bc60bfd419fef15028c96682d033487424",
       "dependencies": [],
       "frontmatter": {
         "name": "work",
@@ -2728,14 +2728,14 @@
       "name": "quality-gater",
       "type": "agent",
       "path": ".claude/agents/quality-gater.md",
-      "description": "QG owner (Phase 3). Runs sequential verification (frontmatter → tests → coverage → benchmarks → pre-pr) after architect APPROVE, before commit. Reports structured PASS/FAIL.",
+      "description": "QG owner (Phase 3). Runs sequential verification on the final committed HEAD after VERIFY-FINAL architect approval. Reports structured PASS/FAIL.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:1c169a633ed4e0b463c7f2270f00456b4476f1a4185cfb5737a072c5230238f8",
+      "hash": "sha256:fc58e5f9436881f38e56c4dd24d88d754512b88b47700dc478a368395a0125a4",
       "dependencies": [],
       "frontmatter": {
         "name": "quality-gater",
-        "description": "QG owner (Phase 3). Runs sequential verification (frontmatter → tests → coverage → benchmarks → pre-pr) after architect APPROVE, before commit. Reports structured PASS/FAIL.",
+        "description": "QG owner (Phase 3). Runs sequential verification on the final committed HEAD after VERIFY-FINAL architect approval. Reports structured PASS/FAIL.",
         "tools": "Read, Grep, Glob, Bash, SendMessage, mcp__androidcommondoc__code-metrics, mcp__androidcommondoc__validate-all, mcp__androidcommondoc__validate-doc-update, mcp__androidcommondoc__tool-use-analytics",
         "model": "sonnet",
         "domain": "quality",
@@ -2747,7 +2747,7 @@
           "detekt"
         ],
         "token_budget": 3000,
-        "template_version": "2.25.0"
+        "template_version": "2.26.0"
       }
     },
     {

@@ -217,11 +217,19 @@ If predicate is `true` and the report shows `SKIP` → `inconsistent-skip` (exit
 
 ## Verdict→HEAD Binding
 
-VERIFY-FINAL verdicts written by `write-verdict.sh --phase verify-final` carry a `**HEAD**:` field (sha at emit time). `run-qg` enforces `verdict.head == git rev-parse HEAD` at proof-mint time.
+VERIFY-FINAL `verdict/v1` JSON records written by `write-verdict.sh --phase verify-final` carry a `head` field (SHA at emit time). `run-qg` enforces `verdict.head == git rev-parse HEAD` at proof-mint time.
 
-**Required roles**: `run-qg` cross-checks that every role in `quality-gate-manifest.json architect-deliberation.required_roles` has both (a) an entry in `report.deliberation.architects_consulted` and (b) a `VERIFY-FINAL`+HEAD-bound `arch-<role>-verdict.md` in the wave dir. Current required roles: `arch-platform`, `arch-testing`, `arch-integration`. A missing role in either check → exit 2 `deliberation-role-incomplete`.
+**Required roles**: `run-qg` cross-checks that every role in `quality-gate-manifest.json architect-deliberation.required_roles` has both (a) an entry in `report.deliberation.architects_consulted` and (b) a VERIFY-FINAL+HEAD-bound `arch-<role>-verdict-verify-final.json` in the wave dir. Current required roles: `arch-platform`, `arch-testing`, `arch-integration`. A missing role in either check → exit 2 `deliberation-role-incomplete`.
 
 **Rule**: if any commit lands after VERIFY-FINAL is written, re-run `write-verdict.sh --phase verify-final` before calling `run-qg`. A verdict approved at commit A does not satisfy a proof minted at commit B.
+
+**Legacy control-plane recovery**: early `wave-phase-state/v1` writers could omit
+`decision` from otherwise valid PREP/VERIFY-FINAL transition evidence. The reader
+recognizes only that exact decisionless shape, reconstructs `decision: approve`,
+revalidates every referenced `verdict/v1` against its role, phase, wave, PLAN and
+transition HEAD, and then replaces the ignored state atomically. Any malformed,
+missing, stale, or non-authorizing source leaves the original state untouched and
+fails closed; operators must never hand-edit the state to bypass revalidation.
 
 ---
 

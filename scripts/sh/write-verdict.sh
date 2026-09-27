@@ -351,9 +351,13 @@ _confine_under_wave "$VERDICT_FILE" false
 
 _relative_to_wave() {
   node -e '
+    const fs = require("fs");
     const path = require("path");
-    const root = path.resolve(process.argv[1]);
-    const target = path.resolve(process.argv[2]);
+    // Normalize both sides through the filesystem before deriving a durable
+    // relative reference. macOS exposes the same temporary tree as /var and
+    // /private/var; mixing those spellings must not serialize a leading ../../.
+    const root = fs.realpathSync(path.resolve(process.argv[1]));
+    const target = fs.realpathSync(path.resolve(process.argv[2]));
     process.stdout.write(path.relative(root, target).split(path.sep).join("/"));
   ' "$WAVE_DIR" "$1"
 }

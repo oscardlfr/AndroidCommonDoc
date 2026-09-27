@@ -13,7 +13,7 @@ description: >
   rules JAR, and install MCP server dependencies. / Clonar AndroidCommonDoc,
   configurar la variable de entorno, compilar las reglas Detekt e instalar
   las dependencias del servidor MCP.
-last_updated: "2026-03-18"
+last_updated: "2026-09-26"
 ---
 
 # Step 1 — Install L0
@@ -101,6 +101,18 @@ cd mcp-server   && npm ci               && cd ..
 # Then re-sync skills in each downstream project:
 cd /path/to/my-project && /sync-l0
 ```
+
+### 1.6 Launching Claude for a downstream project
+
+Claude must be given access to the sibling toolkit on every normal launch:
+
+```bash
+cd /path/to/my-project
+claude --add-dir "$ANDROID_COMMON_DOC"
+```
+
+See [Runtime consumer operations](../runtime-consumer-operations.md) for runtime
+installation, worktrees, recovery modes, and automatic host recertification.
 
 ---
 

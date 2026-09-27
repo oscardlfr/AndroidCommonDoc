@@ -13,8 +13,6 @@ function fixture({ className = 'FAST-PATH', architects = '[]', lifecycleRoles = 
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'wave-control-'));
   fs.mkdirSync(path.join(root, '.planning', 'wave-demo'), { recursive: true });
   fs.mkdirSync(path.join(root, '.claude', 'registry'), { recursive: true });
-  fs.mkdirSync(path.join(root, 'mcp-server', 'node_modules'), { recursive: true });
-  fs.symlinkSync(path.resolve(__dirname, '../../mcp-server/node_modules/yaml'), path.join(root, 'mcp-server', 'node_modules', 'yaml'), 'junction');
   fs.writeFileSync(path.join(root, '.planning', 'wave-demo', 'PLAN.md'), `### Wave Class\n\n**Class**: ${className}\n${required}`);
   fs.writeFileSync(path.join(root, '.claude', 'registry', 'wave-topology.yaml'), `default_class: HARNESS\nclass_artifacts:\n  ${className}:\n    architects: ${architects}\n    lifecycle_roles: ${lifecycleRoles}\n    execution_mode: ${executionMode}\n`);
   execFileSync('git', ['init', '-q'], { cwd: root });
@@ -23,6 +21,18 @@ function fixture({ className = 'FAST-PATH', architects = '[]', lifecycleRoles = 
   execFileSync('git', ['add', '.'], { cwd: root });
   execFileSync('git', ['commit', '-qm', 'fixture'], { cwd: root });
   return root;
+}
+
+function publishPrepApproval(root, role = 'arch-platform') {
+  const scriptsRoot = path.resolve(__dirname, '..');
+  const requestLine = execFileSync('bash', [path.join(scriptsRoot, 'sh', 'write-verdict-request.sh'),
+    '--role', role, '--phase', 'prep', '--slug', 'demo'], { cwd: root, encoding: 'utf8' }).trim();
+  const [requestPath, requestDigest] = requestLine.split(/\s+/);
+  execFileSync('bash', [path.join(scriptsRoot, 'sh', 'write-verdict.sh'),
+    '--role', role, '--phase', 'prep', '--slug', 'demo',
+    '--request', requestPath, '--request-sha256', requestDigest, '--decision', 'approve'],
+  { cwd: root, input: 'fixture PREP approval\n', encoding: 'utf8' });
+  return path.join(root, '.planning', 'wave-demo', `${role}-verdict-prep.json`);
 }
 
 test('initialization is idempotent and bound to PLAN and HEAD', () => {
@@ -44,6 +54,58 @@ test('legal transitions advance exactly one phase and illegal transitions fail c
     control.initialize(root, 'demo');
     assert.strictEqual(control.transition(root, 'demo', 'EXECUTE').phase, 'EXECUTE');
     assert.throws(() => control.transition(root, 'demo', 'QG'), /ILLEGAL_PHASE_TRANSITION/);
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
+
+test('a PREP transition with a real authorizing verdict persists a readable approve decision', () => {
+  const root = fixture({ className: 'HARNESS', architects: '[arch-platform]', lifecycleRoles: '[]' });
+  try {
+    control.initialize(root, 'demo');
+    const verdictPath = publishPrepApproval(root);
+    assert.strictEqual(fs.existsSync(path.join(root, 'scripts', 'lib')), false);
+    const transitioned = control.transition(root, 'demo', 'EXECUTE', {
+      verdicts: [{ role: 'arch-platform', path: verdictPath }],
+    });
+    assert.strictEqual(transitioned.transitions[0].evidence[0].decision, 'approve');
+    assert.strictEqual(control.status(root, 'demo').phase, 'EXECUTE');
+    assert.strictEqual(control.status(root, 'demo').current, true);
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
+
+test('decisionless legacy state is atomically migrated only after its verdict source revalidates', () => {
+  const root = fixture({ className: 'HARNESS', architects: '[arch-platform]', lifecycleRoles: '[]' });
+  try {
+    control.initialize(root, 'demo');
+    const verdictPath = publishPrepApproval(root);
+    control.transition(root, 'demo', 'EXECUTE', { verdicts: [{ role: 'arch-platform', path: verdictPath }] });
+    const statePath = path.join(root, '.androidcommondoc', 'wave-control', 'demo.json');
+    const legacy = JSON.parse(fs.readFileSync(statePath, 'utf8'));
+    delete legacy.transitions[0].evidence[0].decision;
+    fs.writeFileSync(statePath, JSON.stringify(legacy, null, 2) + '\n');
+
+    const migrated = control.status(root, 'demo');
+    assert.strictEqual(migrated.phase, 'EXECUTE');
+    assert.strictEqual(migrated.transitions[0].evidence[0].decision, 'approve');
+    const persisted = JSON.parse(fs.readFileSync(statePath, 'utf8'));
+    assert.strictEqual(persisted.transitions[0].evidence[0].decision, 'approve');
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
+
+test('decisionless legacy state fails closed and remains byte-identical when verdict revalidation fails', () => {
+  const root = fixture({ className: 'HARNESS', architects: '[arch-platform]', lifecycleRoles: '[]' });
+  try {
+    control.initialize(root, 'demo');
+    const verdictPath = publishPrepApproval(root);
+    control.transition(root, 'demo', 'EXECUTE', { verdicts: [{ role: 'arch-platform', path: verdictPath }] });
+    const statePath = path.join(root, '.androidcommondoc', 'wave-control', 'demo.json');
+    const legacy = JSON.parse(fs.readFileSync(statePath, 'utf8'));
+    delete legacy.transitions[0].evidence[0].decision;
+    const legacyBytes = Buffer.from(JSON.stringify(legacy, null, 2) + '\n');
+    fs.writeFileSync(statePath, legacyBytes);
+    fs.writeFileSync(verdictPath, '{"tampered":true}\n');
+
+    assert.throws(() => control.status(root, 'demo'), /LEGACY_PHASE_STATE_VERDICT_INVALID:arch-platform/);
+    assert.deepStrictEqual(fs.readFileSync(statePath), legacyBytes);
   } finally { fs.rmSync(root, { recursive: true, force: true }); }
 });
 

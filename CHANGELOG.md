@@ -5,6 +5,22 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 
 ## [Unreleased]
 
+### Fixed (first L2 consumer runtime hardening)
+
+- Ordinary sync now keeps hooks with L0-relative imports source-referenced instead of copying broken entrypoints; the push gate resolves its verifier/canonical Git hook from the toolkit while validating the consumer repository.
+- Runtime installation now owns and digests `wave-topology.yaml`; `wave-control-plane.cjs` loads YAML from the toolkit, and clean consumers no longer need a fake `mcp-server/node_modules` tree.
+- Relative L0 sources now resolve from linked Git worktrees through the main checkout, including the macOS `/var` ↔ `/private/var` lexical alias.
+- Verdict confinement and relative request references now canonicalize aliases above the wave root without weakening rejection of symlinks inside it; `/var` and `/private/var` no longer make legitimate macOS artifacts fail closed.
+- Detekt hook installers verify content and executable mode, repair identical non-executable shell hooks, and fail on conflicting bytes.
+- Canonical skill examples use the exact single-quoted POSIX entrypoint form, and consumer launch documentation requires `claude --add-dir <L0-root>`.
+- R131 host-boundary coverage now uses an isolated one-plan consumer fixture instead of the repository's mutable `.planning/` tree.
+
+### Added (Claude host compatibility and recovery)
+
+- Added one-command Claude host recertification: capability capture, genuine probe, evidence-derived qualification, atomic replacement of a previously verified same-platform package, and post-publication verification. Claude version is parsed from `--version`, not inferred from an installation path.
+- Added spawn-to-`system/init` timeout enforcement. Requested, observed, and effective effort are now separate; effective effort remains unproven until telemetry exists, and `per_turn_effort_active:false` fails effort-controlled entrypoint certification.
+- Added an operational runbook distinguishing normal launch, `--safe-mode`, `--bare`, and one-shot `-p` recovery, including permission and persistence caveats.
+
 ### Added (Waves 3–7 — collaboration authority closure)
 
 - Added immutable `verdict-request/v1` and request-bound `verdict/v1` artifacts with strict role/phase/wave/PLAN/HEAD/evidence validation, durable no-clobber publication, and compare-and-swap supersession. Legacy Markdown verdict tokens are non-authoritative.

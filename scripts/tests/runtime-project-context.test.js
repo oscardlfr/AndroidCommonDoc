@@ -92,6 +92,7 @@ test('P3-RUNTIME-INVENTORY includes every modular runtime dependency tree', () =
   assert.ok(paths.has('scripts/lib/runtime-consultation/coordination-paths.cjs'));
   assert.ok(paths.has('scripts/lib/runtime-role-lifecycle/claude-id01-startup.cjs'));
   assert.ok(paths.has('scripts/lib/runtime-bridge-codex/process-identity.cjs'));
+  assert.ok(paths.has('scripts/lib/verdict-artifact-confinement.cjs'));
 });
 
 // --- F-24: platform-scoped host certificates must reach the consumer ---

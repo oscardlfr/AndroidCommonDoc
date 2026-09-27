@@ -32,7 +32,7 @@
 // match what it was assigned, incoherent per-shard counts (non-integer,
 // negative, OK+NOT_OK != TOTAL, or a VERDICT that doesn't match them), a
 // BATS_SCOPE other than "targeted" on any per-shard handoff, a BATS_LOG that
-// doesn't match the exact path this orchestrator itself assigned that shard,
+// doesn't match run-bats.sh's canonical retained path for that shard run-id,
 // a BATS_HEAD that doesn't match the HEAD frozen once before the first shard
 // launched (never merely "the same as each other" -- aggregateHandoffs' own
 // mutual-consistency check is a second, independent, weaker layer beneath
@@ -175,9 +175,9 @@ function confineHandoffPath(rawPath, resultsDir) {
  * sums to TOTAL, a VERDICT that actually matches those counts, BATS_SCOPE
  * pinned to "targeted" (only the aggregate may ever claim "full"), the exact
  * HEAD frozen before any shard launched (never merely equal across shards --
- * see aggregateHandoffs for that separate, weaker check), and the exact log
- * path this orchestrator itself assigned this shard. Every failure is a
- * distinct, named reason -- never a bare false. */
+ * see aggregateHandoffs for that separate, weaker check), and the canonical
+ * retained log path run-bats.sh derives beside the live log from BATS_RUN_ID.
+ * Every failure is a distinct, named reason -- never a bare false. */
 function validateShardResult({ handoff, expectedFiles, gitBin, frozenHead, expectedLogPath }) {
   if (!handoff) return { ok: false, reason: 'SHARD_HANDOFF_MISSING' };
   if (handoff.BATS_COMPLETE !== 'true') return { ok: false, reason: 'SHARD_INCOMPLETE' };
@@ -200,7 +200,14 @@ function validateShardResult({ handoff, expectedFiles, gitBin, frozenHead, expec
   if (typeof expectedLogPath !== 'string' || expectedLogPath.length === 0) {
     return { ok: false, reason: 'SHARD_EXPECTED_LOG_PATH_REQUIRED' };
   }
-  if (handoff.BATS_LOG !== expectedLogPath) return { ok: false, reason: 'SHARD_LOG_PATH_MISMATCH' };
+  if (!/^[A-Za-z0-9._-]+$/.test(handoff.BATS_RUN_ID || '')) {
+    return { ok: false, reason: 'SHARD_RUN_ID_MALFORMED' };
+  }
+  const expectedRetainedLogPath = path.join(
+    path.dirname(expectedLogPath),
+    'suite-bats.' + handoff.BATS_RUN_ID + '.log',
+  );
+  if (handoff.BATS_LOG !== expectedRetainedLogPath) return { ok: false, reason: 'SHARD_LOG_PATH_MISMATCH' };
   let expectedDigest;
   try {
     expectedDigest = computeTargetDigest(expectedFiles, gitBin);
@@ -221,6 +228,32 @@ function validateShardResult({ handoff, expectedFiles, gitBin, frozenHead, expec
     return { ok: false, reason: 'SHARD_PROVENANCE_MALFORMED' };
   }
   return { ok: true };
+}
+
+/** Binds the handoff's declared retained artifact to bytes this orchestrator
+ * can independently read. The live log and retained log must be byte-equal,
+ * while the retained file's stable digest and identity must match the values
+ * published by run-bats.sh. Returning the retained bytes lets aggregation use
+ * the admitted immutable evidence rather than re-reading the mutable live log. */
+function validateShardLogArtifacts({ handoff, expectedLogPath, root, readArtifact = stableReadArtifact }) {
+  let live;
+  let retained;
+  try {
+    live = readArtifact(expectedLogPath, { root });
+    retained = readArtifact(handoff.BATS_LOG, { root });
+  } catch (err) {
+    return { ok: false, reason: 'SHARD_LOG_ARTIFACT_UNREADABLE' };
+  }
+  if (retained.sha256 !== handoff.BATS_LOG_DIGEST) {
+    return { ok: false, reason: 'SHARD_LOG_DIGEST_MISMATCH' };
+  }
+  if (retained.identity !== handoff.BATS_LOG_IDENTITY) {
+    return { ok: false, reason: 'SHARD_LOG_IDENTITY_MISMATCH' };
+  }
+  if (live.sha256 !== retained.sha256) {
+    return { ok: false, reason: 'SHARD_LIVE_RETAINED_LOG_MISMATCH' };
+  }
+  return { ok: true, bytes: retained.bytes };
 }
 
 /** Aggregates N already-individually-validated shard handoffs. Fails closed
@@ -299,6 +332,7 @@ module.exports = {
   extractHandoffPath,
   confineHandoffPath,
   validateShardResult,
+  validateShardLogArtifacts,
   aggregateHandoffs,
   renumberTap,
   caseIdentities,
@@ -577,7 +611,8 @@ async function runPool(items, limit, worker, state) {
 
 async function main() {
   const { computeTargetDigest: digestOf, parseHandoffEnv: parseEnv, extractHandoffPath: extractPath,
-    confineHandoffPath: confinePath, validateShardResult: validateShard, aggregateHandoffs: aggregate,
+    confineHandoffPath: confinePath, validateShardResult: validateShard,
+    validateShardLogArtifacts: validateShardArtifacts, aggregateHandoffs: aggregate,
     renumberTap: renumber } = module.exports;
 
   // win32 fail-closed preflight: this tool spawns POSIX bash and signals
@@ -668,6 +703,7 @@ async function main() {
   }
 
   const validated = [];
+  const retainedLogTexts = [];
   for (const run of runs) {
     if (!run.confinement.ok) {
       throw new Error('shard ' + run.shard.index + ': ' + run.confinement.reason + ' (exit ' + run.code + ')\n' + run.shard.index + ' stderr tail: ' + run.stderr.slice(-800));
@@ -679,7 +715,15 @@ async function main() {
     if (!verdict.ok) {
       throw new Error('shard ' + run.shard.index + ': ' + verdict.reason + ' (handoff=' + run.confinement.canonicalPath + ')');
     }
+    const artifactVerdict = validateShardArtifacts({
+      handoff, expectedLogPath: run.logPath, root,
+    });
+    if (!artifactVerdict.ok) {
+      throw new Error('shard ' + run.shard.index + ': ' + artifactVerdict.reason
+        + ' (handoff=' + run.confinement.canonicalPath + ')');
+    }
     validated.push(handoff);
+    retainedLogTexts.push(artifactVerdict.bytes.toString('utf8'));
   }
 
   const agg = aggregate(validated, plan.shards.length);
@@ -705,8 +749,7 @@ async function main() {
       + '. Refusing to publish scope=full against a roster that no longer matches disk.');
   }
 
-  const shardLogTexts = shardLogPaths.map((p) => fs.readFileSync(p, 'utf8'));
-  const { text: tapText, total: tapTotal } = renumber(shardLogTexts);
+  const { text: tapText, total: tapTotal } = renumber(retainedLogTexts);
   if (tapTotal !== agg.facts.total) {
     throw new Error('AGGREGATE_TAP_COUNT_MISMATCH: renumbered TAP has ' + tapTotal + ' cases, handoffs summed to ' + agg.facts.total);
   }

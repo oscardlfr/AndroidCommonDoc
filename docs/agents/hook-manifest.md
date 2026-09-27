@@ -3,7 +3,7 @@ scope: [agents, hooks, workflow]
 sources: [androidcommondoc]
 targets: [all]
 version: 5
-last_updated: "2026-08"
+last_updated: "2026-09-26"
 description: "Consumer hook manifest: classifies all 39 L0 hook files as consumer-required / consumer-optional / l0-internal"
 slug: hook-manifest
 status: active
@@ -35,17 +35,15 @@ Reference classification for all 39 hook files in `.claude/hooks/`. Consumers us
 These are two separate steps — both must be completed for a hook to be active.
 
 **File copy (propagation)**:
-- `.js` hooks: copied to the consumer by `/sync-l0` (see `skills/sync-l0/SKILL.md:140-160`). Opt out per-hook via `selection.exclude_hooks` in `l0-manifest.json`.
-- `.js` runtime helpers: copied as files when imported by propagated hooks, but never registered in `settings.json`.
+- Standalone `.js` hooks are copied to the consumer by `/sync-l0`. Opt out per-hook via `selection.exclude_hooks` in `l0-manifest.json`.
+- `.js` hooks importing `../../scripts/lib/**` remain in L0 and are registered by absolute toolkit path. Copying only their entrypoint would create a guaranteed `MODULE_NOT_FOUND` consumer hook. The same `exclude_hooks` entry prevents a new source-coupled registration; sync remains additive and does not silently remove an already adopted registration.
 - `.sh` hooks: NOT in `/sync-l0` scope. `setup/install-hooks.sh` copies exactly 3 files: `detekt-post-write.sh`, `detekt-pre-commit.sh`, `branch-guard.js`.
 
 **settings.json registration**:
-- `/sync-l0` registers **nothing** in `settings.json` — it only copies files.
+- `/sync-l0` additively registers the required hook set. Source-coupled hooks use the absolute resolved L0 checkout; standalone hooks use the consumer copy. Exact legacy local registrations are migrated without deleting unrelated user hooks.
 - `install-hooks.sh` auto-registers exactly **2** hooks via python JSON merge: `detekt-post-write.sh` (PostToolUse `Write|Edit`) and `detekt-pre-commit.sh` (PreToolUse `Bash`).
 - `branch-guard.js` is copied by `install-hooks.sh` but **not registered**.
-- Every other hook (all `/sync-l0`-propagated `.js` hooks, plus the remaining `.sh` hooks) requires **manual** `settings.json` registration.
-
-This is the gap the manifest addresses: files landing on disk is not the same as registration. The L2 consumer project currently registers 5 of 12 consumer-required hooks; 7 are missing.
+- Optional hooks and remaining `.sh` hooks still require explicit adoption.
 
 ### Runtime Activation (Registered ≠ Executed)
 

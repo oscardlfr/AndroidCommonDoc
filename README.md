@@ -24,6 +24,8 @@ Cross-platform scripts, AI agent skills (Claude Code + GitHub Copilot), 28 custo
 
 > **Start here:** `/work` (smart task routing), `/init-session` (project context dashboard), `/resume-work` (CEO-level session resume). These three entry points discover your agents, skills, and modules automatically.
 
+> **L1/L2 runtime consumers:** install and launch with the exact procedure in [Runtime consumer operations](docs/guides/runtime-consumer-operations.md), including required `claude --add-dir <L0-root>`, worktree behavior, safe-mode recovery, and atomic Claude host recertification.
+
 > **Platform support:** All skills, agents, and Detekt rules work on both **Android-only (AGP 8.x)** and **KMP (AGP 9.0+)** projects. A small subset is KMP-only (noted below).
 
 ---
@@ -59,6 +61,9 @@ Development history beyond the CHANGELOG — summarized from memory + commit log
 
 | Wave | Date | PR | Theme |
 |------|------|----|-------|
+| Waves 3–7 | 2026-09-22 | [#250](https://github.com/oscardlfr/AndroidCommonDoc/pull/250) | Structured verdict authority, reproducible evidence, native push authority, class-aware wave control plane, and operational baseline closure. |
+| Wave 2 | 2026-09-21 | [#249](https://github.com/oscardlfr/AndroidCommonDoc/pull/249) | Repository-wide workflow input-boundary hardening. |
+| Wave 1 stabilization | 2026-09-20 | [#246](https://github.com/oscardlfr/AndroidCommonDoc/pull/246)–[#248](https://github.com/oscardlfr/AndroidCommonDoc/pull/248) | Portable runtime collaboration, macOS certificate/path stabilization, parallel Bats, and process-liveness fixes. |
 | BL-W47-prep | 2026-05-11 | [#180](https://github.com/oscardlfr/AndroidCommonDoc/pull/180) | Topology cleanups: planner 1.11.0, AMEND protocol, 4 topology gaps closed. |
 | Wave F | 2026-05-11 | [#179](https://github.com/oscardlfr/AndroidCommonDoc/pull/179) | Post-Wave-E audit cleanup + script v0.9.1 parity. |
 | Wave E | 2026-05-10 | [#178](https://github.com/oscardlfr/AndroidCommonDoc/pull/178) | L0 cleanup: scrub + atomization + line-anchor vitest refactor. 3 BL closures (BL-W30-04/-05, line-anchor). |
@@ -1070,7 +1075,7 @@ See `setup/github-workflows/ci-template.yml` for a full consumer project templat
 
 ## Documentation
 
-17 domain hubs, 102 sub-docs, 29 guides, 83 agent workflow docs -- all with YAML frontmatter for registry scanning, upstream monitoring, and Detekt rule generation. 19 approved categories including `api` for auto-generated API docs.
+17 domain hubs, 102 sub-docs, 30 guides, 83 agent workflow docs -- all with YAML frontmatter for registry scanning, upstream monitoring, and Detekt rule generation. 19 approved categories including `api` for auto-generated API docs.
 
 ### Doc Integrity System
 
@@ -1254,7 +1259,7 @@ AndroidCommonDoc/
 |   +-- reusable-shell-tests.yml             # workflow_call: bats shell script tests
 |   +-- reusable-check-outdated.yml         # workflow_call: dependency freshness check
 |   +-- reusable-copilot-parity.yml         # workflow_call: verify copilot prompt/skill sync
-+-- docs/                   # 17 domain hubs, 102 sub-docs, 29 guides, 83 agent workflow docs
++-- docs/                   # 17 domain hubs, 102 sub-docs, 30 guides, 83 agent workflow docs
 |   +-- agents/          +-- architecture/  +-- compose/    +-- di/
 |   +-- error-handling/     +-- gradle/     +-- guides/
 |   +-- navigation/         +-- network/    +-- offline-first/ +-- resources/

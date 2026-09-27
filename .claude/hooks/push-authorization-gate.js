@@ -130,17 +130,20 @@ process.stdin.on('end', () => {
     // to fall through to post-H1. Every failure mode below routes to a LOCAL block()+return;
     // none may reach the global `catch { process.exit(0) }` below. Only a clean exit 0 with
     // no spawn error allows.
-    const verifyGitHooksPath = path.join(projectRoot, 'scripts', 'sh', 'verify-git-hooks.sh');
+    const toolkitRoot = path.resolve(__dirname, '..', '..');
+    const verifyGitHooksPath = path.join(toolkitRoot, 'scripts', 'sh', 'verify-git-hooks.sh');
+    const installGitHooksPath = path.join(toolkitRoot, 'scripts', 'sh', 'install-git-hooks.sh');
+    const repairInstruction = `bash "${installGitHooksPath}" "${projectRoot}"`;
     let result;
     try {
       result = spawnSync(
-        'bash', [verifyGitHooksPath, '--repo-root', projectRoot],
+        'bash', [verifyGitHooksPath, '--repo-root', projectRoot, '--toolkit-root', toolkitRoot],
         { cwd: projectRoot, timeout: 15000, encoding: 'utf8' }
       );
     } catch (spawnErr) {
       block(
         `[push-authorization-gate] BLOCKED: verify-git-hooks.sh invocation threw unexpectedly ` +
-        `(${spawnErr && spawnErr.message}). Run bash scripts/sh/install-git-hooks.sh to install ` +
+        `(${spawnErr && spawnErr.message}). Run ${repairInstruction} to install ` +
         `the pre-push hook, then re-push. Bypass: PUSH_AUTHORIZATION_BYPASS=1.`
       );
       return;
@@ -149,7 +152,7 @@ process.stdin.on('end', () => {
     if (result.error) {
       block(
         `[push-authorization-gate] BLOCKED: verify-git-hooks.sh could not be launched ` +
-        `(${result.error.message}). Run bash scripts/sh/install-git-hooks.sh to install ` +
+        `(${result.error.message}). Run ${repairInstruction} to install ` +
         `the pre-push hook, then re-push. Bypass: PUSH_AUTHORIZATION_BYPASS=1.`
       );
       return;
@@ -158,7 +161,7 @@ process.stdin.on('end', () => {
     if (result.status === null) {
       block(
         `[push-authorization-gate] BLOCKED: verify-git-hooks.sh timed out or was terminated ` +
-        `by a signal before completing. Run bash scripts/sh/install-git-hooks.sh to install ` +
+        `by a signal before completing. Run ${repairInstruction} to install ` +
         `or repair the pre-push hook, then re-push. Bypass: PUSH_AUTHORIZATION_BYPASS=1.`
       );
       return;
@@ -168,7 +171,7 @@ process.stdin.on('end', () => {
       const reasonCode = (result.stdout || '').trim() || 'unknown';
       block(
         `[push-authorization-gate] BLOCKED: pre-push hook verification failed (${reasonCode}). ` +
-        `Run bash scripts/sh/install-git-hooks.sh to install or repair the pre-push hook -- this ` +
+        `Run ${repairInstruction} to install or repair the pre-push hook -- this ` +
         `covers both an absent hook and one that has drifted from the canonical source -- then ` +
         `re-push. Bypass: PUSH_AUTHORIZATION_BYPASS=1.`
       );

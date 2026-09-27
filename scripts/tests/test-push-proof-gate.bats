@@ -334,6 +334,7 @@ proof = {
         "agreement_count": 2,
         "run_ids": "canonical-run-a,canonical-run-b",
         "log_digests": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa,bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "log_identities": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc,dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
     },
 }
 with open(proof_path, "w", encoding="utf-8") as f:
@@ -840,6 +841,26 @@ PYEOF
   run_verifier "$HEAD_SHA"
   [ "$status" -eq 2 ]
   [[ "$output" =~ "bats-evidence-floor" ]]
+}
+
+@test "#BE6 BLOCK: bats_evidence.log_identities missing → bats-evidence-reused" {
+  write_quality_gate_report
+  write_push_proof "$HEAD_SHA" 0 "$REPO"
+  patch_bats_evidence_field "log_identities" '""'
+  run_verifier "$HEAD_SHA"
+  [ "$status" -eq 2 ]
+  [[ "$output" =~ "bats-evidence-reused" ]]
+}
+
+@test "#BE7 BLOCK: duplicate retained log identity → bats-evidence-reused" {
+  write_quality_gate_report
+  write_push_proof "$HEAD_SHA" 0 "$REPO"
+  local duplicate
+  duplicate="$(printf 'e%.0s' {1..64})"
+  patch_bats_evidence_field "log_identities" "\"${duplicate},${duplicate}\""
+  run_verifier "$HEAD_SHA"
+  [ "$status" -eq 2 ]
+  [[ "$output" =~ "bats-evidence-reused" ]]
 }
 
 # ─────────────────────────────────────────────────────────────────────────────

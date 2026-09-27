@@ -34,7 +34,7 @@ Additional skill-specific arguments (not in params.json):
 Monitoring enters through the shared product flow:
 
 ```bash
-"<resolved-node>" "<toolkit-root>/scripts/lib/runtime-collaboration-entrypoints.cjs" execute --entrypoint monitor-docs --project-root <consumer-root> --intent <base64url canonical JSON>
+'<resolved-node>' '<toolkit-root>/scripts/lib/runtime-collaboration-entrypoints.cjs' 'execute' '--entrypoint' 'monitor-docs' '--project-root' '<consumer-root>' '--intent' '<base64url canonical JSON>'
 ```
 
 The Bash call must be one standalone direct Node command. For L0, both roots are the current repository. For a runtime consumer, derive `toolkit-root` only from the single local `layer=L0, role=tooling` manifest source and keep `consumer-root` as the literal absolute application repository. Use the resolved Node executable; do not use environment fallbacks, command substitution, wrappers, pipes, redirects, or command separators.

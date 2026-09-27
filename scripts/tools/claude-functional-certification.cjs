@@ -155,6 +155,7 @@ const entrypointNodeExecutablePreflight = {
   canonical_realpath: entrypointNodeExecutable,
   same_file: fs.realpathSync(process.execPath) === entrypointNodeExecutable,
 };
+let nativeClaudeVersion = null;
 
 if (!['entrypoint-protocol', 'host-contract-probe'].includes(operation)) {
   process.stderr.write(`unsupported operation: ${operation}\n`);
@@ -169,7 +170,6 @@ if (nativeClaudeExecutable) {
   const executableBytes = fs.readFileSync(nativeClaudeExecutable);
   const executableDigest = crypto.createHash('sha256').update(executableBytes).digest('hex');
   const executableRealpath = fs.realpathSync(nativeClaudeExecutable);
-  const pinnedVersion = path.basename(executableRealpath);
   const versionCommand = Array.isArray(capability.commands)
     ? capability.commands.find((command) => Array.isArray(command.argv)
       && command.argv.length === 2 && command.argv[1] === '--version')
@@ -178,13 +178,16 @@ if (nativeClaudeExecutable) {
       || capability.decision !== 'DUPLEX_STREAM_JSON_SUPPORTED'
       || capability.executable.realpath !== executableRealpath
       || capability.executable.sha256 !== executableDigest
+      || typeof capability.executable.version !== 'string'
+      || !/^\d+\.\d+\.\d+$/.test(capability.executable.version)
       || !versionCommand
       || versionCommand.argv[0] !== executableRealpath
       || versionCommand.exit_code !== 0
-      || versionCommand.stdout !== `${pinnedVersion} (Claude Code)\n`) {
+      || versionCommand.stdout !== `${capability.executable.version} (Claude Code)\n`) {
     process.stderr.write('native host-contract CLI capability pin did not match the selected executable.\n');
     process.exit(64);
   }
+  nativeClaudeVersion = capability.executable.version;
 }
 for (const required of [projectRoot, selectedChild]) {
   if (!required || !fs.existsSync(required)) {
@@ -480,10 +483,12 @@ const state = {
   requested_model: requestedModel,
   effort_profile: transportProfile === 'native-claude-cli' ? {
     requested: 'high',
-    effective: 'high',
+    effective: null,
     control: '--effort',
     expected_observed: 'high',
     observed: null,
+    per_turn_effort_active: null,
+    verification: 'unproven',
     observation_source: 'assistant.effort-if-emitted',
   } : null,
   sequence: 0,
@@ -1080,15 +1085,16 @@ if (transportProfile === 'native-claude-cli') {
       : 'NO_PRODUCTION_AUTHORITY_OFFLINE_SIMULATION';
   }
   state.cli_pin = nativeClaudeExecutable ? {
-    version: path.basename(fs.realpathSync(nativeClaudeExecutable)),
+    version: nativeClaudeVersion,
     executable_realpath: fs.realpathSync(nativeClaudeExecutable),
     executable_sha256: crypto.createHash('sha256').update(fs.readFileSync(nativeClaudeExecutable)).digest('hex'),
     requested_model: requestedModel,
     effort_requested: 'high',
-    effort_effective: 'high',
+    effort_effective: null,
     effort_control: '--effort',
     effort_expected_observed: 'high',
     effort_observed: null,
+    per_turn_effort_active: null,
     foreground: true,
     persistence: 'no-session-persistence',
   } : null;
@@ -1249,6 +1255,30 @@ writeState();
 process.stderr.write(`P4_LIVE_STATE=${statePath}\n`);
 process.stderr.write(`P4_LIVE_UUID=${sessionId}\n`);
 process.stderr.write(`P4_LIVE_PID=${child.pid}\n`);
+
+const startupTimeoutMs = Number.parseInt(process.env.P4_CERT_STARTUP_TIMEOUT_MS || '60000', 10);
+let startupWatchdog = setTimeout(() => {
+  state.startup_timeout_ms = startupTimeoutMs;
+  fail('HOST_STARTUP_TIMEOUT', `No valid system/init frame arrived within ${startupTimeoutMs} ms.`);
+}, startupTimeoutMs);
+const firstActivityTimeoutMs = Number.parseInt(process.env.P4_CERT_FIRST_ACTIVITY_TIMEOUT_MS || '120000', 10);
+let firstActivityWatchdog = null;
+
+function armFirstActivityWatchdog() {
+  if (firstActivityWatchdog !== null) return;
+  firstActivityWatchdog = setTimeout(() => {
+    firstActivityWatchdog = null;
+    state.first_activity_timeout_ms = firstActivityTimeoutMs;
+    fail('HOST_FIRST_ACTIVITY_TIMEOUT',
+      `No assistant or terminal result frame arrived within ${firstActivityTimeoutMs} ms after system/init.`);
+  }, firstActivityTimeoutMs);
+}
+
+function clearFirstActivityWatchdog() {
+  if (firstActivityWatchdog === null) return;
+  clearTimeout(firstActivityWatchdog);
+  firstActivityWatchdog = null;
+}
 
 let firstToolObserved = false;
 let managedHandshakePending = managedConductor;
@@ -3668,6 +3698,7 @@ function handleFrame(event) {
   if (typeof event.session_id === 'string' && event.session_id !== sessionId) {
     return fail('INVALID_STREAM_SESSION', 'A stream frame belonged to a foreign session.');
   }
+  if (event.type === 'assistant' || event.type === 'result') clearFirstActivityWatchdog();
   state.last_event_at = new Date().toISOString();
   state.last_event_type = event.type || null;
   if (transportProfile === 'native-claude-cli' && operation === 'entrypoint-protocol'
@@ -3675,7 +3706,12 @@ function handleFrame(event) {
     const observedEffort = typeof event.effort === 'string' ? event.effort : null;
     if (observedEffort !== null) {
       state.effort_profile.observed = observedEffort;
-      if (state.cli_pin) state.cli_pin.effort_observed = observedEffort;
+      state.effort_profile.effective = observedEffort;
+      state.effort_profile.verification = 'observed';
+      if (state.cli_pin) {
+        state.cli_pin.effort_observed = observedEffort;
+        state.cli_pin.effort_effective = observedEffort;
+      }
     }
     if (observedEffort !== null && observedEffort !== state.effort_profile.expected_observed) {
       return fail('HOST_PIN_MISMATCH',
@@ -3684,6 +3720,19 @@ function handleFrame(event) {
   }
   if (event.type === 'system' && event.subtype === 'init' && !state.host_identity_observation) {
     if (!validateInit(event)) return fail('INVALID_SYSTEM_INIT_EVIDENCE', 'system/init failed the bounded offline host-shape contract.');
+    if (startupWatchdog !== null) {
+      clearTimeout(startupWatchdog);
+      startupWatchdog = null;
+    }
+    armFirstActivityWatchdog();
+    if (state.effort_profile) {
+      state.effort_profile.per_turn_effort_active = typeof event.per_turn_effort_active === 'boolean'
+        ? event.per_turn_effort_active : null;
+      if (state.cli_pin) state.cli_pin.per_turn_effort_active = state.effort_profile.per_turn_effort_active;
+      if (operation === 'entrypoint-protocol' && state.effort_profile.per_turn_effort_active === false) {
+        return fail('HOST_EFFORT_INACTIVE', 'system/init reported per_turn_effort_active:false for an effort-controlled certification.');
+      }
+    }
     if (transportProfile === 'native-claude-cli' && operation === 'entrypoint-protocol') {
       const availableAgents = new Set(Array.isArray(event.agents) ? event.agents : []);
       if (!P4_NATIVE_AGENT_ROLES.every((role) => availableAgents.has(role))) {
@@ -4062,6 +4111,8 @@ writeJsonlFrame(child.stdin, firstMessage, (error) => {
 });
 
 child.on('exit', (code, signal) => {
+  if (startupWatchdog !== null) clearTimeout(startupWatchdog);
+  clearFirstActivityWatchdog();
   if (terminalShutdownTimer) clearTimeout(terminalShutdownTimer);
   // A host probe that saw an early terminal result arms an UNREF'd continuation
   // timer, so a child that exits before that timer fires would otherwise reach
@@ -4070,7 +4121,8 @@ child.on('exit', (code, signal) => {
   // that was never finalized. Finalize here, before any state is written, so
   // whatever the observer did capture is persisted and judged. It is idempotent
   // (hostProbeFinalized), so a run that already finalized is unaffected.
-  if (operation === 'host-contract-probe' && !String(state.status).startsWith('INVALID_')) {
+  if (operation === 'host-contract-probe' && !String(state.status).startsWith('INVALID_')
+      && !String(state.status).startsWith('HOST_')) {
     finalizeHostContractProbe();
   }
   if (transportProfile === 'native-claude-cli') {

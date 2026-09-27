@@ -142,6 +142,7 @@ function handleEnsure(rawArgv) {
     projectRoot, binding, sortedRoles,
   );
   if (!retainedReconciliation.ok) {
+    if (isTestCapability() && process.env.RUNTIME_ROLE_LIFECYCLE_TEST_DIAGNOSTICS === '1') process.stderr.write('[runtime-role-lifecycle ensure] retained-reconciliation: ' + String(retainedReconciliation.reason || 'unknown') + '\n');
     invalidError('ensure', 'INTERNAL_ERROR');
     return;
   }
@@ -406,6 +407,7 @@ function handleEnsure(rawArgv) {
     const repoId = computeRepoId(projectRoot);
     const txResult = mintSupervisorBatchUnderTransaction(projectRoot, pair, repoId, binding.worktree_id, binding.plan_digest, binding.session_generation_id, codexAppServerGroup, binding.expiry);
     if (!txResult.ok) {
+      if (isTestCapability() && process.env.RUNTIME_ROLE_LIFECYCLE_TEST_DIAGNOSTICS === '1') process.stderr.write('[runtime-role-lifecycle ensure] supervisor-batch-mint: ' + String(txResult.reason || 'unknown') + '\n');
       invalidError('ensure', 'INTERNAL_ERROR');
       return;
     }

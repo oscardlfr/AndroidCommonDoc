@@ -233,6 +233,12 @@
       }
     },
     "quality-gater": {
+      "2.26.0": {
+        "date": "2026-09-26",
+        "breaking": false,
+        "summary": "Require the formal QG on the final committed clean HEAD and run two serial, independent full Bats suites so the proof mint can satisfy its two-run agreement contract.",
+        "migration_hint": "Re-sync the deployed template. Any commit after VERIFY-FINAL or QG initialization invalidates the run; both full Bats runs must be fresh, serial, and agreeing."
+      },
       "2.25.0": {
         "date": "2026-08-22",
         "breaking": false,
