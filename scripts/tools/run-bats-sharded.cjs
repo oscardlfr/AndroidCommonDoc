@@ -32,7 +32,7 @@
 // match what it was assigned, incoherent per-shard counts (non-integer,
 // negative, OK+NOT_OK != TOTAL, or a VERDICT that doesn't match them), a
 // BATS_SCOPE other than "targeted" on any per-shard handoff, a BATS_LOG that
-// doesn't match the exact path this orchestrator itself assigned that shard,
+// doesn't match run-bats.sh's canonical retained path for that shard run-id,
 // a BATS_HEAD that doesn't match the HEAD frozen once before the first shard
 // launched (never merely "the same as each other" -- aggregateHandoffs' own
 // mutual-consistency check is a second, independent, weaker layer beneath
@@ -175,9 +175,9 @@ function confineHandoffPath(rawPath, resultsDir) {
  * sums to TOTAL, a VERDICT that actually matches those counts, BATS_SCOPE
  * pinned to "targeted" (only the aggregate may ever claim "full"), the exact
  * HEAD frozen before any shard launched (never merely equal across shards --
- * see aggregateHandoffs for that separate, weaker check), and the exact log
- * path this orchestrator itself assigned this shard. Every failure is a
- * distinct, named reason -- never a bare false. */
+ * see aggregateHandoffs for that separate, weaker check), and the canonical
+ * retained log path run-bats.sh derives beside the live log from BATS_RUN_ID.
+ * Every failure is a distinct, named reason -- never a bare false. */
 function validateShardResult({ handoff, expectedFiles, gitBin, frozenHead, expectedLogPath }) {
   if (!handoff) return { ok: false, reason: 'SHARD_HANDOFF_MISSING' };
   if (handoff.BATS_COMPLETE !== 'true') return { ok: false, reason: 'SHARD_INCOMPLETE' };
@@ -200,7 +200,14 @@ function validateShardResult({ handoff, expectedFiles, gitBin, frozenHead, expec
   if (typeof expectedLogPath !== 'string' || expectedLogPath.length === 0) {
     return { ok: false, reason: 'SHARD_EXPECTED_LOG_PATH_REQUIRED' };
   }
-  if (handoff.BATS_LOG !== expectedLogPath) return { ok: false, reason: 'SHARD_LOG_PATH_MISMATCH' };
+  if (!/^[A-Za-z0-9._-]+$/.test(handoff.BATS_RUN_ID || '')) {
+    return { ok: false, reason: 'SHARD_RUN_ID_MALFORMED' };
+  }
+  const expectedRetainedLogPath = path.join(
+    path.dirname(expectedLogPath),
+    'suite-bats.' + handoff.BATS_RUN_ID + '.log',
+  );
+  if (handoff.BATS_LOG !== expectedRetainedLogPath) return { ok: false, reason: 'SHARD_LOG_PATH_MISMATCH' };
   let expectedDigest;
   try {
     expectedDigest = computeTargetDigest(expectedFiles, gitBin);

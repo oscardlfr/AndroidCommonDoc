@@ -189,12 +189,13 @@ test('cleanupRunArtifacts never recursively deletes -- a path swapped for a dire
 
 const FROZEN_HEAD = 'a'.repeat(40);
 const EXPECTED_LOG_PATH = '/fake/root/.androidcommondoc/suite-bats.shard0.stamp.log';
+const RETAINED_LOG_PATH = '/fake/root/.androidcommondoc/suite-bats.shard0-run.log';
 
 function baseHandoff(overrides) {
   return Object.assign({
     BATS_OK: '10', BATS_NOT_OK: '0', BATS_EXPECTED: '10', BATS_TOTAL: '10',
     BATS_COMPLETE: 'true', BATS_VERDICT: 'pass', BATS_HEAD: FROZEN_HEAD,
-    BATS_RUN_ID: 'shard0-run', BATS_SCOPE: 'targeted', BATS_LOG: EXPECTED_LOG_PATH,
+    BATS_RUN_ID: 'shard0-run', BATS_SCOPE: 'targeted', BATS_LOG: RETAINED_LOG_PATH,
     BATS_TARGET_DIGEST: rbs.computeTargetDigest(['x.bats', 'y.bats']),
     BATS_PLAN_DIGEST: 'b'.repeat(64), BATS_WAVE_SLUG: 'demo',
     BATS_ENV_FINGERPRINT: 'c'.repeat(64), BATS_STARTED_AT: '2026-09-22T00:00:00Z',
@@ -322,13 +323,27 @@ test('validateShardResult fails closed: caller did not supply the log path this 
   assert.equal(out.reason, 'SHARD_EXPECTED_LOG_PATH_REQUIRED');
 });
 
-test('validateShardResult fails closed: BATS_LOG does not match the path this orchestrator itself assigned', () => {
-  // A shard reporting a DIFFERENT log path than the one it was launched with
-  // is exactly the shape of "handoff for a different, unrelated run" -- must
-  // never be silently accepted just because every other field looks fine.
-  const out = validate(baseHandoff(), ['x.bats', 'y.bats'], { expectedLogPath: '/fake/root/.androidcommondoc/suite-bats.shard1.stamp.log' });
+test('validateShardResult fails closed: BATS_LOG is not the canonical retained path for its run id', () => {
+  // run-bats.sh receives EXPECTED_LOG_PATH as its live log but publishes an
+  // immutable sibling named from BATS_RUN_ID. An unrelated retained path must
+  // never be accepted just because every other field looks coherent.
+  const out = validate(baseHandoff({
+    BATS_LOG: '/fake/root/.androidcommondoc/suite-bats.some-other-run.log',
+  }), ['x.bats', 'y.bats']);
   assert.equal(out.ok, false);
   assert.equal(out.reason, 'SHARD_LOG_PATH_MISMATCH');
+});
+
+test('validateShardResult fails closed: legacy live BATS_LOG path is not accepted as retained evidence', () => {
+  const out = validate(baseHandoff({ BATS_LOG: EXPECTED_LOG_PATH }), ['x.bats', 'y.bats']);
+  assert.equal(out.ok, false);
+  assert.equal(out.reason, 'SHARD_LOG_PATH_MISMATCH');
+});
+
+test('validateShardResult fails closed: malformed run id cannot influence retained log resolution', () => {
+  const out = validate(baseHandoff({ BATS_RUN_ID: '../escape' }), ['x.bats', 'y.bats']);
+  assert.equal(out.ok, false);
+  assert.equal(out.reason, 'SHARD_RUN_ID_MALFORMED');
 });
 
 // ── aggregateHandoffs ────────────────────────────────────────────────────
