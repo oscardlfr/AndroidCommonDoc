@@ -11,10 +11,6 @@ import { createDefaultManifest, readManifest, writeManifest, type Manifest } fro
 
 const RETIRED_PATH = ".claude/agents/team-lead.md";
 const REAL_L0_ROOT = path.resolve(import.meta.dirname, "../../../..");
-const HISTORICAL_FIXTURE = path.join(
-  REAL_L0_ROOT,
-  "mcp-server/tests/fixtures/retired-team-lead-v6.2.1.md.fixture",
-);
 const HISTORICAL_TEAM_LEAD_SHA256 = "01c2f6e75d4e441bae0975ab459afda8501e0dbe57a2d60cf1827cd42ed969ba";
 const LEGACY_CONTENT = `---\nname: team-lead\ntemplate_version: "6.2.1"\n---\n\nLegacy L0 team lead.\n`;
 const LEGACY_SHA256 = createHash("sha256").update(LEGACY_CONTENT).digest("hex");
@@ -65,10 +61,7 @@ describe("permanent retired-artifact tombstones", () => {
     await rm(root, { recursive: true, force: true });
   });
 
-  it("pins the audited 6.2.1 team-lead digest in both retirement registries", async () => {
-    const historicalBytes = await readFile(HISTORICAL_FIXTURE);
-    expect(createHash("sha256").update(historicalBytes).digest("hex"))
-      .toBe(HISTORICAL_TEAM_LEAD_SHA256);
+  it("pins the audited 6.2.1 digest without republishing retired consumer-specific bytes", async () => {
     const tombstones = JSON.parse(await readFile(
       path.join(REAL_L0_ROOT, "skills", "sync-l0", "retired-artifacts.json"), "utf8",
     ));
@@ -78,54 +71,10 @@ describe("permanent retired-artifact tombstones", () => {
     expect(tombstones.artifacts[0].known_l0_sha256).toEqual([HISTORICAL_TEAM_LEAD_SHA256]);
     expect(migrations.templates["team-lead"]["RETIRED-W31.6"].known_l0_sha256)
       .toEqual([HISTORICAL_TEAM_LEAD_SHA256]);
-  });
-
-  it("production tombstone admits and ordinary sync removes the immutable historical fixture", async () => {
-    const historicalBytes = await readFile(HISTORICAL_FIXTURE);
-    const destination = path.join(projectRoot, RETIRED_PATH);
-    await mkdir(path.dirname(destination), { recursive: true });
-    await writeFile(destination, historicalBytes);
-    const realManifest = manifest({
-      sources: [{ layer: "L0", path: REAL_L0_ROOT, role: "tooling" }],
-      selection: {
-        mode: "explicit",
-        exclude_skills: [],
-        exclude_agents: [],
-        exclude_commands: [],
-        exclude_categories: [],
-        exclude_hooks: [],
-      },
-      checksums: { [RETIRED_PATH]: `sha256:${HISTORICAL_TEAM_LEAD_SHA256}` },
-    });
-    const plan = await planRetiredArtifactReconciliation(
-      projectRoot,
+    await expect(access(path.join(
       REAL_L0_ROOT,
-      realManifest,
-    );
-    expect(plan.removePaths).toEqual([RETIRED_PATH]);
-    await writeManifest(path.join(projectRoot, "l0-manifest.json"), realManifest);
-
-    const report = await syncL0(projectRoot, REAL_L0_ROOT);
-
-    expect(report.errors).toEqual([]);
-    expect(report.removedPaths).toContain(RETIRED_PATH);
-    await expect(access(destination)).rejects.toThrow();
-  });
-
-  it("production tombstone rejects a one-byte mutation of the historical fixture", async () => {
-    const historicalBytes = await readFile(HISTORICAL_FIXTURE);
-    const mutated = Buffer.from(historicalBytes);
-    mutated[mutated.length - 2] ^= 1;
-    const destination = path.join(projectRoot, RETIRED_PATH);
-    await mkdir(path.dirname(destination), { recursive: true });
-    await writeFile(destination, mutated);
-
-    await expect(planRetiredArtifactReconciliation(
-      projectRoot,
-      REAL_L0_ROOT,
-      manifest(),
-    )).rejects.toThrow(`retired-artifact-local-content-conflict:${RETIRED_PATH}`);
-    expect(await readFile(destination)).toEqual(mutated);
+      "mcp-server/tests/fixtures/retired-team-lead-v6.2.1.md.fixture",
+    ))).rejects.toThrow();
   });
 
   it("admits only the exact historical bytes at the exact retired path", async () => {
@@ -148,11 +97,13 @@ describe("permanent retired-artifact tombstones", () => {
     expect(plan.removeChecksumPaths).toEqual([RETIRED_PATH]);
   });
 
-  it("preserves and rejects locally modified retired content", async () => {
-    await writeLegacyAgent(projectRoot, `${LEGACY_CONTENT}\nlocal change\n`);
+  it("preserves and rejects a one-byte mutation of retired content", async () => {
+    const mutated = Buffer.from(LEGACY_CONTENT);
+    mutated[mutated.length - 2] ^= 1;
+    await writeLegacyAgent(projectRoot, mutated.toString("utf8"));
     await expect(planRetiredArtifactReconciliation(projectRoot, toolkitRoot, manifest()))
       .rejects.toThrow(`retired-artifact-local-content-conflict:${RETIRED_PATH}`);
-    expect(await readFile(path.join(projectRoot, RETIRED_PATH), "utf8")).toContain("local change");
+    expect(await readFile(path.join(projectRoot, RETIRED_PATH))).toEqual(mutated);
   });
 
   it("preserves and rejects symlinks", async () => {
