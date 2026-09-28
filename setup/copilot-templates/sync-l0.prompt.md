@@ -2,10 +2,10 @@
 <!-- Regenerate: bash adapters/generate-all.sh -->
 ---
 mode: agent
-description: "Synchronize L0 assets, and optionally install the source-referenced collaboration runtime in an L1/L2 consumer."
+description: "Synchronize L0 assets and atomically refresh an already-enabled source-referenced collaboration runtime in an L1/L2 consumer."
 ---
 
-Synchronize L0 assets, and optionally install the source-referenced collaboration runtime in an L1/L2 consumer.
+Synchronize L0 assets and atomically refresh an already-enabled source-referenced collaboration runtime in an L1/L2 consumer.
 
 ## Instructions
 
@@ -16,13 +16,15 @@ Synchronize L0 assets, and optionally install the source-referenced collaboratio
 /sync-l0 --project-root /path/to/my-project
 /sync-l0 --l0-root /path/to/AndroidCommonDoc
 /sync-l0 --runtime --project-root /path/to/consumer
+/sync-l0 --assets-only --project-root /path/to/consumer
 ```
 
 ## Parameters
 
 - `--project-root` -- Path to the downstream project root (default: current working directory)
 - `--l0-root` -- Optional ordinary-sync override. If omitted, resolve the manifest `sources[]` entry whose layer is `L0`. In runtime mode an override must equal that declared local source.
-- `--runtime` -- Install or verify the source-referenced collaboration runtime. Requires an existing manifest with exactly one local `L0`/`tooling` source.
+- `--runtime` -- Adopt the source-referenced collaboration runtime for the first time, or request it explicitly. Requires an existing manifest with exactly one local `L0`/`tooling` source.
+- `--assets-only` -- Explicit maintenance escape hatch that skips runtime refresh even when `manifest.runtime.enabled` is true. Do not use for normal consumer upgrades.
 - `--dry-run` -- Validate and preview without changing consumer files.
 
 ## Behavior
@@ -33,10 +35,15 @@ Synchronize L0 assets, and optionally install the source-referenced collaboratio
 4. **Materializes** copies with version tracking headers:
    - Skills and agents: `l0_source`, `l0_hash`, `l0_synced` injected into YAML frontmatter
    - Commands: HTML comment header with source, hash, synced date
+   - `l0_source` is always the portable identifier `manifest:L0/tooling`; the
+     manifest remains the only path authority and no host path is serialized.
 5. **Updates** manifest checksums and `last_synced` only when manifest-tracked
    managed state changes. A no-op apply preserves `l0-manifest.json` byte-for-byte.
 
-With `--runtime`, the CLI additionally installs the closed runtime consumer contract:
+When `manifest.runtime.enabled` is already true, ordinary `/sync-l0` refreshes
+registry assets and the closed runtime consumer contract in the same atomic
+workflow. No second sync command is required. `--runtime` performs the initial
+opt-in and follows the same workflow:
 
 - Pins the exact toolkit commit and executable-content digest in `manifest.runtime`.
 - Installs `.claude/runtime/l0-entrypoint-launcher.cjs` plus the standalone
@@ -54,6 +61,10 @@ With `--runtime`, the CLI additionally installs the closed runtime consumer cont
   that lost their executable bit are reported as executable repairs without
   rewriting the manifest; conflicting bytes fail closed.
 - Rejects missing/remote/ambiguous L0 sources and never falls back to `ANDROID_COMMON_DOC`.
+- Requires every materializable registry skill to invoke toolkit-owned
+  operations through `.claude/runtime/l0-toolkit-launcher.cjs`; ambient toolkit
+  variables, host-specific paths, and guessed consumer-relative toolkit
+  commands are contract violations.
 - Rejects `--prune`, `--force`, `--force-l0-managed`, and `--auto-migrate` in runtime mode.
 
 ## First-Time Setup
@@ -79,7 +90,8 @@ The sync CLI can be invoked two ways:
 ```bash
 cd <androidcommondoc>/mcp-server && npm run build
 node build/sync/sync-l0-cli.js --project-root <target-project>
-node build/sync/sync-l0-cli.js --project-root <consumer-project> --runtime
+node build/sync/sync-l0-cli.js --project-root <consumer-project> --runtime  # first adoption
+node build/sync/sync-l0-cli.js --project-root <consumer-project>            # every later upgrade
 ```
 
 **TypeScript source (requires tsx):**
@@ -258,9 +270,12 @@ Future direction: `<!-- L1-LOCAL -->` marker in agent files will designate proje
 - Each materialized file includes its source hash for audit trail
 - Hook propagation is additive — project-local hooks are never removed
 - `--runtime --dry-run` performs no writes, including when validation fails
+- Once runtime is enabled, plain `/sync-l0` refreshes assets and runtime together;
+  `--assets-only` is the explicit opt-out, not the normal upgrade path
 - Runtime consumers require their own unambiguous PLAN before an explicit start; a read-only dashboard may report that prerequisite but never manufactures a PLAN
 - L0, L1, and L2 invoke runtime skills through
   `<consumer-root>/.claude/runtime/l0-entrypoint-launcher.cjs`. Missing launcher,
   source ambiguity, commit/digest drift, or a missing executable closure fails
-  closed. The recovery is ordinary sync followed by runtime sync; direct L0
-  invocation, `ANDROID_COMMON_DOC`, and guessed sibling paths are not fallbacks.
+  closed. Recovery is one plain `/sync-l0` against the manifest-declared source;
+  direct L0 invocation, `ANDROID_COMMON_DOC`, guessed sibling paths, and manual
+  copies are not fallbacks.

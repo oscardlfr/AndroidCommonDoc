@@ -24,6 +24,17 @@ function fixture({ className = 'FAST-PATH', architects = '[]', lifecycleRoles = 
   return root;
 }
 
+function writeRuntimeManifest(root, layer) {
+  fs.writeFileSync(path.join(root, 'l0-manifest.json'), JSON.stringify({
+    version: 2,
+    sources: [{ layer: 'L0', role: 'tooling', path: path.relative(root, path.resolve(__dirname, '../..')) }],
+    runtime: {
+      schema: 'runtime-consumer/v1', enabled: true, consumer_layer: layer,
+      toolkit_commit: 'a'.repeat(40), toolkit_content_sha256: 'b'.repeat(64),
+    },
+  }));
+}
+
 function publishPrepApproval(root, role = 'arch-platform') {
   const scriptsRoot = path.resolve(__dirname, '..');
   const requestLine = execFileSync('bash', [path.join(scriptsRoot, 'sh', 'write-verdict-request.sh'),
@@ -56,6 +67,31 @@ test('legal transitions advance exactly one phase and illegal transitions fail c
     assert.strictEqual(control.transition(root, 'demo', 'EXECUTE').phase, 'EXECUTE');
     assert.throws(() => control.transition(root, 'demo', 'QG'), /ILLEGAL_PHASE_TRANSITION/);
   } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
+
+test('an enabled L1 runtime manifest wins over local L0-shaped registry and MCP markers for QG proof routing', () => {
+  const root = fixture();
+  try {
+    fs.mkdirSync(path.join(root, 'skills'), { recursive: true });
+    fs.writeFileSync(path.join(root, 'skills', 'registry.json'), '{}\n');
+    fs.mkdirSync(path.join(root, 'mcp-server'), { recursive: true });
+    fs.writeFileSync(path.join(root, 'mcp-server', 'package.json'), '{}\n');
+    writeRuntimeManifest(root, 'L1');
+
+    const invocation = control.qualityGateProofInvocation(root, 'demo', 'c'.repeat(40));
+    assert.strictEqual(invocation.executable, process.execPath);
+    assert.strictEqual(path.basename(invocation.args[0]), 'runtime-consumer-quality-gate.cjs');
+    assert.deepStrictEqual(invocation.args.slice(1), [root, 'verify', '--slug', 'demo', '--head', 'c'.repeat(40)]);
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
+
+test('L0 QG proof routing selects the native PowerShell verifier on Windows', () => {
+  const toolkitRoot = path.resolve(__dirname, '../..');
+  const invocation = control.qualityGateProofInvocation(toolkitRoot, 'demo', 'd'.repeat(40), 'win32');
+  assert.strictEqual(invocation.executable, 'pwsh.exe');
+  assert.deepStrictEqual(invocation.args.slice(0, 4), ['-NoLogo', '-NoProfile', '-NonInteractive', '-File']);
+  assert.strictEqual(path.basename(invocation.args[4]), 'verify-push-proof.ps1');
+  assert.deepStrictEqual(invocation.args.slice(5), ['-PushedSha', 'd'.repeat(40), '-RepoRoot', toolkitRoot]);
 });
 
 test('a PREP transition with a real authorizing verdict persists a readable approve decision', () => {

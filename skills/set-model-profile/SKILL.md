@@ -18,7 +18,7 @@ copilot: false
 /set-model-profile advanced     # Opus for orchestrators + deep analysis, Sonnet for rest
 /set-model-profile quality      # All agents → opus
 /set-model-profile --show       # Show which model each agent currently uses
-/set-model-profile --update     # Re-import profile definitions from L0 (keeps current selection)
+/set-model-profile --update     # Validate the checked-in L0 profile definitions
 ```
 
 ## Profiles
@@ -32,41 +32,45 @@ copilot: false
 
 ## Execution
 
-### Step 1: Read or Bootstrap Configuration
+### Step 0: Enforce the runtime boundary
+
+Resolve the layer first:
+
+```bash
+node .claude/runtime/l0-toolkit-launcher.cjs describe layer --project-root "$PWD"
+```
+
+In a runtime-enabled L1/L2 consumer, stop without editing. The runtime owns the
+canonical agent templates and `.claude/model-profiles.json`; changing either
+would invalidate its content pin. Select the host model/effort at session
+launch instead. `/set-model-profile` is an L0-maintainer operation.
+
+### Step 1: Read Configuration
 
 Read `.claude/model-profiles.json` from the project root.
 
-**If the file does not exist** (new project, worktree, missing from sync):
-1. Resolve L0 root: check `l0-manifest.json` → `l0_source`, then `ANDROID_COMMON_DOC` env var, then `../AndroidCommonDoc`
-2. Read `.claude/model-profiles.json` from the L0 root
-3. Copy it to the project root at `.claude/model-profiles.json`
-4. Set `"current": "balanced"` (safe default for new projects)
-5. Print: `Bootstrapped model-profiles.json from L0 (current: balanced)`
-
-This ensures the file is always available — no manual copy needed, even in worktrees.
+If the file is missing in L0, fail closed and restore it from Git. Do not guess a
+sibling checkout, consult ambient variables, or manufacture profile defaults.
 
 The file contains:
-- `current`: the active profile name (project-local, never overwritten by L0)
-- `profiles`: map of profile name → `{ description, default_model, overrides }` (definitions from L0)
+- `current`: the active profile name for this L0 checkout
+- `profiles`: map of profile name → `{ description, default_model, overrides }`
 
 The `overrides` map allows specific agents to use a different model than the profile's `default_model`. For example, in `balanced`, static-check agents use `haiku` while the default is `sonnet`.
 
 ### Step 2: Parse Arguments
 
 - **No arguments or `--show`**: Show current profile, then list all agents with their current `model:` frontmatter value. Format as a table. Stop here.
-- **`--update`**: Re-import profile definitions from L0 while preserving the local `current` selection. Proceed to Step 2a.
+- **`--update`**: Validate the checked-in L0 definitions without changing the current selection. Proceed to Step 2a.
 - **Profile name argument** (`budget`, `balanced`, `advanced`, `quality`): Proceed to Step 3.
 - **Invalid argument**: Show error with available profiles. Stop here.
 
-### Step 2a: Update Profiles from L0
+### Step 2a: Validate L0 Profiles
 
-1. Resolve L0 root (same logic as bootstrap)
-2. Read L0's `.claude/model-profiles.json`
-3. Replace local `profiles` with L0's `profiles` (new definitions, new overrides)
-4. Keep local `current` unchanged
-5. If local `current` is not a key in the new profiles, warn and reset to `"balanced"`
-6. Write updated file
-7. Report: `Updated profile definitions from L0 (current: {current} preserved)`
+1. Read the checked-in `.claude/model-profiles.json`.
+2. Confirm `current` names a declared profile.
+3. Keep `current` unchanged; do not import from another checkout.
+4. Report: `L0 profile definitions valid (current: {current})`.
 
 ### Step 3: Discover Agents
 
@@ -115,22 +119,18 @@ If no changes were needed (already on this profile), report:
 Already on '{profile}' profile. No changes needed.
 ```
 
-## Custom Overrides
+## L0-only custom overrides
 
-Users can edit `.claude/model-profiles.json` directly to:
+L0 maintainers can edit `.claude/model-profiles.json` directly to:
 - Add custom profiles (e.g., `"mixed"` with opus for orchestrators, haiku for validators)
 - Modify overrides within existing profiles
 - Set specific agents to specific models regardless of default
 
 After manual edits, run `/set-model-profile {name}` to apply.
 
-## L0 Sync Model
+## Runtime ownership
 
-Profile **definitions** (budget, balanced, advanced, quality + their overrides) come from L0.
-Profile **selection** (`current`) is project-local and never overwritten.
-
-The flow:
-1. L0 defines canonical profiles in `.claude/model-profiles.json`
-2. `/set-model-profile` bootstraps the file on first use (or `--update` refreshes definitions)
-3. `/sync-l0` does NOT sync this file — it's managed by the skill to preserve `current`
-4. Each project can add custom profiles without conflict
+L0 defines canonical profiles in `.claude/model-profiles.json` and may use this
+skill to update its own agent sources. Runtime-enabled consumers receive the
+profile catalog and canonical agents as content-pinned runtime assets; they do
+not mutate either file locally.

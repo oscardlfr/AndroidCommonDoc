@@ -35,6 +35,7 @@ const IMPL = path.resolve(__dirname, '../lib/runtime-role-lifecycle.cjs');
 const rll = require(IMPL);
 const rc = require(path.resolve(__dirname, '../lib/runtime-consultation.cjs'));
 const rbc = require(path.resolve(__dirname, '../lib/runtime-bridge-codex.cjs'));
+const { capSupervisorActionExpiry } = require(path.resolve(__dirname, '../lib/runtime-role-lifecycle/supervisor-batch-mint.cjs'));
 
 const TEST_CAPABILITY = 'handlers-fixture-capability';
 const EXECUTOR_CAPABILITY = 'handlers-fixture-executor-capability';
@@ -365,8 +366,25 @@ test('ensure resume checkpoint emits one idempotent SendMessage action and becom
     assert.strictEqual(repeated.status, 0, JSON.stringify(repeated.result));
     assert.deepStrictEqual(repeated.result.actions, first.result.actions, 're-entry before execution must re-report the same action');
 
-    const resumed = rll.consumeClaudeResumeHandleForObservedActor(dir, event);
+    const resumed = rll.consumeClaudeResumeHandleForObservedActor(dir, {
+      actionId: action.action_id,
+      sessionId: sessionKey,
+      toolUseId: 'resume-delivery-tool-use-1',
+      recipient: role,
+      message: action.payload.message,
+    });
     assert.strictEqual(resumed.ok, true, JSON.stringify(resumed));
+    const consumedMarker = path.join(rll.registryRepoDir(dir), 'claude-resume-handles', parked.record.binding_id + '.json.consumed');
+    assert.strictEqual(fs.existsSync(consumedMarker), true,
+      'the one atomic delivery receipt must consume the exact handle before host delivery');
+    const replay = rll.consumeClaudeResumeHandleForObservedActor(dir, {
+      actionId: action.action_id,
+      sessionId: sessionKey,
+      toolUseId: 'resume-delivery-tool-use-2',
+      recipient: role,
+      message: action.payload.message,
+    });
+    assert.deepStrictEqual(replay, { ok: false, reason: 'resume-delivery-replay' });
     const completedGrant = mintGrant(dir, sessionKey, role, 'ensure', argvDigest);
     const completed = runCli([
       'ensure', '--project-root', dir, '--role', role,
@@ -380,6 +398,160 @@ test('ensure resume checkpoint emits one idempotent SendMessage action and becom
       checkpoint_ref: checkpointRef,
       resumed_roles: [role],
     });
+  } finally {
+    cleanup(dir);
+  }
+});
+
+test('resume checkpoint in a new host session rehydrates a new actor instead of messaging an unreachable prior teammate', () => {
+  const dir = makeGitProject();
+  try {
+    writePlanFixture(dir, 'cross-session-resume-checkpoint');
+    const oldSessionKey = 'cross-session-resume-old';
+    const newSessionKey = 'cross-session-resume-new';
+    const role = LIVE_ROLE;
+    ensureLiveRoleSpawnAction(dir, oldSessionKey, role);
+    const worktreeId = rll.computeWorktreeId(dir);
+    const planDigest = rll.discoverPlan(dir).planDigest;
+    const oldGenerationId = rll.peekSessionGeneration(dir, identityFor(oldSessionKey)).generationId;
+    const profileDigest = rll.roleProfileDigestFor(role);
+    const starting = rll.readRoleBindingState(dir, worktreeId, planDigest, profileDigest, oldGenerationId, role);
+    assert.strictEqual(rll.transitionRoleBinding(
+      dir, worktreeId, planDigest, profileDigest, oldGenerationId, role,
+      'STARTING', 'READY', starting.record, {},
+    ).ok, true);
+    assert.strictEqual(rll.createRoleActorBinding(
+      dir, role, worktreeId, planDigest, oldGenerationId, 600,
+    ).ok, true);
+    const parked = rll.parkClaudeResumeHandleForRoleActor(dir, {
+      sessionId: oldSessionKey, agentId: 'cross-session-resume-agent', agentType: role,
+    });
+    assert.strictEqual(parked.ok, true, JSON.stringify(parked));
+
+    const checkpointRef = 'checkpoint:' + 'b'.repeat(64);
+    const argvDigest = ensureResumeDigest([role], checkpointRef);
+    const grant = mintGrant(dir, newSessionKey, role, 'ensure', argvDigest);
+    const newGenerationId = rll.peekSessionGeneration(dir, identityFor(newSessionKey)).generationId;
+    assert.notStrictEqual(newGenerationId, oldGenerationId, 'fixture must use a genuinely new host session generation');
+    const resumed = runCli([
+      'ensure', '--project-root', dir, '--role', role,
+      '--resume-checkpoint', checkpointRef,
+      '--lifecycle-binding', grant.grantId,
+    ], { RUNTIME_ROLE_LIFECYCLE_FAKE_CAPABILITIES: LIVE_CAPS });
+    assert.strictEqual(resumed.status, 0, JSON.stringify(resumed.result));
+    assert.strictEqual(resumed.result.status, 'ACTION_REQUIRED', JSON.stringify(resumed.result));
+    assert.strictEqual(resumed.result.actions.length, 1, JSON.stringify(resumed.result));
+    assert.strictEqual(resumed.result.actions[0].kind, 'role-spawn');
+    assert.strictEqual(resumed.result.actions[0].operation, 'Agent');
+    assert.strictEqual(resumed.result.actions[0].session_generation_id, newGenerationId,
+      'a new root session must create a new reachable actor in its own generation');
+    assert.strictEqual(resumed.result.actions[0].payload.bootstrap_artifact_ref, checkpointRef);
+    const consumedMarker = path.join(rll.registryRepoDir(dir), 'claude-resume-handles', parked.record.binding_id + '.json.consumed');
+    assert.strictEqual(fs.existsSync(consumedMarker), false,
+      'an unreachable prior actor handle must never be consumed as though host delivery succeeded');
+    const oldState = rll.readRoleBindingState(dir, worktreeId, planDigest, profileDigest, oldGenerationId, role);
+    assert.strictEqual(oldState.state, 'DEAD', JSON.stringify(oldState));
+    const currentState = rll.readRoleBindingState(dir, worktreeId, planDigest, profileDigest, newGenerationId, role);
+    assert.strictEqual(currentState.state, 'STARTING', JSON.stringify(currentState));
+    assert.strictEqual(rll.transitionRoleBinding(
+      dir, worktreeId, planDigest, profileDigest, newGenerationId, role,
+      'STARTING', 'READY', currentState.record, {},
+    ).ok, true);
+    const completedGrant = mintGrant(dir, newSessionKey, role, 'ensure', argvDigest);
+    const completed = runCli([
+      'ensure', '--project-root', dir, '--role', role,
+      '--resume-checkpoint', checkpointRef,
+      '--lifecycle-binding', completedGrant.grantId,
+    ], { RUNTIME_ROLE_LIFECYCLE_FAKE_CAPABILITIES: LIVE_CAPS });
+    assert.strictEqual(completed.result.status, 'READY', JSON.stringify(completed.result));
+    assert.deepStrictEqual(completed.result.operation.resumed_roles, [role]);
+  } finally {
+    cleanup(dir);
+  }
+});
+
+test('ordinary ensure treats a parked Claude role in the current host-process generation as healthy', () => {
+  const dir = makeGitProject();
+  try {
+    writePlanFixture(dir, 'automatic-resume');
+    const sessionKey = 'automatic-resume-session';
+    const role = LIVE_ROLE;
+    ensureLiveRoleSpawnAction(dir, sessionKey, role);
+    const worktreeId = rll.computeWorktreeId(dir);
+    const planDigest = rll.discoverPlan(dir).planDigest;
+    const generationId = rll.peekSessionGeneration(dir, identityFor(sessionKey)).generationId;
+    const profileDigest = rll.roleProfileDigestFor(role);
+    const starting = rll.readRoleBindingState(dir, worktreeId, planDigest, profileDigest, generationId, role);
+    assert.strictEqual(rll.transitionRoleBinding(
+      dir, worktreeId, planDigest, profileDigest, generationId, role,
+      'STARTING', 'READY', starting.record, {},
+    ).ok, true);
+    assert.strictEqual(rll.createRoleActorBinding(
+      dir, role, worktreeId, planDigest, generationId, 600,
+    ).ok, true);
+    const event = { sessionId: sessionKey, agentId: 'automatic-resume-agent', agentType: role };
+    const parked = rll.parkClaudeResumeHandleForRoleActor(dir, event);
+    assert.strictEqual(parked.ok, true, JSON.stringify(parked));
+
+    const runEnsure = () => {
+      const grant = mintGrant(dir, sessionKey, role, 'ensure', ensureDigest([role]));
+      return runCli([
+        'ensure', '--project-root', dir, '--role', role, '--lifecycle-binding', grant.grantId,
+      ], { RUNTIME_ROLE_LIFECYCLE_FAKE_CAPABILITIES: LIVE_CAPS });
+    };
+    const first = runEnsure();
+    assert.strictEqual(first.result.status, 'READY', JSON.stringify(first.result));
+    assert.strictEqual(first.result.actions.length, 0);
+    const second = runEnsure();
+    assert.strictEqual(second.result.status, 'READY', JSON.stringify(second.result));
+    assert.strictEqual(second.result.actions.length, 0);
+  } finally {
+    cleanup(dir);
+  }
+});
+
+test('ordinary ensure rehydrates a role after the same Claude session resumes in a new host process', () => {
+  const dir = makeGitProject();
+  try {
+    writePlanFixture(dir, 'same-session-new-process');
+    const sessionKey = 'same-session-new-process';
+    const role = LIVE_ROLE;
+    ensureLiveRoleSpawnAction(dir, sessionKey, role);
+    const worktreeId = rll.computeWorktreeId(dir);
+    const planDigest = rll.discoverPlan(dir).planDigest;
+    const oldGenerationId = rll.peekSessionGeneration(dir, identityFor(sessionKey)).generationId;
+    const profileDigest = rll.roleProfileDigestFor(role);
+    const starting = rll.readRoleBindingState(
+      dir, worktreeId, planDigest, profileDigest, oldGenerationId, role,
+    );
+    assert.strictEqual(rll.transitionRoleBinding(
+      dir, worktreeId, planDigest, profileDigest, oldGenerationId, role,
+      'STARTING', 'READY', starting.record, {},
+    ).ok, true);
+    assert.strictEqual(rll.createRoleActorBinding(
+      dir, role, worktreeId, planDigest, oldGenerationId, 600,
+    ).ok, true);
+    assert.strictEqual(rll.parkClaudeResumeHandleForRoleActor(dir, {
+      sessionId: sessionKey, agentId: 'same-session-old-agent', agentType: role,
+    }).ok, true);
+
+    const resumedInvocation = rll.resolveSessionGeneration(
+      dir, identityFor(sessionKey), { invocationDigest: '2'.repeat(64), forceRotation: true },
+    );
+    assert.strictEqual(resumedInvocation.ok, true, JSON.stringify(resumedInvocation));
+    assert.strictEqual(resumedInvocation.rotated, true);
+    assert.notStrictEqual(resumedInvocation.generationId, oldGenerationId);
+
+    const grant = mintGrant(dir, sessionKey, role, 'ensure', ensureDigest([role]));
+    const result = runCli([
+      'ensure', '--project-root', dir, '--role', role, '--lifecycle-binding', grant.grantId,
+    ], { RUNTIME_ROLE_LIFECYCLE_FAKE_CAPABILITIES: LIVE_CAPS });
+    assert.strictEqual(result.status, 0, JSON.stringify(result.result));
+    assert.strictEqual(result.result.status, 'ACTION_REQUIRED', JSON.stringify(result.result));
+    assert.strictEqual(result.result.actions.length, 1);
+    assert.strictEqual(result.result.actions[0].kind, 'role-spawn');
+    assert.strictEqual(result.result.actions[0].operation, 'Agent');
+    assert.strictEqual(result.result.actions[0].session_generation_id, resumedInvocation.generationId);
   } finally {
     cleanup(dir);
   }
@@ -3004,6 +3176,30 @@ test('M67-B3-EXPIRY-ROUNDING-03: futureIsoForRegistry(ttlSeconds) always leaves 
     const maxAllowedMs = afterMs + ttlSeconds * 1000 + 2000;
     assert.ok(expiresAtMs < maxAllowedMs, 'ttlSeconds=' + ttlSeconds + ': overshoot must stay bounded (expiresAtMs=' + expiresAtMs + ' >= maxAllowedMs=' + maxAllowedMs + ')');
   }
+});
+
+test('supervisor expiry remains strictly nested when separate clock reads serialize onto the same second', () => {
+  const nowMs = Date.parse('2026-09-29T10:00:00Z');
+  assert.deepStrictEqual(capSupervisorActionExpiry(
+    '2026-09-29T10:02:00Z',
+    '2026-09-29T10:02:00Z',
+    nowMs,
+  ), {
+    ok: true,
+    expiresAtIso: '2026-09-29T10:01:59Z',
+  });
+});
+
+test('supervisor expiry fails closed when retained authority cannot leave any positive launch window', () => {
+  const nowMs = Date.parse('2026-09-29T10:00:00Z');
+  assert.deepStrictEqual(capSupervisorActionExpiry(
+    '2026-09-29T10:00:01Z',
+    '2026-09-29T10:00:01Z',
+    nowMs,
+  ), {
+    ok: false,
+    reason: 'retained-service-lifetime-insufficient',
+  });
 });
 
 // WP3 item C correction pass R3 (point C.1), REVISED by point 3.2 (R4):

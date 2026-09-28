@@ -32,7 +32,7 @@ copilot-template-type: behavioral
 ### Step 1: KDoc Coverage
 
 ```bash
-node "$ANDROID_COMMON_DOC/mcp-server/build/cli/kdoc-coverage.js" "$PROJECT_ROOT" [--changed-files "$CHANGED" | --modules "$MODULE"] --format json
+node .claude/runtime/l0-toolkit-launcher.cjs run kdoc-coverage --project-root "$PWD" -- [--changed-files "$CHANGED" | --modules "$MODULE"] --format json
 ```
 
 Measures: public APIs with/without KDoc per module.
@@ -51,14 +51,14 @@ If docs/api/ exists, also cross-reference: patterns vs generated API docs conten
 ### Step 3: docs/api/ Freshness
 
 ```bash
-node "$ANDROID_COMMON_DOC/mcp-server/build/cli/generate-api-docs.js" "$PROJECT_ROOT" --validate-only
+node .claude/runtime/l0-toolkit-launcher.cjs run generate-api-docs --project-root "$PWD" -- --validate-only
 ```
 
 Reports: FRESH (all up to date), STALE (modules need regeneration), NO_DOCS (docs/api/ doesn't exist — optional).
 
 If `--fix` flag: regenerate stale modules:
 ```bash
-node "$ANDROID_COMMON_DOC/mcp-server/build/cli/generate-api-docs.js" "$PROJECT_ROOT" [--module "$STALE_MODULE"]
+node .claude/runtime/l0-toolkit-launcher.cjs run generate-api-docs --project-root "$PWD" -- [--module "$STALE_MODULE"]
 ```
 
 ### Step 4: Doc Structure Audit

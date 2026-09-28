@@ -3,7 +3,6 @@ name: test-full-parallel
 description: "Run all tests in parallel with coverage. Use when asked to run the full test suite fast or with parallel execution."
 intent: [test, parallel, coverage, fast, suite]
 allowed-tools: [Bash, Read, Grep, Glob]
-l0_requires: ANDROID_COMMON_DOC
 copilot: true
 ---
 
@@ -60,70 +59,12 @@ Uses parameters from `params.json`:
 
 ### macOS / Linux
 ```bash
-COMMON_DOC="${ANDROID_COMMON_DOC:?ANDROID_COMMON_DOC is not set. See README.md}"
-
-"$COMMON_DOC/scripts/sh/run-parallel-coverage-suite.sh" --project-root "$(pwd)" $ARGUMENTS
+node .claude/runtime/l0-toolkit-launcher.cjs run test-full --project-root "$(pwd)" -- $ARGUMENTS
 ```
 
 ### Windows
-```powershell
-$commonDoc = if ($env:ANDROID_COMMON_DOC) { $env:ANDROID_COMMON_DOC } else { throw "ANDROID_COMMON_DOC is not set. See README.md" }
 
-$argList = "$ARGUMENTS" -split '\s+' | Where-Object { $_ }
-$includeShared = $false
-$testType = ""
-$moduleFilter = "*"
-$maxWorkers = 0
-$minLines = 0
-$skipTests = $false
-$freshDaemon = $false
-$coverageOnly = $false
-$coverageModules = ""
-$coverageTool = ""
-
-for ($i = 0; $i -lt $argList.Count; $i++) {
-    $arg = $argList[$i]
-    if ($arg -eq "--include-shared") {
-        $includeShared = $true
-    } elseif ($arg -eq "--test-type" -and $i + 1 -lt $argList.Count) {
-        $testType = $argList[$i + 1]; $i++
-    } elseif ($arg -eq "--module-filter" -and $i + 1 -lt $argList.Count) {
-        $moduleFilter = $argList[$i + 1]; $i++
-    } elseif ($arg -eq "--max-workers" -and $i + 1 -lt $argList.Count) {
-        $maxWorkers = [int]$argList[$i + 1]; $i++
-    } elseif ($arg -eq "--min-lines" -and $i + 1 -lt $argList.Count) {
-        $minLines = [int]$argList[$i + 1]; $i++
-    } elseif ($arg -eq "--skip-tests") {
-        $skipTests = $true
-    } elseif ($arg -eq "--fresh-daemon") {
-        $freshDaemon = $true
-    } elseif ($arg -eq "--coverage-only") {
-        $coverageOnly = $true
-    } elseif ($arg -eq "--coverage-modules" -and $i + 1 -lt $argList.Count) {
-        $coverageModules = $argList[$i + 1]; $i++
-    } elseif ($arg -eq "--coverage-tool" -and $i + 1 -lt $argList.Count) {
-        $coverageTool = $argList[$i + 1]; $i++
-    }
-}
-
-$params = @{
-    ProjectRoot = (Get-Location).Path
-    ModuleFilter = $moduleFilter
-    MinMissedLines = $minLines
-}
-
-if ($testType -ne "") { $params.TestType = $testType }
-if ($includeShared) { $params.IncludeShared = $true }
-if ($skipTests) { $params.SkipTests = $true }
-if ($freshDaemon) { $params.FreshDaemon = $true }
-if ($coverageOnly) { $params.CoverageOnly = $true }
-if ($coverageModules -ne "") { $params.CoverageModules = $coverageModules }
-if ($maxWorkers -gt 0) { $params.MaxWorkers = $maxWorkers }
-if ($coverageTool -ne "") { $params.CoverageTool = $coverageTool }
-
-& "$commonDoc\scripts\ps1\run-parallel-coverage-suite.ps1" @params
-```
-
+Claude Code runs the POSIX command above from Bash on Windows as well. Do not resolve the toolkit through `ANDROID_COMMON_DOC` or call its PowerShell scripts directly; the consumer-local launcher resolves and verifies the pinned L0 source from `l0-manifest.json`.
 ## Expected Output
 
 **On success:**

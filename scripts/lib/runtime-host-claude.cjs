@@ -20,6 +20,7 @@ const ANCHOR_SCHEMA = 'runtime/host-observation-trust-anchor/v1';
 const TICKET_SCHEMA = 'runtime/host-observation-admission/v1';
 const COMPOSITION_SCHEMA = 'runtime/claude-host-composition/v3';
 const COMPOSITION_TTL_SECONDS = 120;
+const CONSUMED_COMPOSITION_SCOPE_SCHEMA = 'runtime/claude-host-composition-consumed/v2';
 const SESSION_EVIDENCE_SCHEMA = 'runtime/claude-session-evidence/v2';
 const SESSION_EVIDENCE_TTL_SECONDS = 12 * 60 * 60;
 const INTERACTIVE_PIN_EVIDENCE_SCHEMA = 'runtime/claude-interactive-pin-evidence/v2';
@@ -47,6 +48,12 @@ const DIRECT_ROLE_HOST_KEYS = Object.freeze([
 ].sort());
 const COMPOSITION_OPERATIONS = Object.freeze(['Agent', 'Bash', 'SendMessage', 'TaskOutput']);
 const COMPOSITION_RE = /^[0-9a-f]{32}$/;
+const CONSUMED_COMPOSITION_SCOPE_KEYS = Object.freeze([
+  'actual_model', 'composition_digest', 'composition_id', 'consumed_at', 'expires_at',
+  'key_id', 'plan_digest', 'project_root_digest', 'requested_profile_digest',
+  'requested_profile_name', 'schema', 'session_digest', 'signature_ed25519_base64',
+  'worktree_id',
+].sort());
 const PROFILE_NAME_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
 const SUPPORTED_CLAUDE_FAMILY = '2.1';
 const SUPPORTED_CLAUDE_VERSION_RE = /^2\.1\.\d+$/;
@@ -1331,8 +1338,13 @@ function recordInteractiveSessionPin(options) {
   if (!transcriptPath) return { ok: false, reason: 'HOST_TRANSCRIPT_UNPROVEN' };
   const destination = interactivePinEvidencePath(projectRoot, event.session_id);
   const existing = readJsonFile(destination);
-  if (verifyInteractivePinEvidence(projectRoot, existing, event.session_id)) {
+  const existingIsValid = verifyInteractivePinEvidence(projectRoot, existing, event.session_id);
+  const transcriptPathDigest = digest(transcriptPath);
+  if (existingIsValid && existing.transcript_path_digest === transcriptPathDigest) {
     return { ok: true, record: existing, idempotent: true };
+  }
+  if (fs.existsSync(destination) && !existingIsValid) {
+    return { ok: false, reason: 'HOST_PIN_UNPROVEN' };
   }
   const observed = isTestCapability() && options.__testObserved
     ? options.__testObserved
@@ -1355,7 +1367,7 @@ function recordInteractiveSessionPin(options) {
     schema: INTERACTIVE_PIN_EVIDENCE_SCHEMA,
     session_digest: digest(event.session_id), project_root_digest: rootDigest, worktree_id: worktreeId,
     requested_profile_name: profile.name, requested_profile_digest: profile.digest,
-    transcript_path_digest: digest(transcriptPath),
+    transcript_path_digest: transcriptPathDigest,
     actual_model: event.model === undefined ? null : event.model,
     cli_family: observed.cliFamily, cli_version: observed.cliVersion,
     pin_digest: observed.pinDigest, host_contract_digest: observed.hostContractDigest,
@@ -1365,13 +1377,29 @@ function recordInteractiveSessionPin(options) {
     expires_at: new Date(now.getTime() + SESSION_EVIDENCE_TTL_SECONDS * 1000).toISOString(), key_id: keys.keyId,
   };
   record.signature_ed25519_base64 = crypto.sign(null, interactivePinEvidencePayload(record), keys.privateKey).toString('base64');
-  try { publishNoClobber(destination, Buffer.from(canonicalJSONStringify(record), 'utf8'), {}); }
-  catch {
-    const concurrentlyPublished = readJsonFile(destination);
-    if (!verifyInteractivePinEvidence(projectRoot, concurrentlyPublished, event.session_id)) return { ok: false, reason: 'HOST_PIN_UNPROVEN' };
-    return { ok: true, record: concurrentlyPublished, idempotent: true };
-  }
-  return { ok: true, record, idempotent: false };
+  const initialDigest = existingIsValid ? digest(canonicalJSONStringify(existing)) : null;
+  const lockDir = path.join(sessionEvidenceDir(projectRoot), '.interactive-' + digest(event.session_id) + '.lock');
+  const locked = owner.withRegistryLock(lockDir, () => {
+    const currentExists = fs.existsSync(destination);
+    const current = readJsonFile(destination);
+    if (currentExists && !verifyInteractivePinEvidence(projectRoot, current, event.session_id)) {
+      return { ok: false, reason: 'HOST_PIN_UNPROVEN' };
+    }
+    if (current && current.transcript_path_digest === transcriptPathDigest) {
+      return { ok: true, record: current, idempotent: true };
+    }
+    const currentDigest = current ? digest(canonicalJSONStringify(current)) : null;
+    if (currentDigest !== initialDigest) {
+      return { ok: false, reason: 'HOST_PIN_RENEWAL_CONFLICT' };
+    }
+    const written = owner.writeRegistryRecordReplace(
+      destination, Buffer.from(canonicalJSONStringify(record), 'utf8'),
+    );
+    if (!written.ok) return { ok: false, reason: 'HOST_PIN_UNPROVEN' };
+    return { ok: true, record, idempotent: false, renewed: current !== null };
+  });
+  if (!locked.ok) return { ok: false, reason: 'HOST_PIN_UNPROVEN' };
+  return locked.value;
 }
 
 function readJsonFile(file) {
@@ -1408,7 +1436,10 @@ function verifyProductionSessionRecord(projectRoot, record, sessionId) {
   const owner = lifecycleOwner();
   let worktreeId;
   try { worktreeId = owner.computeWorktreeId(projectRoot); } catch { return false; }
-  const plan = owner.discoverPlan(projectRoot);
+  // The signed session record is the scope selector.  Consumers may retain
+  // several wave PLANs; requiring a globally unique PLAN here invalidates a
+  // still-current record after an unrelated historical wave is added.
+  const plan = owner.discoverPlan(projectRoot, record.plan_digest);
   if (!plan.ok || record.worktree_id !== worktreeId || record.plan_digest !== plan.planDigest) return false;
   const profile = resolveRequestedModelProfile(projectRoot, null);
   if (!profile.ok || profile.name !== record.requested_profile_name || profile.digest !== record.requested_profile_digest) return false;
@@ -1509,8 +1540,7 @@ function productionSessionObservation(projectRoot, event, testObserved) {
   try {
     transcriptPath = fs.realpathSync(event.transcript_path);
     const stat = fs.lstatSync(transcriptPath);
-    if (!stat.isFile() || stat.isSymbolicLink() ||
-        digest(transcriptPath) !== interactive.transcript_path_digest) return null;
+    if (!stat.isFile() || stat.isSymbolicLink()) return null;
   } catch { return null; }
   const profile = resolveRequestedModelProfile(projectRoot, null);
   if (!profile.ok || (interactive.actual_model !== null &&
@@ -1519,24 +1549,139 @@ function productionSessionObservation(projectRoot, event, testObserved) {
     ? testObserved
     : observeClaudeExecutablePin({ projectRoot, startingPid: process.pid });
   if (!observed || !observed.ok || observed.observationSource !== interactive.observation_source ||
-      observed.processId !== interactive.process_id || digest(observed.processBirth) !== interactive.process_birth_digest ||
       observed.executableDigest !== interactive.executable_digest || observed.cliVersion !== interactive.cli_version ||
       observed.cliFamily !== interactive.cli_family || observed.pinDigest !== interactive.pin_digest ||
       observed.hostContractDigest !== interactive.host_contract_digest) return null;
+  let currentInteractive = interactive;
+  let hostInvocationChanged = false;
+  const transcriptPathDigest = digest(transcriptPath);
+  const processBirthDigest = digest(observed.processBirth);
+  if (transcriptPathDigest !== interactive.transcript_path_digest ||
+      observed.processId !== interactive.process_id || processBirthDigest !== interactive.process_birth_digest) {
+    const owner = lifecycleOwner();
+    const keys = loadOrCreateProductionKey(projectRoot);
+    const now = new Date();
+    const renewed = {
+      ...interactive,
+      transcript_path_digest: transcriptPathDigest,
+      process_id: observed.processId,
+      process_birth_digest: processBirthDigest,
+      observed_at: now.toISOString(),
+      expires_at: new Date(now.getTime() + SESSION_EVIDENCE_TTL_SECONDS * 1000).toISOString(),
+      key_id: keys.keyId,
+    };
+    renewed.signature_ed25519_base64 = crypto.sign(
+      null, interactivePinEvidencePayload(renewed), keys.privateKey,
+    ).toString('base64');
+    const destination = interactivePinEvidencePath(projectRoot, event.session_id);
+    const expectedDigest = digest(canonicalJSONStringify(interactive));
+    const lockDir = path.join(sessionEvidenceDir(projectRoot), '.interactive-' + digest(event.session_id) + '.lock');
+    const locked = owner.withRegistryLock(lockDir, () => {
+      const current = readJsonFile(destination);
+      if (!verifyInteractivePinEvidence(projectRoot, current, event.session_id)) return null;
+      if (current.transcript_path_digest === transcriptPathDigest &&
+          current.process_id === observed.processId &&
+          current.process_birth_digest === processBirthDigest) return current;
+      if (digest(canonicalJSONStringify(current)) !== expectedDigest) return null;
+      const written = owner.writeRegistryRecordReplace(
+        destination, Buffer.from(canonicalJSONStringify(renewed), 'utf8'),
+      );
+      return written.ok ? renewed : null;
+    });
+    if (!locked.ok || !locked.value) return null;
+    currentInteractive = locked.value;
+    hostInvocationChanged = true;
+  }
+  const invocationGeneration = lifecycleOwner().resolveSessionGeneration(
+    projectRoot,
+    { provider: 'claude-hook', runtime_session_key: event.session_id },
+    {
+      invocationDigest: digest(currentInteractive.process_id + ':' + currentInteractive.process_birth_digest),
+      forceRotation: hostInvocationChanged,
+    },
+  );
+  if (!invocationGeneration.ok) return null;
   return {
-    ...interactive,
+    ...currentInteractive,
     actual_host: 'claude', actual_role_engine: 'claude', continuity: 'session-persistent',
   };
 }
 
-function getProductionSessionIdentity(projectRoot, sessionId) {
+function consumedCompositionScopePayload(record) {
+  return Buffer.from(JSON.stringify([
+    record.schema, record.composition_id, record.composition_digest,
+    record.session_digest, record.project_root_digest, record.worktree_id,
+    record.plan_digest, record.actual_model, record.requested_profile_name,
+    record.requested_profile_digest, record.consumed_at, record.expires_at,
+    record.key_id,
+  ]), 'utf8');
+}
+
+function verifyConsumedCompositionScope(projectRoot, composition, scope, sessionId, expected) {
+  if (!scope || !hasExactKeys(scope, CONSUMED_COMPOSITION_SCOPE_KEYS) ||
+      scope.schema !== CONSUMED_COMPOSITION_SCOPE_SCHEMA ||
+      scope.composition_id !== composition.composition_id ||
+      scope.composition_digest !== digest(canonicalJSONStringify(composition)) ||
+      scope.session_digest !== digest(sessionId) || scope.session_digest !== composition.session_digest ||
+      scope.project_root_digest !== projectRootIdentityDigest(projectRoot) ||
+      scope.worktree_id !== composition.worktree_id || scope.plan_digest !== composition.plan_digest ||
+      scope.requested_profile_name !== composition.requested_profile_name ||
+      scope.requested_profile_digest !== composition.requested_profile_digest ||
+      !boundedLiteral(scope.actual_model, 128) || !DIGEST_RE.test(scope.key_id) ||
+      typeof scope.signature_ed25519_base64 !== 'string') return false;
+  const consumed = Date.parse(scope.consumed_at);
+  const expires = Date.parse(scope.expires_at);
+  if (!Number.isFinite(consumed) || !Number.isFinite(expires) || consumed > Date.now() ||
+      expires <= Date.now() || expires - consumed > SESSION_EVIDENCE_TTL_SECONDS * 1000) return false;
+  if (expected && (scope.worktree_id !== expected.worktreeId || scope.plan_digest !== expected.planDigest)) return false;
+  const plan = lifecycleOwner().discoverPlan(projectRoot, scope.plan_digest);
+  const profile = resolveRequestedModelProfile(projectRoot, null);
+  if (!plan.ok || plan.planDigest !== scope.plan_digest || !profile.ok ||
+      profile.name !== scope.requested_profile_name || profile.digest !== scope.requested_profile_digest ||
+      !actualModelMatchesRequestedAlias(scope.actual_model, profile.requestedModel)) return false;
+  const anchor = readJsonFile(compositionKeyPaths(projectRoot).anchor);
+  if (!anchor || anchor.schema !== ANCHOR_SCHEMA || anchor.key_id !== scope.key_id) return false;
+  try {
+    const der = Buffer.from(anchor.public_key_spki_der_base64, 'base64');
+    if (digestBytes(der) !== anchor.key_id) return false;
+    const publicKey = crypto.createPublicKey({ key: der, type: 'spki', format: 'der' });
+    return crypto.verify(null, consumedCompositionScopePayload(scope), publicKey,
+      Buffer.from(scope.signature_ed25519_base64, 'base64'));
+  } catch { return false; }
+}
+
+function findProductionCompositionForSessionScope(projectRoot, sessionId, expected) {
+  if (!expected || !DIGEST_RE.test(expected.worktreeId || '') || !DIGEST_RE.test(expected.planDigest || '')) return null;
+  let names;
+  try { names = fs.readdirSync(compositionDir(projectRoot)); } catch { return null; }
+  const sessionDigest = digest(sessionId);
+  const matches = [];
+  for (const name of names) {
+    if (!/^[0-9a-f]{32}\.json$/.test(name)) continue;
+    const record = readJsonFile(path.join(compositionDir(projectRoot), name));
+    if (!record || record.session_digest !== sessionDigest || record.worktree_id !== expected.worktreeId ||
+        record.plan_digest !== expected.planDigest) continue;
+    const scope = readJsonFile(compositionConsumedPath(projectRoot, record.composition_id));
+    if (!verifyConsumedCompositionScope(projectRoot, record, scope, sessionId, expected)) continue;
+    matches.push({ ...record, expires_at: scope.expires_at });
+  }
+  matches.sort((a, b) => b.created_at.localeCompare(a.created_at));
+  return matches[0] || null;
+}
+
+function getProductionSessionIdentity(projectRoot, sessionId, expected) {
   if (!isUsableRoot(projectRoot) || !boundedLiteral(sessionId, 4096)) return { ok: false };
   const record = productionSessionObservation(projectRoot, { session_id: sessionId });
-  if (record) return { ok: true, record };
+  if (record && (!expected || (record.worktree_id === expected.worktreeId && record.plan_digest === expected.planDigest))) {
+    return { ok: true, record };
+  }
   const interactive = readJsonFile(interactivePinEvidencePath(projectRoot, sessionId));
-  return verifyInteractivePinEvidence(projectRoot, interactive, sessionId)
-    ? { ok: true, record: interactive }
-    : { ok: false };
+  if (!verifyInteractivePinEvidence(projectRoot, interactive, sessionId)) return { ok: false };
+  if (expected) {
+    const composition = findProductionCompositionForSessionScope(projectRoot, sessionId, expected);
+    return composition ? { ok: true, record: composition } : { ok: false };
+  }
+  return { ok: true, record: interactive };
 }
 
 function directRoleHostDir(projectRoot) {
@@ -2204,11 +2349,29 @@ function consumeProductionHostComposition(projectRoot, compositionId, expected) 
   if (!verifyProductionRecord(projectRoot, record, expected)) return { ok: false };
   const resolvedRecord = resolvePendingCompositionModel(projectRoot, record);
   if (!resolvedRecord) return { ok: false };
+  const keys = loadOrCreateProductionKey(projectRoot);
+  const consumedAt = new Date();
+  const consumedScope = {
+    schema: CONSUMED_COMPOSITION_SCOPE_SCHEMA,
+    composition_id: compositionId,
+    composition_digest: digest(canonicalJSONStringify(record)),
+    session_digest: record.session_digest,
+    project_root_digest: record.project_root_digest,
+    worktree_id: record.worktree_id,
+    plan_digest: record.plan_digest,
+    actual_model: resolvedRecord.actual_model,
+    requested_profile_name: record.requested_profile_name,
+    requested_profile_digest: record.requested_profile_digest,
+    consumed_at: consumedAt.toISOString(),
+    expires_at: new Date(consumedAt.getTime() + SESSION_EVIDENCE_TTL_SECONDS * 1000).toISOString(),
+    key_id: keys.keyId,
+  };
+  consumedScope.signature_ed25519_base64 = crypto.sign(
+    null, consumedCompositionScopePayload(consumedScope), keys.privateKey,
+  ).toString('base64');
   try {
-    fs.writeFileSync(compositionConsumedPath(projectRoot, compositionId), JSON.stringify({
-      schema: 'runtime/claude-host-composition-consumed/v1', composition_id: compositionId,
-      consumed_at: new Date().toISOString(),
-    }), { encoding: 'utf8', flag: 'wx', mode: 0o600 });
+    fs.writeFileSync(compositionConsumedPath(projectRoot, compositionId), JSON.stringify(consumedScope),
+      { encoding: 'utf8', flag: 'wx', mode: 0o600 });
   } catch (error) {
     if (error && error.code === 'EEXIST') return { ok: false };
     throw error;

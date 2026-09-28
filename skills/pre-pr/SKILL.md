@@ -13,6 +13,10 @@ For any result consumed by a quality gate, wrap execution with `scripts/tools/ev
 
 > **Push authority:** this skill may prepare or request a push, but cannot authorize one. Only the installed canonical Git `pre-push` hook enforces ref updates from current stamps/proof. Runtime role labels and command-intent hooks are defense-in-depth, never portable identity proof.
 
+## Runtime source boundary
+
+Resolve the active layer with `node .claude/runtime/l0-toolkit-launcher.cjs describe layer --project-root "$PWD"`. In L1/L2, invoke toolkit-owned checks only through that consumer-local launcher. Never depend on `ANDROID_COMMON_DOC`, guessed sibling paths, or a consumer `mcp-server/`. Steps explicitly marked L0-source-only are skipped downstream; the consumer project's own rules remain authoritative.
+
 ## Usage Examples
 
 ```
@@ -120,7 +124,7 @@ Gradle deprecation warnings → WARNING (reports, dev must acknowledge).
 Run TruffleHog on the project to detect committed secrets:
 
 ```bash
-bash scripts/sh/scan-secrets.sh "$(pwd)"
+node .claude/runtime/l0-toolkit-launcher.cjs run scan-secrets --project-root "$PWD" --
 ```
 
 - status=SKIPPED (trufflehog not installed): INFO — do not block
@@ -133,7 +137,7 @@ bash scripts/sh/scan-secrets.sh "$(pwd)"
 
 ```bash
 if [ -f "gradle/libs.versions.toml" ]; then
-  node "$ANDROID_COMMON_DOC/mcp-server/build/cli/check-outdated.js" "$(pwd)" --format summary
+  node .claude/runtime/l0-toolkit-launcher.cjs run check-outdated --project-root "$PWD" -- --format summary
 fi
 ```
 
@@ -146,7 +150,7 @@ Does NOT block -- version updates are a separate task, not a PR gate.
 
 ```bash
 if git diff --name-only "$MERGE_BASE..HEAD" | grep -qE '\.gradle\.kts$'; then
-  bash "$ANDROID_COMMON_DOC/scripts/sh/catalog-coverage-check.sh" --project-root "$(pwd)"
+  node .claude/runtime/l0-toolkit-launcher.cjs run catalog-coverage --project-root "$PWD" --
 fi
 ```
 
@@ -162,9 +166,11 @@ Catalog coverage scans `*.gradle.kts` in the consumer project for hardcoded depe
 Run Vitest integration tests when agent templates, .claude/agents/, or mcp-server sources changed:
 
 ```bash
-if git diff --name-only "$BASE_SHA" HEAD | grep -qE '^(setup/agent-templates/|\.claude/agents/|mcp-server/)'; then
-  cd "$ANDROID_COMMON_DOC/mcp-server" && npm test
-  cd - > /dev/null
+if [[ "$(node .claude/runtime/l0-toolkit-launcher.cjs describe layer --project-root "$PWD")" == "L0" ]] \
+  && git diff --name-only "$BASE_SHA" HEAD | grep -qE '^(setup/agent-templates/|\.claude/agents/|mcp-server/)'; then
+  (cd mcp-server && npm test)
+else
+  echo "[STEP 5.8 SKIP] L0 agent-template integration suite is source-only"
 fi
 ```
 
@@ -175,8 +181,11 @@ Failures BLOCK the PR. The integration suite enforces Wave 1 template rules (Edi
 Run when agent templates or `.claude/agents/` changed:
 
 ```bash
-if git diff --name-only "$MERGE_BASE" HEAD | grep -qE '^(setup/agent-templates/|\.claude/agents/)'; then
+if [[ "$(node .claude/runtime/l0-toolkit-launcher.cjs describe layer --project-root "$PWD")" == "L0" ]] \
+  && git diff --name-only "$MERGE_BASE" HEAD | grep -qE '^(setup/agent-templates/|\.claude/agents/)'; then
   bash scripts/sh/validate-agent-templates.sh --show-details
+else
+  echo "[STEP 5.9 SKIP] L0 agent-template lint is source-only"
 fi
 ```
 
@@ -185,8 +194,12 @@ Failures BLOCK the PR. Validates role keyword contracts, tool-body cross-referen
 ### Step 6 — Registry hash freshness
 
 ```bash
-node mcp-server/build/cli/generate-registry.js
-bash scripts/sh/rehash-registry.sh --project-root "$(pwd)" --check
+if [[ "$(node .claude/runtime/l0-toolkit-launcher.cjs describe layer --project-root "$PWD")" == "L0" ]]; then
+  node mcp-server/build/cli/generate-registry.js
+  bash scripts/sh/rehash-registry.sh --project-root "$(pwd)" --check
+else
+  echo "[STEP 6 SKIP] L0 registry generation is source-only"
+fi
 ```
 
 Run `node mcp-server/build/cli/generate-registry.js` then `bash scripts/sh/rehash-registry.sh --project-root "$(pwd)" --check`. Both tools produce identical hashes post-S2.1; chaining remains required through Wave 22 as regression guard.

@@ -318,8 +318,8 @@ describe('arch-platform + arch-integration — caller grep rule', () => {
     expect(platformContent).toMatch(/template_version:\s*"\d+\.\d+\.\d+"/);
   });
 
-  it('arch-integration has template version 1.32.0', () => {
-    expect(integrationContent).toContain('template_version: "1.32.0"');
+  it('arch-integration has template version 1.32.1', () => {
+    expect(integrationContent).toContain('template_version: "1.32.1"');
   });
 });
 
@@ -490,7 +490,7 @@ describe('quality-gater template — gate protocol', () => {
   });
 
   it('has template version 2.28.0', () => {
-    expect(content).toContain('template_version: "2.28.0"');
+    expect(content).toContain('template_version: "2.28.1"');
   });
 });
 
@@ -815,9 +815,9 @@ describe('quality-gater template — stamp enforcement', () => {
   const content = fs.readFileSync(path.join(TEMPLATES_DIR, 'quality-gater.md'), 'utf-8');
 
   it('has Step 10 (QG proof emitter)', () => {
-    // Step 10 now delegates to emit-push-proof.sh run-qg (bl-w47-pr-0c2 T6a)
-    expect(content).toContain('emit-push-proof.sh');
-    expect(content).toContain('run-qg');
+    expect(content).toContain('run emit-push-proof');
+    expect(content).toContain('run runtime-consumer-qg');
+    expect(content).toContain('mint --slug');
   });
 
   it('Step 10 mentions quality-gate.stamp (backward-compat comment)', () => {
@@ -852,7 +852,7 @@ describe('context-provider template — spawn protocol (v3.0.0 pre-cache)', () =
   });
 
   it('has template version 3.9.0', () => {
-    expect(cpContent).toContain('template_version: "3.9.0"');
+    expect(cpContent).toContain('template_version: "3.9.1"');
   });
 
   it('has External Context section with Context7 call sequence', () => {
@@ -918,7 +918,7 @@ describe('architect templates — PRE-TASK protocol', () => {
   });
 
   it('planner version 1.22.0', () => {
-    expect(plannerContent).toContain('template_version: "1.22.0"');
+    expect(plannerContent).toContain('template_version: "1.22.1"');
   });
 
   it('arch-testing has template_version field in frontmatter', () => {

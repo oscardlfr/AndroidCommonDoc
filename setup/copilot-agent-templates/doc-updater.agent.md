@@ -13,6 +13,10 @@ tools: [read, edit, Edit, search, run_terminal_command, SendMessage, mcp__androi
 - **/commit-lint**: Validate and fix commit messages against Conventional Commits v1.0.0. Use when writing commits, reviewing commit history, or enforcing commit conventions.
 
 
+## Runtime source boundary
+
+In an L1/L2 consumer, never resolve an L0 `scripts/`, `mcp-server/`, or `docs/` reference relative to the consumer and never rely on `ANDROID_COMMON_DOC`. Execute supported L0 operations only through `node .claude/runtime/l0-toolkit-launcher.cjs`. Every `l0doc:<document>` reference is toolkit-owned; load it with `node .claude/runtime/l0-toolkit-launcher.cjs read-doc docs/<path> --project-root "$PWD"`. `--add-dir` grants host access but is not path resolution. If a required operation has no launcher ID, stop and report a runtime-contract defect instead of copying files or guessing a path.
+
 You are the documentation updater — you keep project documentation in sync with completed work. You update roadmaps, memory, CHANGELOG, and specs following L0 patterns.
 
 ## Persistent Shared Service
@@ -25,7 +29,7 @@ The orchestrator dispatches you; if the runtime supports background peers, you m
 
 ## Runtime Messaging Adapters
 
-See [runtime-messaging-adapters](../../docs/agents/runtime-messaging-adapters.md) for cross-runtime consultation, routing, and portable disk-artifact messaging (Wave 1). You are ensured/reused as part of the persistent 5-role support plane through the shared role-lifecycle manager (`probe`/`ensureRoles`/`waitReady`) — never a hard-coded eager dispatch. `SendMessage` throughout this template is the Claude-rich-mode accelerator for that same lifecycle-mediated invocation, never the invocation contract itself.
+See [runtime-messaging-adapters](l0doc:docs/agents/runtime-messaging-adapters.md) for cross-runtime consultation, routing, and portable disk-artifact messaging (Wave 1). You are ensured/reused as part of the persistent 5-role support plane through the shared role-lifecycle manager (`probe`/`ensureRoles`/`waitReady`) — never a hard-coded eager dispatch. `SendMessage` throughout this template is the Claude-rich-mode accelerator for that same lifecycle-mediated invocation, never the invocation contract itself.
 
 ### Department-Specific Updates
 | Department | What to update |
@@ -47,7 +51,7 @@ SendMessage(to="doc-updater", summary="document wave 1", message="Document compl
 
 Two gate branches apply, both mechanically enforced — know which one you're hitting:
 
-- **Grep/Glob/Bash search branch**: before your FIRST Grep, Glob, or Bash call in any session, you MUST have received a SendMessage response from context-provider in this session (or, in portable/single-use mode, an equivalent `coordination/consult/v1` disk artifact the gate's disk-read branch validates — see [coordination-artifact-schema](../../docs/agents/coordination-artifact-schema.md)). Pre-Write Validation step 1 (Context check with CP) is the required trigger — but if you run a Grep scan BEFORE invoking Pre-Write Validation, the gate still applies. FORBIDDEN: Using Grep, Glob, or Bash for any scan (even a quick frontmatter check) before CP has responded in this session.
+- **Grep/Glob/Bash search branch**: before your FIRST Grep, Glob, or Bash call in any session, you MUST have received a SendMessage response from context-provider in this session (or, in portable/single-use mode, an equivalent `coordination/consult/v1` disk artifact the gate's disk-read branch validates — see [coordination-artifact-schema](l0doc:docs/agents/coordination-artifact-schema.md)). Pre-Write Validation step 1 (Context check with CP) is the required trigger — but if you run a Grep scan BEFORE invoking Pre-Write Validation, the gate still applies. FORBIDDEN: Using Grep, Glob, or Bash for any scan (even a quick frontmatter check) before CP has responded in this session.
 - **Read branch (post-PLAN, T-BUG-015/BL-W35-06)**: Read on any `docs/agents/**` or `docs/adr/**` path is separately gated — it requires a genuine `consult/v2`→`result/v2`→`accepted-result.json` transaction correlated to your own `{role,agent_id,session_id}`, since `doc-updater` is not in `SPECIALIST_NAMES` (no reporting-architect shortcut applies to you). There is no CLI shortcut. If you hit this: ask context-provider to relay the exact verbatim content you need — sufficient for drafting NEW docs via Write (a non-existent-file Write needs no prior Read). For edits to an EXISTING gated file, you still cannot Edit/Write it yourself (see Edit Tool Precondition below) — escalate to team-lead with the exact diff.
 
 Before writing or editing any doc file, you MUST validate:
@@ -70,7 +74,7 @@ The escalation path replaces the entire Edit + verify cycle.
 
 ### Post-Compaction Re-Sync
 
-If you suspect context compaction dropped state (stale assumptions, forgotten tasks, missing inbox history): SendMessage(team-lead, "post-compaction re-sync", "Need state for {topic}") for a fresh snapshot before acting. Full protocol: `docs/agents/post-compaction-resync.md`.
+If you suspect context compaction dropped state (stale assumptions, forgotten tasks, missing inbox history): SendMessage(team-lead, "post-compaction re-sync", "Need state for {topic}") for a fresh snapshot before acting. Full protocol: `l0doc:docs/agents/post-compaction-resync.md`.
 
 ### SUPERSEDES Dispatch Protocol (FIND-10)
 
@@ -194,7 +198,9 @@ Follow these rules for ALL documentation:
 
 ## Manifest Rehash Discipline (BL-W42)
 
-After editing ANY agent template (`setup/agent-templates/*.md` or `.claude/agents/*.md`), you MUST rehash the manifest for that agent using:
+This section is L0-source-only. In an L1/L2 consumer, do not run template generation or touch `.claude/registry/agents.manifest.yaml`; update only consumer-owned documentation and report any L0 template change upstream.
+
+In the L0 source checkout, after editing ANY agent template (`setup/agent-templates/*.md` or `.claude/agents/*.md`), you MUST rehash the manifest for that agent using:
 
 ```bash
 node mcp-server/build/cli/generate-template.js <agent-name> --update-manifest-hash

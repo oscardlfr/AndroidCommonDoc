@@ -4,7 +4,6 @@ description: "Audit README.md and AGENTS.md against the current state of the rep
 intent: [readme, audit, stale, counts, references, docs]
 allowed-tools: [Bash, Read, Edit, Write]
 disable-model-invocation: false
-l0_requires: ANDROID_COMMON_DOC
 copilot: true
 ---
 
@@ -68,14 +67,17 @@ Run `/readme-audit --fix` manually before commits to repair stale counts — cou
 
 ## Implementation
 
-### macOS / Linux
 ```bash
-COMMON_DOC="${ANDROID_COMMON_DOC:?ANDROID_COMMON_DOC is not set}"
-bash "$COMMON_DOC/scripts/sh/readme-audit.sh" --project-root "$(pwd)"
+node .claude/runtime/l0-toolkit-launcher.cjs run readme-audit --project-root "$PWD" -- $ARGUMENTS
 ```
 
-### Manual (any platform)
-The agent reads the audit report, identifies all findings, and applies fixes directly via Edit tool.
+### Windows
+
+Claude Code runs the POSIX command above from Bash on Windows as well. The
+launcher selects the platform implementation and injects the project root.
+
+The agent reads the audit report, identifies all findings, and applies fixes
+directly via Edit only when `--fix` was requested.
 
 ## Cross-References
 

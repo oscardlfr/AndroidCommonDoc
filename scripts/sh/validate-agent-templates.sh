@@ -85,7 +85,7 @@ fi
 
 should_run() {
     [[ -z "$CHECKS" ]] && return 0
-    echo ",$CHECKS," | grep -q ",$1,"
+    grep -q ",$1," <<< ",$CHECKS,"
 }
 
 ERRORS=0
@@ -223,8 +223,8 @@ if should_run "role-keywords"; then
         tools_field=$(get_frontmatter_field "$file" "tools")
         for keyword in "$@"; do
             # Check body OR frontmatter tools (some keywords like Write are tool names)
-            if ! echo "$body" | grep -qi "$keyword"; then
-                if ! echo "$tools_field" | grep -qi "$keyword"; then
+            if ! grep -qi "$keyword" <<< "$body"; then
+                if ! grep -qi "$keyword" <<< "$tools_field"; then
                     detail "$fname: missing required keyword '$keyword'"
                     rk_errors=$((rk_errors + 1))
                 fi
@@ -286,7 +286,7 @@ if should_run "imperative-style"; then
         body_no_fences=$(get_body_no_fences "$f")
 
         for pattern in "${PASSIVE_PATTERNS[@]}"; do
-            hits=$(echo "$body_no_fences" | grep -c "$pattern" 2>/dev/null || true)
+            hits=$(grep -c "$pattern" <<< "$body_no_fences" 2>/dev/null || true)
             if [[ $hits -gt 0 ]]; then
                 detail "$fname: passive prose detected — '$pattern' ($hits occurrences)"
                 imp_warnings=$((imp_warnings + hits))
@@ -321,12 +321,13 @@ if should_run "tool-body-xref"; then
             tool="${TOOL_NAMES[$tool_idx]}"
             pattern="${TOOL_REGEXES[$tool_idx]}"
             # Check if body references the tool (outside fences)
-            if echo "$body_no_fences" | grep -q "$pattern" 2>/dev/null; then
+            if grep -q "$pattern" <<< "$body_no_fences" 2>/dev/null; then
                 # Check if tool is in frontmatter
-                if ! echo "$tools_field" | grep -qi "$tool"; then
+                if ! grep -qi "$tool" <<< "$tools_field"; then
                     # Special case: Agent() in team-lead is via the Agent tool
                     # Special case: examples showing what NOT to do (WRONG patterns)
-                    if echo "$body_no_fences" | grep -B1 "$pattern" | grep -qi "WRONG\|NEVER\|FORBIDDEN\|CANNOT\|example"; then
+                    matching_context=$(grep -B1 "$pattern" <<< "$body_no_fences" || true)
+                    if grep -qi "WRONG\|NEVER\|FORBIDDEN\|CANNOT\|example" <<< "$matching_context"; then
                         continue
                     fi
                     detail "$fname: body references '$tool' but not in frontmatter tools"
@@ -363,19 +364,19 @@ if should_run "anti-patterns"; then
 $(cat "$subdoc_path")"
                 fi
             done
-            if ! echo "$pm_combined" | grep -q "IMMEDIATELY"; then
+            if ! grep -q "IMMEDIATELY" <<< "$pm_combined"; then
                 detail "$fname: team-lead missing IMMEDIATELY execution trigger"
                 ap_warnings=$((ap_warnings + 1))
             fi
-            if ! echo "$pm_combined" | grep -q "STOP PLANNING\|PHASE TRANSITIONS ARE AUTOMATIC"; then
+            if ! grep -q "STOP PLANNING\|PHASE TRANSITIONS ARE AUTOMATIC" <<< "$pm_combined"; then
                 detail "$fname: team-lead missing phase transition enforcement rule"
                 ap_warnings=$((ap_warnings + 1))
             fi
-            if ! echo "$pm_combined" | grep -q "PHASE TRANSITIONS ARE AUTOMATIC"; then
+            if ! grep -q "PHASE TRANSITIONS ARE AUTOMATIC" <<< "$pm_combined"; then
                 detail "$fname: team-lead missing automatic phase transition rule"
                 ap_warnings=$((ap_warnings + 1))
             fi
-            if ! echo "$pm_combined" | grep -q "DISPOSABLE"; then
+            if ! grep -q "DISPOSABLE" <<< "$pm_combined"; then
                 detail "$fname: team-lead missing DISPOSABLE dev rule"
                 ap_warnings=$((ap_warnings + 1))
             fi
@@ -384,7 +385,7 @@ $(cat "$subdoc_path")"
         # Architect-specific: must NOT have Write/Edit in tools
         if [[ "$name" == arch-* ]]; then
             tools_field=$(get_frontmatter_field "$f" "tools")
-            if echo "$tools_field" | grep -qi "Write\|Edit"; then
+            if grep -qi "Write\|Edit" <<< "$tools_field"; then
                 detail "$fname: Architect has Write/Edit in tools — architects are read-only"
                 ap_warnings=$((ap_warnings + 1))
             fi
@@ -392,7 +393,7 @@ $(cat "$subdoc_path")"
 
         # Planner/quality-gater: must be "peer" not "sub-agent"
         if [[ "$name" == "planner" || "$name" == "quality-gater" ]]; then
-            if echo "$body_no_fences" | grep -qi "sub-agent spawned by team-lead"; then
+            if grep -qi "sub-agent spawned by team-lead" <<< "$body_no_fences"; then
                 detail "$fname: describes self as sub-agent — should be 'team peer'"
                 ap_warnings=$((ap_warnings + 1))
             fi
@@ -400,8 +401,8 @@ $(cat "$subdoc_path")"
 
         # General: named Agent() calls (devs should be anonymous)
         if [[ "$name" == "team-lead" ]]; then
-            named_agent_calls=$(echo "$body_no_fences" | grep -c 'Agent(name=' 2>/dev/null || true)
-            wrong_markers=$(echo "$body_no_fences" | grep -c 'WRONG' 2>/dev/null || true)
+            named_agent_calls=$(grep -c 'Agent(name=' <<< "$body_no_fences" 2>/dev/null || true)
+            wrong_markers=$(grep -c 'WRONG' <<< "$body_no_fences" 2>/dev/null || true)
             # Subtract WRONG examples from count
             real_named=$((named_agent_calls - wrong_markers))
             if [[ $real_named -gt 0 ]]; then

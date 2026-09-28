@@ -45,8 +45,8 @@ copilot: false
 | Source | Location | Target Subdir |
 |--------|----------|---------------|
 | Marketplace | `~/.claude/skills/*/SKILL.md` | `~/.gsd/agent/skills/marketplace/{name}/SKILL.md` |
-| L0 Skills | `$ANDROID_COMMON_DOC/skills/*/SKILL.md` | `~/.gsd/agent/skills/l0/{name}/SKILL.md` |
-| L0 Agents | `$ANDROID_COMMON_DOC/.claude/agents/*.md` | `~/.gsd/agent/skills/l0-agents/{name}/SKILL.md` |
+| L0 Skills | manifest-pinned toolkit `skills/*/SKILL.md` | `~/.gsd/agent/skills/l0/{name}/SKILL.md` |
+| L0 Agents | manifest-pinned toolkit `.claude/agents/*.md` | `~/.gsd/agent/skills/l0-agents/{name}/SKILL.md` |
 
 > **Important**: This skill syncs to the **user-level** `~/.gsd/agent/skills/` directory only. It does NOT copy marketplace skills into project-level `.claude/skills/`. Project-level skills are managed by `/sync-l0` (L0 canonical only). Pi/GSD reads both locations — user-level provides marketplace skills to all projects without duplicating files.
 
@@ -77,8 +77,8 @@ File: `~/.gsd/agent/skills/.sync-manifest.json`
         "pdf": { "hash": "sha256:abc...", "synced_at": "..." }
       }
     },
-    "l0": { "root": "$ANDROID_COMMON_DOC/skills", "entries": {} },
-    "l0-agents": { "root": "$ANDROID_COMMON_DOC/.claude/agents", "entries": {} }
+    "l0": { "root": "manifest:L0/tooling/skills", "entries": {} },
+    "l0-agents": { "root": "manifest:L0/tooling/.claude/agents", "entries": {} }
   }
 }
 ```
@@ -93,7 +93,7 @@ File: `~/.gsd/agent/skills/.sync-manifest.json`
       "matcher": "",
       "hooks": [{
         "type": "command",
-        "command": "bash \"$ANDROID_COMMON_DOC/scripts/sh/sync-gsd-skills.sh\" --source all 2>/dev/null || true"
+        "command": "node \"$CLAUDE_PROJECT_DIR\"/.claude/runtime/l0-toolkit-launcher.cjs run sync-gsd-skills --project-root \"$CLAUDE_PROJECT_DIR\" -- --source all 2>/dev/null || true"
       }]
     }]
   }
@@ -105,7 +105,7 @@ File: `~/.gsd/agent/skills/.sync-manifest.json`
 ### Execution
 
 ```bash
-bash "$ANDROID_COMMON_DOC/scripts/sh/sync-gsd-skills.sh" \
+node .claude/runtime/l0-toolkit-launcher.cjs run sync-gsd-skills --project-root "$PWD" -- \
   ${SOURCE:+--source "$SOURCE"} \
   ${DRY_RUN:+--dry-run} \
   ${VERBOSE:+--verbose}

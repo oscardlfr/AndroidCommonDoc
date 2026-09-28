@@ -26,6 +26,7 @@ const SESSION_START_HOOK_PATH = path.join(REPO_ROOT, '.claude/hooks/runtime-host
 const runtimeRoleLifecycle = require('../lib/runtime-role-lifecycle.cjs');
 const runtimeHostClaude = require('../lib/runtime-host-claude.cjs');
 const runtimeCollaborationEntrypoints = require('../lib/runtime-collaboration-entrypoints.cjs');
+const waveControlPlane = require('../lib/wave-control-plane.cjs');
 
 const CANONICAL_ENTRYPOINT_CLI_PATH = path.resolve(REPO_ROOT, 'scripts/lib/runtime-collaboration-entrypoints.cjs');
 const RELATIVE_ENTRYPOINT_CLI_PATH = 'scripts/lib/runtime-collaboration-entrypoints.cjs';
@@ -133,6 +134,15 @@ function monitorDocsIntent() {
 
 function initSessionIntent() {
   return Buffer.from(JSON.stringify({ mode: 'start' })).toString('base64url');
+}
+
+function workIntent(waveSlug, overrides) {
+  return Buffer.from(JSON.stringify(Object.assign({
+    role: 'toolkit-specialist',
+    subject_ref: `subject:${'a'.repeat(64)}`,
+    task: 'bounded fixture task',
+    wave_slug: waveSlug,
+  }, overrides || {}))).toString('base64url');
 }
 
 function extractRewrittenCommand(stdout) {
@@ -452,7 +462,53 @@ for (const [command, reason, label] of [
   passed += 1;
 }
 
-assert.strictEqual(passed, 17);
+// Case 8b: a recognized /work request in PREP must preserve the stable,
+// actionable control-plane reason rather than hiding it behind the generic
+// entrypoint error. Unexpected planning failures remain generic.
+{
+  const sessionId = uniqueSessionId();
+  const minted = recordManagedSystemInit(sessionId);
+  try {
+    const ctx = buildWorktreeContext(minted.worktreeRoot);
+    fs.symlinkSync(
+      path.join(REPO_ROOT, 'mcp-server', 'node_modules'),
+      path.join(ctx.worktreeRoot, 'mcp-server', 'node_modules'),
+      process.platform === 'win32' ? 'junction' : 'dir',
+    );
+    waveControlPlane.initialize(ctx.worktreeRoot, minted.waveSlug);
+    const commandFor = (intent) => runtimeRoleLifecycle.renderPosixDirect([
+      process.execPath, ctx.canonicalEntrypointPath, 'execute',
+      '--entrypoint', 'work', '--project-root', ctx.worktreeRoot, '--intent', intent,
+    ]);
+    const phaseResult = runHookAt(
+      baseEvent(commandFor(workIntent(minted.waveSlug)), ctx.worktreeRoot, sessionId),
+      ctx.hookPath,
+      ctx.worktreeRoot,
+    );
+    const phaseBody = JSON.parse(phaseResult.stdout);
+    assert.strictEqual(phaseBody.hookSpecificOutput.permissionDecision, 'deny');
+    assert.match(phaseBody.hookSpecificOutput.permissionDecisionReason,
+      /wave-control-work-outside-execute: \/work is available only during EXECUTE/);
+    console.log('PASS: case-8b-work-prep-preserves-recovery-diagnostic');
+    passed += 1;
+
+    const genericResult = runHookAt(
+      baseEvent(commandFor(workIntent(minted.waveSlug, { role: null })), ctx.worktreeRoot, sessionId),
+      ctx.hookPath,
+      ctx.worktreeRoot,
+    );
+    const genericBody = JSON.parse(genericResult.stdout);
+    assert.strictEqual(genericBody.hookSpecificOutput.permissionDecision, 'deny');
+    assert.strictEqual(genericBody.hookSpecificOutput.permissionDecisionReason,
+      '[R131/P3] collaboration entrypoint intent or scope is invalid.');
+    console.log('PASS: case-8c-unexpected-planning-error-remains-generic');
+    passed += 1;
+  } finally {
+    minted.cleanup();
+  }
+}
+
+assert.strictEqual(passed, 19);
 
 // Case 9: the production SessionStart hook must emit only a bounded reason and fail closed
 // when invoked from an ordinary test process whose ancestry contains no
@@ -479,6 +535,6 @@ assert.strictEqual(passed, 17);
   passed += 1;
 }
 
-assert.strictEqual(passed, 18);
+assert.strictEqual(passed, 20);
 
-console.log('18/18 PASS');
+console.log('20/20 PASS');

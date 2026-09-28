@@ -11,14 +11,10 @@ Build, install, and run app with debug logging. Use when asked to launch, run, o
 
 ### macOS / Linux
 ```bash
-COMMON_DOC="${ANDROID_COMMON_DOC:?ANDROID_COMMON_DOC is not set. See README.md}"
-
-"$COMMON_DOC/scripts/sh/build-run-app.sh" --project-root "$(pwd)" $ARGUMENTS
+node .claude/runtime/l0-toolkit-launcher.cjs run run-app --project-root "$PWD" -- $ARGUMENTS
 ```
 
 ### Windows (PowerShell)
 ```powershell
-$commonDoc = if ($env:ANDROID_COMMON_DOC) { $env:ANDROID_COMMON_DOC } else { throw "ANDROID_COMMON_DOC is not set. See README.md" }
-
-& "$commonDoc\scripts\ps1\build-run-app.ps1" -ProjectRoot (Get-Location).Path -Arguments "$ARGUMENTS"
+node .claude/runtime/l0-toolkit-launcher.cjs run run-app --project-root (Get-Location).Path -- $ARGUMENTS
 ```

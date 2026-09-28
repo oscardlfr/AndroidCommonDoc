@@ -68,7 +68,7 @@ jobs:
           retention-days: 14
 
   behavioral-readme-check:
-    name: README behavioral content (Wave History + ingestion-loop + team-lead)
+    name: README behavioral content (ingestion-loop + team-lead)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -88,9 +88,7 @@ jobs:
             fi
           }
 
-          # README must have Wave History section documenting Wave 20+
-          check "README: Recent Changes section"         "^## Recent Changes"             "README.md"
-          check "README: Wave 25 entry"                   "Wave 25"                        "README.md"
+          # README documents durable current behavior, not an embedded change log.
           check "README: Ingestion Loop mentioned"        "ingestion|ingest-content"       "README.md"
           check "README: team-lead (not project-manager)" "team-lead"                      "README.md"
 

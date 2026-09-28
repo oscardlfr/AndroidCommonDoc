@@ -1080,6 +1080,61 @@ test('R131-BOUNDARY-EXACT-ACTION-CORRELATION-27: Agent event must match exact du
   }
 });
 
+test('R131-BOUNDARY-RESUME-SENDMESSAGE-27b: role-notify forces SendMessage and consumes its exact parked handle before delivery', () => {
+  const lib = requireBoundaryLib();
+  const rll = require('../lib/runtime-role-lifecycle.cjs');
+  const actionId = 'a'.repeat(32);
+  const handleId = 'b'.repeat(32);
+  const message = [
+    'RUNTIME_RESUME/v1', `checkpoint:${'c'.repeat(64)}`, `resume-handle:${handleId}`,
+    `runtime-action:${actionId}`, 'host-status:validated-and-consumed-before-delivery',
+    'actor-action:none', 'reply:none', 'next:wait-for-correlated-task',
+  ].join('\n');
+  const action = {
+    action_id: actionId, repo_id: 'repo-test', kind: 'role-notify', runtime: 'claude-native',
+    worktree_id: 'worktree', plan_digest: 'd'.repeat(64), session_generation_id: 'e'.repeat(32),
+    role: 'arch-platform', payload: { teammate_name: 'arch-platform', message },
+  };
+  const saved = {};
+  for (const key of ['findActionAcrossRepos', 'computeRepoId', 'resolveHostOperationForAction',
+    'consumeClaudeResumeHandleForObservedActor']) saved[key] = rll[key];
+  let consumed = 0;
+  rll.findActionAcrossRepos = () => ({ ok: true, absent: false, action });
+  rll.computeRepoId = () => 'repo-test';
+  rll.resolveHostOperationForAction = () => 'SendMessage';
+  rll.consumeClaudeResumeHandleForObservedActor = () => { consumed += 1; return { ok: true }; };
+  try {
+    const wrongPrimitive = lib.admitNativeActionEvent({
+      hook_event_name: 'PreToolUse', tool_name: 'Agent', cwd: PROJECT_ROOT,
+      tool_input: { prompt: message }, session_id: 'session-1',
+    });
+    assert.deepStrictEqual(wrongPrimitive, {
+      admitted: false, owning: true, reason: 'native-action-wrong-host-primitive',
+    });
+    assert.strictEqual(consumed, 0);
+
+    const admitted = lib.admitNativeActionEvent({
+      hook_event_name: 'PreToolUse', tool_name: 'SendMessage', cwd: PROJECT_ROOT,
+      tool_input: { recipient: 'arch-platform', message }, session_id: 'session-1',
+    });
+    assert.deepStrictEqual(admitted, {
+      admitted: true, owning: true, actionId, operation: 'SendMessage', consumed: true,
+    });
+    assert.strictEqual(consumed, 1);
+
+    const mismatched = lib.admitNativeActionEvent({
+      hook_event_name: 'PreToolUse', tool_name: 'SendMessage', cwd: PROJECT_ROOT,
+      tool_input: { recipient: 'arch-testing', message }, session_id: 'session-1',
+    });
+    assert.deepStrictEqual(mismatched, {
+      admitted: false, owning: true, reason: 'native-sendmessage-action-input-mismatch',
+    });
+    assert.strictEqual(consumed, 1);
+  } finally {
+    for (const [key, value] of Object.entries(saved)) rll[key] = value;
+  }
+});
+
 test('R131-BOUNDARY-CALLER-COMPOSITION-REJECTION-28: forged composition id cannot admit an entrypoint event', () => {
   const lib = requireBoundaryLib();
   const rll = require('../lib/runtime-role-lifecycle.cjs');

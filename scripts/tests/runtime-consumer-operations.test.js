@@ -58,9 +58,14 @@ test('provenance and wave docs reject prose-only authority claims', () => {
 
 test('canonical entrypoint docs use the consumer launcher without model-owned path discovery', () => {
   const init = fs.readFileSync(path.join(root, 'skills', 'init-session', 'SKILL.md'), 'utf8');
+  const command = fs.readFileSync(path.join(root, '.claude', 'commands', 'init-session.md'), 'utf8');
   assert.match(init, /node \.claude\/runtime\/l0-entrypoint-launcher\.cjs init-session/);
   assert.match(init, /Do not run `ls`, `find`, `which`, `pwd`, `node -e`/);
   assert.doesNotMatch(init, /<base64url canonical JSON>/);
+  assert.match(command, /node \.claude\/runtime\/l0-entrypoint-launcher\.cjs init-session/);
+  assert.match(command, /never construct a replacement dashboard/);
+  assert.doesNotMatch(command, /\$SKILL_DIR\/init-session\/SKILL\.md/);
+  assert.doesNotMatch(command, /Read the skill file/);
   for (const name of ['resume-work', 'work', 'ingest-content', 'monitor-docs']) {
     const text = fs.readFileSync(path.join(root, 'skills', name, 'SKILL.md'), 'utf8');
     const line = text.split(/\r?\n/).find((candidate) => candidate.includes('l0-entrypoint-launcher.cjs'));

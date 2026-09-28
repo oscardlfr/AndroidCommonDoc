@@ -28,6 +28,7 @@ const SOURCE_REFERENCED_HOOK_FILES = new Set([
 ]);
 const CONSUMER_FILES = Object.freeze([
   '.claude/runtime/l0-entrypoint-launcher.cjs',
+  '.claude/runtime/l0-toolkit-launcher.cjs',
   '.claude/hooks/l0-source-hook-launcher.js',
   '.claude/hooks/context-provider-write-gate.js',
   '.claude/hooks/detekt-post-write.sh',
@@ -188,6 +189,8 @@ function computeRuntimeToolkitInventory(toolkitRoot) {
   const files = [
     'scripts/lib/runtime-role-lifecycle.cjs', 'scripts/lib/runtime-host-claude.cjs',
     'scripts/lib/runtime-consultation.cjs', 'scripts/lib/runtime-collaboration-entrypoints.cjs',
+    'scripts/lib/runtime-consumer-quality-gate.cjs',
+    'scripts/tools/wave-control-plane.cjs',
     'scripts/lib/wave-control-plane.cjs',
     'scripts/lib/verdict-evidence-contract-cli.cjs',
     'scripts/lib/verdict-evidence-contract.cjs', 'scripts/lib/verdict-artifact-confinement.cjs',
@@ -207,6 +210,13 @@ function computeRuntimeToolkitInventory(toolkitRoot) {
     collectDirectory(root, 'scripts/lib/runtime-consultation', files);
     collectDirectory(root, 'scripts/lib/runtime-role-lifecycle', files);
     collectDirectory(root, 'scripts/lib/runtime-bridge-codex', files);
+    // l0-toolkit-launcher exposes a closed operation allowlist whose POSIX and
+    // Windows targets live in these trees. Inventory the complete executable
+    // trees, including sourced/dot-sourced helpers, so an uncommitted target or
+    // dependency edit cannot execute under an unchanged runtime content pin.
+    collectDirectory(root, 'scripts/sh', files);
+    collectDirectory(root, 'scripts/ps1', files);
+    collectDirectory(root, 'scripts/tools', files);
     collectDirectory(root, 'mcp-server/build', files);
   } catch { return fail('runtime-toolkit-inventory-invalid'); }
   const entries = [];

@@ -4,6 +4,7 @@ const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
+const runtimeProjectContext = require('./runtime-project-context.cjs');
 
 const SCHEMA = 'wave-phase-state/v1';
 const PHASES = Object.freeze(['PREP', 'EXECUTE', 'VERIFY_FINAL', 'QG', 'COMPLETE']);
@@ -427,6 +428,30 @@ function verifyVerdicts(root, slug, state, phase, verdicts) {
   }
   return results;
 }
+function qualityGateProofInvocation(root, slug, head, platform = process.platform) {
+  const projectContext = runtimeProjectContext.resolveRuntimeProjectContext(root);
+  if (!projectContext.ok) throw new Error('RUNTIME_PROJECT_CONTEXT_INVALID:' + projectContext.reason);
+  if (projectContext.consumerLayer === 'L0') {
+    if (platform === 'win32') {
+      return {
+        executable: 'pwsh.exe',
+        args: ['-NoLogo', '-NoProfile', '-NonInteractive', '-File',
+          path.join(root, 'scripts', 'ps1', 'verify-push-proof.ps1'),
+          '-PushedSha', head, '-RepoRoot', root],
+      };
+    }
+    return {
+      executable: 'bash',
+      args: [path.join(root, 'scripts', 'sh', 'emit-push-proof.sh'),
+        '--subcommand', 'verify-proof', '--pushed-sha', head, '--repo-root', root],
+    };
+  }
+  return {
+    executable: process.execPath,
+    args: [path.resolve(__dirname, 'runtime-consumer-quality-gate.cjs'),
+      root, 'verify', '--slug', slug, '--head', head],
+  };
+}
 function transition(root, slug, to, options = {}) {
   if (!PHASES.includes(to)) throw new Error('UNKNOWN_PHASE');
   const inputs = currentInputs(root, slug);
@@ -453,9 +478,9 @@ function transition(root, slug, to, options = {}) {
       catch { throw new Error('QG_STAMP_MALFORMED:' + rel); }
       if (stamp.verdict !== 'PASS' || stamp.head !== inputs.head) throw new Error('QG_STAMP_NOT_CURRENT:' + rel);
     }
-    const proofCheck = spawnSync('bash', [path.join(inputs.root, 'scripts', 'sh', 'emit-push-proof.sh'),
-      '--subcommand', 'verify-proof', '--pushed-sha', inputs.head, '--repo-root', inputs.root],
-    { cwd: inputs.root, encoding: 'utf8', timeout: 30000 });
+    const invocation = qualityGateProofInvocation(inputs.root, slug, inputs.head);
+    const proofCheck = spawnSync(invocation.executable, invocation.args,
+      { cwd: inputs.root, encoding: 'utf8', timeout: 30000 });
     if (proofCheck.status !== 0) throw new Error('QG_PROOF_INVALID');
   }
   const transitionAt = new Date().toISOString();
@@ -491,4 +516,4 @@ function lifecycleActions(root, slug, profile = 'auto') {
 }
 
 module.exports = { SCHEMA, PHASES, NEXT, initialize, inspect, readState, transition, status, lifecycleActions,
-  parsePlanClass, requiredRoles, lifecycleRoles, executionMode };
+  parsePlanClass, requiredRoles, lifecycleRoles, executionMode, qualityGateProofInvocation };

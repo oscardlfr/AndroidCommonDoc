@@ -185,6 +185,26 @@ for skill_dir in "$SKILLS_DIR"/*/; do
       in_win && in_code{print}
     ' "$skill_file")
 
+    # A launcher invocation can be genuinely platform-neutral: Claude Code and
+    # Copilot both invoke Node directly, while the launcher selects the owning
+    # POSIX/PowerShell implementation. Accept one top-level bash block before
+    # any platform subsection and render it into both generated command blocks.
+    impl_portable=$(awk '
+      /^## Implementation/{in_impl=1; next}
+      in_impl && /^## /{exit}
+      in_impl && /^### /{exit}
+      in_impl && /^```bash/{in_code=1; next}
+      in_impl && in_code && /^```/{exit}
+      in_impl && in_code{print}
+    ' "$skill_file")
+
+    if [ -z "$impl_mac" ] && [ -n "$impl_portable" ]; then
+      impl_mac="$impl_portable"
+    fi
+    if [ -z "$impl_win" ] && [ -n "$impl_portable" ]; then
+      impl_win=$(printf '%s\n' "$impl_portable" | sed 's/"\$PWD"/(Get-Location).Path/g')
+    fi
+
     {
       echo "<!-- GENERATED from skills/$name/SKILL.md -- DO NOT EDIT MANUALLY -->"
       echo "<!-- Regenerate: bash adapters/generate-all.sh -->"

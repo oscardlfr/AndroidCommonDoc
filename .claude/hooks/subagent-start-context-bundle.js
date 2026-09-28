@@ -99,8 +99,11 @@ const CLAUDE_ONE_SHOT_BINDING_TTL_SECONDS = 3600;
 // ─────────────────────────────────────────────────────────────────────────
 
 /**
- * Scans role-bindings for `role`, scoped to the CURRENT worktree/PLAN,
- * across every session generation. Returns TWO independent things:
+ * Scans role-bindings for `role`, scoped to the CURRENT worktree, across
+ * every PLAN and session generation.  The binding/action tuple is the
+ * authenticated PLAN selector; a consumer may retain multiple historical
+ * wave PLANs, so global single-PLAN discovery is never an ownership gate.
+ * Returns TWO independent things:
  *   - `anyExists`: true iff ANY role-binding record exists for this role,
  *     regardless of its current state. This is the M7-RB-NONOWNING
  *     ownership gate -- "no role-binding record at all" is the ONLY
@@ -116,14 +119,11 @@ const CLAUDE_ONE_SHOT_BINDING_TTL_SECONDS = 3600;
  */
 function scanRoleBindingsForRole(projectRoot, role) {
   let worktreeId;
-  let planResult;
   try {
     worktreeId = rll.computeWorktreeId(projectRoot);
-    planResult = rll.discoverPlan(projectRoot);
   } catch {
     return { anyExists: false, liveCandidates: [] };
   }
-  if (!planResult.ok) return { anyExists: false, liveCandidates: [] };
   const bindingsDir = path.join(rll.registryRepoDir(projectRoot), 'role-bindings');
   let entries;
   try {
@@ -145,7 +145,7 @@ function scanRoleBindingsForRole(projectRoot, role) {
       || typeof rec.role !== 'string'
     ) continue;
     if (rll.roleBindingPathFor(projectRoot, rec.worktree_id, rec.plan_digest, rec.profile_digest, rec.session_generation_id, rec.role) !== candidatePath) continue;
-    if (rec.worktree_id !== worktreeId || rec.plan_digest !== planResult.planDigest || rec.role !== role) continue;
+    if (rec.worktree_id !== worktreeId || rec.role !== role) continue;
     const stateResult = rll.readRoleBindingState(projectRoot, rec.worktree_id, rec.plan_digest, rec.profile_digest, rec.session_generation_id, rec.role);
     if (!stateResult.ok) continue;
     anyExists = true;
@@ -404,8 +404,8 @@ function tryConsumeClaudeAgentOneShotReservation(projectRoot, agentType, session
   let planResult;
   let worktreeId;
   try {
-    waveSlug = getWaveSlug(projectRoot, { useEnv: false, useAlias: false, gitTimeoutMs: 3000 });
-    planResult = rll.discoverPlan(projectRoot);
+    planResult = rll.discoverPlan(projectRoot, reservation.plan_digest);
+    waveSlug = planResult.ok ? waveSlugFromPlanResult(projectRoot, planResult) : null;
     worktreeId = rll.computeWorktreeId(projectRoot);
   } catch {
     return { owning: true, ok: false, reason: 'claude-agent-one-shot-scope-unresolvable' };
@@ -614,8 +614,6 @@ function handleSubagentStop(data) {
   let repoDescriptor;
   try {
     repoDescriptor = { repoId: rll.computeRepoId(projectRoot) };
-    const planResult = rll.discoverPlan(projectRoot);
-    if (!planResult.ok) { process.exit(0); return; } // genuinely pre-PLAN (a well-defined negative result, never an exception) -- mechanism inapplicable.
   } catch {
     // CIERRE FINAL correction (2026-08-15), SCOPE-ERROR-BLOCKS: a genuine
     // THROW (git/PLAN resolution genuinely failing, as opposed to the
@@ -797,6 +795,16 @@ function extractWaveSlugFromFrontmatter(content) {
   return match[1].trim();
 }
 
+function waveSlugFromPlanResult(projectRoot, planResult) {
+  if (!planResult || !planResult.ok || typeof planResult.planPath !== 'string') return null;
+  const planningRoot = path.join(projectRoot, '.planning') + path.sep;
+  if (!planResult.planPath.startsWith(planningRoot) || path.basename(planResult.planPath) !== 'PLAN.md') return null;
+  const waveDir = path.basename(path.dirname(planResult.planPath));
+  return waveDir.startsWith('wave-') && waveDir.length > 'wave-'.length
+    ? waveDir.slice('wave-'.length)
+    : null;
+}
+
 // Sequence 35 correction 2 (WAVE1-FUNCTIONAL-CLOSEOUT-REALISTIC-20260822):
 // ONE deterministic validation+render helper shared by BOTH root-source
 // authenticated-dispatch paths -- the newly consumed reservation binding
@@ -811,7 +819,7 @@ function extractWaveSlugFromFrontmatter(content) {
 function renderRootSourceAuthenticatedDispatchOrExit(projectRoot, agentType, binding, isResume) {
   let planResult;
   try {
-    planResult = rll.discoverPlan(projectRoot);
+    planResult = rll.discoverPlan(projectRoot, binding.plan_digest);
   } catch {
     planResult = { ok: false };
   }
@@ -861,7 +869,7 @@ function renderRootSourceAuthenticatedDispatchOrExit(projectRoot, agentType, bin
 // target gate still owns the one-use grant and every correlation decision.
 function buildRoleLifecycleBootstrapContext(projectRoot, agentType, action) {
   let planResult;
-  try { planResult = rll.discoverPlan(projectRoot); } catch { return null; }
+  try { planResult = rll.discoverPlan(projectRoot, action.plan_digest); } catch { return null; }
   if (!planResult || !planResult.ok || planResult.planDigest !== action.plan_digest
       || action.role !== agentType || typeof action.action_id !== 'string'
       || typeof action.worktree_id !== 'string' || typeof action.session_generation_id !== 'string') return null;
@@ -922,13 +930,10 @@ process.stdin.on('end', () => {
     const agentType = (data.agent_type || '').trim();
     if (!agentType) process.exit(0); // main orchestrator — skip
 
-    // Resolve wave slug from git branch
-    const waveSlug = getWaveSlug(projectRoot, {
-      useEnv: false,
-      useAlias: false,
-      gitTimeoutMs: 3000,
-    });
-    if (!waveSlug) process.exit(0); // no active wave — skip silently
+    // The branch name is presentation metadata, not lifecycle authority.
+    // A managed worktree may append a uniqueness suffix (for example `-c1`)
+    // while the authenticated action still targets the unsuffixed wave.
+    let waveSlug = null;
 
     // Third HOLD, Part B, B2/B3/B4: confirm/consume B1's reservation before
     // ever letting this spawn proceed as a genuine role-lifecycle owner.
@@ -1182,12 +1187,26 @@ process.stdin.on('end', () => {
             process.stderr.write(`[subagent-start-context-bundle] role lifecycle bootstrap context invalid for "${agentType}" -- FATAL, quarantining, bundle injection skipped\n`);
             process.exit(0);
           }
+          const scopedPlan = rll.discoverPlan(projectRoot, action.plan_digest);
+          waveSlug = waveSlugFromPlanResult(projectRoot, scopedPlan);
         } catch (e) {
           quarantineCandidate(projectRoot, candidate, 'role-actor-binding-creation-threw');
           process.stderr.write(`[subagent-start-context-bundle] role-actor-binding creation threw for "${agentType}": ${(e && e.message) || e} -- FATAL, quarantining, bundle injection skipped\n`);
           process.exit(0);
         }
       }
+    }
+
+    if (!waveSlug) {
+      waveSlug = getWaveSlug(projectRoot, {
+        useEnv: false,
+        useAlias: false,
+        gitTimeoutMs: 3000,
+      });
+    }
+    if (!waveSlug) {
+      if (roleLifecycleBootstrapContext) emitSubagentStartAdditionalContext(roleLifecycleBootstrapContext);
+      process.exit(0);
     }
 
     // Bundle path: .planning/wave-<slug>/context-bundles/<role>.md

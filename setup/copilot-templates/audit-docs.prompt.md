@@ -85,7 +85,8 @@ Skipped gracefully if textstat not installed.
 
 ```bash
 # CLI
-node mcp-server/build/cli/audit-docs.js --project-root "$(pwd)" --layer L0
+LAYER="$(node .claude/runtime/l0-toolkit-launcher.cjs describe layer --project-root "$PWD")"
+node .claude/runtime/l0-toolkit-launcher.cjs run audit-docs --project-root "$PWD" -- --layer "$LAYER"
 
 # MCP tool
 # Use via Claude Desktop or agent: call audit-docs tool with params

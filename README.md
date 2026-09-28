@@ -22,11 +22,9 @@ Conversational text, agent names, the newest evidence file, and runtime command-
 
 Cross-platform scripts, AI agent skills (Claude Code + GitHub Copilot), 28 custom Detekt architecture rules, convention plugins for one-line adoption (KMP and Android-only), real-time enforcement hooks, an MCP server with 47 tools, a unified audit system with finding deduplication, multi-layer knowledge cascade (L0→L1→L2), extensible agent routing, a persisted class-aware wave control plane, 39 agent templates, and doc intelligence with upstream monitoring and a user-gated ingestion loop -- designed for solo developers and small teams managing multiple Android/KMP projects from a single source of truth.
 
-> **Start here:** `/work` (smart task routing), `/init-session` (project context dashboard), `/resume-work` (CEO-level session resume). These three entry points discover your agents, skills, and modules automatically.
+> **Start here:** `/work` (smart task routing), `/init-session` (canonical runtime readiness), `/resume-work` (CEO-level session resume). These entry points use the qualified runtime adapter; they do not reconstruct state with ad-hoc checkout scans.
 
 > **L1/L2 runtime consumers:** install and launch with the exact procedure in [Runtime consumer operations](docs/guides/runtime-consumer-operations.md), including required `claude --add-dir <L0-root>`, worktree behavior, safe-mode recovery, and the patch-tolerant Claude `2.1.x` host adapter.
-
-> **Consumer stabilization status:** [PRs #251–#254](https://github.com/oscardlfr/AndroidCommonDoc/pull/254) shipped first-consumer hardening, bounded stabilization, contract convergence, and the first adoption follow-up through `develop@59087cb`. Superseded `PRUNEABLE` workstreams are collapsed into shipped history in [BACKLOG.md](BACKLOG.md); only the active finalization remains temporary. Until `BL-CONS-P0-01` lands, a requested coverage run with `modules_contributing=0` or only `no_xml` modules is **not** valid coverage evidence, even when its tests pass.
 
 > **Platform support:** All skills, agents, and Detekt rules work on both **Android-only (AGP 8.x)** and **KMP (AGP 9.0+)** projects. A small subset is KMP-only (noted below).
 
@@ -57,81 +55,6 @@ Install once, use across all your projects.
 
 ---
 
-## Recent Changes
-
-Development history beyond the CHANGELOG — summarized from memory + commit log. Newest first.
-
-| Wave | Date | PR | Theme |
-|------|------|----|-------|
-| Consumer-contract convergence | 2026-09-28 | [#253](https://github.com/oscardlfr/AndroidCommonDoc/pull/253) | Byte-stable sync, executable repair, source-referenced hooks, consumer-local runtime entrypoints, clean L1/L2/worktree acceptance, and one local full aggregate plus GitHub CI. |
-| First-consumer hardening | 2026-09-27 | [#251](https://github.com/oscardlfr/AndroidCommonDoc/pull/251) | Source-referenced runtime sync, worktree-safe paths, executable hooks, topology/YAML closure, exact recovery guidance, and atomic Claude host recertification. |
-| Consumer stabilization | 2026-09-27 | [#252](https://github.com/oscardlfr/AndroidCommonDoc/pull/252) | Manifest-aware portable hook launch, safe one-shot recovery, effort telemetry enforcement, atomic settings, ordinary/runtime composition, and deterministic adapter checks. |
-| Waves 3–7 | 2026-09-22 | [#250](https://github.com/oscardlfr/AndroidCommonDoc/pull/250) | Structured verdict authority, reproducible evidence, native push authority, class-aware wave control plane, and operational baseline closure. |
-| Wave 2 | 2026-09-21 | [#249](https://github.com/oscardlfr/AndroidCommonDoc/pull/249) | Repository-wide workflow input-boundary hardening. |
-| Wave 1 stabilization | 2026-09-20 | [#246](https://github.com/oscardlfr/AndroidCommonDoc/pull/246)–[#248](https://github.com/oscardlfr/AndroidCommonDoc/pull/248) | Portable runtime collaboration, macOS certificate/path stabilization, parallel Bats, and process-liveness fixes. |
-| BL-W47-prep | 2026-05-11 | [#180](https://github.com/oscardlfr/AndroidCommonDoc/pull/180) | Topology cleanups: planner 1.11.0, AMEND protocol, 4 topology gaps closed. |
-| Wave F | 2026-05-11 | [#179](https://github.com/oscardlfr/AndroidCommonDoc/pull/179) | Post-Wave-E audit cleanup + script v0.9.1 parity. |
-| Wave E | 2026-05-10 | [#178](https://github.com/oscardlfr/AndroidCommonDoc/pull/178) | L0 cleanup: scrub + atomization + line-anchor vitest refactor. 3 BL closures (BL-W30-04/-05, line-anchor). |
-| Wave D | 2026-05-10 | [#177](https://github.com/oscardlfr/AndroidCommonDoc/pull/177) | Quick wins: atomization pass 2, CP integration W17#11/#17, test gap. 30L diet via 3 extracted sub-docs. |
-| Wave C | 2026-05-10 | [#176](https://github.com/oscardlfr/AndroidCommonDoc/pull/176) | Doc cleanup + private-name scrub. 3 BL closures (BL-W32-11, BL-W30-02/03). |
-| Wave B | 2026-05-10 | [#173](https://github.com/oscardlfr/AndroidCommonDoc/pull/173)–[#174](https://github.com/oscardlfr/AndroidCommonDoc/pull/174) | Arch-platform hardening bundle. 5 BL closures (W31.7-09/ktr-01/02/03/adapter-bug). 3 new sub-docs. |
-| Wave B-bis | 2026-05-10 | [#175](https://github.com/oscardlfr/AndroidCommonDoc/pull/175) | Topology gaps closed (G1+G2+G3). plan-md-write-gate hook. |
-| BL-W46 | 2026-05-09 | [#157](https://github.com/oscardlfr/AndroidCommonDoc/pull/157)–[#161](https://github.com/oscardlfr/AndroidCommonDoc/pull/161) | Closed 16 BL-W45 audit findings + 4 deferred (3 fixed, 1 dropped). node -e gate exemption, sh backtick parity, getting-started frontmatter, plan-mode NOT-REPRODUCIBLE. |
-| BL-W45 | 2026-05-08 | [#154](https://github.com/oscardlfr/AndroidCommonDoc/pull/154)–[#156](https://github.com/oscardlfr/AndroidCommonDoc/pull/156) + L1 [#46](https://github.com/oscardlfr/shared-kmp-libs/pull/46) | Alignment debt cleanup. INV-a..k closed. Orchestration guide hub-split 351→33 lines, 8 tl-* sub-docs, kmp-test-runner v0.8.1. |
-| BL-W44-S2 | 2026-05-08 | [#150](https://github.com/oscardlfr/AndroidCommonDoc/pull/150)–[#153](https://github.com/oscardlfr/AndroidCommonDoc/pull/153) | BL-W26-01/02 closed. 5 agents gain MCP tools frontmatter. 4 retro fixes: planner sentinel, arch-bash-write-gate exemption, jq tuple lint, adapters headers. |
-| BL-W44 | 2026-05-07 | [#145](https://github.com/oscardlfr/AndroidCommonDoc/pull/145)–[#149](https://github.com/oscardlfr/AndroidCommonDoc/pull/149) | Process hardening + Windows support. architect-bash-write-gate Windows-aware, wave-phase-gate prefix match, WAVE_PHASE_GATE_BYPASS, BL-W32-13/16 closed. |
-| BL-W43 | 2026-05-06 | [#140](https://github.com/oscardlfr/AndroidCommonDoc/pull/140)–[#143](https://github.com/oscardlfr/AndroidCommonDoc/pull/143) | Architect topology hardening. premature-execution-gate hook, arch-*-gate cross-verify exempt, substring-gate doc + bats. |
-| BL-W42 | 2026-05-05 | [#135](https://github.com/oscardlfr/AndroidCommonDoc/pull/135)–[#139](https://github.com/oscardlfr/AndroidCommonDoc/pull/139) | Closed 14 BL-W41 findings. knowledge-currency-gate, kmp-test-runner-gate, before-after-delta hooks. SUPERSEDES protocol + v0.8.1 pins. |
-| BL-W41 | 2026-05-05 | [#131](https://github.com/oscardlfr/AndroidCommonDoc/pull/131)–[#134](https://github.com/oscardlfr/AndroidCommonDoc/pull/134) | Section H + delta protocol + --from-disk + 4-layer topology enforcement. 14 findings filed. |
-| BL-W40 | 2026-05-05 | [#127](https://github.com/oscardlfr/AndroidCommonDoc/pull/127)–[#130](https://github.com/oscardlfr/AndroidCommonDoc/pull/130) | Numbered Step Gate roll-out. Mid-session recovery; section-H manifest yaml fixup. |
-| BL-W37 | 2026-05-04 | [#124](https://github.com/oscardlfr/AndroidCommonDoc/pull/124), L1 [#41](https://github.com/oscardlfr/shared-kmp-libs/pull/41)/[#42](https://github.com/oscardlfr/shared-kmp-libs/pull/42), [#125](https://github.com/oscardlfr/AndroidCommonDoc/pull/125) | Cross-repo sync. arch-platform caught writer/reader desync PR1. PR4 pivoted nonces→observability. |
-| BL-W36 | 2026-05-04 | [#119](https://github.com/oscardlfr/AndroidCommonDoc/pull/119)–[#123](https://github.com/oscardlfr/AndroidCommonDoc/pull/123) | BL-W34 deferred items. 4 findings filed. PHASE 1 PREP pattern established. |
-| BL-W35 | 2026-05-04 | [#112](https://github.com/oscardlfr/AndroidCommonDoc/pull/112)–[#117](https://github.com/oscardlfr/AndroidCommonDoc/pull/117) | L0 dogfood topology. 7 bugs + 1 incident. Cross-arch sync protocol dogfooded twice. |
-| BL-W34 | 2026-05-03 | [#107](https://github.com/oscardlfr/AndroidCommonDoc/pull/107)–[#109](https://github.com/oscardlfr/AndroidCommonDoc/pull/109) | L1 security prep. gitignore, local-first-skills pattern, proguard-validator AGP 9 ext. |
-| BL-W33 | 2026-05-02 | [#101](https://github.com/oscardlfr/AndroidCommonDoc/pull/101)–[#105](https://github.com/oscardlfr/AndroidCommonDoc/pull/105) | 9 backlog items + 1 self-finding + 23 architect amendments closed. 8 BL-W34 entries filed. |
-| BL-W32 Phase 2 prep | 2026-05-01 | [#98](https://github.com/oscardlfr/AndroidCommonDoc/pull/98) | file BL-W32-08/-09/-10 backlog entries |
-| BL-W32 Phase 1 | 2026-05-01 | [#97](https://github.com/oscardlfr/AndroidCommonDoc/pull/97) | 3 L0 fixes: CP zombie (TeamDelete-on-reuse), concern-ownership map in arch-topology-protocols.md, arch-testing pre-dispatch decision (mocked vs fixture-driven); 3 architect templates bumped; Phase 1 CLOSED |
-| BL-W32 closeout plan | 2026-05-01 | [#96](https://github.com/oscardlfr/AndroidCommonDoc/pull/96) | phase 1 (L0) + phase 2 (sync) plan |
-| BL-W32-05 SHIPPED | 2026-05-01 | [#95](https://github.com/oscardlfr/AndroidCommonDoc/pull/95) | SHIPPED marker + PR ref + wave history update |
-| BL-W32-05 | 2026-05-01 | [#94](https://github.com/oscardlfr/AndroidCommonDoc/pull/94) | architect verdict gate regex consistency: PYTHON_WRITE_RE exempt-target gap + self-edit-gate `wave\d+` slug sync; bats +8 (44 total); 20/20 CI on 2nd push |
-| BL-W32-07 | 2026-05-01 | [#93](https://github.com/oscardlfr/AndroidCommonDoc/pull/93) | spawn-pattern coherence: planner template 1.9.0 + manifest TeamCreate-peer revert + hooks Check 3 + 4 stale ref fixes + /init-session --orchestrate flag |
-| BL-W32-06b | 2026-05-01 | [#92](https://github.com/oscardlfr/AndroidCommonDoc/pull/92) | test-specialist 1.12.0→1.13.0 + 27-line kmp-test-runner v0.6.2 awareness section + L1/L2 propagation |
-| BL-W32-06a | 2026-05-01 | [#91](https://github.com/oscardlfr/AndroidCommonDoc/pull/91) | gradle-run.sh/.ps1 thin-wrap kmp-test-runner v0.6.2 (497→101 / 489→99 lines); arch-platform caught `--timeout` env-var bug |
-| BL-W32-06 filed | 2026-05-01 | [#90](https://github.com/oscardlfr/AndroidCommonDoc/pull/90) | file BL-W32-06: kmp-test-runner v0.6.2 adoption (4 sub-tasks) |
-| BL-W31.7-12 | 2026-04-30 | [#89](https://github.com/oscardlfr/AndroidCommonDoc/pull/89) | planner peer auto-spawn enforcement (PreToolUse:ExitPlanMode block) + planner 1.8.0 + spawn_method drift fix; **W31.7 thread CLOSED (12/12)** |
-| BL-W31.7-11 | 2026-04-30 | [#88](https://github.com/oscardlfr/AndroidCommonDoc/pull/88) | manifest ABI/API stability validator (BREAKING/ADDITIVE/NEUTRAL classifier) + manifest-abi-warn CI job (WARN); 45 new tests |
-| BL-W31.7-08 | 2026-04-30 | [#87](https://github.com/oscardlfr/AndroidCommonDoc/pull/87) | new toolkit-specialist agent (5th core specialist) for mcp-server TS/hooks/non-test scripts; 39 agents total |
-| BL-W31.7-10 | 2026-04-30 | [#86](https://github.com/oscardlfr/AndroidCommonDoc/pull/86) | quality-gater project-type detection (Step 0.5 + applicable_project_types manifest field) + 5 Wave-30 hooks exec-bit fix |
-| BL-W31.7-09 | 2026-04-29 | [#85](https://github.com/oscardlfr/AndroidCommonDoc/pull/85) | architect verdict-to-disk protocol enforcement (A+B+C) + heredoc-aware scanner refactor |
-| W31.7 Phase 4 sub-3 | 2026-04-29 | [#84](https://github.com/oscardlfr/AndroidCommonDoc/pull/84) | pre-commit hook chains manifest drift gate |
-| W31.7 Phase 4 sub-2 | 2026-04-29 | [#83](https://github.com/oscardlfr/AndroidCommonDoc/pull/83) | pre-Agent-spawn validator hook |
-| W31.7 Phase 4 sub-1 | 2026-04-29 | [#82](https://github.com/oscardlfr/AndroidCommonDoc/pull/82) | flip manifest drift validator WARN → BLOCK |
-| W31.7 P3 r7 | 2026-04-28 | [#81](https://github.com/oscardlfr/AndroidCommonDoc/pull/81) | canonicalize 8 tools+marketing agents (Phase 3 closer); 37/38 baselined (97%) |
-| W31.7 P3 r6 | 2026-04-28 | [#80](https://github.com/oscardlfr/AndroidCommonDoc/pull/80) | canonicalize 3 Tier 3 security/release auditors (26→29/38) |
-| W31.7 P3 r5 | 2026-04-28 | [#79](https://github.com/oscardlfr/AndroidCommonDoc/pull/79) | canonicalize 2 orchestrators + 4 internal validators (20→26/38) |
-| W31.7 P3 r4 | 2026-04-28 | [#78](https://github.com/oscardlfr/AndroidCommonDoc/pull/78) | canonicalize 4 Tier 1 auditors (first DRIFT round, 16→20/38) |
-| W31.7 P3 r3 | 2026-04-28 | [#77](https://github.com/oscardlfr/AndroidCommonDoc/pull/77) | bake SHA-256 baselines for 5 NOOP agents (11→16/38) |
-| W31.7 P3 r2 | 2026-04-28 | [#76](https://github.com/oscardlfr/AndroidCommonDoc/pull/76) | bake SHA-256 baselines for 8 NOOP agents (3→11/38) |
-| 31.7 P3 r1 | 2026-04-27 | [#75](https://github.com/oscardlfr/AndroidCommonDoc/pull/75) | agent template generator from manifest: `template-generator.ts` lib + `generate-template.ts` CLI + bash/PS1 wrappers; pilot regenerates 3 architects with manifest-anchored SHA-256 baselines via surgical line-based writer; 65 new tests (54 vitest + 11 bats); 16/38 agents canonical, 22 pending future rounds → Phase 4 |
-| 31.7 | 2026-04-26 → 04-27 | [#71](https://github.com/oscardlfr/AndroidCommonDoc/pull/71), [#72](https://github.com/oscardlfr/AndroidCommonDoc/pull/72), [#73](https://github.com/oscardlfr/AndroidCommonDoc/pull/73), [#74](https://github.com/oscardlfr/AndroidCommonDoc/pull/74) | agents-manifest workflow: Phase 1 seed (38/38 agents + 5 invariants), Phase 2 CI validators in WARN mode (manifest-validator.ts + drift-audit job), `architect-bash-write-gate.js` hook closing the W31.5 Bash bypass (BL-W31.7-07), and W31.7 closeout housekeeping |
-| 31.6 | 2026-04-25 | [#69](https://github.com/oscardlfr/AndroidCommonDoc/pull/69) | agent-template cleanup + canonical pattern alignment; team-lead.md retired in favor of `docs/agents/main-agent-orchestration-guide.md` (main agent IS team-lead) |
-| 31 | 2026-04-24 | [#66](https://github.com/oscardlfr/AndroidCommonDoc/pull/66) | Pre-split hardening + BL-W31-00 + W18/W19 triage + CI fix for W30-latent registry drift |
-| 30 | 2026-04-24 | [#65](https://github.com/oscardlfr/AndroidCommonDoc/pull/65) | 10 backlog items + P3 enforcement hooks + BL-W30-11 planner T-BUG-015 fix |
-| 29 | 2026-04-23 | local + L1 [#28](https://github.com/oscardlfr/shared-kmp-libs/pull/28) | L0 → L1/L2 propagation; L1 manifest cleanup; L2 local FF merge; api-contract-guardian CP gate |
-| 28 | 2026-04-22 | [#62](https://github.com/oscardlfr/AndroidCommonDoc/pull/62) | L0 housekeeping pre-W29: BL-W27-01..04 + W17 HIGH findings #1, #3-#5 |
-| 27 | 2026-04-22 | [#61](https://github.com/oscardlfr/AndroidCommonDoc/pull/61) | BL-W26-06 rollback W25 pattern-search MCP wiring; codified dev → arch → CP chain |
-| 26 | 2026-04-21 | [#60](https://github.com/oscardlfr/AndroidCommonDoc/pull/60) | BL-W26-01a MCP wiring for 4 agents + Bug #8 topology activation gate post-ExitPlanMode |
-| Wave 25 | 2026-04-21 | [#59](https://github.com/oscardlfr/AndroidCommonDoc/pull/59) | MCP wiring fix across 10 agents; context-provider v3.0 pattern pre-cache; ingestion loop closed (context-provider → team-lead approval → doc-updater → `ingest-content`) |
-| 24 | 2026-04-20 | [#58](https://github.com/oscardlfr/AndroidCommonDoc/pull/58) | Bug #3 session teardown (`TeamDelete` before `TeamCreate`); P4 17 agent mirrors; team-lead 5.17.0 |
-| 23 | 2026-04-20 | [#57](https://github.com/oscardlfr/AndroidCommonDoc/pull/57) | S8 token meter + scope_doc_path + PREP/EXECUTE architect dispatch modes |
-| 22 | 2026-04-20 | [#56](https://github.com/oscardlfr/AndroidCommonDoc/pull/56) | Token topology S1–S7: team-lead → sonnet, spawn-prompt diet, RTK prefix, verdict-to-disk |
-| 21 | 2026-04-20 | [#55](https://github.com/oscardlfr/AndroidCommonDoc/pull/55) | Enforcement + portability chain (session team collision fix) |
-| 20 | 2026-04-20 | [#53](https://github.com/oscardlfr/AndroidCommonDoc/pull/53), [#54](https://github.com/oscardlfr/AndroidCommonDoc/pull/54) | Bug #7 session-scoped CP gate, hash parity, MIGRATIONS, `/work` rewrite |
-
-Refer to `CHANGELOG.md` for shipped releases and `memory/` for session-scoped feedback patterns.
-
----
-
 ## Design Philosophy: Token-Efficient AI Workflows
 
 AI agents that drive Gradle directly waste thousands of tokens parsing raw output. AndroidCommonDoc moves all heavy processing outside the context window.
@@ -152,6 +75,36 @@ Skills enforce these boundaries -- `/coverage` explicitly forbids the agent from
 ## Layered Ecosystem Model
 
 AndroidCommonDoc is designed as an **L0 (generic layer)** in a multi-tier ecosystem where skills, agents, and documentation cascade down to consuming projects:
+
+### Use L0 from Codex or Claude Code
+
+Codex can maintain and use L0 directly by opening this repository (or one of its
+Git worktrees) as the workspace. `AGENTS.md` is the portable authority; no
+consumer sync, sibling-path environment variable, or Claude certificate is
+required for that direct L0 workflow.
+
+Claude Code consumes L0 from an L1/L2 checkout through `/sync-l0`. The first
+runtime adoption uses `/sync-l0 --runtime`; every later plain `/sync-l0`
+refreshes both registry assets and the already-enabled runtime atomically from
+the one local `L0/tooling` source in `l0-manifest.json`. Claude must be launched
+with `--add-dir <L0-root>` so the host can read that sibling checkout.
+
+```mermaid
+flowchart LR
+    L0[AndroidCommonDoc L0]
+    C[Codex workspace]
+    S[/sync-l0 + manifest pin/]
+    L1[L1 consumer]
+    L2[L2 consumer]
+    H[Claude Code host<br/>--add-dir L0 root]
+
+    C -->|direct repository authority| L0
+    L0 --> S
+    S -->|assets + verified runtime adapter| L1
+    S -->|assets + verified runtime adapter| L2
+    H -->|consumer-local launchers| L1
+    H -->|consumer-local launchers| L2
+```
 
 | Layer | Role | Example |
 |-------|------|---------|
@@ -246,7 +199,7 @@ Downstream projects maintain local copies of L0 skills via the **registry + mani
 /sync-l0 --runtime
 ```
 
-Runtime mode requires an existing manifest with exactly one local `L0` source whose role is `tooling`. It pins the toolkit commit and executable-content digest, installs the ten canonical runtime role definitions, routes runtime skills through `.claude/runtime/l0-entrypoint-launcher.cjs`, and registers source-coupled hooks through the separate consumer-local hook launcher. Both resolve L0 from the manifest. Source-coupled runtime code is not copied into the application, and consumer settings/skills contain no host-specific Node or toolkit path. A repeated no-op preserves manifest bytes and `last_synced`; mode-only drift in owned executable hooks is repaired. Use `--runtime --dry-run` for a write-free preflight. Runtime mode rejects remote/ambiguous sources, local runtime-role or owned-hook conflicts, and all prune/force/migration flags.
+Runtime mode requires an existing manifest with exactly one local `L0` source whose role is `tooling`. It pins the toolkit commit and executable-content digest, installs the ten canonical runtime role definitions, routes runtime skills through `.claude/runtime/l0-entrypoint-launcher.cjs`, and registers source-coupled hooks through the separate consumer-local hook launcher. Both resolve L0 from the manifest. Source-coupled runtime code is not copied into the application, and consumer settings/skills contain no host-specific Node or toolkit path; materialized metadata records the portable identifier `l0_source: manifest:L0/tooling`. After initial adoption, plain `/sync-l0` refreshes assets and runtime together; `/sync-l0 --assets-only` is the explicit maintenance opt-out. A repeated no-op preserves manifest bytes and `last_synced`; mode-only drift in owned executable hooks is repaired. Use `--runtime --dry-run` for the first write-free preflight. Runtime mode rejects remote/ambiguous sources, local runtime-role or owned-hook conflicts, and all prune/force/migration flags.
 
 ---
 
@@ -655,7 +608,7 @@ These three skills are the recommended way to start any session. They discover a
 | Skill | What it does |
 |-------|-------------|
 | `/work <task>` | **Primary entry point.** Smart task routing -- reads agent frontmatter (domain+intent), matches your task description, and delegates to the best agent or skill. Extensible: add new agents and `/work` finds them |
-| `/init-session` | Project context dashboard -- lists available agents, skills, modules, business docs, and recent activity. Run this when you open a project for the first time |
+| `/init-session` | Canonical runtime readiness dashboard; `--orchestrate <slug>` ensures only the support plane admitted by the current wave and fails closed instead of constructing a manual fallback |
 | `/resume-work` | CEO/CTO session resume -- department-level status across your project (engineering, product, content). Picks up where you left off |
 | `/android-skills-consume` | **Reference.** Bridge doc for Google's Android Skills ecosystem (`navigation-3`, `edge-to-edge`, `r8-analyzer`, `agp-9-upgrade`, `migrate-xml-views-to-jetpack-compose`, `play-billing-library-version-upgrade`, `android-cli`) — install via `android skills add`. Per-layer applicability in `.planning/intel/android-skills-catalog.md` |
 
@@ -1080,7 +1033,7 @@ See `setup/github-workflows/ci-template.yml` for a full consumer project templat
 
 ## Documentation
 
-17 domain hubs, 102 sub-docs, 30 guides, 83 agent workflow docs -- all with YAML frontmatter for registry scanning, upstream monitoring, and Detekt rule generation. 19 approved categories including `api` for auto-generated API docs.
+17 domain hubs, 102 sub-docs, 31 guides, 84 agent workflow docs -- all with YAML frontmatter for registry scanning, upstream monitoring, and Detekt rule generation. 19 approved categories including `api` for auto-generated API docs.
 
 ### Doc Integrity System
 
@@ -1264,7 +1217,7 @@ AndroidCommonDoc/
 |   +-- reusable-shell-tests.yml             # workflow_call: bats shell script tests
 |   +-- reusable-check-outdated.yml         # workflow_call: dependency freshness check
 |   +-- reusable-copilot-parity.yml         # workflow_call: verify copilot prompt/skill sync
-+-- docs/                   # 17 domain hubs, 102 sub-docs, 30 guides, 83 agent workflow docs
++-- docs/                   # 17 domain hubs, 102 sub-docs, 31 guides, 84 agent workflow docs
 |   +-- agents/          +-- architecture/  +-- compose/    +-- di/
 |   +-- error-handling/     +-- gradle/     +-- guides/
 |   +-- navigation/         +-- network/    +-- offline-first/ +-- resources/

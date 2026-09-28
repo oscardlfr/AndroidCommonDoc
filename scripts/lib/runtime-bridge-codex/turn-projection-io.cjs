@@ -5,6 +5,7 @@
 function createTurnProjectionIo({
   TURN_READ_PROJECTION_ENTRY_CAP,
   TURN_READ_PROJECTION_FILE_CAP,
+  ensureSecureRegistryDir,
   execFileSync,
   fs,
   path,
@@ -127,7 +128,11 @@ function chmodProjectionDirectories(root, mode) {
   }
   walk(root);
   dirs.sort((a, b) => b.length - a.length);
-  for (const dir of dirs) fs.chmodSync(dir, mode);
+  const secured = ensureSecureRegistryDir(dirs);
+  if (!secured || !secured.ok) {
+    throw new Error('projection-directory-security-failed:' + String((secured && secured.reason) || 'unknown'));
+  }
+  if (process.platform !== 'win32') for (const dir of dirs) fs.chmodSync(dir, mode);
 }
 
 function removeProjectionTree(target) {

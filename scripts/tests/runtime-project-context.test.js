@@ -25,6 +25,7 @@ const SOURCE_REFERENCED_HOOK_FILES = new Set([
 ]);
 const CONSUMER_FILES = [
   '.claude/runtime/l0-entrypoint-launcher.cjs',
+  '.claude/runtime/l0-toolkit-launcher.cjs',
   '.claude/hooks/l0-source-hook-launcher.js',
   '.claude/hooks/context-provider-write-gate.js',
   '.claude/hooks/detekt-post-write.sh',

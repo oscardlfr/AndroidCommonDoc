@@ -283,12 +283,32 @@ function admitNativeActionEvent(event) {
   }
   if (!found || !found.ok || found.absent || found.action.repo_id !== owner.computeRepoId(projectRoot)) return { admitted: false };
   const operation = owner.resolveHostOperationForAction(found.action.kind, found.action.runtime);
-  if (operation !== event.tool_name) return { admitted: false };
+  if (operation !== event.tool_name) return { admitted: false, owning: true, reason: 'native-action-wrong-host-primitive' };
   if (operation === 'Agent') {
     const input = event.tool_input;
     const agentType = input.subagent_type || input.agent_type;
     if (agentType !== found.action.payload.agent_type ||
-        !String(input.prompt || '').includes(found.action.payload.bootstrap_message)) return { admitted: false };
+        !String(input.prompt || '').includes(found.action.payload.bootstrap_message)) return { admitted: false, owning: true, reason: 'native-agent-action-input-mismatch' };
+  }
+  if (operation === 'SendMessage') {
+    const input = event.tool_input;
+    const action = found.action;
+    if (!action.payload || input.recipient !== action.payload.teammate_name || input.message !== action.payload.message) {
+      return { admitted: false, owning: true, reason: 'native-sendmessage-action-input-mismatch' };
+    }
+    const resume = /^RUNTIME_RESUME\/v1\ncheckpoint:[0-9a-f]{64}\nresume-handle:([0-9a-f]{32})\nruntime-action:([0-9a-f]{32})\nhost-status:validated-and-consumed-before-delivery\nactor-action:none\nreply:none\nnext:wait-for-correlated-task$/.exec(input.message);
+    if (resume) {
+      const consumed = owner.consumeClaudeResumeHandleForObservedActor(projectRoot, {
+        actionId,
+        sessionId: event.session_id, toolUseId: event.tool_use_id,
+        recipient: input.recipient, message: input.message,
+      });
+      if (!consumed || consumed.ok !== true) return {
+        admitted: false, owning: true,
+        reason: 'native-resume-consumption-failed:' + (consumed && consumed.reason ? consumed.reason : 'invalid'),
+      };
+      return { admitted: true, owning: true, actionId, operation, consumed: true };
+    }
   }
   return { admitted: true, actionId, operation };
 }
@@ -451,7 +471,17 @@ if (require.main === module) {
       const event = JSON.parse(input);
       if (event && event.hook_event_name === 'PreToolUse') {
         admitEntrypointPreToolUse(event);
-        admitNativeActionEvent(event);
+        const nativeAction = admitNativeActionEvent(event);
+        if (nativeAction.owning && !nativeAction.admitted) {
+          process.stdout.write(JSON.stringify({
+            hookSpecificOutput: {
+              hookEventName: 'PreToolUse',
+              permissionDecision: 'deny',
+              permissionDecisionReason: '[runtime-host-boundary] ' + nativeAction.reason,
+            },
+          }));
+          return;
+        }
         processPreToolUse(event, {});
       }
       else if (event && (event.hook_event_name === 'PostToolUse' || event.hook_event_name === 'PostToolUseFailure')) {

@@ -276,7 +276,7 @@ describe('doc-updater template', () => {
   });
 
   it('template version bumped to 2.13.0', () => {
-    expect(content).toContain('template_version: "2.13.0"');
+    expect(content).toContain('template_version: "2.13.1"');
   });
 });
 
@@ -306,7 +306,7 @@ describe('quality-gater template', () => {
   });
 
   it('template version 2.28.0', () => {
-    expect(content).toContain('template_version: "2.28.0"');
+    expect(content).toContain('template_version: "2.28.1"');
   });
 
   it('has architect deliberation step', () => {
@@ -472,8 +472,8 @@ describe('/pre-pr has Step 5.7 referencing check-outdated', () => {
     expect(content).toContain('Dependency freshness');
   });
 
-  it('Step 5.7 references check-outdated CLI', () => {
-    expect(content).toContain('check-outdated.js');
+  it('Step 5.7 references the allowlisted check-outdated operation', () => {
+    expect(content).toContain('l0-toolkit-launcher.cjs run check-outdated');
   });
 
   it('Step 5.7 checks for libs.versions.toml existence', () => {

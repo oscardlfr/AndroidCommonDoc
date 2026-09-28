@@ -8,46 +8,45 @@ status: active
 layer: L0
 parent: getting-started
 category: guides
-last_updated: "2026-09-28"
+last_updated: "2026-09-29"
 description: "Exact installation, launch, recovery, worktree, and Claude host compatibility procedure for L1/L2 consumers."
 ---
-
 # Runtime consumer operations
 
 ## Install or refresh a consumer
 
-Build the toolkit first. Preflight and apply ordinary sync before preflighting and applying the source-referenced runtime install:
+Build the toolkit first, then use one runtime adoption workflow. `/sync-l0` is the public interface; the CLI below is the exact non-interactive equivalent:
 
 ```bash
-cd "$ANDROID_COMMON_DOC/mcp-server"
+cd /absolute/path/to/AndroidCommonDoc/mcp-server
 npm ci && npm run build
-node build/sync/sync-l0-cli.js --project-root /absolute/path/to/consumer --dry-run
-node build/sync/sync-l0-cli.js --project-root /absolute/path/to/consumer
 node build/sync/sync-l0-cli.js --project-root /absolute/path/to/consumer --runtime --dry-run
 node build/sync/sync-l0-cli.js --project-root /absolute/path/to/consumer --runtime
 ```
 
+After that first adoption, every normal upgrade is one command. The manifest's `runtime.enabled` flag makes plain sync refresh assets and runtime together:
+
+```bash
+node build/sync/sync-l0-cli.js --project-root /absolute/path/to/consumer --dry-run
+node build/sync/sync-l0-cli.js --project-root /absolute/path/to/consumer
+```
+
+`--assets-only` is an explicit maintenance opt-out; it is not the normal upgrade path. No ordinary-sync-then-runtime-sync sequence is required.
+
 An L1 must own `skills/registry.json`; generate it with `npm run generate-registry -- /absolute/path/to/L1` from the toolkit `mcp-server`. Without that marker the portable layer contract intentionally classifies it as L2.
 
-`--runtime` installs the consumer-owned wave topology, the standalone `.claude/runtime/l0-entrypoint-launcher.cjs`,
-and a toolkit runtime-closure digest. Every runtime skill invokes that local launcher; L0 self-hosts the same path.
-Hooks that import L0 modules are not copied partially. Instead, the consumer also receives `.claude/hooks/l0-source-hook-launcher.js`; registrations call that stable local hook
-launcher. Both launchers resolve the one local L0 tooling source from `l0-manifest.json` at execution time. The
-runtime entrypoint launcher verifies the installed pin and content before forwarding; the source-hook launcher
-confines source resolution and delegates the hook without certifying the runtime installation. No Node installation
-path, user home, or toolkit checkout is serialized into consumer `settings.json` or generated skill commands. The
-runtime installer materializes and checksums every consumer-local hook target registered in `settings.json`, including
-the context-bundle write gate and tool-use logger, together with the context provider's sanctioned
-`scripts/sh/write-bundle.sh` closure. Installation fails closed on missing, customized, or incomplete local targets.
+`--runtime` installs the consumer-owned wave topology, the standalone `.claude/runtime/l0-entrypoint-launcher.cjs`, and a toolkit runtime-closure digest. Every runtime skill invokes that local launcher; L0 self-hosts the same path. Hooks that import L0 modules are not copied partially. Instead, the consumer also receives `.claude/hooks/l0-source-hook-launcher.js`; registrations call that stable local hook launcher. Materialized skill, agent, and command metadata records `l0_source: manifest:L0/tooling`; it never serializes the checkout path or username, and ordinary sync repairs legacy generated provenance without overwriting consumer edits.
+
+Both launchers resolve the one local L0 tooling source from `l0-manifest.json` at execution time. The runtime entrypoint launcher verifies the installed pin and content before forwarding; the source-hook launcher confines source resolution and delegates the hook without certifying the runtime installation. No Node installation path, user home, or toolkit checkout is serialized into consumer `settings.json` or generated skill commands. The runtime installer materializes and checksums every consumer-local hook target registered in `settings.json`, including the context-bundle write gate, tool-use logger, and context provider's sanctioned `scripts/sh/write-bundle.sh` closure. Installation fails closed on missing, customized, or incomplete local targets.
 Standalone hooks remain copyable.
-Remote, missing, ambiguous, or symlinked source targets fail closed. Re-run both commands after changing toolkit revisions. A managed topology from an older sync is updated automatically only
-when its current bytes still match the checksum recorded by that sync. Local
-topology drift or a customized role remains a conflict and is never overwritten.
+Remote, missing, ambiguous, or symlinked source targets fail closed. Re-run plain `/sync-l0` after changing toolkit revisions. A managed topology from an older sync is updated automatically only when its current bytes still match the checksum recorded by that sync. Local topology drift or a customized role remains a conflict and is never overwritten.
 
 The shell hook installer also verifies executable mode. An identical Detekt hook that lost its executable bit is
 repaired without `--force` and reported as an executable repair; the mode-only repair does not rewrite the manifest.
 Differing bytes fail and require review. A repeated ordinary or runtime sync with no manifest-tracked change and no
 pending mode repair preserves `l0-manifest.json` byte-for-byte, including `last_synced`, so verification stays clean.
+
+Older runtime adopters may have consumer hooks that L0 copied before it began recording those paths in `checksums`. Refresh recognizes only the published historical byte digest at its exact destination path, preflights the complete runtime closure, then replaces all eligible files and commits their current checksums atomically. A digest at the wrong path, modified bytes, or a customized sibling aborts the refresh before any runtime file is changed. Do not use `--force` or copy hooks manually to recover this state; review the reported path and preserve genuine consumer customizations.
 
 ### Runtime skill invocation and failure behavior
 
@@ -69,8 +68,8 @@ The model must not discover the sibling toolkit, call `scripts/lib/runtime-colla
 `$PWD`, `$(pwd)`, `ANDROID_COMMON_DOC`, or another ambient path. A missing local
 launcher, missing/ambiguous/remote/symlinked L0 tooling source, commit or digest
 drift, or missing executable closure is a closed failure. Do not fall back to a
-dashboard-only imitation. Refresh the toolkit checkout deliberately, then rerun
-ordinary sync followed by runtime sync and restart the host.
+dashboard-only imitation. Refresh the toolkit checkout deliberately, rerun one
+plain `/sync-l0`, and restart the host.
 
 ## Launch Claude from a consumer
 
@@ -91,10 +90,11 @@ claude --add-dir $env:ANDROID_COMMON_DOC --effort high
 
 `--add-dir` grants host filesystem reachability; `--effort high` is verified from the native PreToolUse event. Neither replaces
 `l0-manifest.json`, runtime digests, certificate pins, or the Git hooks. Linked Git
-worktrees may retain the manifest path authored relative to the main checkout; both
-the installer and hook launcher use Git's common directory rather than an ambient
-fallback. If the same manifest-relative source resolves to different toolkits from
-the linked and main checkouts, activation fails closed as ambiguous.
+worktrees may retain the manifest path authored relative to the main checkout; the
+installer and hook launcher use Git's common directory, not an ambient fallback.
+Runtime PLAN authority comes from the signed launcher composition and owning action digest,
+never branch spelling or global PLAN uniqueness; retained waves and `-c1` worktree
+suffixes are supported. Two resolved toolkits fail closed as ambiguous.
 
 Run Gradle serially within one worktree. Concurrent Gradle invocations that share
 the same checkout/build directories can produce transient unresolved-reference
@@ -115,16 +115,16 @@ Combining those actions in one PTY write can truncate or concatenate input; this
 is a terminal boundary, not an L0 hook repair. Use `-p` / `--print` only for a
 bounded, non-persistent one-turn invocation.
 
-## Full quality-gate ownership
+## Quality-gate ownership by layer
 
-The `quality-gater` owns one canonical local full Bats execution. Focused tests are
-the development loop; after the PLAN, path manifest, clean HEAD, architect verdict
-bindings, and QG session are current, it invokes `run-bats-sharded.cjs` once with
-six shards at max parallelism six and explicit `--wave-slug` plus `--plan`. Only
-the verified full aggregate authorizes the feature-branch push; individual shard
-handoffs do not.
+In L0, the `quality-gater` owns one canonical local full Bats execution. Focused
+tests are the development loop; after the PLAN, path manifest, clean HEAD,
+architect verdict bindings, and QG session are current, it invokes the sharded
+suite once. In L1/L2, the consumer project's `/pre-pr` pipeline runs once and its
+PASS receipt is bound to the current HEAD and PLAN by the allowlisted runtime
+adapter. The L0 Bats harness is never copied or executed in a consumer.
 
-The local aggregate validates the exact branch HEAD and authorizes publishing it.
+The layer-appropriate local gate validates the exact branch HEAD and authorizes publishing it.
 Under strict branch protection, required GitHub `CI Gate` validates the PR merge
 candidate updated with `develop` and authorizes merge; it is not a claim that CI
 tested the byte-identical local SHA. Do not run a second local full suite to
@@ -245,6 +245,9 @@ returns a signed pending composition bound to the exact session, tool, input and
 transcript. The launcher finalizes only from the matching host-owned `tool_use`;
 absent, duplicate, mismatched or unsupported model evidence fails closed.
 
+Some 2.1.x hosts may still echo deprecated `team_name` on role spawn. The adapter accepts only the exact action-owned value, audits and removes it before calling the current five-field `Agent` schema.
+A foreign value fails closed; consumers must not edit generated actions or retry them manually.
+
 Versions outside `2.1.x`, including `2.2.x` and `3.x`, fail closed until the host
 adapter is reviewed. The genuine host-contract workflow qualifies that new
 adapter family, not each developer machine or patch release.
@@ -288,12 +291,7 @@ the signed same-platform package atomically, and post-verifies it. Use
 `--observer-path /absolute/path/to/claude-host-contract-probe.cjs` only when the
 probe used a reviewed observer outside the toolkit's canonical fixture path.
 
-Use `recertify-claude-host-contract.cjs` only for a new protocol family: it captures, probes, qualifies, publishes,
-and verifies. `promote-claude-host-contract.cjs` only finishes that reviewed publication from retained evidence;
-it is neither a normal `2.1.x` update step nor a shortcut around the live probe.
+Use `recertify-claude-host-contract.cjs` only for a new protocol family: it captures, probes, qualifies, publishes, and verifies. `promote-claude-host-contract.cjs` only finishes reviewed publication from retained evidence; it is neither a normal `2.1.x` update step nor a shortcut around the live probe.
 
-Effective effort is not inferred from `--effort`, latency, token use, or legacy `system/init.per_turn_effort_active`.
-`effective` remains null unless native `PreToolUse.effort.level` equals the request; absent or mismatched evidence fails
-closed. Certification rejects conflicting inherited `CLAUDE_CODE_EFFORT_LEVEL`
-and aligns the child environment with canonical `--effort high`, preventing a
-hidden global `max` from masquerading as the requested profile.
+Effective effort is not inferred from `--effort`, latency, token use, or legacy `system/init.per_turn_effort_active`. `effective` remains null unless native `PreToolUse.effort.level` equals the request; absent or mismatched evidence fails closed.
+Certification rejects conflicting inherited `CLAUDE_CODE_EFFORT_LEVEL` and aligns the child environment with canonical `--effort high`, preventing a hidden global `max` from masquerading as the requested profile.

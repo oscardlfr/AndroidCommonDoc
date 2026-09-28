@@ -245,13 +245,15 @@ function handleReadyOwning(tokens, cliIdx, toolInput, data) {
     sessionId: data.session_id,
     agentId: data.agent_id,
     agentType: data.agent_type,
+    transcriptPath: data.transcript_path,
     toolUseId: data.tool_use_id,
     action,
     actorBinding: binding,
     grantId: mintResult.grantId,
   });
   if (!startupReadyPre.ok) {
-    block('[RC-TARGET-GATE] ready: unable to persist the authenticated startup-ready PRE fact.');
+    block('[RC-TARGET-GATE] ready: unable to persist the authenticated startup-ready PRE fact ('
+      + String(startupReadyPre.reason || 'unknown') + ').');
     return;
   }
 

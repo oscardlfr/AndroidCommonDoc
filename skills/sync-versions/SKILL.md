@@ -3,7 +3,6 @@ name: sync-versions
 description: "Check version catalog alignment between KMP projects. Use when asked to verify dependency versions match the source of truth."
 intent: [versions, catalog, kmp, alignment, dependencies, toml]
 allowed-tools: [Bash, Read, Grep, Glob]
-l0_requires: ANDROID_COMMON_DOC
 copilot: true
 ---
 
@@ -12,7 +11,7 @@ copilot: true
 ```
 /sync-versions
 /sync-versions --source ../your-shared-libs --projects ../MyProject,../MyApp
-/sync-versions --json
+/sync-versions --output-format json
 /sync-versions --ignore-extra
 ```
 
@@ -22,7 +21,7 @@ Uses parameters from `params.json`:
 - `source-of-truth` -- Path to the project defining canonical versions (default: `../your-shared-libs`).
 - `projects` -- Comma-separated project paths to compare against source of truth.
 - `ignore-extra` -- Don't report dependencies that exist only in consumer projects.
-- `json` -- Output as JSON.
+- `output-format` -- `human` (default) or `json`.
 - `project-root` -- Path to the project root directory.
 
 ## Behavior
@@ -44,19 +43,14 @@ Uses parameters from `params.json`:
 
 ## Implementation
 
-### macOS / Linux
 ```bash
-COMMON_DOC="${ANDROID_COMMON_DOC:?ANDROID_COMMON_DOC is not set. See README.md}"
-
-"$COMMON_DOC/scripts/sh/check-version-sync.sh" --project-root "$(pwd)" $ARGUMENTS
+node .claude/runtime/l0-toolkit-launcher.cjs run version-sync --project-root "$PWD" -- $ARGUMENTS
 ```
 
 ### Windows
-```powershell
-$commonDoc = if ($env:ANDROID_COMMON_DOC) { $env:ANDROID_COMMON_DOC } else { throw "ANDROID_COMMON_DOC is not set. See README.md" }
-
-& "$commonDoc\scripts\ps1\check-version-sync.ps1" -ProjectRoot (Get-Location).Path -SourceOfTruth "$SOURCE" -Projects @($PROJECTS) -OutputFormat $FORMAT
-```
+Claude Code runs the POSIX command above from Bash on Windows as well. The
+launcher selects the platform implementation. Paths stay relative to the
+consumer root because the operation executes with that directory as `cwd`.
 
 ## Expected Output
 

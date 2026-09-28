@@ -158,15 +158,65 @@ for sha in "${gated_shas[@]}"; do
 done
 
 # -- 7. Push-proof verification (QG-proof gate) --------------------------------
-PROOF_SCRIPT="$REPO_ROOT/scripts/sh/emit-push-proof.sh"
-if [[ -f "$PROOF_SCRIPT" ]]; then
+# L0 owns the full emit-push-proof harness. An installed L1/L2 runtime instead
+# owns a compact verifier exposed only through its qualified consumer launcher.
+runtime_state="$(python3 - "$REPO_ROOT/l0-manifest.json" <<'PYEOF'
+import json, os, sys
+path = sys.argv[1]
+if not os.path.exists(path):
+    print("INACTIVE"); raise SystemExit(0)
+try:
+    manifest = json.load(open(path, encoding="utf-8"))
+except Exception:
+    print("INVALID"); raise SystemExit(0)
+runtime = manifest.get("runtime")
+if runtime is None:
+    print("INACTIVE")
+elif isinstance(runtime, dict) and runtime.get("enabled") is True:
+    print("ACTIVE")
+elif isinstance(runtime, dict) and runtime.get("enabled") is False:
+    print("INACTIVE")
+else:
+    print("INVALID")
+PYEOF
+)"
+
+if [[ "$runtime_state" == "INVALID" ]]; then
+  block "runtime manifest" "l0-manifest.json has malformed runtime metadata; repair it with /sync-l0 before pushing"
+elif [[ "$runtime_state" == "ACTIVE" ]]; then
+  RUNTIME_LAUNCHER="$REPO_ROOT/.claude/runtime/l0-toolkit-launcher.cjs"
+  [[ -f "$RUNTIME_LAUNCHER" && ! -L "$RUNTIME_LAUNCHER" ]] || \
+    block "push-proof" "qualified runtime launcher missing or unsafe at $RUNTIME_LAUNCHER. Re-run /sync-l0."
+  command -v node >/dev/null 2>&1 || \
+    block "infrastructure" "node not found on PATH (required by the runtime consumer proof verifier)"
+  runtime_slug="$(python3 - "$QG_STAMP" <<'PYEOF'
+import json, re, sys
+try:
+    slug = json.load(open(sys.argv[1], encoding="utf-8")).get("wave_slug", "")
+except Exception:
+    slug = ""
+print(slug if isinstance(slug, str) and re.fullmatch(r"[A-Za-z0-9._-]+", slug) and slug not in (".", "..") else "")
+PYEOF
+)"
+  [[ -n "$runtime_slug" ]] || \
+    block "quality-gate.stamp" "runtime consumer stamp has no valid wave_slug; re-run /quality-gate"
   for sha in "${gated_shas[@]}"; do
-    if ! bash "$PROOF_SCRIPT" --subcommand verify-proof --pushed-sha "$sha" >&2; then
-      block "push-proof" "QG proof is missing, stale, or invalid for pushed commit $sha. Run the canonical QG runner (emit-push-proof.sh run-qg) via /quality-gate, then re-push."
+    if ! node "$RUNTIME_LAUNCHER" run runtime-consumer-qg --project-root "$REPO_ROOT" \
+        -- verify --slug "$runtime_slug" --head "$sha" >&2; then
+      block "push-proof" "runtime consumer proof is missing, stale, or invalid for pushed commit $sha. Run /quality-gate, then re-push."
     fi
   done
 else
-  block "push-proof" "emit-push-proof.sh not found at $PROOF_SCRIPT. Harness integrity violation."
+  PROOF_SCRIPT="$REPO_ROOT/scripts/sh/emit-push-proof.sh"
+  if [[ -f "$PROOF_SCRIPT" ]]; then
+    for sha in "${gated_shas[@]}"; do
+      if ! bash "$PROOF_SCRIPT" --subcommand verify-proof --pushed-sha "$sha" >&2; then
+        block "push-proof" "QG proof is missing, stale, or invalid for pushed commit $sha. Run the canonical QG runner (emit-push-proof.sh run-qg) via /quality-gate, then re-push."
+      fi
+    done
+  else
+    block "push-proof" "emit-push-proof.sh not found at $PROOF_SCRIPT. Harness integrity violation."
+  fi
 fi
 
 echo "[pre-push-hook] OK: both stamps PASS + fresh and match the pushed commit(s)." >&2

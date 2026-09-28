@@ -40,11 +40,65 @@ async function createProjectRoot(dir: string): Promise<void> {
 
 async function legacyDetektHookBytes(filename: "detekt-pre-commit.sh" | "detekt-post-write.sh"): Promise<Buffer> {
   const current = await readFile(join(REAL_L0_ROOT, ".claude", "hooks", filename));
-  const legacy = Buffer.from(current.toString("utf8").replace("INPUT=$(cat)\n", "INPUT=$(cat /dev/stdin)\n"));
+  const portableResolution = `# Resolve the qualified toolkit from the consumer manifest. The consumer-local
+# launcher owns source/worktree resolution and content-pin validation; ambient
+# toolkit paths are intentionally not an authority.
+SCRIPT_DIR="$(cd "$(dirname "\${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+TOOLKIT_LAUNCHER="$PROJECT_ROOT/.claude/runtime/l0-toolkit-launcher.cjs"
+if [ ! -f "$TOOLKIT_LAUNCHER" ]; then
+  echo "L0 toolkit launcher is missing: $TOOLKIT_LAUNCHER" >&2
+  exit 1
+fi
+if ! COMMON_DOC="$(node "$TOOLKIT_LAUNCHER" describe toolkit-root --project-root "$PROJECT_ROOT")"; then
+  echo "L0 toolkit source could not be qualified for Detekt ${filename === "detekt-pre-commit.sh" ? "pre-commit" : "post-write"}" >&2
+  exit 1
+fi`;
+  const historicalResolution = `# Determine AndroidCommonDoc location
+COMMON_DOC="\${ANDROID_COMMON_DOC:-}"
+if [ -z "$COMMON_DOC" ]; then
+  # Resolve from script location: .claude/hooks/ -> repo root
+  SCRIPT_DIR="$(cd "$(dirname "\${BASH_SOURCE[0]}")" && pwd)"
+  COMMON_DOC="$(cd "$SCRIPT_DIR/../.." && pwd)"
+fi`;
+  const reconstructed = current.toString("utf8")
+    .replace(portableResolution, historicalResolution)
+    .replace('CACHE_DIR="$PROJECT_ROOT/.androidcommondoc/cache/detekt"', 'CACHE_DIR="$COMMON_DOC/.cache"')
+    .replace("INPUT=$(cat)\n", "INPUT=$(cat /dev/stdin)\n");
+  expect(reconstructed).not.toBe(current.toString("utf8"));
+  const legacy = Buffer.from(reconstructed);
   const expected = filename === "detekt-pre-commit.sh"
     ? "fd79f0f45adf279d9b0cd41240cb89e96786b3e1c994f68b138781d3e0d22312"
     : "a263152549291c949e77a9f76dfdbeedcabec50c07a5f1cc3e5305ed331cc8d4";
   expect(createHash("sha256").update(legacy).digest("hex")).toBe(expected);
+  return legacy;
+}
+
+async function legacyRuntimeHookBytes(
+  filename: "context-provider-write-gate.js" | "tool-use-logger.js",
+): Promise<Buffer> {
+  const current = await readFile(join(REAL_L0_ROOT, ".claude", "hooks", filename));
+  const normalizedCurrent = current.toString("utf8").replace(/\r\n/g, "\n");
+  if (filename === "tool-use-logger.js") {
+    const historical = Buffer.from(normalizedCurrent);
+    expect(createHash("sha256").update(historical).digest("hex"))
+      .toBe("7c39a59ab6da4520006ce3a50f04ca6753004c77651b4782f927bed2d59b280a");
+    return historical;
+  }
+  const reconstructed = normalizedCurrent
+    .replace("const fs = require('fs');\n", "")
+    .replace(
+      "  const resolved = path.resolve(candidate);\n  try { return fs.realpathSync(resolved).replace(/\\\\/g, '/'); }\n  catch { return resolved.replace(/\\\\/g, '/'); }",
+      "  return path.resolve(candidate).replace(/\\\\/g, '/');",
+    )
+    .replace(
+      "  let canonical;\n  try { canonical = fs.realpathSync(WRITE_BUNDLE_SH_PATH).replace(/\\\\/g, '/'); }\n  catch { canonical = path.resolve(WRITE_BUNDLE_SH_PATH).replace(/\\\\/g, '/'); }",
+      "  const canonical = path.resolve(WRITE_BUNDLE_SH_PATH).replace(/\\\\/g, '/');",
+    );
+  expect(reconstructed).not.toBe(normalizedCurrent);
+  const legacy = Buffer.from(reconstructed);
+  expect(createHash("sha256").update(legacy).digest("hex"))
+    .toBe("792de9ffd1be16dfbd7125b33daaf8dc95e1a881f73c825232a83ff9ac8653fd");
   return legacy;
 }
 
@@ -360,6 +414,78 @@ describe("source-referenced runtime installation", () => {
     await expect(readFile(join(projectRoot, ".claude", "settings.json"), "utf8")).rejects.toThrow();
   });
 
+  it("runtime refresh atomically claims the exact checksum-less historical hooks and stays idempotent", async () => {
+    expect((await installRuntimeConsumer(projectRoot, REAL_L0_ROOT)).ok).toBe(true);
+    const manifestPath = join(projectRoot, "l0-manifest.json");
+    const relatives = [
+      ".claude/hooks/context-provider-write-gate.js",
+      ".claude/hooks/tool-use-logger.js",
+    ] as const;
+    const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
+    for (const relativePath of relatives) delete manifest.checksums[relativePath];
+    await writeFile(manifestPath, JSON.stringify(manifest, null, 2) + "\n");
+    await writeFile(join(projectRoot, relatives[0]), await legacyRuntimeHookBytes("context-provider-write-gate.js"));
+    await writeFile(join(projectRoot, relatives[1]), await legacyRuntimeHookBytes("tool-use-logger.js"));
+
+    const upgraded = await installRuntimeConsumer(projectRoot, REAL_L0_ROOT);
+
+    expect(upgraded.ok).toBe(true);
+    const stableManifest = await readFile(manifestPath, "utf8");
+    const committed = JSON.parse(stableManifest);
+    for (const relativePath of relatives) {
+      const current = await readFile(join(REAL_L0_ROOT, relativePath));
+      expect(await readFile(join(projectRoot, relativePath))).toEqual(current);
+      expect(committed.checksums[relativePath]).toBe(
+        `sha256:${createHash("sha256").update(current).digest("hex")}`,
+      );
+    }
+    expect((await installRuntimeConsumer(projectRoot, REAL_L0_ROOT)).ok).toBe(true);
+    expect(await readFile(manifestPath, "utf8")).toBe(stableManifest);
+  });
+
+  it("rejects an exact historical runtime hook beside customized bytes without partial writes", async () => {
+    expect((await installRuntimeConsumer(projectRoot, REAL_L0_ROOT)).ok).toBe(true);
+    const manifestPath = join(projectRoot, "l0-manifest.json");
+    const contextPath = join(projectRoot, ".claude/hooks/context-provider-write-gate.js");
+    const loggerPath = join(projectRoot, ".claude/hooks/tool-use-logger.js");
+    const legacyContext = await legacyRuntimeHookBytes("context-provider-write-gate.js");
+    const customizedLogger = Buffer.from("// consumer customization\n");
+    const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
+    delete manifest.checksums[".claude/hooks/context-provider-write-gate.js"];
+    delete manifest.checksums[".claude/hooks/tool-use-logger.js"];
+    await writeFile(manifestPath, JSON.stringify(manifest, null, 2) + "\n");
+    await writeFile(contextPath, legacyContext);
+    await writeFile(loggerPath, customizedLogger);
+
+    const rejected = await installRuntimeConsumer(projectRoot, REAL_L0_ROOT);
+
+    expect(rejected.ok).toBe(false);
+    expect(rejected.reason).toBe("runtime-consumer-file-conflict:.claude/hooks/tool-use-logger.js");
+    expect(await readFile(contextPath)).toEqual(legacyContext);
+    expect(await readFile(loggerPath)).toEqual(customizedLogger);
+  });
+
+  it("rejects a historical runtime-hook digest at the wrong path without partial writes", async () => {
+    expect((await installRuntimeConsumer(projectRoot, REAL_L0_ROOT)).ok).toBe(true);
+    const manifestPath = join(projectRoot, "l0-manifest.json");
+    const contextPath = join(projectRoot, ".claude/hooks/context-provider-write-gate.js");
+    const loggerPath = join(projectRoot, ".claude/hooks/tool-use-logger.js");
+    const legacyContext = await legacyRuntimeHookBytes("context-provider-write-gate.js");
+    const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
+    delete manifest.checksums[".claude/hooks/context-provider-write-gate.js"];
+    delete manifest.checksums[".claude/hooks/tool-use-logger.js"];
+    await writeFile(manifestPath, JSON.stringify(manifest, null, 2) + "\n");
+    await writeFile(contextPath, legacyContext);
+    await writeFile(loggerPath, legacyContext);
+
+    const rejected = await installRuntimeConsumer(projectRoot, REAL_L0_ROOT);
+
+    expect(rejected.ok).toBe(false);
+    expect(rejected.reason).toBe("runtime-consumer-file-conflict:.claude/hooks/tool-use-logger.js");
+    expect(await readFile(contextPath)).toEqual(legacyContext);
+    expect(await readFile(loggerPath)).toEqual(legacyContext);
+  });
+
   it("preflights without writes, then installs exact roles and portable owned hook registrations idempotently", async () => {
     const dry = await installRuntimeConsumer(projectRoot, REAL_L0_ROOT, { dryRun: true });
     expect(dry.ok).toBe(true);
@@ -511,6 +637,26 @@ describe("source-referenced runtime installation", () => {
       join(projectRoot, ".planning", "wave-consumer-fixture", "context-bundles", "test-specialist.md"),
       "utf8",
     )).toContain("fixture pattern");
+    const toolkitLauncher = join(projectRoot, ".claude", "runtime", "l0-toolkit-launcher.cjs");
+    const launcherEnv = { ...process.env, ANDROID_COMMON_DOC: join(projectRoot, "hostile-toolkit") };
+    const projectType = spawnSync(process.execPath, [toolkitLauncher, "run", "detect-project-type",
+      "--project-root", projectRoot, "--"], {
+      cwd: projectRoot, encoding: "utf8", env: launcherEnv,
+    });
+    expect(projectType.status, projectType.stderr).toBe(0);
+    expect(projectType.stdout.trim()).toBe("unknown");
+    const runtimeDoc = spawnSync(process.execPath, [toolkitLauncher, "read-doc",
+      "docs/agents/agent-verdict-protocol.md", "--project-root", projectRoot], {
+      cwd: projectRoot, encoding: "utf8", env: launcherEnv,
+    });
+    expect(runtimeDoc.status, runtimeDoc.stderr).toBe(0);
+    expect(runtimeDoc.stdout).toContain("verdict");
+    const unknownOperation = spawnSync(process.execPath, [toolkitLauncher, "run", "not-registered",
+      "--project-root", projectRoot, "--"], {
+      cwd: projectRoot, encoding: "utf8", env: launcherEnv,
+    });
+    expect(unknownOperation.status).toBe(1);
+    expect(unknownOperation.stderr).toContain("unknown operation id");
     const manifest = JSON.parse(await readFile(join(projectRoot, "l0-manifest.json"), "utf8"));
     expect(manifest.runtime.consumer_layer).toBe("L2");
     expect(manifest.runtime.toolkit_content_sha256).toBe(first.toolkitContentDigest);
@@ -600,6 +746,77 @@ describe("source-referenced runtime installation", () => {
     expect(await readFile(manifestPath, "utf8")).toBe(stableBytes);
   });
 
+  it("repairs six legacy skills once while ten byte-exact runtime roles remain a true no-op", async () => {
+    expect((await syncL0(projectRoot, REAL_L0_ROOT, { runtime: true })).errors).toEqual([]);
+    expect((await installRuntimeConsumer(projectRoot, REAL_L0_ROOT)).ok).toBe(true);
+
+    const skills = [
+      "ingest-content", "init-session", "monitor-docs",
+      "resume-work", "sync-l0", "work",
+    ];
+    const roles = [
+      "arch-platform", "arch-testing", "arch-integration", "context-provider",
+      "doc-updater", "toolkit-specialist", "test-specialist", "verifier",
+      "quality-gater", "planner",
+    ];
+    const selectedPaths = new Set([
+      ...skills.map((name) => `.claude/skills/${name}/SKILL.md`),
+      ...roles.map((name) => `.claude/agents/${name}.md`),
+    ]);
+    const manifestPath = join(projectRoot, "l0-manifest.json");
+    const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
+    manifest.selection.mode = "explicit";
+    manifest.checksums = Object.fromEntries(Object.entries(manifest.checksums).filter(
+      ([relativePath]) => selectedPaths.has(relativePath) || (
+        !relativePath.startsWith(".claude/skills/")
+        && !relativePath.startsWith(".claude/agents/")
+        && !relativePath.startsWith(".claude/commands/")
+      ),
+    ));
+    await writeFile(manifestPath, JSON.stringify(manifest, null, 2) + "\n");
+
+    for (const name of skills) {
+      const skillPath = join(projectRoot, ".claude", "skills", name, "SKILL.md");
+      await writeFile(
+        skillPath,
+        (await readFile(skillPath, "utf8")).replace("manifest:L0/tooling", "/Users/private/legacy-l0"),
+      );
+    }
+    const roleBytes = new Map<string, string>();
+    for (const name of roles) {
+      const rolePath = join(projectRoot, ".claude", "agents", `${name}.md`);
+      const bytes = await readFile(rolePath, "utf8");
+      expect(bytes).toBe(await readFile(join(REAL_L0_ROOT, ".claude", "agents", `${name}.md`), "utf8"));
+      roleBytes.set(name, bytes);
+    }
+
+    const repaired = await syncL0(projectRoot, REAL_L0_ROOT);
+    expect(repaired.errors).toEqual([]);
+    expect(repaired.updated).toBe(6);
+    expect(repaired.unchanged).toBe(10);
+    for (const name of skills) {
+      const bytes = await readFile(join(projectRoot, ".claude", "skills", name, "SKILL.md"), "utf8");
+      expect(bytes).toContain("l0_source: manifest:L0/tooling");
+      expect(bytes).not.toContain("/Users/private/legacy-l0");
+    }
+    for (const name of roles) {
+      expect(await readFile(join(projectRoot, ".claude", "agents", `${name}.md`), "utf8"))
+        .toBe(roleBytes.get(name));
+    }
+
+    const manifestAfterRepair = await readFile(manifestPath, "utf8");
+    const second = await syncL0(projectRoot, REAL_L0_ROOT);
+    expect(second.errors).toEqual([]);
+    expect(second.updated).toBe(0);
+    expect(second.unchanged).toBe(16);
+    expect(second.manifestChanged).toBe(false);
+    expect(await readFile(manifestPath, "utf8")).toBe(manifestAfterRepair);
+    for (const name of roles) {
+      expect(await readFile(join(projectRoot, ".claude", "agents", `${name}.md`), "utf8"))
+        .toBe(roleBytes.get(name));
+    }
+  });
+
   it("does not preserve unknown or forged runtime-owned checksums", async () => {
     expect((await installRuntimeConsumer(projectRoot, REAL_L0_ROOT)).ok).toBe(true);
     const manifestPath = join(projectRoot, "l0-manifest.json");
@@ -628,6 +845,7 @@ describe("source-referenced runtime installation", () => {
     manifest.runtime.toolkit_commit = "0".repeat(40);
     manifest.runtime.toolkit_content_sha256 = "1".repeat(64);
     await writeFile(manifestPath, JSON.stringify(manifest, null, 2) + "\n");
+    const previousInode = (await stat(assetPath)).ino;
 
     const ordinary = await syncL0(projectRoot, REAL_L0_ROOT);
     expect(ordinary.errors).toEqual([]);
@@ -640,10 +858,57 @@ describe("source-referenced runtime installation", () => {
     expect(await readFile(assetPath, "utf8")).toBe(
       await readFile(join(REAL_L0_ROOT, relativeAsset), "utf8"),
     );
+    if (process.platform !== "win32") expect((await stat(assetPath)).ino).not.toBe(previousInode);
+    expect((await readdir(join(projectRoot, ".claude", "runtime")))
+      .filter((entry) => entry.includes(".tmp"))).toEqual([]);
     const upgradedManifest = JSON.parse(await readFile(manifestPath, "utf8"));
     expect(upgradedManifest.checksums[relativeAsset]).not.toBe(previousChecksum);
     expect(upgradedManifest.runtime.toolkit_commit).not.toBe("0".repeat(40));
     expect(upgradedManifest.runtime.toolkit_content_sha256).not.toBe("1".repeat(64));
+  });
+
+  it("recovers an interrupted runtime publication while keeping the manifest as the final commit marker", async () => {
+    expect((await installRuntimeConsumer(projectRoot, REAL_L0_ROOT)).ok).toBe(true);
+    const manifestPath = join(projectRoot, "l0-manifest.json");
+    const firstRelative = ".claude/runtime/l0-entrypoint-launcher.cjs";
+    const secondRelative = ".claude/hooks/context-provider-write-gate.js";
+    const previousFirst = "// previous entrypoint launcher\n";
+    const previousSecond = "// previous context-provider gate\n";
+    const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
+    manifest.checksums[firstRelative] =
+      `sha256:${createHash("sha256").update(previousFirst).digest("hex")}`;
+    manifest.checksums[secondRelative] =
+      `sha256:${createHash("sha256").update(previousSecond).digest("hex")}`;
+    manifest.runtime.toolkit_commit = "0".repeat(40);
+    manifest.runtime.toolkit_content_sha256 = "1".repeat(64);
+    await writeFile(join(projectRoot, firstRelative), previousFirst, "utf8");
+    await writeFile(join(projectRoot, secondRelative), previousSecond, "utf8");
+    await writeFile(manifestPath, JSON.stringify(manifest, null, 2) + "\n", "utf8");
+
+    // Model a process death after one atomic rename but before the manifest
+    // commit marker: one file is current, one is still the recorded old file.
+    await writeFile(
+      join(projectRoot, firstRelative),
+      await readFile(join(REAL_L0_ROOT, firstRelative), "utf8"),
+      "utf8",
+    );
+
+    const recovered = await installRuntimeConsumer(projectRoot, REAL_L0_ROOT);
+
+    expect(recovered.ok).toBe(true);
+    expect(await readFile(join(projectRoot, firstRelative), "utf8"))
+      .toBe(await readFile(join(REAL_L0_ROOT, firstRelative), "utf8"));
+    expect(await readFile(join(projectRoot, secondRelative), "utf8"))
+      .toBe(await readFile(join(REAL_L0_ROOT, secondRelative), "utf8"));
+    const committed = JSON.parse(await readFile(manifestPath, "utf8"));
+    expect(committed.runtime.toolkit_commit).not.toBe("0".repeat(40));
+    expect(committed.runtime.toolkit_content_sha256).not.toBe("1".repeat(64));
+    expect(committed.checksums[firstRelative]).toBe(
+      `sha256:${createHash("sha256").update(await readFile(join(REAL_L0_ROOT, firstRelative))).digest("hex")}`,
+    );
+    expect(committed.checksums[secondRelative]).toBe(
+      `sha256:${createHash("sha256").update(await readFile(join(REAL_L0_ROOT, secondRelative))).digest("hex")}`,
+    );
   });
 
   it("drops missing and drifted assets but preserves content ownership across mode drift", async () => {
@@ -717,6 +982,90 @@ describe("source-referenced runtime installation", () => {
       .rejects.toThrow();
   });
 
+  it("mints and verifies a downstream QG receipt without copying the L0 harness", async () => {
+    const installed = await installRuntimeConsumer(projectRoot, REAL_L0_ROOT);
+    expect(installed.ok).toBe(true);
+    for (const args of [
+      ["init", "-q"],
+      ["config", "user.email", "test@example.invalid"],
+      ["config", "user.name", "Test"],
+      ["add", "."],
+      ["commit", "-qm", "fixture"],
+    ]) {
+      const git = spawnSync("git", args, { cwd: projectRoot, encoding: "utf8" });
+      expect(git.status, git.stderr).toBe(0);
+    }
+    const head = spawnSync("git", ["rev-parse", "HEAD"], { cwd: projectRoot, encoding: "utf8" }).stdout.trim();
+    await mkdir(join(projectRoot, ".androidcommondoc", "wave-control"), { recursive: true });
+    await mkdir(join(projectRoot, ".planning", "wave-runtime"), { recursive: true });
+    await writeFile(join(projectRoot, ".androidcommondoc", "pre-pr.stamp"), JSON.stringify({
+      verdict: "PASS", timestamp: new Date().toISOString(), head,
+    }) + "\n");
+    await writeFile(join(projectRoot, ".androidcommondoc", "wave-control", "runtime.json"), JSON.stringify({
+      phase: "QG", head, plan_sha256: "a".repeat(64),
+    }) + "\n");
+
+    const launcher = join(projectRoot, ".claude", "runtime", "l0-toolkit-launcher.cjs");
+    const mint = spawnSync(process.execPath, [launcher, "run", "runtime-consumer-qg", "--project-root", projectRoot,
+      "--", "mint", "--slug", "runtime"], { cwd: projectRoot, encoding: "utf8" });
+    expect(mint.status, mint.stderr || mint.stdout).toBe(0);
+    expect(mint.stdout).toContain("RUNTIME_CONSUMER_QG_MINTED");
+    const verify = spawnSync(process.execPath, [launcher, "run", "runtime-consumer-qg", "--project-root", projectRoot,
+      "--", "verify", "--slug", "runtime", "--head", head], { cwd: projectRoot, encoding: "utf8" });
+    expect(verify.status, verify.stderr || verify.stdout).toBe(0);
+    expect(verify.stdout).toContain("RUNTIME_CONSUMER_QG_VERIFIED");
+    await expect(readFile(join(projectRoot, "scripts", "sh", "emit-push-proof.sh"), "utf8"))
+      .rejects.toThrow();
+
+    await writeFile(join(projectRoot, ".androidcommondoc", "pre-pr.stamp"), JSON.stringify({
+      verdict: "PASS", timestamp: new Date().toISOString(), head: "0".repeat(40),
+    }) + "\n");
+    const rejected = spawnSync(process.execPath, [launcher, "run", "runtime-consumer-qg", "--project-root", projectRoot,
+      "--", "verify", "--slug", "runtime", "--head", head], { cwd: projectRoot, encoding: "utf8" });
+    expect(rejected.status).not.toBe(0);
+    expect(rejected.stderr).toContain("pre-pr-stamp-not-current");
+  });
+
+  it("upgrades an in-place runtime role when its bytes match the previously recorded checksum", async () => {
+    const relative = ".claude/agents/arch-platform.md";
+    const destination = join(projectRoot, relative);
+    const previousManagedBytes = "previous managed arch-platform runtime template\n";
+    await mkdir(join(projectRoot, ".claude", "agents"), { recursive: true });
+    await writeFile(destination, previousManagedBytes, "utf8");
+    const manifestPath = join(projectRoot, "l0-manifest.json");
+    const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
+    manifest.checksums[relative] =
+      `sha256:${createHash("sha256").update(previousManagedBytes).digest("hex")}`;
+    await writeFile(manifestPath, JSON.stringify(manifest, null, 2) + "\n", "utf8");
+
+    const installed = await installRuntimeConsumer(projectRoot, REAL_L0_ROOT);
+
+    expect(installed.ok).toBe(true);
+    expect(installed.migratedRoles).toContain("arch-platform");
+    expect(await readFile(destination, "utf8"))
+      .toBe(await readFile(join(REAL_L0_ROOT, relative), "utf8"));
+  });
+
+  it("rejects an in-place runtime role whose bytes drift from its recorded checksum", async () => {
+    const relative = ".claude/agents/arch-platform.md";
+    const destination = join(projectRoot, relative);
+    const previousManagedBytes = "previous managed arch-platform runtime template\n";
+    await mkdir(join(projectRoot, ".claude", "agents"), { recursive: true });
+    await writeFile(destination, "locally edited arch-platform runtime template\n", "utf8");
+    const manifestPath = join(projectRoot, "l0-manifest.json");
+    const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
+    manifest.checksums[relative] =
+      `sha256:${createHash("sha256").update(previousManagedBytes).digest("hex")}`;
+    await writeFile(manifestPath, JSON.stringify(manifest, null, 2) + "\n", "utf8");
+
+    const installed = await installRuntimeConsumer(projectRoot, REAL_L0_ROOT);
+
+    expect(installed.ok).toBe(false);
+    expect(installed.reason).toBe("runtime-role-conflict:arch-platform");
+    expect(await readFile(destination, "utf8"))
+      .toBe("locally edited arch-platform runtime template\n");
+  });
+
   it("leaves malformed settings and customized role bytes untouched", async () => {
     await mkdir(join(projectRoot, ".claude", "agents"), { recursive: true });
     await writeFile(join(projectRoot, ".claude", "settings.json"), "{broken", "utf8");
@@ -750,7 +1099,7 @@ describe("source-referenced runtime installation", () => {
     expect(runtimeContext.verifyRuntimeConsumerInstallation(projectRoot).ok).toBe(true);
   });
 
-  it("wires --runtime through the built CLI, keeps dry-run write-free, and qualifies a second idempotent sync", async () => {
+  it("wires --runtime through the built CLI, keeps dry-run write-free, and refreshes an enabled runtime with plain sync", async () => {
     const cliRoot = await mkdtemp(join(tmpdir(), "runtime cli consumer "));
     try {
       await writeRuntimeManifest(cliRoot);
@@ -767,8 +1116,11 @@ describe("source-referenced runtime installation", () => {
       expect(first.stdout).toContain(`Required Claude launch: claude --add-dir ${JSON.stringify(REAL_L0_ROOT)} --effort high`);
       expect(runtimeContext.verifyRuntimeConsumerInstallation(cliRoot, { verifyContent: true }).ok).toBe(true);
       const settingsBefore = await readFile(join(cliRoot, ".claude", "settings.json"), "utf8");
-      const second = spawnSync(process.execPath, args, { encoding: "utf8" });
+      const second = spawnSync(process.execPath,
+        [cli, "--project-root", cliRoot, "--l0-root", REAL_L0_ROOT], { encoding: "utf8" });
       expect(second.status, second.stderr || second.stdout).toBe(0);
+      expect(second.stdout).toContain("Runtime: enabled by l0-manifest.json; refreshing assets and runtime together");
+      expect(second.stdout).toContain("Runtime consumer: L2");
       expect(await readFile(join(cliRoot, ".claude", "settings.json"), "utf8")).toBe(settingsBefore);
     } finally {
       await rm(cliRoot, { recursive: true, force: true });

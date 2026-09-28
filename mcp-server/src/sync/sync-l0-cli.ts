@@ -12,7 +12,7 @@
  * If no manifest exists, auto-discovers L0/L1 sources nearby and creates one.
  *
  * Usage:
- *   node build/sync/sync-l0-cli.js [--project-root <path>] [--l0-root <path>] [--prune] [--force] [--dry-run] [--runtime]
+ *   node build/sync/sync-l0-cli.js [--project-root <path>] [--l0-root <path>] [--prune] [--force] [--dry-run] [--runtime] [--assets-only]
  *
  * Options:
  *   --project-root  Path to the downstream project (default: cwd)
@@ -21,6 +21,7 @@
  *   --force         Allow removing >5 files (requires --prune)
  *   --dry-run       Preview changes without writing
  *   --runtime       Install the source-referenced L1/L2 collaboration runtime
+ *   --assets-only   Do not refresh an already-enabled runtime
  *
  * Exit codes:
  *   0 - Success
@@ -68,11 +69,12 @@ interface CliArgs {
   autoMigrate: boolean;
   forceL0Managed: boolean;
   runtime: boolean;
+  assetsOnly: boolean;
 }
 
 const USAGE = `Usage:
   sync-l0 [--project-root <path>] [--l0-root <path>] [--prune] [--force]
-          [--dry-run] [--auto-migrate] [--force-l0-managed] [--runtime]
+          [--dry-run] [--auto-migrate] [--force-l0-managed] [--runtime] [--assets-only]
 
 Options:
   --project-root PATH   Downstream project root (default: current directory)
@@ -83,6 +85,7 @@ Options:
   --auto-migrate        Apply eligible manifest migrations
   --force-l0-managed    Replace locally drifted L0-owned templates
   --runtime             Install or refresh the source-referenced runtime
+  --assets-only         Sync registry assets only, even when runtime is already enabled
   -h, --help            Show this help and exit without reading or writing a project
 `;
 
@@ -95,6 +98,7 @@ function parseArgs(argv: string[]): CliArgs {
   let autoMigrate = false;
   let forceL0Managed = false;
   let runtime = false;
+  let assetsOnly = false;
 
   for (let i = 2; i < argv.length; i++) {
     if (argv[i] === "--project-root") {
@@ -117,12 +121,15 @@ function parseArgs(argv: string[]): CliArgs {
       forceL0Managed = true;
     } else if (argv[i] === "--runtime") {
       runtime = true;
+    } else if (argv[i] === "--assets-only") {
+      assetsOnly = true;
     } else {
       throw new Error(`Unknown option: ${argv[i]}`);
     }
   }
 
-  return { projectRoot, l0Root, prune, force, dryRun, autoMigrate, forceL0Managed, runtime };
+  if (runtime && assetsOnly) throw new Error("--runtime and --assets-only are mutually exclusive");
+  return { projectRoot, l0Root, prune, force, dryRun, autoMigrate, forceL0Managed, runtime, assetsOnly };
 }
 
 // ---------------------------------------------------------------------------
@@ -263,7 +270,18 @@ async function main(): Promise<void> {
     process.stdout.write(`${USAGE}\n`);
     return;
   }
-  const { projectRoot, l0Root: l0RootArg, prune, force, dryRun, autoMigrate, forceL0Managed, runtime } = parseArgs(process.argv);
+  const {
+    projectRoot, l0Root: l0RootArg, prune, force, dryRun, autoMigrate,
+    forceL0Managed, runtime: requestedRuntime, assetsOnly,
+  } = parseArgs(process.argv);
+
+  const manifestPath = path.join(projectRoot, "l0-manifest.json");
+  let runtime = requestedRuntime;
+  if (!runtime && !assetsOnly && existsSync(manifestPath)) {
+    const currentManifest = await readManifest(manifestPath);
+    runtime = currentManifest.runtime?.enabled === true;
+    if (runtime) console.log("Runtime: enabled by l0-manifest.json; refreshing assets and runtime together");
+  }
 
   console.log(`Sync → ${projectRoot}`);
   if (dryRun) console.log("  (dry-run mode — no files will be modified)");
@@ -395,7 +413,7 @@ async function main(): Promise<void> {
       console.error(`  ✗ ${f}`);
     }
     console.error("");
-    console.error("This indicates a sync bug. Re-run /sync-l0 or check ANDROID_COMMON_DOC path.");
+    console.error("This indicates a sync bug. Re-run /sync-l0 or check the manifest-declared L0 source.");
     console.log("");
   }
 

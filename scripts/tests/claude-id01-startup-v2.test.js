@@ -102,7 +102,7 @@ function completeStartup(fixture, options = {}) {
       fixture.role, 'ready', 'role-actor', 'target', 'target', fixture.action.action_id);
     if (!grant.ok) return { actor, grant };
     const pre = rll.recordClaudeStartupReadyPreObservation(fixture.projectRoot, {
-      sessionId: fixture.sessionId, agentId: fixture.agentId, agentType: fixture.role,
+      sessionId: fixture.sessionId, agentId: options.readyAgentId || fixture.agentId, agentType: fixture.role,
       toolUseId: readyToolUseId, action: fixture.action, actorBinding: fixture.actorBinding,
       grantId: grant.grantId,
     });
@@ -116,7 +116,7 @@ function completeStartup(fixture, options = {}) {
     if (!ready.ok) return { actor, grant, pre, consumedGrant, ready };
     const outcome = rll.recordClaudeStartupReadyOutcome(fixture.projectRoot, {
       hook_event_name: 'PostToolUse', tool_name: 'Bash', session_id: fixture.sessionId,
-      tool_use_id: readyToolUseId, agent_id: fixture.agentId, agent_type: fixture.role,
+      tool_use_id: readyToolUseId, agent_id: options.outcomeAgentId || fixture.agentId, agent_type: fixture.role,
     });
     return { actor, grant, pre, consumedGrant, ready, outcome };
   });
@@ -166,6 +166,202 @@ test('P1-ID01-V2 initial consumed claim plus real actor binding and successful t
     assert.strictEqual(afterStop.ok, false);
     assert.strictEqual(afterStop.reason, 'claude-id01-startup-trace-absent');
   } finally { cleanup(fixture); }
+});
+
+test('P1-ID01-V2 SubagentStop parks the exact actor in a multi-wave consumer without global PLAN guessing', () => {
+  const fixture = makeFixture('multi-wave-stop-park');
+  try {
+    const completed = completeStartup(fixture);
+    assert.strictEqual(completed.outcome.ok, true, JSON.stringify(completed));
+    const historicalWave = path.join(fixture.projectRoot, '.planning', 'wave-historical-retained');
+    fs.mkdirSync(historicalWave, { recursive: true });
+    fs.writeFileSync(path.join(historicalWave, 'PLAN.md'), '# retained historical wave\n');
+    assert.strictEqual(rll.discoverPlan(fixture.projectRoot).ok, false,
+      'fixture must reproduce the real multi-wave consumer where global PLAN discovery is ambiguous');
+
+    const parked = rll.parkClaudeResumeHandleForRoleActor(fixture.projectRoot, {
+      sessionId: fixture.sessionId, agentId: fixture.agentId, agentType: fixture.role,
+    });
+    assert.strictEqual(parked.ok, true, JSON.stringify(parked));
+    const parkedState = rll.readRoleBindingState(
+      fixture.projectRoot, fixture.worktreeId, fixture.planDigest, fixture.profileDigest,
+      fixture.generation.generationId, fixture.role,
+    );
+    assert.strictEqual(parkedState.ok, true);
+    assert.strictEqual(parkedState.state, 'WAITING');
+  } finally { cleanup(fixture); }
+});
+
+test('P1-ID01-V2 ready PRE resolves the unique authenticated startup actor when PreToolUse omits agent identity fields', () => {
+  const fixture = makeFixture('pretooluse-without-agent-fields');
+  try {
+    const actor = withSessionEvidence(fixture, () => rll.recordClaudeStartupActorObservation(fixture.projectRoot, {
+      sessionId: fixture.sessionId, agentId: fixture.agentId, agentType: fixture.role,
+      action: fixture.action, claim: fixture.claim, actorBinding: fixture.actorBinding,
+    }));
+    assert.strictEqual(actor.ok, true, JSON.stringify(actor));
+    const argvDigest = rc.sha256String('ready:' + fixture.action.action_id);
+    const grant = rll.mintLifecycleCommandGrant(fixture.projectRoot, fixture.actorBinding, argvDigest,
+      fixture.role, 'ready', 'role-actor', 'target', 'target', fixture.action.action_id);
+    assert.strictEqual(grant.ok, true, JSON.stringify(grant));
+
+    const invalidTranscript = rll.recordClaudeStartupReadyPreObservation(fixture.projectRoot, {
+      sessionId: fixture.sessionId, transcriptPath: path.join(fixture.projectRoot, 'missing.jsonl'),
+      toolUseId: 'startup-ready-invalid-transcript', action: fixture.action,
+      actorBinding: fixture.actorBinding, grantId: grant.grantId,
+    });
+    assert.strictEqual(invalidTranscript.ok, false);
+    assert.strictEqual(invalidTranscript.reason, 'startup-ready-pre-input-invalid');
+
+    const transcriptDir = path.join(fixture.projectRoot, fixture.sessionId, 'subagents');
+    fs.mkdirSync(transcriptDir, { recursive: true });
+    const transcriptPath = path.join(transcriptDir, 'agent-' + fixture.agentId + '.jsonl');
+    fs.writeFileSync(transcriptPath, '{}\n');
+    const transcriptBound = rll.recordClaudeStartupReadyPreObservation(fixture.projectRoot, {
+      sessionId: fixture.sessionId, agentId: 'non-authoritative-hook-alias', agentType: 'arch-testing',
+      transcriptPath, toolUseId: 'startup-ready-transcript-bound', action: fixture.action,
+      actorBinding: fixture.actorBinding, grantId: grant.grantId,
+    });
+    assert.strictEqual(transcriptBound.ok, true, JSON.stringify(transcriptBound));
+    assert.strictEqual(transcriptBound.record.agent_digest, digest(fixture.agentId));
+    assert.strictEqual(transcriptBound.record.role, fixture.role);
+
+    const mainTranscriptPath = path.join(fixture.projectRoot, fixture.sessionId + '.jsonl');
+    fs.writeFileSync(mainTranscriptPath, '{}\n');
+    const mainTranscriptFallback = rll.recordClaudeStartupReadyPreObservation(fixture.projectRoot, {
+      sessionId: fixture.sessionId, agentId: 'non-authoritative-hook-alias', agentType: 'arch-testing',
+      transcriptPath: mainTranscriptPath, toolUseId: 'startup-ready-main-transcript', action: fixture.action,
+      actorBinding: fixture.actorBinding, grantId: grant.grantId,
+    });
+    assert.strictEqual(mainTranscriptFallback.ok, true, JSON.stringify(mainTranscriptFallback));
+    assert.strictEqual(mainTranscriptFallback.record.agent_digest, digest(fixture.agentId));
+    assert.strictEqual(mainTranscriptFallback.record.role, fixture.role);
+
+    const wrongExplicitRole = rll.recordClaudeStartupReadyPreObservation(fixture.projectRoot, {
+      sessionId: fixture.sessionId, agentType: 'arch-testing',
+      toolUseId: 'startup-ready-wrong-role', action: fixture.action,
+      actorBinding: fixture.actorBinding, grantId: grant.grantId,
+    });
+    assert.strictEqual(wrongExplicitRole.ok, false);
+    assert.strictEqual(wrongExplicitRole.reason, 'startup-ready-pre-input-invalid');
+
+    const wrongExplicitAgent = rll.recordClaudeStartupReadyPreObservation(fixture.projectRoot, {
+      sessionId: fixture.sessionId, agentId: 'foreign-agent', agentType: fixture.role,
+      toolUseId: 'startup-ready-wrong-agent', action: fixture.action,
+      actorBinding: fixture.actorBinding, grantId: grant.grantId,
+    });
+    assert.strictEqual(wrongExplicitAgent.ok, false);
+    assert.strictEqual(wrongExplicitAgent.reason, 'startup-ready-actor-trace-absent');
+
+    const teamAlias = fixture.role + '@session-' + fixture.sessionId.slice(0, 8);
+    const teamAliasReady = rll.recordClaudeStartupReadyPreObservation(fixture.projectRoot, {
+      sessionId: fixture.sessionId, agentId: teamAlias, agentType: fixture.role,
+      toolUseId: 'startup-ready-team-alias', action: fixture.action,
+      actorBinding: fixture.actorBinding, grantId: grant.grantId,
+    });
+    assert.strictEqual(teamAliasReady.ok, true, JSON.stringify(teamAliasReady));
+    assert.strictEqual(teamAliasReady.record.agent_digest, digest(fixture.agentId));
+
+    const foreignTeamAlias = rll.recordClaudeStartupReadyPreObservation(fixture.projectRoot, {
+      sessionId: fixture.sessionId, agentId: fixture.role + '@session-deadbeef', agentType: fixture.role,
+      toolUseId: 'startup-ready-foreign-team-alias', action: fixture.action,
+      actorBinding: fixture.actorBinding, grantId: grant.grantId,
+    });
+    assert.strictEqual(foreignTeamAlias.ok, false);
+    assert.strictEqual(foreignTeamAlias.reason, 'startup-ready-actor-trace-absent');
+
+    const secondAgentDigest = digest('ambiguous-second-agent');
+    const secondLookupKey = digest('claude-startup-v2:' + fixture.generation.generationId + ':' + secondAgentDigest);
+    const secondTracePath = path.join(rll.registryRepoDir(fixture.projectRoot), 'claude-id01-traces',
+      'startup-v2-' + secondLookupKey + '.json');
+    fs.writeFileSync(secondTracePath, JSON.stringify({ ...actor.record, agent_digest: secondAgentDigest }), { mode: 0o600 });
+    const ambiguous = rll.recordClaudeStartupReadyPreObservation(fixture.projectRoot, {
+      sessionId: fixture.sessionId, toolUseId: 'startup-ready-ambiguous-agent',
+      action: fixture.action, actorBinding: fixture.actorBinding, grantId: grant.grantId,
+    });
+    assert.strictEqual(ambiguous.ok, false);
+    assert.strictEqual(ambiguous.reason, 'startup-ready-actor-trace-ambiguous');
+    fs.unlinkSync(secondTracePath);
+
+    const pre = rll.recordClaudeStartupReadyPreObservation(fixture.projectRoot, {
+      sessionId: fixture.sessionId, toolUseId: 'startup-ready-without-agent-fields',
+      action: fixture.action, actorBinding: fixture.actorBinding, grantId: grant.grantId,
+    });
+    assert.strictEqual(pre.ok, true, JSON.stringify(pre));
+    assert.strictEqual(pre.record.role, fixture.role);
+    assert.strictEqual(pre.record.agent_digest, digest(fixture.agentId));
+  } finally { cleanup(fixture); }
+});
+
+test('P1-ID01-V2 startup joins a scoped composition with current host evidence before persisting the actor trace', () => {
+  const fixture = makeFixture('scoped-composition-host-contract');
+  const saved = host.getProductionSessionIdentity;
+  try {
+    host.getProductionSessionIdentity = (projectRoot, sessionId, expected) => {
+      if (projectRoot !== fixture.projectRoot || sessionId !== fixture.sessionId) return { ok: false };
+      const common = {
+        worktree_id: fixture.worktreeId,
+        expires_at: new Date(Date.now() + 600000).toISOString(),
+      };
+      return expected
+        ? { ok: true, record: { ...common, plan_digest: fixture.planDigest } }
+        : { ok: true, record: { ...common, host_contract_digest: digest('host-contract') } };
+    };
+    const actor = rll.recordClaudeStartupActorObservation(fixture.projectRoot, {
+      sessionId: fixture.sessionId, agentId: fixture.agentId, agentType: fixture.role,
+      action: fixture.action, claim: fixture.claim, actorBinding: fixture.actorBinding,
+    });
+    assert.strictEqual(actor.ok, true, JSON.stringify(actor));
+    assert.strictEqual(actor.record.host_contract_digest, digest('host-contract'));
+    assert.strictEqual(Object.keys(actor.record).length, 14);
+
+    host.getProductionSessionIdentity = (projectRoot, sessionId, expected) => {
+      if (projectRoot !== fixture.projectRoot || sessionId !== fixture.sessionId) return { ok: false };
+      return expected
+        ? { ok: true, record: {
+          worktree_id: fixture.worktreeId, plan_digest: fixture.planDigest,
+          expires_at: new Date(Date.now() + 600000).toISOString(),
+        } }
+        : { ok: false };
+    };
+    const missingHostEvidence = rll.recordClaudeStartupActorObservation(fixture.projectRoot, {
+      sessionId: fixture.sessionId, agentId: fixture.agentId + '-missing', agentType: fixture.role,
+      action: fixture.action, claim: fixture.claim, actorBinding: fixture.actorBinding,
+    });
+    assert.strictEqual(missingHostEvidence.ok, false);
+    assert.strictEqual(missingHostEvidence.reason, 'startup-actor-session-unproven');
+  } finally {
+    host.getProductionSessionIdentity = saved;
+    cleanup(fixture);
+  }
+});
+
+test('P1-ID01-V2 authenticated team alias completes ready outcome but a foreign alias cannot mint capability', () => {
+  const accepted = makeFixture('team-alias-outcome');
+  const rejected = makeFixture('foreign-team-alias-outcome');
+  try {
+    const teamAlias = accepted.role + '@session-' + accepted.sessionId.slice(0, 8);
+    const completed = completeStartup(accepted, { readyAgentId: teamAlias, outcomeAgentId: teamAlias });
+    assert.strictEqual(completed.pre.ok, true, JSON.stringify(completed));
+    assert.strictEqual(completed.outcome.ok, true, JSON.stringify(completed));
+    assert.strictEqual(completed.outcome.capability.schema, 'runtime/claude-id01-capability/v2');
+
+    const foreign = completeStartup(rejected, {
+      readyAgentId: rejected.role + '@session-' + rejected.sessionId.slice(0, 8),
+      outcomeAgentId: rejected.role + '@session-deadbeef',
+    });
+    assert.strictEqual(foreign.pre.ok, true, JSON.stringify(foreign));
+    assert.strictEqual(foreign.outcome.ok, false);
+    assert.strictEqual(foreign.outcome.reason, 'startup-ready-outcome-actor-mismatch');
+    const proof = withSessionEvidence(rejected, () => rll.checkClaudeId01ProofComplete(
+      rejected.projectRoot, rejected.sessionId, rejected.worktreeId, rejected.planDigest,
+      rejected.role, rejected.agentId,
+    ));
+    assert.strictEqual(proof.ok, false);
+  } finally {
+    cleanup(accepted);
+    cleanup(rejected);
+  }
 });
 
 test('P1-ID01-V2 missing host evidence, failed/missing ready, foreign actor and old generation-wide v1 capability grant no requester proof', () => {

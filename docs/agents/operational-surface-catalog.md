@@ -48,7 +48,7 @@ generated: true
 | `generate-rules` | active | yes | yes | Generate Detekt custom rules from pattern doc frontmatter. Use when asked to create or update lint rules from documentation. |
 | `git-flow` | active | yes | yes | Git Flow branch management — start feature/release/hotfix branches, merge tracks, and manage releases. Generic implementation of the Git Flow model (feature/* → develop, release/* → master). Use when setting up branches, merging completed work, or creating releases. |
 | `ingest-content` | active | yes | yes | Analyze external content and extract patterns for routing to docs. Use when asked to ingest an article, URL, or pasted content. |
-| `init-session` | active | yes | no | Show project context dashboard. Optionally ensures the persistent support plane with --orchestrate <slug> flag. |
+| `init-session` | active | yes | no | Show canonical runtime readiness. Optionally ensures the admitted support plane with `--orchestrate <slug>`; non-ready results stop without an ad-hoc dashboard fallback. |
 | `kdoc-audit` | active | yes | yes | Audit KDoc coverage on public Kotlin APIs. Reports undocumented symbols, per-module coverage, and regression warnings vs baseline. |
 | `kdoc-migrate` | active | yes | yes | Full-project KDoc migration orchestrator. Adds KDoc to all undocumented public APIs, module by module, informed by pattern docs. |
 | `lint-resources` | active | yes | yes | Validate string resource naming conventions (snake_case, prefixes, duplicates, Swift sync). Use when checking resource files or before merging UI changes. |

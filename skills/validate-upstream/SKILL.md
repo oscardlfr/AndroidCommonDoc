@@ -34,7 +34,7 @@ copilot-template-type: behavioral
 ## Implementation
 
 ```bash
-node mcp-server/build/cli/audit-docs.js --project-root "$(pwd)" --with-upstream --waves 3
+node .claude/runtime/l0-toolkit-launcher.cjs run audit-docs --project-root "$PWD" -- --with-upstream --waves 3
 ```
 
 ## Cross-References

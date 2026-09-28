@@ -26,12 +26,19 @@ if [ "$LINE_COUNT" -gt 500 ]; then
   exit 0
 fi
 
-# Determine AndroidCommonDoc location
-COMMON_DOC="${ANDROID_COMMON_DOC:-}"
-if [ -z "$COMMON_DOC" ]; then
-  # Resolve from script location: .claude/hooks/ -> repo root
-  SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-  COMMON_DOC="$(cd "$SCRIPT_DIR/../.." && pwd)"
+# Resolve the qualified toolkit from the consumer manifest. The consumer-local
+# launcher owns source/worktree resolution and content-pin validation; ambient
+# toolkit paths are intentionally not an authority.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+TOOLKIT_LAUNCHER="$PROJECT_ROOT/.claude/runtime/l0-toolkit-launcher.cjs"
+if [ ! -f "$TOOLKIT_LAUNCHER" ]; then
+  echo "L0 toolkit launcher is missing: $TOOLKIT_LAUNCHER" >&2
+  exit 1
+fi
+if ! COMMON_DOC="$(node "$TOOLKIT_LAUNCHER" describe toolkit-root --project-root "$PROJECT_ROOT")"; then
+  echo "L0 toolkit source could not be qualified for Detekt post-write" >&2
+  exit 1
 fi
 
 # Verify custom rules JAR exists (if not built yet, don't block development)
@@ -49,7 +56,7 @@ if [ ! -f "$CONFIG" ]; then
 fi
 
 # Resolve Detekt CLI JAR (the custom rules JAR is NOT the CLI)
-CACHE_DIR="$COMMON_DOC/.cache"
+CACHE_DIR="$PROJECT_ROOT/.androidcommondoc/cache/detekt"
 DETEKT_CLI_VERSION="2.0.0-alpha.2"
 DETEKT_CLI_JAR=""
 

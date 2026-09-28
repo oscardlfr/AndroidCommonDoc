@@ -363,13 +363,13 @@ describe("BL-W30-05: arch-* templates have Message Topic Discipline pointer", ()
 
 // ── T-BUG-013: /pre-pr wires catalog-coverage-check.sh ─────────────────────
 
-describe("T-BUG-013: /pre-pr invokes catalog-coverage-check.sh (no more unwired tool theater)", () => {
+describe("T-BUG-013: /pre-pr invokes catalog coverage through the runtime adapter", () => {
   const PRE_PR = path.join(ROOT, "skills/pre-pr/SKILL.md");
 
-  it("pre-pr SKILL.md references catalog-coverage-check.sh with T-BUG-013 tag", () => {
+  it("pre-pr SKILL.md references the allowlisted catalog-coverage operation with T-BUG-013 tag", () => {
     const content = fs.readFileSync(PRE_PR, "utf-8");
     expect(content).toMatch(/T-BUG-013/);
-    expect(content).toMatch(/catalog-coverage-check\.sh/);
+    expect(content).toMatch(/l0-toolkit-launcher\.cjs run catalog-coverage/);
     // Step must be conditional on .gradle.kts changes
     expect(content).toMatch(/\.gradle\.kts/);
     // Summary table row for visibility

@@ -60,9 +60,19 @@ function renderCanonicalNativeAgentInput(action, proposedInput, requestedModel) 
   if (!canonicalInput || !proposedInput || typeof proposedInput !== 'object' || Array.isArray(proposedInput)) {
     return { ok: false, reason: 'native-agent-input-invalid' };
   }
-  const allowed = new Set(['description', 'subagent_type', 'name', 'prompt', 'run_in_background', 'model']);
+  // Claude Code releases that still expose the former team API may echo the
+  // action's internal team_name into Agent tool_input.  It is not part of the
+  // current Agent schema, so accept it only as an exact, action-bound legacy
+  // alias and always remove it through updatedInput before tool execution.
+  // A foreign/mismatched value remains a hard denial.
+  const allowed = new Set(['description', 'subagent_type', 'name', 'prompt', 'run_in_background', 'model', 'team_name']);
   const unknown = Object.keys(proposedInput).filter((key) => !allowed.has(key));
   if (unknown.length > 0) return { ok: false, reason: 'native-agent-input-unknown-field' };
+  if (Object.prototype.hasOwnProperty.call(proposedInput, 'team_name') &&
+      (action.kind !== 'role-spawn' || typeof action.payload.team_name !== 'string' ||
+       proposedInput.team_name !== action.payload.team_name)) {
+    return { ok: false, reason: 'native-agent-input-team-mismatch' };
+  }
   if (proposedInput.subagent_type !== canonicalInput.subagent_type) {
     return { ok: false, reason: 'native-agent-input-subtype-mismatch' };
   }

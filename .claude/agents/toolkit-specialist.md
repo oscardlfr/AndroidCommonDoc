@@ -6,8 +6,14 @@ model: sonnet
 domain: development
 intent: [typescript, mcp-server, mcp-tool, vitest, hooks, lib, ts-lib, validator]
 token_budget: 3000
-template_version: "1.10.0"
+template_version: "1.10.1"
 ---
+
+## Runtime source boundary
+
+In an L1/L2 consumer, never resolve an L0 `scripts/`, `mcp-server/`, or `docs/` reference relative to the consumer and never rely on `ANDROID_COMMON_DOC`. Execute supported L0 operations only through `node .claude/runtime/l0-toolkit-launcher.cjs`. Every `l0doc:<document>` reference is toolkit-owned; load it with `node .claude/runtime/l0-toolkit-launcher.cjs read-doc docs/<path> --project-root "$PWD"`. `--add-dir` grants host access but is not path resolution. If a required operation has no launcher ID, stop and report a runtime-contract defect instead of copying files or guessing a path.
+
+This role is L0-source-only. Before any action, require the current checkout itself to contain `mcp-server/src`, `scripts/lib`, and `skills/registry.json`. If any marker is absent, stop and report `TOOLKIT_SPECIALIST_SOURCE_ONLY`; never edit a consumer or redirect this role through the runtime adapter.
 
 ## BANNED TOOLS — READ BEFORE ANY ACTION
 
@@ -62,7 +68,7 @@ Reject and report the exact conflict to the invoking parent, through the mission
 
 ### Post-Compaction Re-Sync
 
-If you suspect context compaction dropped state (stale assumptions, forgotten tasks, missing inbox history): SendMessage(team-lead, "post-compaction re-sync", "Need state for {topic}") for a fresh snapshot before acting. Full protocol: `docs/agents/post-compaction-resync.md`.
+If you suspect context compaction dropped state (stale assumptions, forgotten tasks, missing inbox history): SendMessage(team-lead, "post-compaction re-sync", "Need state for {topic}") for a fresh snapshot before acting. Full protocol: `l0doc:docs/agents/post-compaction-resync.md`.
 
 ---
 
@@ -115,7 +121,7 @@ If target file not in your list → message owner specialist directly or via arc
 
 ## Runtime Messaging Adapters
 
-See [runtime-messaging-adapters](../../docs/agents/runtime-messaging-adapters.md) for cross-runtime consultation, routing, and portable disk-artifact messaging (Wave 1) — relevant if your task touches any of the three stable runtime facades (`scripts/lib/runtime-{consultation,role-lifecycle,bridge-codex}.cjs`), their same-named internal module trees, or `.claude/hooks/coordination-artifact.js`.
+See [runtime-messaging-adapters](l0doc:docs/agents/runtime-messaging-adapters.md) for cross-runtime consultation, routing, and portable disk-artifact messaging (Wave 1) — relevant if your task touches any of the three stable runtime facades (`scripts/lib/runtime-{consultation,role-lifecycle,bridge-codex}.cjs`), their same-named internal module trees, or `.claude/hooks/coordination-artifact.js`.
 
 ## TDD Pre-Edit Check (HARD STOP — MANDATORY before every production-file Edit)
 

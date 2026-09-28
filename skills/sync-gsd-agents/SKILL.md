@@ -53,8 +53,7 @@ This skill bridges the gap: it generates GSD-compatible agent wrappers from `.cl
 ### Mode: Sync (default)
 
 ```bash
-bash scripts/sh/sync-gsd-agents.sh \
-  --project-root "$(pwd)" \
+node .claude/runtime/l0-toolkit-launcher.cjs run sync-gsd-agents --project-root "$PWD" -- \
   ${TARGET:+--target "$TARGET"} \
   ${DRY_RUN:+--dry-run} \
   ${VERBOSE:+--verbose}
@@ -63,16 +62,14 @@ bash scripts/sh/sync-gsd-agents.sh \
 ### Mode: Check (`--check`)
 
 ```bash
-bash scripts/sh/check-agent-parity.sh \
-  --project-root "$(pwd)" \
+node .claude/runtime/l0-toolkit-launcher.cjs run check-agent-parity --project-root "$PWD" -- \
   ${TARGET:+--target "$TARGET"}
 ```
 
 ### Mode: Fix (`--fix`)
 
 ```bash
-bash scripts/sh/check-agent-parity.sh \
-  --project-root "$(pwd)" \
+node .claude/runtime/l0-toolkit-launcher.cjs run check-agent-parity --project-root "$PWD" -- \
   ${TARGET:+--target "$TARGET"} \
   --fix
 ```
@@ -110,7 +107,7 @@ Use `check-agent-parity.sh` in pre-commit or CI:
 
 ```yaml
 # .github/workflows/reusable-agent-parity.yml
-- run: bash scripts/sh/check-agent-parity.sh --target project --project-root .
+- run: node .claude/runtime/l0-toolkit-launcher.cjs run check-agent-parity --project-root "$PWD" -- --target project
 ```
 
 ## Cross-References

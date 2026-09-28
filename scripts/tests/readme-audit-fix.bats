@@ -114,3 +114,15 @@ sys.exit(0 if 'MCP server with 0 tools' in content else 1)
     [ "$readme_before" = "$readme_after" ]
     [ "$agents_before" = "$agents_after" ]
 }
+
+@test "(f) thin portable AGENTS contract is not treated as a missing inventory table" {
+    printf '%s\n' \
+      '# Portable contract' \
+      'README.md, registries and generated inventories describe what exists.' \
+      > "$WORK_DIR/AGENTS.md"
+
+    run bash "$SCRIPT" --project-root "$WORK_DIR" --json
+
+    [[ "$output" != *"AGENTS.md 'Available Skills"* ]]
+    [[ "$output" != *"missing from AGENTS.md table"* ]]
+}

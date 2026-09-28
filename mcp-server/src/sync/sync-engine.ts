@@ -17,7 +17,7 @@
  * - Registry existence is validated before any sync operations
  */
 
-import { readFile, writeFile, mkdir, unlink, access, lstat, readdir, rename, copyFile, realpath, chmod } from "node:fs/promises";
+import { readFile, writeFile, mkdir, unlink, access, lstat, readdir, rename, copyFile, realpath, chmod, open } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import path from "node:path";
@@ -94,6 +94,7 @@ export interface SyncOptions {
 /** Files owned by the runtime installation, not by the ordinary registry sync. */
 const RUNTIME_CONSUMER_FILES = [
   ".claude/runtime/l0-entrypoint-launcher.cjs",
+  ".claude/runtime/l0-toolkit-launcher.cjs",
   ".claude/hooks/l0-source-hook-launcher.js",
   ".claude/hooks/context-provider-write-gate.js",
   ".claude/hooks/detekt-post-write.sh",
@@ -110,20 +111,24 @@ const EXECUTABLE_CONSUMER_FILES = new Set<string>([
 ]);
 
 /**
- * Exact checksum-less Detekt hook revisions distributed by the legacy L0
- * installer. Ownership is deliberately scoped by destination path as well as
- * content digest: a digest copied to the other hook path, or any locally
- * edited bytes, remains consumer-owned and must fail closed.
+ * Exact checksum-less runtime revisions distributed by legacy L0 installers.
+ * Ownership is deliberately scoped by destination path as well as content
+ * digest: a digest copied to another path, or any locally edited bytes,
+ * remains consumer-owned and must fail closed.
  */
-const LEGACY_DETEKT_HOOK_SHA256_BY_PATH: Readonly<Record<string, string>> = Object.freeze({
+const LEGACY_RUNTIME_FILE_SHA256_BY_PATH: Readonly<Record<string, string>> = Object.freeze({
   ".claude/hooks/detekt-pre-commit.sh":
     "fd79f0f45adf279d9b0cd41240cb89e96786b3e1c994f68b138781d3e0d22312",
   ".claude/hooks/detekt-post-write.sh":
     "a263152549291c949e77a9f76dfdbeedcabec50c07a5f1cc3e5305ed331cc8d4",
+  ".claude/hooks/context-provider-write-gate.js":
+    "792de9ffd1be16dfbd7125b33daaf8dc95e1a881f73c825232a83ff9ac8653fd",
+  ".claude/hooks/tool-use-logger.js":
+    "7c39a59ab6da4520006ce3a50f04ca6753004c77651b4782f927bed2d59b280a",
 });
 
-function isKnownLegacyDetektHook(relativePath: string, content: string | Buffer): boolean {
-  const expected = LEGACY_DETEKT_HOOK_SHA256_BY_PATH[relativePath];
+function isKnownLegacyRuntimeFile(relativePath: string, content: string | Buffer): boolean {
+  const expected = LEGACY_RUNTIME_FILE_SHA256_BY_PATH[relativePath];
   return expected !== undefined && createHash("sha256").update(content).digest("hex") === expected;
 }
 
@@ -327,6 +332,33 @@ function hashContent(content: string): string {
   return `sha256:${hash}`;
 }
 
+/**
+ * Metadata is generated output, so it is deliberately excluded from the
+ * content hash. Check it separately to let an ordinary sync migrate an older
+ * materialization contract without treating that migration as a local edit.
+ */
+function hasCanonicalL0Metadata(
+  content: string,
+  entry: SkillRegistryEntry,
+): boolean {
+  const lines = content.replace(/\r\n/g, "\n").split("\n").map((line) => line.trim());
+  return lines.includes("l0_source: manifest:L0/tooling") &&
+    lines.includes(`l0_hash: ${entry.hash}`) &&
+    lines.some((line) => /^l0_synced:\s*\S+/.test(line));
+}
+
+/** Runtime role templates are owned by the runtime installer and deliberately
+ * published byte-for-byte. Ordinary registry entries use generated provenance,
+ * but applying that requirement to these ten paths makes every later plain
+ * sync rewrite them before the runtime installer restores the same bytes. */
+function expectsGeneratedL0Metadata(entry: SkillRegistryEntry, manifest: Manifest): boolean {
+  if (manifest.runtime?.enabled !== true) return true;
+  const destination = destPath(entry.path);
+  return !RUNTIME_ROLE_TEMPLATES.some(
+    (role) => destination === `.claude/agents/${role}.md`,
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Diff computation
 // ---------------------------------------------------------------------------
@@ -371,8 +403,26 @@ export async function computeSyncActions(
       // No existing checksum - new file
       actions.push({ registryEntry: entry, action: "add" });
     } else if (currentHash === entry.hash) {
-      // Hash matches - unchanged
-      actions.push({ registryEntry: entry, action: "unchanged", currentHash });
+      // The source hash matches, but generated provenance may still belong to
+      // an older sync contract. Verify local content first so metadata repair
+      // can never overwrite a genuine consumer edit.
+      if (!projectRoot) {
+        actions.push({ registryEntry: entry, action: "unchanged", currentHash });
+        continue;
+      }
+      const localAction = await detectLocalEdit(projectRoot, dest, currentHash);
+      if (localAction === "add" || localAction === "conflict") {
+        actions.push({ registryEntry: entry, action: localAction, currentHash });
+        continue;
+      }
+      const localContent = await readFile(path.join(projectRoot, dest), "utf-8");
+      actions.push({
+        registryEntry: entry,
+        action: !expectsGeneratedL0Metadata(entry, manifest) || hasCanonicalL0Metadata(localContent, entry)
+          ? "unchanged"
+          : "update",
+        currentHash,
+      });
     } else {
       // L0 hash differs from manifest — update needed, but check for local edits
       if (!force && projectRoot) {
@@ -738,16 +788,17 @@ export function getGitCommit(dirPath: string): string | undefined {
 export function materializeFile(
   content: string,
   entry: SkillRegistryEntry,
-  l0Root: string,
+  _l0Root: string,
 ): string {
   const syncedDate = new Date().toISOString();
+  const portableSource = "manifest:L0/tooling";
 
   if (entry.type === "skill" || entry.type === "agent") {
-    return injectFrontmatterFields(content, l0Root, entry.hash, syncedDate);
+    return injectFrontmatterFields(content, portableSource, entry.hash, syncedDate);
   }
 
   // Command type: HTML comment header
-  return injectCommandHeader(content, l0Root, entry.hash, syncedDate);
+  return injectCommandHeader(content, portableSource, entry.hash, syncedDate);
 }
 
 /**
@@ -1246,16 +1297,46 @@ async function readHookSettingsOrThrow(settingsPath: string): Promise<ClaudeSett
 }
 
 async function writeSettingsAtomically(settingsPath: string, settings: ClaudeSettings): Promise<void> {
-  const directory = path.dirname(settingsPath);
+  await writeRuntimeFileAtomically(settingsPath, JSON.stringify(settings, null, 2) + "\n");
+}
+
+/**
+ * Publish one runtime-owned file without ever exposing truncated bytes.
+ *
+ * The temporary file lives beside its destination so rename is constrained to
+ * the same filesystem. Its bytes and mode are flushed before publication, and
+ * the containing directory is flushed after rename on POSIX. If publication is
+ * interrupted, the old destination (or a complete new one) remains usable and
+ * the stale manifest makes the next runtime sync retry the convergence.
+ */
+async function writeRuntimeFileAtomically(
+  destination: string,
+  content: string,
+  mode?: number,
+): Promise<void> {
+  const directory = path.dirname(destination);
   await mkdir(directory, { recursive: true });
   const temporaryPath = path.join(
     directory,
-    `.settings.json.${process.pid}.${Date.now()}.${Math.random().toString(16).slice(2)}.tmp`,
+    `.${path.basename(destination)}.${process.pid}.${Date.now()}.${Math.random().toString(16).slice(2)}.tmp`,
   );
+  let handle: Awaited<ReturnType<typeof open>> | undefined;
   try {
-    await writeFile(temporaryPath, JSON.stringify(settings, null, 2) + "\n", "utf-8");
-    await rename(temporaryPath, settingsPath);
+    handle = await open(temporaryPath, "wx", mode ?? 0o666);
+    await handle.writeFile(content, "utf8");
+    if (mode !== undefined) await handle.chmod(mode);
+    await handle.sync();
+    await handle.close();
+    handle = undefined;
+    await rename(temporaryPath, destination);
+    if (process.platform !== "win32") {
+      const directoryHandle = await open(directory, "r");
+      try { await directoryHandle.sync(); } finally { await directoryHandle.close(); }
+    }
   } catch (err) {
+    if (handle) {
+      try { await handle.close(); } catch { /* best-effort close before cleanup */ }
+    }
     try {
       await unlink(temporaryPath);
     } catch {
@@ -1346,6 +1427,8 @@ export async function computeRuntimeToolkitInventory(toolkitRoot: string): Promi
   const files = [
     "scripts/lib/runtime-role-lifecycle.cjs", "scripts/lib/runtime-host-claude.cjs",
     "scripts/lib/runtime-consultation.cjs", "scripts/lib/runtime-collaboration-entrypoints.cjs",
+    "scripts/lib/runtime-consumer-quality-gate.cjs",
+    "scripts/tools/wave-control-plane.cjs",
     "scripts/lib/wave-control-plane.cjs",
     "scripts/lib/verdict-evidence-contract-cli.cjs",
     "scripts/lib/verdict-evidence-contract.cjs", "scripts/lib/verdict-artifact-confinement.cjs",
@@ -1364,6 +1447,11 @@ export async function computeRuntimeToolkitInventory(toolkitRoot: string): Promi
   await collectInventoryDirectory(canonicalRoot, "scripts/lib/runtime-consultation", files);
   await collectInventoryDirectory(canonicalRoot, "scripts/lib/runtime-role-lifecycle", files);
   await collectInventoryDirectory(canonicalRoot, "scripts/lib/runtime-bridge-codex", files);
+  // Keep every allowlisted launcher target and its sourced/dot-sourced helpers
+  // inside the content pin, including platform-specific implementations.
+  await collectInventoryDirectory(canonicalRoot, "scripts/sh", files);
+  await collectInventoryDirectory(canonicalRoot, "scripts/ps1", files);
+  await collectInventoryDirectory(canonicalRoot, "scripts/tools", files);
   await collectInventoryDirectory(canonicalRoot, "mcp-server/build", files);
   const unique = [...new Set(files)].sort();
   const inventory: RuntimeToolkitInventoryEntry[] = [];
@@ -1514,6 +1602,7 @@ export async function installRuntimeConsumer(
 
     const roleWrites: Array<{ role: string; source: string; destination: string; content: string; migration: boolean }> = [];
     for (const role of RUNTIME_ROLE_TEMPLATES) {
+      const relative = `.claude/agents/${role}.md`;
       const source = path.join(toolkit, ".claude", "agents", `${role}.md`);
       const destination = path.join(consumer, ".claude", "agents", `${role}.md`);
       const content = await readFile(source, "utf8");
@@ -1521,7 +1610,10 @@ export async function installRuntimeConsumer(
       try {
         const existing = await readFile(destination, "utf8");
         if (existing === content) continue;
-        if (stripL0Metadata(existing) !== content) {
+        const existingDigest = `sha256:${createHash("sha256").update(existing).digest("hex")}`;
+        const isPreviouslyManaged = manifest.checksums[relative] === existingDigest;
+        const isCurrentOrdinarySyncCopy = stripL0Metadata(existing) === content;
+        if (!isPreviouslyManaged && !isCurrentOrdinarySyncCopy) {
           return { ok: false, reason: `runtime-role-conflict:${role}`, dryRun };
         }
         migration = true;
@@ -1552,7 +1644,7 @@ export async function installRuntimeConsumer(
         }
         const recorded = manifest.checksums[relative];
         const existingDigest = `sha256:${createHash("sha256").update(existing).digest("hex")}`;
-        if (recorded !== existingDigest && !isKnownLegacyDetektHook(relative, existing)) {
+        if (recorded !== existingDigest && !isKnownLegacyRuntimeFile(relative, existing)) {
           return { ok: false, reason: `runtime-consumer-file-conflict:${relative}`, dryRun };
         }
       } catch (err) {
@@ -1566,14 +1658,15 @@ export async function installRuntimeConsumer(
     if (!dryRun) {
       await applyRetiredArtifactPlan(consumer, retiredArtifactPlan);
       for (const write of consumerFileWrites) {
-        await mkdir(path.dirname(write.destination), { recursive: true });
-        await writeFile(write.destination, write.content, "utf8");
-        if (EXECUTABLE_CONSUMER_FILES.has(write.relative)) await chmod(write.destination, 0o755);
+        await writeRuntimeFileAtomically(
+          write.destination,
+          write.content,
+          EXECUTABLE_CONSUMER_FILES.has(write.relative) ? 0o755 : undefined,
+        );
       }
       for (const destination of executableRepairs) await chmod(destination, 0o755);
       for (const write of roleWrites) {
-        await mkdir(path.dirname(write.destination), { recursive: true });
-        await writeFile(write.destination, write.content, "utf8");
+        await writeRuntimeFileAtomically(write.destination, write.content);
       }
       if (JSON.stringify(nextSettings) !== JSON.stringify(settings)) {
         await writeSettingsAtomically(settingsPath, nextSettings);
@@ -1591,7 +1684,9 @@ export async function installRuntimeConsumer(
       }
       if (manifestStateWithoutTimestamp(manifest) !== manifestBefore) {
         manifest.last_synced = new Date().toISOString();
-        await writeManifest(manifestPath, manifest);
+        // The manifest is the transaction commit marker: publish it only after
+        // every runtime asset, role and settings update is durably visible.
+        await writeRuntimeFileAtomically(manifestPath, JSON.stringify(manifest, null, 2) + "\n");
       }
     }
     const manifestChanged = !dryRun && manifestStateWithoutTimestamp(manifest) !== manifestBefore;
@@ -3016,7 +3111,7 @@ export async function syncHooks(
         const relative = `.claude/hooks/${filename}`;
         state = sourceBytes.equals(destinationBytes)
           ? "current"
-          : isKnownLegacyDetektHook(relative, destinationBytes) ? "legacy" : "conflict";
+          : isKnownLegacyRuntimeFile(relative, destinationBytes) ? "legacy" : "conflict";
       }
       shellPlans.set(filename, { source, destination, state });
       if (state === "conflict") {

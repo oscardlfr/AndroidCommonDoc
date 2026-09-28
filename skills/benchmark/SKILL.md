@@ -3,7 +3,6 @@ name: benchmark
 description: "Run benchmarks across modules and show agent-friendly results summary. Detects available platforms and devices."
 intent: [benchmark, performance, modules, measure]
 allowed-tools: [Bash, Read, Grep, Glob]
-l0_requires: ANDROID_COMMON_DOC
 copilot: true
 ---
 
@@ -48,47 +47,12 @@ For any result consumed by a quality gate, wrap execution with `scripts/tools/ev
 ### macOS / Linux
 
 ```bash
-COMMON_DOC="${ANDROID_COMMON_DOC:?ANDROID_COMMON_DOC is not set. See README.md}"
-
-"$COMMON_DOC/scripts/sh/run-benchmarks.sh" --project-root "$(pwd)" $ARGUMENTS
+node .claude/runtime/l0-toolkit-launcher.cjs run benchmark --project-root "$(pwd)" -- $ARGUMENTS
 ```
 
 ### Windows
 
-```powershell
-$commonDoc = if ($env:ANDROID_COMMON_DOC) { $env:ANDROID_COMMON_DOC } else { throw "ANDROID_COMMON_DOC is not set. See README.md" }
-
-$argList = "$ARGUMENTS" -split '\s+' | Where-Object { $_ }
-$config = "smoke"
-$platform = "all"
-$moduleFilter = "*"
-$includeShared = $false
-
-for ($i = 0; $i -lt $argList.Count; $i++) {
-    $arg = $argList[$i]
-    if ($arg -eq "--config" -and $i + 1 -lt $argList.Count) {
-        $config = $argList[$i + 1]; $i++
-    } elseif ($arg -eq "--platform" -and $i + 1 -lt $argList.Count) {
-        $platform = $argList[$i + 1]; $i++
-    } elseif ($arg -eq "--module-filter" -and $i + 1 -lt $argList.Count) {
-        $moduleFilter = $argList[$i + 1]; $i++
-    } elseif ($arg -eq "--include-shared") {
-        $includeShared = $true
-    }
-}
-
-$params = @{
-    ProjectRoot = (Get-Location).Path
-    Config = $config
-    Platform = $platform
-    ModuleFilter = $moduleFilter
-}
-
-if ($includeShared) { $params.IncludeShared = $true }
-
-& "$commonDoc\scripts\ps1\run-benchmarks.ps1" @params
-```
-
+Claude Code runs the POSIX command above from Bash on Windows as well. Do not resolve the toolkit through `ANDROID_COMMON_DOC` or call its PowerShell scripts directly; the consumer-local launcher resolves and verifies the pinned L0 source from `l0-manifest.json`.
 ## Expected Output
 
 ### On success

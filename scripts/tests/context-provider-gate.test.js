@@ -124,6 +124,20 @@ if (process.env.S16_RED_CASE) {
   process.exit(0);
 }
 
+// Cross-process Claude --resume must reach the authority boundary that can
+// renew a genuine interactive pin. A read-only identity preflight cannot do
+// that and would reject the first Bash tool-use before the launcher runs.
+const hookSource = fs.readFileSync(HOOK, 'utf8');
+const entrypointInjectorSource = hookSource.slice(
+  hookSource.indexOf('function tryInjectEntrypointComposition'),
+  hookSource.indexOf('function findConsultationCliInvocation'),
+);
+assert.doesNotMatch(entrypointInjectorSource, /getProductionSessionIdentity\s*\(/,
+  'entrypoint injection must not preflight a resumable session through the read-only identity API');
+assert.match(entrypointInjectorSource, /mintProductionHostComposition\s*\(/,
+  'entrypoint injection must delegate verification and atomic resume renewal to the composition mint boundary');
+console.log('R131 resumed entrypoint reaches atomic composition mint: PASS');
+
 // F1: Grep on docs path, arch-platform, no flag → BLOCK (official PreToolUse deny)
 clearSessionFlag('s1');
 const f1 = runHook({
@@ -4220,6 +4234,7 @@ console.log('\nAll context-provider-gate tests passed.');
     fs.writeFileSync(path.join(consumer, 'l0-manifest.json'), JSON.stringify(manifest));
     for (const relative of [
       '.claude/runtime/l0-entrypoint-launcher.cjs',
+      '.claude/runtime/l0-toolkit-launcher.cjs',
       '.claude/hooks/l0-source-hook-launcher.js',
       '.claude/hooks/context-provider-write-gate.js',
       '.claude/hooks/detekt-post-write.sh',

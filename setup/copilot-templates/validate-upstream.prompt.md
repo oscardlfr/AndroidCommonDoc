@@ -35,7 +35,7 @@ Validate pattern docs against upstream official documentation. Runs Layer 1 dete
 ## Implementation
 
 ```bash
-node mcp-server/build/cli/audit-docs.js --project-root "$(pwd)" --with-upstream --waves 3
+node .claude/runtime/l0-toolkit-launcher.cjs run audit-docs --project-root "$PWD" -- --with-upstream --waves 3
 ```
 
 ## Cross-References

@@ -828,6 +828,7 @@ describe("P3 runtime-collaboration-entrypoints (RED)", () => {
         expect(text).toContain("node .claude/runtime/l0-entrypoint-launcher.cjs init-session\n");
         expect(text).toContain("node .claude/runtime/l0-entrypoint-launcher.cjs init-session --orchestrate <slug>");
         expect(text).not.toContain("'node' '.claude/runtime/l0-entrypoint-launcher.cjs' 'init-session'");
+        expect(text).toContain("A failed or non-ready launcher result is terminal");
       } else {
         expect(text).toContain("'<resolved-node>' '<consumer-root>/.claude/runtime/l0-entrypoint-launcher.cjs' 'execute'");
         expect(text).toContain(`'--entrypoint' '${entrypointValue}'`);
@@ -842,6 +843,13 @@ describe("P3 runtime-collaboration-entrypoints (RED)", () => {
         expect(text).toContain("do not search for or hand-write a bundle file");
       }
     }
+
+    const initCommand = fs.readFileSync(path.join(ROOT, ".claude/commands/init-session.md"), "utf8");
+    expect(initCommand).toContain("node .claude/runtime/l0-entrypoint-launcher.cjs init-session\n");
+    expect(initCommand).toContain("node .claude/runtime/l0-entrypoint-launcher.cjs init-session --orchestrate <slug>");
+    expect(initCommand).toContain("never construct a replacement dashboard");
+    expect(initCommand).not.toContain("$SKILL_DIR/init-session/SKILL.md");
+    expect(initCommand).not.toContain("Read the skill file");
 
     const source = fs.readFileSync(ENTRYPOINT_MODULE, "utf8");
     const importPattern = /require\(\s*['"]([^'"]+)['"]\s*\)/g;

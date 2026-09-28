@@ -3,18 +3,14 @@ name: lint-resources
 description: "Validate string resource naming conventions (snake_case, prefixes, duplicates, Swift sync). Use when checking resource files or before merging UI changes."
 intent: [lint, resources, strings, naming, validate, duplicates]
 allowed-tools: [Bash, Read, Grep, Glob]
-l0_requires: ANDROID_COMMON_DOC
 copilot: true
 ---
 
 ## Prerequisites
 
-`ANDROID_COMMON_DOC` must be set to the AndroidCommonDoc installation path:
-
-```bash
-export ANDROID_COMMON_DOC="/path/to/AndroidCommonDoc"   # macOS/Linux
-$env:ANDROID_COMMON_DOC = "C:\path\to\AndroidCommonDoc" # Windows
-```
+The project must have a qualified runtime installation from `/sync-l0`. The
+consumer-local launcher resolves the manifest-pinned toolkit; no ambient path
+or guessed sibling checkout is accepted.
 
 ## Usage Examples
 
@@ -50,31 +46,14 @@ $env:ANDROID_COMMON_DOC = "C:\path\to\AndroidCommonDoc" # Windows
 
 ## Implementation
 
-### macOS / Linux
 ```bash
-COMMON_DOC="${ANDROID_COMMON_DOC:?ANDROID_COMMON_DOC is not set. See README.md}"
-
-"$COMMON_DOC/scripts/sh/lint-resources.sh" \
-  --project-root "$PROJECT_ROOT" \
-  --module-path "$MODULE_PATH" \
-  --strict \
-  --show-details \
-  --check-swift-sync \
-  --output-format human
+node .claude/runtime/l0-toolkit-launcher.cjs run lint-resources --project-root "$PWD" -- $ARGUMENTS
 ```
 
-### Windows (PowerShell)
-```powershell
-$commonDoc = if ($env:ANDROID_COMMON_DOC) { $env:ANDROID_COMMON_DOC } else { throw "ANDROID_COMMON_DOC is not set. See README.md" }
+### Windows
 
-& "$commonDoc\scripts\ps1\lint-resources.ps1" `
-  -ProjectRoot "$ProjectRoot" `
-  -ModulePath "$ModulePath" `
-  -StrictMode `
-  -ShowDetails `
-  -CheckSwiftSync `
-  -OutputFormat human
-```
+Claude Code runs the POSIX command above from Bash on Windows as well. The
+launcher selects the platform implementation and injects the project root.
 
 ## Expected Output
 
