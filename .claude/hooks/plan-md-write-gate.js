@@ -3,7 +3,9 @@
 
 'use strict';
 
-// PreToolUse Write|Edit gate: blocks non-planner agents from writing .planning/wave-*/PLAN.md.
+// PreToolUse Write|Edit gate:
+//   - blocks non-planner agents from writing .planning/wave-*/PLAN.md
+//   - confines planner writes to PLAN.md/CLASS for the active wave
 // Side-effect (BL-W47-prep-3 F2): when planner writes PLAN.md, auto-creates
 //   .claude/wave-quality-gates/<slug>.md stub so the wave sentinel exists before any specialist commits.
 // Identity resolved from stdin JSON data.agent_type (empirically verified: architect-bash-write-gate.js:51).
@@ -12,6 +14,38 @@
 
 const fs = require('fs');
 const path = require('path');
+const { getWaveSlug } = require('./hook-control-plane-utils.js');
+
+function block(reason) {
+  process.stdout.write(JSON.stringify({ decision: 'block', reason }));
+  process.exit(2);
+}
+
+function confinedRelativePath(projectRoot, requestedPath) {
+  const root = path.resolve(projectRoot);
+  const absolute = path.isAbsolute(requestedPath)
+    ? path.resolve(requestedPath)
+    : path.resolve(root, requestedPath);
+  const relative = path.relative(root, absolute);
+  if (!relative || relative === '..' || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) {
+    return null;
+  }
+
+  // An existing symlink in any path component could redirect the write after
+  // lexical confinement. New components are safe because their first existing
+  // ancestor has already been checked.
+  let cursor = root;
+  for (const segment of relative.split(path.sep)) {
+    cursor = path.join(cursor, segment);
+    try {
+      if (fs.lstatSync(cursor).isSymbolicLink()) return null;
+    } catch (error) {
+      if (error && error.code === 'ENOENT') break;
+      return null;
+    }
+  }
+  return relative.split(path.sep).join('/');
+}
 
 let input = '';
 const stdinTimeout = setTimeout(() => process.exit(0), 5000);
@@ -19,8 +53,6 @@ process.stdin.setEncoding('utf8');
 process.stdin.on('data', chunk => (input += chunk));
 process.stdin.on('end', () => {
   clearTimeout(stdinTimeout);
-
-  if (process.env.CLAUDE_SKIP_PLANNER === '1') process.exit(0);
 
   let data;
   try {
@@ -32,23 +64,29 @@ process.stdin.on('end', () => {
   const toolName = data.tool_name || '';
   if (toolName !== 'Write' && toolName !== 'Edit') process.exit(0);
 
-  const projectRoot = process.env.CLAUDE_PROJECT_DIR || process.cwd();
-  let filePath = (data.tool_input?.file_path ?? '').replace(/\\/g, '/');
-  if (path.isAbsolute(filePath)) {
-    filePath = path.relative(projectRoot, filePath).replace(/\\/g, '/');
-  }
-  filePath = filePath.replace(/^\.\//, '');
-
-  // Match .planning/wave-<slug>/PLAN.md or .planning/wave-<slug>/PLAN-W<digits>.md
-  if (!/^\.planning\/wave-[^/]+\/PLAN(-W\d+)?\.md$/.test(filePath)) process.exit(0);
-
+  const projectRoot = path.resolve(process.env.CLAUDE_PROJECT_DIR || process.cwd());
+  const requestedPath = data.tool_input?.file_path ?? '';
+  const filePath = confinedRelativePath(projectRoot, requestedPath);
   const agentType = (data.agent_type ?? '').toLowerCase();
+
+  // The escape hatch skips mandatory planner delegation for a trivial main-agent
+  // change. It must never disable confinement once the active actor is a planner.
+  if (process.env.CLAUDE_SKIP_PLANNER === '1' && agentType !== 'planner') process.exit(0);
+
   if (agentType === 'planner') {
+    const activeSlug = getWaveSlug(projectRoot, { protectedEnvReturnsNull: true });
+    if (!activeSlug) {
+      block('[planner-gate] planner write denied: active wave slug is unavailable; set CLAUDE_WAVE_SLUG to the exact wave before dispatch.');
+    }
+    const allowedPlan = `.planning/wave-${activeSlug}/PLAN.md`;
+    const allowedClass = `.planning/wave-${activeSlug}/CLASS`;
+    if (filePath !== allowedPlan && filePath !== allowedClass) {
+      block(`[planner-gate] planner writes are confined to ${allowedPlan} and ${allowedClass}; cross-wave, external, symlinked, and unrelated writes are denied.`);
+    }
+
     // Auto-create wave-quality-gates sentinel stub for this wave.
-    const slugMatch = filePath.match(/^\.planning\/wave-([^/]+)\/PLAN/);
-    if (slugMatch) {
-      const slug = slugMatch[1];
-      const projectRoot = process.env.CLAUDE_PROJECT_DIR || process.cwd();
+    if (filePath === allowedPlan) {
+      const slug = activeSlug;
       const sentinelDir = path.join(projectRoot, '.claude', 'wave-quality-gates');
       const sentinelPath = path.join(sentinelDir, `${slug}.md`);
       try {
@@ -71,9 +109,8 @@ process.stdin.on('end', () => {
     process.exit(0);
   }
 
-  process.stdout.write(JSON.stringify({
-    decision: 'block',
-    reason: '[planner-gate] team-lead/architects/specialists may NOT write .planning/wave-*/PLAN.md — that file is the planner peer\'s exclusive work-product. Spawn planner via Agent(subagent_type="planner") and dispatch the planning task. Escape hatch: CLAUDE_SKIP_PLANNER=1.',
-  }));
-  process.exit(2);
+  // Match .planning/wave-<slug>/PLAN.md or .planning/wave-<slug>/PLAN-W<digits>.md
+  if (!filePath || !/^\.planning\/wave-[^/]+\/PLAN(-W\d+)?\.md$/.test(filePath)) process.exit(0);
+
+  block('[planner-gate] team-lead/architects/specialists may NOT write .planning/wave-*/PLAN.md — that file is the planner peer\'s exclusive work-product. Spawn planner via Agent(subagent_type="planner") and dispatch the planning task. Escape hatch: CLAUDE_SKIP_PLANNER=1.');
 });

@@ -4172,6 +4172,10 @@ console.log('\nAll context-provider-gate tests passed.');
       },
     };
     fs.writeFileSync(path.join(consumer, 'l0-manifest.json'), JSON.stringify(manifest));
+    spawnSync('git', ['-C', consumer, 'config', 'user.email', 'test@example.invalid']);
+    spawnSync('git', ['-C', consumer, 'config', 'user.name', 'Test']);
+    spawnSync('git', ['-C', consumer, 'add', '.']);
+    assert.strictEqual(spawnSync('git', ['-C', consumer, 'commit', '-qm', 'fixture']).status, 0);
     const intent = Buffer.from(JSON.stringify({ mode: 'dashboard' }), 'utf8').toString('base64url');
     const direct = rll.renderPosixDirect([
       'node', path.resolve(__dirname, '../lib/runtime-collaboration-entrypoints.cjs'), 'execute',
@@ -4229,7 +4233,7 @@ console.log('\nAll context-provider-gate tests passed.');
     }
     const sourceReferenced = new Set([
       'agent-spawn-execution-gate.js', 'bash-cli-spawn-gate.js', 'context-provider-gate.js',
-      'premature-execution-gate.js', 'runtime-consultation-target-gate.js',
+      'premature-execution-gate.js', 'plan-md-write-gate.js', 'runtime-consultation-target-gate.js',
       'runtime-host-boundary.js', 'runtime-host-session-start.js', 'subagent-start-context-bundle.js',
     ]);
     const hooks = {};
@@ -4259,6 +4263,32 @@ console.log('\nAll context-provider-gate tests passed.');
       JSON.parse(admittedLauncher.stdout).hookSpecificOutput.permissionDecisionReason,
       /genuine claude-sonnet-5 host composition evidence is unavailable/,
       'a qualified launcher must pass adapter verification and reach ordinary host-composition admission',
+    );
+
+    // A wave-scoped start must select its named PLAN even when the consumer
+    // contains other historical waves. Admission is deliberately vetoed here
+    // by the absent live host observation; that veto must not leave PREP state.
+    fs.mkdirSync(path.join(consumer, '.planning', 'wave-historical'), { recursive: true });
+    fs.writeFileSync(path.join(consumer, '.planning', 'wave-historical', 'PLAN.md'), '# Historical fixture\n');
+    const scopedStart = rll.renderPosixDirect([
+      'node', path.join(consumer, '.claude/runtime/l0-entrypoint-launcher.cjs'), 'execute',
+      '--entrypoint', 'init-session', '--project-root', consumer,
+      '--intent', Buffer.from(JSON.stringify({ mode: 'start', wave_slug: 'entrypoint-gate' }), 'utf8').toString('base64url'),
+    ]);
+    const scopedVeto = runHook({
+      tool_name: 'Bash', tool_input: { command: scopedStart }, session_id: 'consumer-scoped-veto',
+      agent_type: '', agent_id: '', cwd: consumer,
+    }, { CLAUDE_PROJECT_DIR: consumer });
+    assertPreToolUseDeny(scopedVeto, 'CONSUMER-ENTRYPOINT-SCOPED-VETO');
+    assert.match(
+      JSON.parse(scopedVeto.stdout).hookSpecificOutput.permissionDecisionReason,
+      /genuine claude-sonnet-5 host composition evidence is unavailable/,
+      'multi-wave scoped admission must reach host evidence rather than fail ambiguous PLAN discovery',
+    );
+    assert.strictEqual(
+      fs.existsSync(path.join(consumer, '.androidcommondoc', 'wave-control', 'entrypoint-gate.json')),
+      false,
+      'a vetoed admission must not materialize PREP state',
     );
 
     const l0Root = path.resolve(__dirname, '../..');

@@ -8,8 +8,8 @@ layer: L0
 parent: agents-hub
 category: agents
 description: "Class-aware persisted PREP-to-COMPLETE control plane built on the portable Wave-1 lifecycle."
-version: 1
-last_updated: "2026-09-22"
+version: 2
+last_updated: "2026-09-28"
 ---
 
 # Wave Control Plane
@@ -21,6 +21,14 @@ PREP -> EXECUTE -> VERIFY_FINAL -> QG -> COMPLETE
 ```
 
 State is stored at `.androidcommondoc/wave-control/<slug>.json` and is bound to the exact PLAN digest and Git HEAD. Illegal transitions, unknown phases, source drift, missing verdicts, or missing QG artifacts reject. Callers cannot skip a phase.
+
+Every claimed phase advance must come from the successful transition receipt for
+the active wave and agree with a subsequent persisted status read. Operational
+reports cite its exact `phase`, `revision`, and `plan_sha256`. Planner completion,
+support-role rebind, intended next steps, an `EXECUTE` label in prose, or a host UI
+message is not transition authority. If the receipt is missing or its bindings do
+not match, report the persisted phase and revision without claiming that the plan
+was rebound or that execution started.
 
 ## Class-aware role floors
 

@@ -313,9 +313,13 @@ function readState(root, slug) {
   const p = pathsFor(root, slug);
   return withStateLock(p.root, p.state, () => readStateUnlocked(p.root, slug));
 }
-function initialize(root, slug) {
-  const inputs = currentInputs(root, slug);
-  return withStateLock(inputs.root, inputs.state, () => {
+function initialize(root, slug, expectedPlanDigest = null) {
+  const target = pathsFor(root, slug);
+  return withStateLock(target.root, target.state, () => {
+    const inputs = currentInputs(root, slug);
+    if (expectedPlanDigest !== null && inputs.planDigest !== expectedPlanDigest) {
+      throw new Error('PHASE_STATE_PLAN_DRIFT');
+    }
     if (fs.existsSync(inputs.state)) {
       const existing = readStateUnlocked(root, slug);
       if (existing.head !== inputs.head || existing.plan_sha256 !== inputs.planDigest) throw new Error('PHASE_STATE_INPUT_DRIFT');
@@ -333,6 +337,24 @@ function initialize(root, slug) {
     atomicWrite(inputs.state, state);
     return state;
   });
+}
+// Read-only admission preflight. Unlike initialize(), this never creates the
+// control-plane directory, lock, or PREP state. Callers may therefore prove
+// host composition before committing the wave state.
+function inspect(root, slug) {
+  const inputs = currentInputs(root, slug);
+  if (!fs.existsSync(inputs.state)) {
+    return {
+      wave_slug: slug, phase: 'PREP', plan_sha256: inputs.planDigest,
+      head: inputs.head, lifecycle_roles: inputs.lifecycleRoles,
+      plan_current: true, head_current: true, current: true, initialized: false,
+    };
+  }
+  const existing = readState(root, slug);
+  const planCurrent = existing.plan_sha256 === inputs.planDigest;
+  const headCurrent = existing.head === inputs.head;
+  return { ...existing, plan_current: planCurrent, head_current: headCurrent,
+    current: planCurrent && headCurrent, initialized: true };
 }
 function verifyVerdicts(root, slug, state, phase, verdicts) {
   if (state.required_roles.length === 0) return [];
@@ -417,5 +439,5 @@ function lifecycleActions(root, slug, profile = 'auto') {
     mode: state.execution_mode, transport: 'runtime-role-lifecycle' }));
 }
 
-module.exports = { SCHEMA, PHASES, NEXT, initialize, readState, transition, status, lifecycleActions,
+module.exports = { SCHEMA, PHASES, NEXT, initialize, inspect, readState, transition, status, lifecycleActions,
   parsePlanClass, requiredRoles, lifecycleRoles, executionMode };

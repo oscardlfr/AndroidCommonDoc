@@ -1,8 +1,8 @@
 # AndroidCommonDoc Backlog
 
-> **Last updated**: 2026-09-27
-> **Roadmap baseline**: `develop@51598ecfbf7e2db8781521acc1ba94e3a84108f2` (PR #252). **H1, G0, ordered Waves 1–7, first-consumer hardening, and its bounded stabilization are SHIPPED.**
-> **Current delivery**: PR #252 shipped the post-#251 consumer stabilization without modifying a product repository. Four newly reproduced post-#252 convergence defects form one bounded in-progress stabilization below; they are not an open-ended consumer-finding stream. There is no numbered wave marked `NEXT`. **R33 remains deferred.**
+> **Last updated**: 2026-09-28
+> **Roadmap baseline**: `develop@a89005cfd764b53956df5045c94f94da0a8c0384` (PR #253). **H1, G0, ordered Waves 1–7, first-consumer hardening, and consumer-contract convergence are SHIPPED.**
+> **Current delivery**: PR #253 shipped the bounded post-#252 convergence without modifying a product repository. The current runtime-adoption follow-up is limited to independently reproduced upstream defects: wave-scoped admission, sync idempotency diagnostics, planner write confinement, ViewModel-rule precision, and operational guidance. There is no numbered wave marked `NEXT`. **R33 remains deferred.**
 > **Source of truth**: this file owns ordering and scope. `git log`, merged PRs, and `project_*shipped.md` memory entries own historical detail.
 
 ## Operating contract
@@ -106,29 +106,17 @@ and `:core-result:allTests` pass. The audit first exposed a missing
 Generating its registry with the canonical tool restored the disk contract; a
 fresh runtime preflight/apply/idempotency cycle now reports **L1**.
 
-## Bounded post-#252 consumer-contract convergence — PRUNEABLE / IN PROGRESS
+## PR #253 consumer-contract convergence — SHIPPED
 
-The next DawSync acceptance exposed four related installation/dispatch gaps. The
-closure is deliberately bounded: repair the upstream L0 contract once, prove the
-same matrix in clean L1 and L2 fixtures, and stop adding ad-hoc downstream
-mitigations.
+PR #253 was squash-merged as
+`a89005cfd764b53956df5045c94f94da0a8c0384`. It closed the three temporary
+`PRUNEABLE` workstreams: byte-stable ordinary/runtime sync and executable-mode
+repair, source-referenced hook execution plus the consumer-local runtime
+entrypoint launcher, and clean L1/L2/worktree acceptance with exact operations
+guidance. Those execution summaries are intentionally pruned; DawSync remains
+consumer evidence, never an edited product repository.
 
-All three workstreams below are temporary and explicitly `PRUNEABLE`. They may be
-collapsed only after the PR merges and the shipped commit/evidence is recorded;
-the active P0/P1/P2 queue below is not pruneable.
-
-| Temporary workstream | Lifecycle | Bounded closure |
-|---|---|---|
-| WS-A — sync-state convergence | **PRUNEABLE — IN PROGRESS** | Ordinary and runtime no-op applies preserve `l0-manifest.json` byte-for-byte, including `last_synced`. Runtime-owned Detekt hooks install executable and repair/report mode-only drift without rewriting the manifest; conflicting bytes still fail closed. |
-| WS-B — portable hook and skill dispatch | **PRUNEABLE — IN PROGRESS** | Source-reference `bash-cli-spawn-gate.js` through the consumer hook launcher, then install `.claude/runtime/l0-entrypoint-launcher.cjs` and make all five control-plane skills call that exact local path in L0, L1, and L2. Missing, ambiguous, or drifted pins fail closed. |
-| WS-C — consumer acceptance and operations | **PRUNEABLE — IN PROGRESS** | Prove WS-A/WS-B with positive and negative tests, a pre-existing wrong-mode fixture, byte-idempotent second passes, and a persistent-flow smoke from clean L1 and L2 fixtures. Keep exact install, launch, fallback, and refresh documentation synchronized without editing DawSync. |
-
-DawSync remains evidence and a consumer; no product-repository edit is part of
-this closure. After merge, prune this three-row execution view and retain only the
-shipped summary, commit/PR identity, durable evidence pointers, and any genuinely
-open backlog IDs.
-
-## Active backlog after PR #252
+## Active backlog after PR #253
 
 Priority is impact, not implementation size. Every item needs an accepted PLAN,
 negative and positive tests, and a clean-consumer acceptance when it changes a
@@ -780,7 +768,8 @@ The following are historical, not executable backlog items:
 
 ## Shipped (recent)
 
-- **Post-first-consumer stabilization** — MERGED `develop@51598ec` (2026-09-27), PR #252. Closed malformed-settings fail-open behavior, bounded safe one-shot recovery, positive effort telemetry enforcement, formal-wave Bats fixture isolation, manifest-aware portable hook registrations, ordinary/runtime composition, CLI discovery side effects, and deterministic adapter checks. The bounded post-#252 convergence block above contains only the four subsequently reproduced installation/dispatch gaps.
+- **Consumer-contract convergence** — MERGED `develop@a89005cf` (2026-09-28), PR #253. Closed byte-stable sync and executable-mode repair, source-referenced hook/runtime launch, clean L1/L2/worktree acceptance, and the one-local-full-run plus required-GitHub-CI contract. Its temporary `PRUNEABLE` workstreams were removed after merge.
+- **Post-first-consumer stabilization** — MERGED `develop@51598ec` (2026-09-27), PR #252. Closed malformed-settings fail-open behavior, bounded safe one-shot recovery, positive effort telemetry enforcement, formal-wave Bats fixture isolation, manifest-aware portable hook registrations, ordinary/runtime composition, CLI discovery side effects, and deterministic adapter checks.
 - **First-consumer runtime hardening** — MERGED `develop@c5ee193e` (2026-09-27), PR #251. Closed all 13 post-PR-#250 consumer findings with source-referenced runtime hooks, executable-mode repair, topology/YAML closure, exact launch/recovery documentation, atomic Claude host recertification, bounded certification startup, isolated R131 fixtures, and clean consumer/worktree acceptance.
 - **Wave 2 — Workflow Expression & Input Boundary Audit** — MERGED `develop@fa7f6cf8` (2026-09-21), PR #249 (`fa7f6cf8`, "fix(ci): harden workflow input boundaries"); merge tree byte-identical to the approved PR head tree `7e634353`. Hardened raw untrusted GitHub expression interpolation across the ten audited workflows/templates (shell and `github-script` bodies routed through `env:` boundaries, quoted at consumption) plus `qg-path-audit.sh` H2/H3/table-form parser hardening. 30/30 required checks passed, 0 unresolved review threads, CLEAN merge state; full Bats 3391/3391 (`qg-linux-canonical` six-shard profile), MCP Vitest 2665/2665, ESLint 0 errors, three independent architect VERIFY-FINAL verdicts APPROVE. PLAN digest `8f5e1849f42af77b4c0fcffa3e2f884c70adf6c1e564b261203ce3611cd50a05`; full record in memory `project_wave_workflow_input_boundary_audit_shipped.md`. HTML escaping is tracked only as `BL-CONS-P2-01`; R33 native stays `PENDING_EXTERNAL_RELEASE`.
 - **Wave 1 — Portable Runtime Collaboration & Persistent Role Lifecycle** — MERGED `develop@b5d7ed46` (2026-09-19). PR #246 `1b3eebe5` (2026-09-15, portable mixed-host consultation + consumer sync, 204 internal CommonJS modules across the 3 stable facades), PR #247 `2a98bc17` (2026-09-19, macOS stabilization: per-platform host-certificate coexistence, symlink-identity and TMPDIR-path-budget fixes), PR #248 `b5d7ed46` (2026-09-19, macOS follow-ups: ctimeNs identity gap, config.toml parse hardening, parallel Bats orchestrator, zombie-liveness fix). Windows live qualification: P4 QUALIFIED, P5 LIVE_QUALIFIED (attempt N13), P6 QUALIFIED (attempt 3). Mandatory post-Wave-1 qualification checkpoint COMPLETE, zero P0/P1 findings (one non-blocking fast-follow: planner→context-provider bootstrap-edge gap); full record in memory `project_wave_portable_runtime_collaboration_lifecycle_shipped.md` and `project_post_wave1_agent_skill_behavioral_qualification.md`. R33 native stays `PENDING_EXTERNAL_RELEASE`.
@@ -795,9 +784,9 @@ For full history use `git log` and the corresponding `project_*shipped.md` memor
 
 ## How to use this document
 
-1. Select from **Active backlog after PR #251**, normally highest priority first; there is no legacy numbered `NEXT` wave.
+1. Select from **Active backlog after PR #253**, normally highest priority first; there is no legacy numbered `NEXT` wave.
 2. Reproduce the selected item independently at current `develop`, accept one bounded PLAN, and freeze its exact path manifest before implementation.
 3. Preserve the item's dependencies and fail-closed acceptance. Do not combine unrelated P0/P1 entries merely to reduce PR count.
-4. Treat Waves 1–7, G0, and PR #251 as shipped history; do not reopen them implicitly or execute old wave prose literally.
+4. Treat Waves 1–7, G0, and PRs #251–#253 as shipped history; do not reopen them implicitly or execute old wave prose literally.
 5. On completion, record final PR/commit/tests, move only the closed ID to shipped history, and reprioritize remaining evidence.
 6. Trigger-only work enters the active queue only with the stated current evidence and an explicit owner.

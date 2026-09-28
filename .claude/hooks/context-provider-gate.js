@@ -1409,7 +1409,8 @@ function tryInjectEntrypointComposition(toolInput, event) {
     plan = runtimeCollaborationEntrypoints.planEntrypointStep(
       values['--entrypoint'], intent, values['--project-root'],
     );
-    const rootScope = resolveProjectRootScope(values['--project-root']);
+    const explicitWaveScope = runtimeCollaborationEntrypoints.plannedEntrypointWaveScope(plan);
+    const rootScope = explicitWaveScope || resolveProjectRootScope(values['--project-root']);
     if (!rootScope) throw new Error('scope-unavailable');
     scope = {
       projectRootDescriptor: values['--project-root'],
@@ -1435,6 +1436,8 @@ function tryInjectEntrypointComposition(toolInput, event) {
       projectRoot: values['--project-root'], event,
       entrypoint: values['--entrypoint'], argvDigest: plan.argv_digest,
       roleScope: plan.role_scope,
+      planDigest: scope.planDigest,
+      worktreeId: scope.worktreeId,
     });
   } catch {
     composition = null;

@@ -31,7 +31,7 @@ teardown_file() {
 @test "gate allows planner Write on .planning/wave-*/PLAN.md" {
   local tmp_dir
   tmp_dir="$(mktemp -d)"
-  run bash -c "echo '{\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\".planning/wave-foo/PLAN.md\"},\"agent_type\":\"planner\"}' | CLAUDE_PROJECT_DIR='$tmp_dir' node '$HOOK'"
+  run bash -c "echo '{\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\".planning/wave-foo/PLAN.md\"},\"agent_type\":\"planner\"}' | CLAUDE_PROJECT_DIR='$tmp_dir' CLAUDE_WAVE_SLUG=foo node '$HOOK'"
   [ "$status" -eq 0 ]
   rm -rf "$tmp_dir"
 }
@@ -57,6 +57,15 @@ teardown_file() {
   [ "$status" -eq 0 ]
 }
 
+@test "CLAUDE_SKIP_PLANNER cannot bypass planner write confinement" {
+  local tmp_dir
+  tmp_dir="$(mktemp -d)"
+  run env CLAUDE_SKIP_PLANNER=1 bash -c "echo '{\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"/tmp/MEMORY.md\"},\"agent_type\":\"planner\"}' | CLAUDE_PROJECT_DIR='$tmp_dir' CLAUDE_WAVE_SLUG=foo node '$HOOK'"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *'planner writes are confined'* ]]
+  rm -rf "$tmp_dir"
+}
+
 # ── Case 6: BLOCK — Edit (not Write) on PLAN.md by non-planner → exit 2 ─────
 
 @test "gate blocks team-lead Edit on .planning/wave-*/PLAN.md" {
@@ -79,7 +88,7 @@ teardown_file() {
   tmp_dir="$(mktemp -d)"
   mkdir -p "$tmp_dir/.claude/wave-quality-gates"
   local sentinel="$tmp_dir/.claude/wave-quality-gates/wave-test-slug.md"
-  run bash -c "echo '{\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\".planning/wave-wave-test-slug/PLAN.md\"},\"agent_type\":\"planner\"}' | CLAUDE_PROJECT_DIR='$tmp_dir' node '$HOOK'"
+  run bash -c "echo '{\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\".planning/wave-wave-test-slug/PLAN.md\"},\"agent_type\":\"planner\"}' | CLAUDE_PROJECT_DIR='$tmp_dir' CLAUDE_WAVE_SLUG=wave-test-slug node '$HOOK'"
   [ "$status" -eq 0 ]
   [ -f "$sentinel" ]
   [[ "$(cat $sentinel)" == *'Wave Quality Gate: wave-test-slug'* ]]
@@ -103,7 +112,7 @@ teardown_file() {
   mkdir -p "$tmp_dir/.claude/wave-quality-gates"
   local sentinel="$tmp_dir/.claude/wave-quality-gates/wave-test-slug.md"
   echo "existing content" > "$sentinel"
-  run bash -c "echo '{\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\".planning/wave-wave-test-slug/PLAN.md\"},\"agent_type\":\"planner\"}' | CLAUDE_PROJECT_DIR='$tmp_dir' node '$HOOK'"
+  run bash -c "echo '{\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\".planning/wave-wave-test-slug/PLAN.md\"},\"agent_type\":\"planner\"}' | CLAUDE_PROJECT_DIR='$tmp_dir' CLAUDE_WAVE_SLUG=wave-test-slug node '$HOOK'"
   [ "$status" -eq 0 ]
   [[ "$(cat $sentinel)" == "existing content" ]]
   rm -rf "$tmp_dir"
@@ -119,11 +128,56 @@ teardown_file() {
   mkdir -p "$tmp_dir/.claude/wave-quality-gates"
   abs_path="${win_dir}/.planning/wave-abs-test/PLAN.md"
   sentinel="$tmp_dir/.claude/wave-quality-gates/abs-test.md"
-  run bash -c "echo '{\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"'\"$abs_path\"'\"},\"agent_type\":\"planner\"}' | CLAUDE_PROJECT_DIR='$win_dir' node '$HOOK'"
+  run bash -c "echo '{\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"'\"$abs_path\"'\"},\"agent_type\":\"planner\"}' | CLAUDE_PROJECT_DIR='$win_dir' CLAUDE_WAVE_SLUG=abs-test node '$HOOK'"
   [ "$status" -eq 0 ]
   [ -f "$sentinel" ]
   [[ "$(cat "$sentinel")" == *'Wave Quality Gate: abs-test'* ]]
   rm -rf "$tmp_dir"
+}
+
+@test "planner is blocked from writing outside its owned wave artifacts" {
+  local tmp_dir
+  tmp_dir="$(mktemp -d)"
+  run bash -c "echo '{\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"/tmp/MEMORY.md\"},\"agent_type\":\"planner\"}' | CLAUDE_PROJECT_DIR='$tmp_dir' CLAUDE_WAVE_SLUG=foo node '$HOOK'"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *'planner writes are confined'* ]]
+  rm -rf "$tmp_dir"
+}
+
+@test "planner is blocked from writing another wave PLAN" {
+  local tmp_dir
+  tmp_dir="$(mktemp -d)"
+  run bash -c "echo '{\"tool_name\":\"Edit\",\"tool_input\":{\"file_path\":\".planning/wave-bar/PLAN.md\"},\"agent_type\":\"planner\"}' | CLAUDE_PROJECT_DIR='$tmp_dir' CLAUDE_WAVE_SLUG=foo node '$HOOK'"
+  [ "$status" -eq 2 ]
+  rm -rf "$tmp_dir"
+}
+
+@test "planner is blocked when the active wave is unavailable" {
+  local tmp_dir
+  tmp_dir="$(mktemp -d)"
+  run bash -c "echo '{\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\".planning/wave-foo/PLAN.md\"},\"agent_type\":\"planner\"}' | CLAUDE_PROJECT_DIR='$tmp_dir' CLAUDE_WAVE_SLUG=develop node '$HOOK'"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *'active wave slug is unavailable'* ]]
+  rm -rf "$tmp_dir"
+}
+
+@test "planner may write CLASS for its active wave" {
+  local tmp_dir
+  tmp_dir="$(mktemp -d)"
+  run bash -c "echo '{\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\".planning/wave-foo/CLASS\"},\"agent_type\":\"planner\"}' | CLAUDE_PROJECT_DIR='$tmp_dir' CLAUDE_WAVE_SLUG=foo node '$HOOK'"
+  [ "$status" -eq 0 ]
+  rm -rf "$tmp_dir"
+}
+
+@test "planner is blocked through a symlinked wave directory" {
+  local tmp_dir outside
+  tmp_dir="$(mktemp -d)"
+  outside="$(mktemp -d)"
+  mkdir -p "$tmp_dir/.planning"
+  ln -s "$outside" "$tmp_dir/.planning/wave-foo"
+  run bash -c "echo '{\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\".planning/wave-foo/PLAN.md\"},\"agent_type\":\"planner\"}' | CLAUDE_PROJECT_DIR='$tmp_dir' CLAUDE_WAVE_SLUG=foo node '$HOOK'"
+  [ "$status" -eq 2 ]
+  rm -rf "$tmp_dir" "$outside"
 }
 
 @test "F3-F: non-planner Write with ABSOLUTE path to PLAN.md → block (exit 2)" {

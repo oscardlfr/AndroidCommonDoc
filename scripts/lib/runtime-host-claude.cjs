@@ -1759,12 +1759,15 @@ function verifyProductionRecord(projectRoot, record, expected) {
   const scope = lifecycleOwner();
   let worktreeId;
   try { worktreeId = scope.computeWorktreeId(projectRoot); } catch { return false; }
-  const plan = scope.discoverPlan(projectRoot);
+  const expectedPlanDigest = expected && expected.planDigest;
+  const plan = scope.discoverPlan(projectRoot, expectedPlanDigest || null);
   if (!plan.ok || record.worktree_id !== worktreeId || record.plan_digest !== plan.planDigest) return false;
   const profile = resolveRequestedModelProfile(projectRoot, null);
   if (!profile.ok || profile.name !== record.requested_profile_name || profile.digest !== record.requested_profile_digest) return false;
   if (expected && (record.entrypoint !== expected.entrypoint || record.argv_digest !== expected.argvDigest ||
-      record.role_scope_digest !== digest(JSON.stringify(expected.roleScope)))) return false;
+      record.role_scope_digest !== digest(JSON.stringify(expected.roleScope)) ||
+      (expected.planDigest !== null && expected.planDigest !== undefined && record.plan_digest !== expected.planDigest) ||
+      (expected.worktreeId !== null && expected.worktreeId !== undefined && record.worktree_id !== expected.worktreeId))) return false;
   const anchor = readJsonFile(compositionKeyPaths(projectRoot).anchor);
   if (!anchor || anchor.schema !== ANCHOR_SCHEMA || anchor.key_id !== record.key_id) return false;
   let publicKey;
@@ -1792,8 +1795,10 @@ function mintHostCompositionFromSessionObservation(options, sessionObservation) 
   }
   let worktreeId;
   try { worktreeId = owner.computeWorktreeId(projectRoot); } catch { return { ok: false }; }
-  const plan = owner.discoverPlan(projectRoot);
+  const expectedPlanDigest = options.planDigest || null;
+  const plan = owner.discoverPlan(projectRoot, expectedPlanDigest);
   if (!plan.ok) return { ok: false };
+  if (options.worktreeId && options.worktreeId !== worktreeId) return { ok: false };
   const rootDigest = projectRootIdentityDigest(projectRoot);
   if (!rootDigest) return { ok: false };
   const keys = loadOrCreateProductionKey(projectRoot);

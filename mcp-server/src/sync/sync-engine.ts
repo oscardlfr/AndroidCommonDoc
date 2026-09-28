@@ -820,10 +820,19 @@ interface HookRegistrationEntry {
   readonly timeout?: number;
 }
 
+const HOOK_TIMEOUT_SECONDS = Object.freeze({
+  contextProvider: 30,
+  plannerWriteGate: 10,
+  subagentLifecycle: 10,
+});
+
+function describeHookRegistration(entry: HookRegistrationEntry): string {
+  return `${entry.event}/${entry.matcher}:${entry.file}`;
+}
+
 /**
- * The 11 L0 enforcement hook registrations (10 unique hook files) that must be
- * present in L1 settings.json: 6 pre-existing + 4 M6 Block C + M7/WP4 dependency
- * closure additions (dispatch arch-testing-20260808T142647Z, Section 6) --
+ * L0 enforcement hook registrations that must be present in L1 settings.json,
+ * including the M6 Block C and M7/WP4 dependency-closure additions --
  * context-provider-gate.js (requester gate, re-registered under its own
  * existing matcher — recognized as already-present, never duplicated),
  * runtime-consultation-target-gate.js (target gate), context-provider-write-gate.js
@@ -833,8 +842,7 @@ interface HookRegistrationEntry {
  * subagent-start-context-bundle.js file, registered ADDITIONALLY under
  * SubagentStop for one-shot claude-agent binding retirement ("Agent
  * return") -- a second EVENT registration for an already-listed FILE, not
- * a new hook file, so the unique-file count stays 10 while the entry count
- * grows to 11.
+ * a new hook file.
  */
 const L0_REQUIRED_HOOK_REGISTRATIONS: readonly HookRegistrationEntry[] = [
   { event: 'PostToolUse', matcher: 'Write|Edit', file: 'detekt-post-write.sh', timeout: 30 },
@@ -846,26 +854,29 @@ const L0_REQUIRED_HOOK_REGISTRATIONS: readonly HookRegistrationEntry[] = [
   { event: 'PreToolUse', matcher: 'Bash',            file: 'bash-cli-spawn-gate.js' },
   { event: 'PreToolUse', matcher: 'Bash',            file: 'push-authorization-gate.js' },
   { event: 'PreToolUse', matcher: 'Bash',            file: 'commit-scope-validation-gate.js' },
-  { event: 'PreToolUse', matcher: 'Grep|Glob|Bash|Read', file: 'context-provider-gate.js' },
+  { event: 'PreToolUse', matcher: 'Write|Edit',      file: 'plan-md-write-gate.js', timeout: HOOK_TIMEOUT_SECONDS.plannerWriteGate },
+  { event: 'PreToolUse', matcher: 'Grep|Glob|Bash|Read', file: 'context-provider-gate.js', timeout: HOOK_TIMEOUT_SECONDS.contextProvider },
   { event: 'PreToolUse', matcher: 'Bash',            file: 'runtime-consultation-target-gate.js' },
   { event: 'PreToolUse', matcher: 'Bash',            file: 'context-provider-write-gate.js' },
-  { event: 'SubagentStart', matcher: '.*',           file: 'subagent-start-context-bundle.js' },
-  { event: 'SubagentStop', matcher: '.*',            file: 'subagent-start-context-bundle.js' },
+  { event: 'SubagentStart', matcher: '.*',           file: 'subagent-start-context-bundle.js', timeout: HOOK_TIMEOUT_SECONDS.subagentLifecycle },
+  { event: 'SubagentStop', matcher: '.*',            file: 'subagent-start-context-bundle.js', timeout: HOOK_TIMEOUT_SECONDS.subagentLifecycle },
 ] as const;
 
 /**
  * Hooks in this set are thin toolkit entrypoints, not standalone consumer
- * assets. Their relative imports deliberately resolve into `scripts/lib/` in
- * the L0 checkout. Copying one of these files without that closure creates a
- * hook that fails before it can inspect its event, so ordinary sync keeps the
- * implementation in L0 and registers an absolute source reference instead.
+ * assets, or private dependencies of those entrypoints. Their relative imports
+ * deliberately resolve inside the L0 checkout. Copying only part of that
+ * closure creates a hook that fails before it can inspect its event, so ordinary
+ * sync keeps the implementation in L0 and registers a portable source reference.
  */
 const SOURCE_REFERENCED_HOOK_FILES = new Set([
   "agent-spawn-execution-gate.js",
   "architect-verdict-presence-gate.js",
   "bash-cli-spawn-gate.js",
   "context-provider-gate.js",
+  "hook-control-plane-utils.js",
   "premature-execution-gate.js",
+  "plan-md-write-gate.js",
   "push-authorization-gate.js",
   "runtime-consultation-target-gate.js",
   "runtime-host-boundary.js",
@@ -1008,7 +1019,8 @@ const RUNTIME_CORE_HOOK_FILES = [
   "runtime-consultation-target-gate.js", "agent-spawn-execution-gate.js",
   "subagent-start-context-bundle.js", "runtime-host-boundary.js",
   "runtime-host-session-start.js", "bash-cli-spawn-gate.js",
-  "premature-execution-gate.js", "tool-use-logger.js",
+  "premature-execution-gate.js", "plan-md-write-gate.js",
+  "hook-control-plane-utils.js", "tool-use-logger.js",
 ] as const;
 
 const RUNTIME_ROLE_TEMPLATES = [
@@ -1022,18 +1034,19 @@ const RUNTIME_HOOK_REGISTRATIONS: readonly (HookRegistrationEntry & { timeout: n
   { event: "PreToolUse", matcher: "Bash", file: "detekt-pre-commit.sh", timeout: 60 },
   { event: "SessionStart", matcher: "startup", file: "runtime-host-session-start.js", timeout: 20 },
   { event: "PreToolUse", matcher: "Write|Edit|Bash", file: "premature-execution-gate.js", timeout: 5 },
+  { event: "PreToolUse", matcher: "Write|Edit", file: "plan-md-write-gate.js", timeout: HOOK_TIMEOUT_SECONDS.plannerWriteGate },
   { event: "PreToolUse", matcher: "Bash", file: "bash-cli-spawn-gate.js", timeout: 5 },
   { event: "PreToolUse", matcher: "Bash", file: "runtime-consultation-target-gate.js", timeout: 5 },
   { event: "PreToolUse", matcher: "Bash", file: "context-provider-write-gate.js", timeout: 5 },
-  { event: "PreToolUse", matcher: "Grep|Glob|Bash|Read", file: "context-provider-gate.js", timeout: 30 },
+  { event: "PreToolUse", matcher: "Grep|Glob|Bash|Read", file: "context-provider-gate.js", timeout: HOOK_TIMEOUT_SECONDS.contextProvider },
   { event: "PreToolUse", matcher: "Task|Agent", file: "agent-spawn-execution-gate.js", timeout: 30 },
   { event: "PreToolUse", matcher: "Bash|Task|Agent|SendMessage", file: "runtime-host-boundary.js", timeout: 5 },
   { event: "PostToolUse", matcher: ".*", file: "tool-use-logger.js", timeout: 5 },
   { event: "PostToolUse", matcher: "Bash|Task|Agent|SendMessage", file: "runtime-host-boundary.js", timeout: 5 },
   { event: "PostToolUseFailure", matcher: "Agent|SendMessage", file: "tool-use-logger.js", timeout: 5 },
   { event: "PostToolUseFailure", matcher: "Bash|Task|Agent|SendMessage", file: "runtime-host-boundary.js", timeout: 5 },
-  { event: "SubagentStart", matcher: ".*", file: "subagent-start-context-bundle.js", timeout: 10 },
-  { event: "SubagentStop", matcher: ".*", file: "subagent-start-context-bundle.js", timeout: 10 },
+  { event: "SubagentStart", matcher: ".*", file: "subagent-start-context-bundle.js", timeout: HOOK_TIMEOUT_SECONDS.subagentLifecycle },
+  { event: "SubagentStop", matcher: ".*", file: "subagent-start-context-bundle.js", timeout: HOOK_TIMEOUT_SECONDS.subagentLifecycle },
 ] as const;
 
 export interface RuntimeToolkitInventoryEntry {
@@ -2110,7 +2123,7 @@ export async function syncMultiSource(
       );
     if (msMergeResult.added.length > 0) {
       report.warnings.push(
-        `Hook registrations added to settings.json: ${msMergeResult.added.map((entry) => entry.file).join(", ")}`,
+        `Hook registrations added to settings.json: ${msMergeResult.added.map(describeHookRegistration).join(", ")}`,
       );
     }
   }
@@ -2494,7 +2507,7 @@ export async function syncL0(
       );
     if (slMergeResult.added.length > 0) {
       report.warnings.push(
-        `Hook registrations added to settings.json: ${slMergeResult.added.map((entry) => entry.file).join(", ")}`,
+        `Hook registrations added to settings.json: ${slMergeResult.added.map(describeHookRegistration).join(", ")}`,
       );
     }
   }

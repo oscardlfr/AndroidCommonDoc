@@ -26,7 +26,7 @@ Cross-platform scripts, AI agent skills (Claude Code + GitHub Copilot), 28 custo
 
 > **L1/L2 runtime consumers:** install and launch with the exact procedure in [Runtime consumer operations](docs/guides/runtime-consumer-operations.md), including required `claude --add-dir <L0-root>`, worktree behavior, safe-mode recovery, and atomic Claude host recertification.
 
-> **Consumer stabilization status:** [PR #251](https://github.com/oscardlfr/AndroidCommonDoc/pull/251) closed the 13 first-consumer findings; [PR #252](https://github.com/oscardlfr/AndroidCommonDoc/pull/252) shipped the bounded follow-up at `develop@51598ec`. The four subsequently reproduced install/dispatch gaps are grouped into three temporary `PRUNEABLE` workstreams in [BACKLOG.md](BACKLOG.md); after merge they collapse to one shipped record rather than becoming an open-ended downstream patch stream. Until `BL-CONS-P0-01` lands, a requested coverage run with `modules_contributing=0` or only `no_xml` modules is **not** valid coverage evidence, even when its tests pass.
+> **Consumer stabilization status:** [PR #251](https://github.com/oscardlfr/AndroidCommonDoc/pull/251) closed the 13 first-consumer findings, [PR #252](https://github.com/oscardlfr/AndroidCommonDoc/pull/252) shipped the bounded stabilization, and [PR #253](https://github.com/oscardlfr/AndroidCommonDoc/pull/253) shipped consumer-contract convergence at `develop@a89005cf`. Its temporary `PRUNEABLE` workstreams have been collapsed into shipped history in [BACKLOG.md](BACKLOG.md). Until `BL-CONS-P0-01` lands, a requested coverage run with `modules_contributing=0` or only `no_xml` modules is **not** valid coverage evidence, even when its tests pass.
 
 > **Platform support:** All skills, agents, and Detekt rules work on both **Android-only (AGP 8.x)** and **KMP (AGP 9.0+)** projects. A small subset is KMP-only (noted below).
 
@@ -63,6 +63,7 @@ Development history beyond the CHANGELOG — summarized from memory + commit log
 
 | Wave | Date | PR | Theme |
 |------|------|----|-------|
+| Consumer-contract convergence | 2026-09-28 | [#253](https://github.com/oscardlfr/AndroidCommonDoc/pull/253) | Byte-stable sync, executable repair, source-referenced hooks, consumer-local runtime entrypoints, clean L1/L2/worktree acceptance, and one local full aggregate plus GitHub CI. |
 | First-consumer hardening | 2026-09-27 | [#251](https://github.com/oscardlfr/AndroidCommonDoc/pull/251) | Source-referenced runtime sync, worktree-safe paths, executable hooks, topology/YAML closure, exact recovery guidance, and atomic Claude host recertification. |
 | Consumer stabilization | 2026-09-27 | [#252](https://github.com/oscardlfr/AndroidCommonDoc/pull/252) | Manifest-aware portable hook launch, safe one-shot recovery, effort telemetry enforcement, atomic settings, ordinary/runtime composition, and deterministic adapter checks. |
 | Waves 3–7 | 2026-09-22 | [#250](https://github.com/oscardlfr/AndroidCommonDoc/pull/250) | Structured verdict authority, reproducible evidence, native push authority, class-aware wave control plane, and operational baseline closure. |

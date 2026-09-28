@@ -11,6 +11,7 @@ const runtimeContext = req(path.join(ROOT, "scripts/lib/runtime-project-context.
 const SOURCE_REFERENCED = new Set([
   "agent-spawn-execution-gate.js", "bash-cli-spawn-gate.js", "context-provider-gate.js",
   "premature-execution-gate.js", "runtime-consultation-target-gate.js",
+  "plan-md-write-gate.js",
   "runtime-host-boundary.js", "runtime-host-session-start.js", "subagent-start-context-bundle.js",
 ]);
 

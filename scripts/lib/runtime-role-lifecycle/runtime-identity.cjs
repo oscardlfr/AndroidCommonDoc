@@ -110,7 +110,8 @@ function createRuntimeIdentityModule({
    * @param {string} projectRoot
    * @returns {{ok:true,planPath:string,planDigest:string}|{ok:false}}
    */
-  function discoverPlan(projectRoot) {
+  function discoverPlan(projectRoot, expectedDigest = null) {
+    if (expectedDigest !== null && !/^[0-9a-f]{64}$/.test(expectedDigest)) return { ok: false };
     const planningDir = path.join(projectRoot, '.planning');
     let entries;
     try {
@@ -122,7 +123,12 @@ function createRuntimeIdentityModule({
     for (const entry of entries) {
       if (!entry.isDirectory() || !entry.name.startsWith('wave-')) continue;
       const candidate = path.join(planningDir, entry.name, 'PLAN.md');
-      if (fs.existsSync(candidate)) matches.push(candidate);
+      if (fs.existsSync(candidate)) {
+        if (expectedDigest === null) matches.push(candidate);
+        else {
+          try { if (sha256File(candidate) === expectedDigest) matches.push(candidate); } catch { return { ok: false }; }
+        }
+      }
     }
     if (matches.length !== 1) return { ok: false };
     let planDigest;

@@ -4,7 +4,7 @@ const crypto = require('crypto');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { execFileSync } = require('child_process');
+const { execFileSync, spawnSync } = require('child_process');
 const test = require('node:test');
 const control = require('../lib/wave-control-plane.cjs');
 const entrypoints = require('../lib/runtime-collaboration-entrypoints.cjs');
@@ -176,7 +176,7 @@ test('lifecycle roles reject duplicates and invalid names independently of verdi
   }
 });
 
-test('canonical runtime entrypoint derives init-session role scope from wave state', () => {
+test('canonical runtime entrypoint preflights exact wave without mutating state', () => {
   const root = fixture({
     className: 'HARNESS',
     architects: '[arch-platform, arch-testing]',
@@ -186,7 +186,55 @@ test('canonical runtime entrypoint derives init-session role scope from wave sta
   try {
     const plan = entrypoints.planEntrypointStep('init-session', { mode: 'start', wave_slug: 'demo' }, root);
     assert.deepStrictEqual(plan.role_scope, ['context-provider', 'doc-updater']);
-    assert.deepStrictEqual(control.status(root, 'demo').lifecycle_roles, ['context-provider', 'doc-updater']);
+    assert.strictEqual(fs.existsSync(path.join(root, '.androidcommondoc', 'wave-control', 'demo.json')), false);
+    assert.strictEqual(control.inspect(root, 'demo').initialized, false);
+    assert.deepStrictEqual(entrypoints.plannedEntrypointWaveScope(plan), {
+      waveSlug: 'demo',
+      planDigest: control.inspect(root, 'demo').plan_sha256,
+      worktreeId: require('../lib/runtime-role-lifecycle.cjs').computeWorktreeId(root),
+      initializeAfterAdmission: true,
+    });
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
+
+test('wave-scoped init-session selects its exact PLAN when sibling waves exist', () => {
+  const root = fixture({ lifecycleRoles: '[context-provider, doc-updater]' });
+  try {
+    const sibling = path.join(root, '.planning', 'wave-sibling');
+    fs.mkdirSync(sibling, { recursive: true });
+    fs.writeFileSync(path.join(sibling, 'PLAN.md'), '### Wave Class\n**Class**: HARNESS\n');
+    const plan = entrypoints.planEntrypointStep('init-session', { mode: 'start', wave_slug: 'demo' }, root);
+    const scope = entrypoints.plannedEntrypointWaveScope(plan);
+    assert.match(scope.planDigest, /^[0-9a-f]{64}$/);
+    assert.strictEqual(require('../lib/runtime-role-lifecycle.cjs').discoverPlan(root).ok, false);
+    const selected = require('../lib/runtime-role-lifecycle.cjs').discoverPlan(root, scope.planDigest);
+    assert.strictEqual(selected.ok, true);
+    assert.strictEqual(selected.planPath, path.join(root, '.planning', 'wave-demo', 'PLAN.md'));
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
+
+test('CLI reports typed control-plane ancestry failure instead of usage-invalid', () => {
+  const root = fixture();
+  try {
+    const encoded = Buffer.from(JSON.stringify({ mode: 'start', wave_slug: 'missing-wave' }), 'utf8').toString('base64url');
+    const result = spawnSync(process.execPath, [
+      path.resolve(__dirname, '../lib/runtime-collaboration-entrypoints.cjs'), 'execute',
+      '--entrypoint', 'init-session', '--project-root', root, '--intent', encoded,
+    ], { cwd: root, encoding: 'utf8' });
+    assert.strictEqual(result.status, 2);
+    const envelope = JSON.parse(result.stdout.trim());
+    assert.strictEqual(envelope.status, 'FAILED');
+    assert.strictEqual(envelope.detail, 'phase-state-ancestry-missing');
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
+
+test('atomic initialization rejects preflight PLAN drift without publishing PREP', () => {
+  const root = fixture();
+  try {
+    const preflight = control.inspect(root, 'demo');
+    fs.appendFileSync(path.join(root, '.planning', 'wave-demo', 'PLAN.md'), '\ndrift\n');
+    assert.throws(() => control.initialize(root, 'demo', preflight.plan_sha256), /PHASE_STATE_PLAN_DRIFT/);
+    assert.strictEqual(fs.existsSync(path.join(root, '.androidcommondoc', 'wave-control', 'demo.json')), false);
   } finally { fs.rmSync(root, { recursive: true, force: true }); }
 });
 

@@ -14,12 +14,15 @@ const CORE_HOOK_FILES = Object.freeze([
   'runtime-consultation-target-gate.js', 'agent-spawn-execution-gate.js',
   'subagent-start-context-bundle.js', 'runtime-host-boundary.js',
   'runtime-host-session-start.js', 'bash-cli-spawn-gate.js',
-  'premature-execution-gate.js', 'tool-use-logger.js',
+  'premature-execution-gate.js', 'plan-md-write-gate.js',
+  'hook-control-plane-utils.js', 'tool-use-logger.js',
 ]);
 const SOURCE_REFERENCED_HOOK_FILES = new Set([
   'agent-spawn-execution-gate.js', 'context-provider-gate.js',
   'bash-cli-spawn-gate.js',
-  'premature-execution-gate.js', 'runtime-consultation-target-gate.js',
+  'hook-control-plane-utils.js',
+  'premature-execution-gate.js', 'plan-md-write-gate.js',
+  'runtime-consultation-target-gate.js',
   'runtime-host-boundary.js', 'runtime-host-session-start.js',
   'subagent-start-context-bundle.js',
 ]);
@@ -44,6 +47,7 @@ const HOOK_MATRIX = Object.freeze([
   ['PreToolUse', 'Bash', 'detekt-pre-commit.sh', 60],
   ['SessionStart', 'startup', 'runtime-host-session-start.js', 20],
   ['PreToolUse', 'Write|Edit|Bash', 'premature-execution-gate.js', 5],
+  ['PreToolUse', 'Write|Edit', 'plan-md-write-gate.js', 10],
   ['PreToolUse', 'Bash', 'bash-cli-spawn-gate.js', 5],
   ['PreToolUse', 'Bash', 'runtime-consultation-target-gate.js', 5],
   ['PreToolUse', 'Bash', 'context-provider-write-gate.js', 5],

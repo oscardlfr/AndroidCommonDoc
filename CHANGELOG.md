@@ -5,6 +5,25 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 
 ## [Unreleased]
 
+### Fixed (runtime-adoption follow-up)
+
+- Wave-scoped runtime entrypoints resolve the exact requested `PLAN.md` even when
+  sibling waves exist, and `init-session` no longer persists PREP state before
+  host-composition admission succeeds.
+- Ordinary/runtime sync share canonical hook timeouts, so no-op alternation keeps
+  `settings.json` byte-stable and diagnostics identify distinct hook events.
+- Planner `Write`/`Edit` operations are confined to `PLAN.md` and `CLASS` for the
+  active wave in L0 and synced consumers; the source-referenced gate rejects
+  external, cross-wave, traversal, and symlinked targets.
+- The hardcoded-string Detekt rule recognizes an actual simple or qualified
+  `ViewModel` supertype without classifying test fixtures by substring.
+
+### Changed (runtime-adoption operations)
+
+- Recovery guidance distinguishes initial `acceptEdits` behavior, single-turn
+  print mode, and safe PTY input sequencing. Relay markers and phase transitions
+  require durable provenance instead of conversational claims.
+
 ### Fixed (post-#252 consumer-contract convergence)
 
 - Ordinary and runtime no-op sync now preserve `l0-manifest.json` byte-for-byte,
