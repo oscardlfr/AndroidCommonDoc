@@ -1,5 +1,4 @@
 'use strict';
-
 // Extracted behaviorally from runtime-role-lifecycle.cjs: the `ensure`
 // CLI subcommand handler in full -- argv parse/grant validation, the
 // resume-checkpoint and ephemeral-mode early exits, retained-supervisor
