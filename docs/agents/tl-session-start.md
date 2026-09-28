@@ -7,8 +7,8 @@ targets: ['L0', 'L1', 'L2']
 status: active
 layer: L0
 description: "READ FIRST: session gates, two-pass planning, shared lifecycle, and persisted wave-control authority."
-version: 4
-last_updated: "2026-09-22"
+version: 5
+last_updated: "2026-09-28"
 ---
 
 # Session Start — Operating Mode + Phase 0
@@ -147,6 +147,7 @@ The **main conversation agent is the orchestrator**; do not create a redundant t
 7. **Architect authority is request-bound JSON** whose scope, phase, digests, nonce, and freshness validate against the active request.
 8. **Push authority is the installed Git hook** consuming current structured evidence and proof; prose never substitutes for it.
 9. **Stop only owned processes** whose identity and ownership are proven by the runtime; never sweep unrelated host processes.
+10. **Claim phase changes only from a validated transition receipt** for the active wave. A planner completion, role rebind, UI label, or conversational statement does not prove `EXECUTE`. Before reporting a rebound or phase advance, read the persisted status and cite the receipt's exact `phase`, `revision`, and `plan_sha256`; if any value is absent, stale, or mismatched, report the wave's actual persisted state and stop.
 
 ### Session Start: Non-Lifecycle Setup Only
 

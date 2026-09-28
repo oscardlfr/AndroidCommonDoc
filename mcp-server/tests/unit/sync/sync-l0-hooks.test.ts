@@ -106,13 +106,21 @@ describe("syncHooks", () => {
   });
 
   it("keeps hooks with L0-relative imports source-referenced", async () => {
-    await createL0Root(l0Root, ["push-authorization-gate.js", "bash-cli-spawn-gate.js", "standalone.js"]);
+    await createL0Root(l0Root, [
+      "push-authorization-gate.js",
+      "bash-cli-spawn-gate.js",
+      "hook-control-plane-utils.js",
+      "plan-md-write-gate.js",
+      "standalone.js",
+    ]);
     await createProjectRoot(projectRoot);
 
     const result = await syncHooks(l0Root, projectRoot, []);
 
     expect(result.skipped).toContain("push-authorization-gate.js");
     expect(result.skipped).toContain("bash-cli-spawn-gate.js");
+    expect(result.skipped).toContain("hook-control-plane-utils.js");
+    expect(result.skipped).toContain("plan-md-write-gate.js");
     expect(result.copied).toContain("standalone.js");
     await expect(readFile(join(projectRoot, ".claude", "hooks", "push-authorization-gate.js"), "utf8"))
       .rejects.toThrow();
@@ -195,7 +203,7 @@ describe("source-referenced runtime installation", () => {
     const first = await installRuntimeConsumer(projectRoot, REAL_L0_ROOT);
     expect(first.ok).toBe(true);
     expect(first.consumerLayer).toBe("L2");
-    expect(first.registrations).toBe(16);
+    expect(first.registrations).toBe(17);
     expect(first.toolkitContentDigest).toMatch(/^[0-9a-f]{64}$/);
     const inventoryPaths = new Set(first.inventory?.map((entry) => entry.relative_path));
     expect(inventoryPaths.has("scripts/lib/runtime-consultation.cjs")).toBe(true);
@@ -212,6 +220,8 @@ describe("source-referenced runtime installation", () => {
     expect(inventoryPaths.has("scripts/lib/verdict-artifact-store.cjs")).toBe(true);
     expect(inventoryPaths.has(".claude/registry/wave-topology.yaml")).toBe(true);
     expect(inventoryPaths.has(".claude/hooks/l0-source-hook-launcher.js")).toBe(true);
+    expect(inventoryPaths.has(".claude/hooks/plan-md-write-gate.js")).toBe(true);
+    expect(inventoryPaths.has(".claude/hooks/hook-control-plane-utils.js")).toBe(true);
     expect(first.inventory?.find((entry) => entry.relative_path === ".claude/hooks/detekt-pre-commit.sh")?.mode)
       .toBe(0o755);
     expect(first.inventory?.find((entry) => entry.relative_path === ".claude/hooks/l0-source-hook-launcher.js")?.mode)
@@ -231,12 +241,57 @@ describe("source-referenced runtime installation", () => {
     expect(commands.find((command: string) => command.includes("agent-spawn-execution-gate.js"))).toBe(
       'node "$CLAUDE_PROJECT_DIR"/.claude/hooks/l0-source-hook-launcher.js agent-spawn-execution-gate.js',
     );
+    expect(commands.filter((command: string) => command.includes("plan-md-write-gate.js"))).toHaveLength(1);
+    expect(commands.find((command: string) => command.includes("plan-md-write-gate.js"))).toBe(
+      'node "$CLAUDE_PROJECT_DIR"/.claude/hooks/l0-source-hook-launcher.js plan-md-write-gate.js',
+    );
+    expect(installedHooks.find((hook: any) => hook.command.includes("plan-md-write-gate.js"))?.timeout)
+      .toBe(10);
     expect(installedHooks.find((hook: any) => hook.command.includes("agent-spawn-execution-gate.js"))?.timeout)
       .toBeGreaterThanOrEqual(30);
     expect(commands.every((command: string) => !command.includes(REAL_L0_ROOT.replace(/\\/g, "/")))).toBe(true);
     expect(commands.every((command: string) => !command.includes(process.execPath.replace(/\\/g, "/")))).toBe(true);
     expect(await readFile(join(projectRoot, ".claude", "hooks", "l0-source-hook-launcher.js"), "utf8"))
       .toBe(await readFile(join(REAL_L0_ROOT, ".claude", "hooks", "l0-source-hook-launcher.js"), "utf8"));
+    await expect(readFile(join(projectRoot, ".claude", "hooks", "plan-md-write-gate.js"), "utf8"))
+      .rejects.toThrow();
+    await expect(readFile(join(projectRoot, ".claude", "hooks", "hook-control-plane-utils.js"), "utf8"))
+      .rejects.toThrow();
+    const consumerLauncher = join(projectRoot, ".claude", "hooks", "l0-source-hook-launcher.js");
+    const hookEnvironment = {
+      ...process.env,
+      CLAUDE_PROJECT_DIR: projectRoot,
+      CLAUDE_WAVE_SLUG: "consumer-fixture",
+    };
+    const allowedPlannerWrite = spawnSync(
+      process.execPath,
+      [consumerLauncher, "plan-md-write-gate.js"],
+      {
+        encoding: "utf8",
+        env: hookEnvironment,
+        input: JSON.stringify({
+          tool_name: "Write",
+          agent_type: "planner",
+          tool_input: { file_path: join(projectRoot, ".planning", "wave-consumer-fixture", "PLAN.md") },
+        }),
+      },
+    );
+    expect(allowedPlannerWrite.status, allowedPlannerWrite.stderr || allowedPlannerWrite.stdout).toBe(0);
+    const deniedPlannerWrite = spawnSync(
+      process.execPath,
+      [consumerLauncher, "plan-md-write-gate.js"],
+      {
+        encoding: "utf8",
+        env: hookEnvironment,
+        input: JSON.stringify({
+          tool_name: "Write",
+          agent_type: "planner",
+          tool_input: { file_path: join(tmpdir(), "claude-project-memory", "MEMORY.md") },
+        }),
+      },
+    );
+    expect(deniedPlannerWrite.status).toBe(2);
+    expect(deniedPlannerWrite.stdout).toContain("planner writes are confined");
     const manifest = JSON.parse(await readFile(join(projectRoot, "l0-manifest.json"), "utf8"));
     expect(manifest.runtime.consumer_layer).toBe("L2");
     expect(manifest.runtime.toolkit_content_sha256).toBe(first.toolkitContentDigest);
@@ -292,16 +347,24 @@ describe("source-referenced runtime installation", () => {
   it("keeps ordinary-runtime-ordinary-runtime manifest bytes stable", async () => {
     const firstOrdinary = await syncL0(projectRoot, REAL_L0_ROOT);
     expect(firstOrdinary.errors).toEqual([]);
+    const registrationWarning = firstOrdinary.warnings.find((warning) =>
+      warning.startsWith("Hook registrations added to settings.json:"));
+    expect(registrationWarning).toContain("SubagentStart/.*:subagent-start-context-bundle.js");
+    expect(registrationWarning).toContain("SubagentStop/.*:subagent-start-context-bundle.js");
     expect((await syncL0(projectRoot, REAL_L0_ROOT, { runtime: true })).errors).toEqual([]);
     const firstRuntime = await installRuntimeConsumer(projectRoot, REAL_L0_ROOT);
     expect(firstRuntime.ok).toBe(true);
     const manifestPath = join(projectRoot, "l0-manifest.json");
+    const settingsPath = join(projectRoot, ".claude", "settings.json");
     const stableBytes = await readFile(manifestPath, "utf8");
+    const stableSettings = await readFile(settingsPath, "utf8");
 
     const secondOrdinary = await syncL0(projectRoot, REAL_L0_ROOT);
     expect(secondOrdinary.errors).toEqual([]);
     expect(secondOrdinary.manifestChanged).toBe(false);
+    expect(secondOrdinary.warnings).not.toContainEqual(expect.stringContaining("Hook registrations added"));
     expect(await readFile(manifestPath, "utf8")).toBe(stableBytes);
+    expect(await readFile(settingsPath, "utf8")).toBe(stableSettings);
 
     expect((await syncL0(projectRoot, REAL_L0_ROOT, { runtime: true })).errors).toEqual([]);
     const secondRuntime = await installRuntimeConsumer(projectRoot, REAL_L0_ROOT);

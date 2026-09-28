@@ -127,4 +127,48 @@ class NoHardcodedStringsInViewModelRuleTest {
         val findings = rule.lint(code)
         assertThat(findings).hasSize(2)
     }
+
+    @Test
+    fun `reports hardcoded string in qualified ViewModel supertype`() {
+        val code = """
+            class LoginViewModel : androidx.lifecycle.ViewModel() {
+                fun message() = "Invalid login"
+            }
+        """.trimIndent()
+
+        assertThat(rule.lint(code)).hasSize(1)
+    }
+
+    @Test
+    fun `ignores BaseViewModelTest supertype`() {
+        val code = """
+            class LoginViewModelTest : BaseViewModelTest() {
+                fun fixture() = "test fixture"
+            }
+        """.trimIndent()
+
+        assertThat(rule.lint(code)).isEmpty()
+    }
+
+    @Test
+    fun `ignores ViewModelTestFixture supertype`() {
+        val code = """
+            class LoginTest : ViewModelTestFixture() {
+                fun fixture() = "test fixture"
+            }
+        """.trimIndent()
+
+        assertThat(rule.lint(code)).isEmpty()
+    }
+
+    @Test
+    fun `ignores class name containing ViewModel without ViewModel supertype`() {
+        val code = """
+            class LoginViewModelTest {
+                fun fixture() = "test fixture"
+            }
+        """.trimIndent()
+
+        assertThat(rule.lint(code)).isEmpty()
+    }
 }

@@ -8,7 +8,7 @@ status: active
 layer: L0
 parent: getting-started
 category: guides
-last_updated: "2026-09-27"
+last_updated: "2026-09-28"
 description: "Exact installation, launch, recovery, worktree, and Claude host recertification procedure for L1/L2 consumers."
 ---
 
@@ -107,6 +107,14 @@ platform compilation target, enumerate the checkout's actual tasks (for example,
 Authenticated entrypoint commands use the renderer's canonical POSIX form: every
 token is single-quoted. Do not rewrite those commands with POSIX double quotes;
 the boundary intentionally sends non-canonical forms through ordinary approval.
+
+### Interactive terminal input
+
+Treat terminal control input and prompt submission as separate operations. When
+clearing a prompt, send `Ctrl+U`, wait, send the new prompt, then send `Enter`.
+Combining those actions in one PTY write can truncate or concatenate input; this
+is a terminal boundary, not an L0 hook repair. Use `-p` / `--print` only for a
+bounded, non-persistent one-turn invocation.
 
 ## Full quality-gate ownership
 
@@ -217,6 +225,13 @@ Mode distinctions:
   an explicit `apiKeyHelper`. It is not the normal recovery mode.
 - `-p` / `--print`: one non-interactive turn. With `--no-session-persistence` it
   is suitable for diagnostics/certification, not a retained monitor or work session.
+- `--permission-mode acceptEdits`: selects the initial permission mode; it is not
+  a promise that the whole session will remain prompt-free. Write/Edit operations
+  covered by that mode may be accepted while Bash or another operation outside
+  its approval surface can still require explicit approval. After leaving Plan
+  mode, verify the selected permission choice instead of assuming the initial mode
+  persisted. Do not weaken hooks or enable a global bypass to suppress a legitimate
+  host prompt.
 - A prompt saying “run this first” cannot prevent host startup from loading memory.
   Use `--safe-mode` when startup ordering is the problem.
 

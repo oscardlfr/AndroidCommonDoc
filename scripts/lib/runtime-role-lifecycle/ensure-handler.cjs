@@ -104,7 +104,15 @@ function handleEnsure(rawArgv) {
     return;
   }
 
-  const planResult = discoverPlan(projectRoot);
+  let planResult = discoverPlan(projectRoot, binding.plan_digest);
+  // Preserve the established stale-binding diagnostic when the repository has
+  // one unambiguous current PLAN: the comparison below must report identity
+  // mismatch, not misclassify a valid policy surface as POLICY_INVALID. In a
+  // multi-wave repository there is intentionally no guessing fallback.
+  if (!planResult.ok) {
+    const unscopedPlan = discoverPlan(projectRoot);
+    if (unscopedPlan.ok) planResult = unscopedPlan;
+  }
   if (!planResult.ok) {
     invalidError('ensure', 'POLICY_INVALID');
     return;

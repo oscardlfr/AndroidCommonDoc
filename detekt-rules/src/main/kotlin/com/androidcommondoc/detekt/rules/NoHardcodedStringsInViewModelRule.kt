@@ -34,7 +34,7 @@ class NoHardcodedStringsInViewModelRule(config: Config) : Rule(
     override fun visitClass(klass: KtClass) {
         super.visitClass(klass)
 
-        if (!klass.superTypeListEntries.any { it.text.contains("ViewModel") }) return
+        if (!klass.superTypeListEntries.any(::isViewModelSupertype)) return
 
         val stringTemplates = klass.collectDescendantsOfType<KtStringTemplateExpression>()
         for (template in stringTemplates) {
@@ -71,6 +71,11 @@ class NoHardcodedStringsInViewModelRule(config: Config) : Rule(
                 )
             )
         }
+    }
+
+    private fun isViewModelSupertype(entry: org.jetbrains.kotlin.psi.KtSuperTypeListEntry): Boolean {
+        val typeName = entry.typeReference?.text ?: return false
+        return typeName.substringBefore('<').substringAfterLast('.') == "ViewModel"
     }
 
     private fun isInsideCompanionObject(element: org.jetbrains.kotlin.psi.KtElement): Boolean {

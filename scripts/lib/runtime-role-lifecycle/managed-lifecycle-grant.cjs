@@ -45,7 +45,8 @@ function resolveOrMintManagedLifecycleGrant(options) {
       return { ok: false, reason: 'MANAGED_LIFECYCLE_SCOPE_MISMATCH' };
     }
   } else {
-    const plan = discoverPlan(projectRootDescriptor);
+    const expectedPlanDigest = options.planDigest || null;
+    const plan = discoverPlan(projectRootDescriptor, expectedPlanDigest);
     if (!plan.ok) return { ok: false, reason: 'MANAGED_LIFECYCLE_PLAN_INVALID' };
     try { worktreeId = computeWorktreeId(projectRootDescriptor); } catch {
       return { ok: false, reason: 'MANAGED_LIFECYCLE_WORKTREE_INVALID' };

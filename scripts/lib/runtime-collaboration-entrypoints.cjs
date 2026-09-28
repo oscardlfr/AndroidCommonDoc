@@ -49,6 +49,7 @@ const TRUSTED_CONTEXTS = new WeakSet();
 const CONTEXT_STATE = new WeakMap();
 const PLAN_COMMAND_ARGS = new Map();
 const PLAN_SUPPORT_ROLES = new WeakMap();
+const PLAN_WAVE_SCOPES = new WeakMap();
 const HEX64 = '[0-9a-f]{64}';
 const REF_RE = Object.freeze({
   checkpoint: new RegExp(`^checkpoint:${HEX64}$`),
@@ -608,9 +609,8 @@ function ingestionCompletion(projectRoot, intent) {
 
 function supportRolesForIntent(entrypoint, intent, projectRoot) {
   if (!intent.wave_slug) return [...SUPPORT_ROLES];
-  const state = entrypoint === 'init-session'
-    ? waveControl.initialize(projectRoot, intent.wave_slug)
-    : waveControl.status(projectRoot, intent.wave_slug);
+  const state = waveControl.inspect(projectRoot, intent.wave_slug);
+  if (entrypoint !== 'init-session' && state.initialized === false) throw new TypeError('wave-control-state-missing');
   if (state.plan_current === false) throw new TypeError('wave-control-plan-drift');
   if (entrypoint === 'work' && state.phase !== 'EXECUTE') throw new TypeError('wave-control-work-outside-execute');
   // EXECUTE intentionally permits HEAD movement while specialists commit.  The
@@ -664,7 +664,21 @@ function planEntrypointStep(entrypoint, intent, projectRoot) {
   }
   const planned = Object.freeze({ command, argv_digest: argvDigest, role_scope: roleScope });
   PLAN_SUPPORT_ROLES.set(planned, supportRoles);
+  if (intent.wave_slug) {
+    const state = waveControl.inspect(projectRoot, intent.wave_slug);
+    PLAN_WAVE_SCOPES.set(planned, Object.freeze({
+      waveSlug: intent.wave_slug,
+      planDigest: state.plan_sha256,
+      worktreeId: lifecycleOwner.computeWorktreeId(projectRoot),
+      initializeAfterAdmission: entrypoint === 'init-session' && state.initialized === false,
+    }));
+  }
   return planned;
+}
+
+function plannedEntrypointWaveScope(plan) {
+  const scope = PLAN_WAVE_SCOPES.get(plan);
+  return scope ? { ...scope } : null;
 }
 
 function plannedEntrypointCommandArgument(plan) {
@@ -833,15 +847,22 @@ async function main(argv) {
     validateIntent(parsed.entrypoint, parsed.intent);
     const plan = planEntrypointStep(parsed.entrypoint, parsed.intent, parsed.projectRoot);
     if ((plan.command === null) !== (parsed.lifecycleBinding === null)) throw new TypeError('grant-shape-mismatch');
+    const waveScope = plannedEntrypointWaveScope(plan);
     const consumed = claudeHostOwner.consumeProductionHostComposition(parsed.projectRoot, parsed.hostComposition, {
       entrypoint: parsed.entrypoint,
       argvDigest: plan.argv_digest,
       roleScope: plan.role_scope,
+      planDigest: waveScope ? waveScope.planDigest : null,
+      worktreeId: waveScope ? waveScope.worktreeId : null,
     });
     let envelope;
     if (!consumed.ok) {
       envelope = makeEnvelope(parsed.entrypoint, 'UNAVAILABLE', 'host-composition-unavailable', null);
     } else {
+      if (waveScope && waveScope.initializeAfterAdmission) {
+        const initialized = waveControl.initialize(parsed.projectRoot, waveScope.waveSlug, waveScope.planDigest);
+        if (initialized.plan_sha256 !== waveScope.planDigest) throw new TypeError('wave-control-plan-drift');
+      }
       const context = createTrustedHostContext(
         createProductionPorts(parsed, plan, consumed.record),
         PLAN_SUPPORT_ROLES.get(plan) || SUPPORT_ROLES,
@@ -851,14 +872,19 @@ async function main(argv) {
     process.stdout.write(`${JSON.stringify(envelope)}\n`);
     process.exitCode = exitCode(envelope.status);
   } catch (error) {
-    const unavailable = error && error.message === 'grant-shape-mismatch';
-    const envelope = makeEnvelope('', unavailable ? 'UNAVAILABLE' : 'FAILED', unavailable ? 'host-composition-unavailable' : 'usage-invalid', null);
+    const code = error && typeof error.message === 'string' ? error.message : '';
+    const unavailable = code === 'grant-shape-mismatch';
+    const operational = /^(PHASE_STATE_|UNSAFE_CONTROL_PLANE_FILE|CONTROL_PLANE_FILE_DRIFT|wave-control-)/.test(code);
+    const detail = unavailable ? 'host-composition-unavailable'
+      : operational ? code.toLowerCase().replace(/_/g, '-') : 'usage-invalid';
+    const envelope = makeEnvelope('', unavailable ? 'UNAVAILABLE' : 'FAILED', detail, null);
     process.stdout.write(`${JSON.stringify(envelope)}\n`);
     process.exitCode = unavailable ? 6 : 2;
   }
 }
 
-module.exports = { ENTRYPOINTS, RESULT_STATUSES, executeEntrypoint, planEntrypointStep, plannedEntrypointCommandArgument };
+module.exports = { ENTRYPOINTS, RESULT_STATUSES, executeEntrypoint, planEntrypointStep,
+  plannedEntrypointCommandArgument, plannedEntrypointWaveScope };
 if (process.env.NODE_ENV === 'test'
     && process.env.RUNTIME_COLLABORATION_ENTRYPOINTS_TEST_CAPABILITY === 'p3-entrypoints-v1') {
   module.exports.__TEST_ONLY__createTrustedHostContext = createTrustedHostContext;

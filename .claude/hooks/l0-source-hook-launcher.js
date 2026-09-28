@@ -18,6 +18,7 @@ const ALLOWED_HOOKS = new Set([
   'context-provider-gate.js',
   'context-provider-write-gate.js',
   'premature-execution-gate.js',
+  'plan-md-write-gate.js',
   'push-authorization-gate.js',
   'runtime-consultation-target-gate.js',
   'runtime-host-boundary.js',

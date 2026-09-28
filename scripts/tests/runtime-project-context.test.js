@@ -18,7 +18,8 @@ const PIN = { schema: 'runtime-consumer/v1', enabled: true, consumer_layer: 'L2'
 const SOURCE_REFERENCED_HOOK_FILES = new Set([
   'agent-spawn-execution-gate.js', 'context-provider-gate.js',
   'bash-cli-spawn-gate.js',
-  'premature-execution-gate.js', 'runtime-consultation-target-gate.js',
+  'premature-execution-gate.js', 'plan-md-write-gate.js',
+  'runtime-consultation-target-gate.js',
   'runtime-host-boundary.js', 'runtime-host-session-start.js',
   'subagent-start-context-bundle.js',
 ]);

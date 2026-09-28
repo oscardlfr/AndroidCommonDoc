@@ -348,7 +348,7 @@ describe("mergeHookRegistrations()", () => {
     // retirement-trigger (the same subagent-start-context-bundle.js, ALSO
     // registered under SubagentStop) — see dispatch Section 6 and
     // m7-completeness-verdict-2026-08-09.md Block 4 point 1.
-    expect(result2.skipped).toHaveLength(14);
+    expect(result2.skipped).toHaveLength(15);
 
     // Verify no duplicates in any PreToolUse block
     const settings = await readSettings(fixtureDir);
@@ -395,7 +395,7 @@ describe("mergeHookRegistrations()", () => {
 
     const result = await mergeHookRegistrations(fixtureDir);
 
-    expect(result.added).toHaveLength(14);
+    expect(result.added).toHaveLength(15);
     expect(existsSync(join(fixtureDir, ".claude", "settings.json"))).toBe(true);
 
     const settings = await readSettings(fixtureDir);
@@ -409,7 +409,7 @@ describe("mergeHookRegistrations()", () => {
     const result = await mergeHookRegistrations(fixtureDir, true);
 
     expect(result.dryRun).toBe(true);
-    expect(result.added).toHaveLength(14);
+    expect(result.added).toHaveLength(15);
 
     // File must still be the empty object we wrote
     const settings = await readSettings(fixtureDir);
