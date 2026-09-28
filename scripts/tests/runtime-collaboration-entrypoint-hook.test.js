@@ -75,6 +75,7 @@ function baseEvent(command, cwd, sessionId) {
     session_id: sessionId || uniqueSessionId(),
     transcript_path: path.join(os.tmpdir(), 'r131-p4-no-persist-transcript-' + crypto.randomBytes(8).toString('hex') + '.jsonl'),
     cwd: cwd || REPO_ROOT,
+    effort: { level: 'high' },
     tool_input: { command },
   };
 }
@@ -101,6 +102,24 @@ function recordManagedSystemInit(sessionId) {
   const minted = mintIsolatedHostContractSession(REPO_ROOT, { rc: runtimeConsultation, runtimeHostClaude, event });
   hostContractFixtures.push(minted); // process-exit safety net, on top of each case's own deterministic finally cleanup.
   assert.strictEqual(minted.result.ok, true, 'managed system/init fixture must be admitted: ' + JSON.stringify(minted.result));
+  // mintIsolatedHostContractSession intentionally creates a detached HEAD
+  // worktree. Install the files under direct test so this subprocess suite
+  // exercises the working-tree implementation, not the pre-change baseline.
+  for (const relativePath of [
+    '.claude/hooks/context-provider-gate.js',
+    'scripts/lib/runtime-collaboration-entrypoints.cjs',
+    'scripts/lib/runtime-host-claude.cjs',
+    'scripts/lib/runtime-role-lifecycle/cli-rootsource-handlers.cjs',
+    'scripts/lib/runtime-role-lifecycle/ensure-handler.cjs',
+    'scripts/lib/runtime-role-lifecycle/lifecycle-argv.cjs',
+    'scripts/lib/runtime-role-lifecycle/managed-lifecycle-grant.cjs',
+    'scripts/lib/runtime-role-lifecycle/runtime-identity.cjs',
+    'scripts/lib/wave-control-plane.cjs',
+  ]) {
+    fs.copyFileSync(path.join(REPO_ROOT, relativePath), path.join(minted.worktreeRoot, relativePath));
+  }
+  assert.ok(runtimeHostClaude.getProductionSessionIdentity(minted.worktreeRoot, sessionId),
+    'managed system/init identity must remain verifiable after installing working-tree runtime files');
   return minted;
 }
 
@@ -264,6 +283,103 @@ function assertDenied(command, cwd, expectedReason, label) {
   }
 }
 
+// A human/model-visible init-session call must not require the caller to
+// discover Node/root paths or synthesize base64url. The hook owns those values
+// and rewrites the closed shorthand through the same canonical admission path.
+{
+  const sessionId = uniqueSessionId();
+  const minted = recordManagedSystemInit(sessionId);
+  try {
+    const ctx = buildWorktreeContext(minted.worktreeRoot);
+    const command = 'node .claude/runtime/l0-entrypoint-launcher.cjs init-session';
+    const result = runHookAt(baseEvent(command, ctx.worktreeRoot, sessionId), ctx.hookPath, ctx.worktreeRoot);
+    assert.strictEqual(result.status, 0, 'case-3e-init-session-dashboard-shorthand: hook exit code');
+    assert.notStrictEqual(result.stdout.trim(), '', 'case-3e-init-session-dashboard-shorthand: expected injection');
+    const parsed = runtimeRoleLifecycle.parsePosixDirect(extractRewrittenCommand(result.stdout));
+    assert.strictEqual(parsed[0], runtimeRoleLifecycle.resolvedNodePath(),
+      'case-3e-init-session-dashboard-shorthand: hook must resolve Node');
+    assert.strictEqual(parsed[1], ctx.canonicalEntrypointPath,
+      'case-3e-init-session-dashboard-shorthand: hook must resolve the installed runtime target');
+    assert.strictEqual(extractFlag(parsed, '--project-root'), ctx.worktreeRoot,
+      'case-3e-init-session-dashboard-shorthand: hook must derive the exact consumer root');
+    assert.deepStrictEqual(
+      JSON.parse(Buffer.from(extractFlag(parsed, '--intent'), 'base64url').toString('utf8')),
+      { mode: 'dashboard' },
+      'case-3e-init-session-dashboard-shorthand: hook must own the canonical dashboard intent',
+    );
+    assert.match(extractFlag(parsed, '--host-composition') || '', /^[0-9a-f]{32}$/,
+      'case-3e-init-session-dashboard-shorthand: host composition must be injected');
+    assert.match(extractFlag(parsed, '--lifecycle-binding') || '', /^[0-9a-f]{32}$/,
+      'case-3e-init-session-dashboard-shorthand: dashboard probe lifecycle binding must be injected');
+    console.log('PASS: case-3e-init-session-dashboard-shorthand');
+    passed += 1;
+  } finally {
+    minted.cleanup();
+  }
+}
+
+{
+  const sessionId = uniqueSessionId();
+  const minted = recordManagedSystemInit(sessionId);
+  try {
+    const ctx = buildWorktreeContext(minted.worktreeRoot);
+    const waveDir = fs.readdirSync(path.join(ctx.worktreeRoot, '.planning'))
+      .find((name) => name.startsWith('wave-'));
+    const slug = waveDir.slice('wave-'.length);
+    fs.symlinkSync(
+      path.join(REPO_ROOT, 'mcp-server', 'node_modules'),
+      path.join(ctx.worktreeRoot, 'mcp-server', 'node_modules'),
+      process.platform === 'win32' ? 'junction' : 'dir',
+    );
+    runtimeCollaborationEntrypoints.planEntrypointStep(
+      'init-session', { mode: 'start', wave_slug: slug }, ctx.worktreeRoot,
+    );
+    const command = 'node .claude/runtime/l0-entrypoint-launcher.cjs init-session --orchestrate ' + slug;
+    const result = runHookAt(baseEvent(command, ctx.worktreeRoot, sessionId), ctx.hookPath, ctx.worktreeRoot);
+    assert.strictEqual(result.status, 0, 'case-3f-init-session-orchestrate-shorthand: hook exit code');
+    assert.notStrictEqual(result.stdout.trim(), '', 'case-3f-init-session-orchestrate-shorthand: expected injection');
+    const response = JSON.parse(result.stdout);
+    assert.strictEqual(response.hookSpecificOutput.permissionDecision, 'allow',
+      'case-3f-init-session-orchestrate-shorthand: expected admission: ' + result.stdout);
+    const parsed = runtimeRoleLifecycle.parsePosixDirect(extractRewrittenCommand(result.stdout));
+    assert.deepStrictEqual(
+      JSON.parse(Buffer.from(extractFlag(parsed, '--intent'), 'base64url').toString('utf8')),
+      { mode: 'start', wave_slug: slug },
+      'case-3f-init-session-orchestrate-shorthand: hook must own the exact wave intent',
+    );
+    assert.match(extractFlag(parsed, '--host-composition') || '', /^[0-9a-f]{32}$/,
+      'case-3f-init-session-orchestrate-shorthand: host composition must be injected');
+    assert.match(extractFlag(parsed, '--lifecycle-binding') || '', /^[0-9a-f]{32}$/,
+      'case-3f-init-session-orchestrate-shorthand: lifecycle binding must be injected');
+    const execution = spawnSync(parsed[0], parsed.slice(1), {
+      cwd: ctx.worktreeRoot, encoding: 'utf8', env: process.env,
+    });
+    assert.ok([0, 4].includes(execution.status),
+      'case-3f-init-session-orchestrate-shorthand: rewritten entrypoint must execute: '
+        + execution.stderr + execution.stdout);
+    assert.match(JSON.parse(execution.stdout).status, /^(READY|ACTION_REQUIRED)$/,
+      'case-3f-init-session-orchestrate-shorthand: exact multi-wave lifecycle must not fail closed');
+    console.log('PASS: case-3f-init-session-orchestrate-shorthand');
+    passed += 1;
+  } finally {
+    minted.cleanup();
+  }
+}
+
+for (const [command, reason, label] of [
+  ['node .claude/runtime/l0-entrypoint-launcher.cjs init-session --orchestrate', /closed documented shape/,
+    'case-3g-shorthand-missing-slug'],
+  ['node .claude/runtime/l0-entrypoint-launcher.cjs init-session --orchestrate ../escape', /closed documented shape/,
+    'case-3h-shorthand-traversal-slug'],
+  ['node .claude/runtime/l0-entrypoint-launcher.cjs init-session --extra value', /closed documented shape/,
+    'case-3i-shorthand-extra-flag'],
+  ['node .claude/runtime/l0-entrypoint-launcher.cjs init-session; echo bypass', /closed documented shape/,
+    'case-3j-shorthand-shell-chain'],
+]) {
+  assertDenied(command, REPO_ROOT, reason, label);
+  passed += 1;
+}
+
 // Case 4: the exact relative token remains recognizable outside its owner cwd
 // and is denied fail-closed instead of falling through to ordinary approval.
 {
@@ -334,9 +450,9 @@ function assertDenied(command, cwd, expectedReason, label) {
   passed += 1;
 }
 
-assert.strictEqual(passed, 11);
+assert.strictEqual(passed, 17);
 
-// Case 9: the production SessionStart hook must stay silent and fail closed
+// Case 9: the production SessionStart hook must emit only a bounded reason and fail closed
 // when invoked from an ordinary test process whose ancestry contains no
 // executable matching the signed Claude host certificate.
 {
@@ -344,7 +460,7 @@ assert.strictEqual(passed, 11);
   const event = {
     hook_event_name: 'SessionStart', source: 'startup', session_id: sessionId,
     transcript_path: path.join(os.tmpdir(), 'r131-p4-no-persist-transcript-' + crypto.randomBytes(8).toString('hex') + '.jsonl'),
-    cwd: REPO_ROOT,
+    cwd: REPO_ROOT, model: 'claude-sonnet-5',
   };
   const result = spawnSync(process.execPath, [SESSION_START_HOOK_PATH], {
     input: JSON.stringify(event), encoding: 'utf8', cwd: REPO_ROOT,
@@ -352,13 +468,15 @@ assert.strictEqual(passed, 11);
     timeout: 25000,
   });
   assert.strictEqual(result.status, 0, 'case-9-unpinned-session-start: hook exit code');
-  assert.strictEqual(result.stdout.trim(), '', 'case-9-unpinned-session-start: hook must stay silent');
+  assert.strictEqual(result.stdout.trim(), '', 'case-9-unpinned-session-start: hook stdout must stay silent');
+  assert.match(result.stderr, /^\[runtime-host-session-start\] [A-Z0-9_]+\n$/,
+    'case-9-unpinned-session-start: stderr must expose only the bounded failure code');
   assert.strictEqual(runtimeHostClaude.getProductionSessionIdentity(REPO_ROOT, sessionId).ok, false,
     'case-9-unpinned-session-start: no interactive identity evidence may be minted');
   console.log('PASS: case-9-unpinned-session-start');
   passed += 1;
 }
 
-assert.strictEqual(passed, 12);
+assert.strictEqual(passed, 18);
 
-console.log('12/12 PASS');
+console.log('18/18 PASS');

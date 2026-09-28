@@ -38,6 +38,16 @@ async function createProjectRoot(dir: string): Promise<void> {
   await mkdir(join(dir, ".claude", "hooks"), { recursive: true });
 }
 
+async function legacyDetektHookBytes(filename: "detekt-pre-commit.sh" | "detekt-post-write.sh"): Promise<Buffer> {
+  const current = await readFile(join(REAL_L0_ROOT, ".claude", "hooks", filename));
+  const legacy = Buffer.from(current.toString("utf8").replace("INPUT=$(cat)\n", "INPUT=$(cat /dev/stdin)\n"));
+  const expected = filename === "detekt-pre-commit.sh"
+    ? "fd79f0f45adf279d9b0cd41240cb89e96786b3e1c994f68b138781d3e0d22312"
+    : "a263152549291c949e77a9f76dfdbeedcabec50c07a5f1cc3e5305ed331cc8d4";
+  expect(createHash("sha256").update(legacy).digest("hex")).toBe(expected);
+  return legacy;
+}
+
 describe("syncHooks", () => {
   let tmpDir: string;
   let l0Root: string;
@@ -162,6 +172,62 @@ describe("syncHooks", () => {
     expect(await readFile(destination, "utf8")).toBe("// hook: detekt-post-write.sh\n");
   });
 
+  it("upgrades only the exact historical Detekt hooks and repairs their executable mode", async () => {
+    await createProjectRoot(projectRoot);
+    for (const filename of ["detekt-pre-commit.sh", "detekt-post-write.sh"] as const) {
+      const destination = join(projectRoot, ".claude", "hooks", filename);
+      await writeFile(destination, await legacyDetektHookBytes(filename));
+      await chmod(destination, 0o644);
+    }
+
+    const result = await syncHooks(REAL_L0_ROOT, projectRoot);
+
+    expect(result.errors).toEqual([]);
+    expect(result.conflicts).toEqual([]);
+    for (const filename of ["detekt-pre-commit.sh", "detekt-post-write.sh"] as const) {
+      const destination = join(projectRoot, ".claude", "hooks", filename);
+      expect(await readFile(destination)).toEqual(await readFile(join(REAL_L0_ROOT, ".claude", "hooks", filename)));
+      if (process.platform !== "win32") expect((await stat(destination)).mode & 0o777).toBe(0o755);
+    }
+  });
+
+  it("does not partially migrate a known legacy hook when its sibling is customized", async () => {
+    await createProjectRoot(projectRoot);
+    const pre = join(projectRoot, ".claude", "hooks", "detekt-pre-commit.sh");
+    const post = join(projectRoot, ".claude", "hooks", "detekt-post-write.sh");
+    const legacyPre = await legacyDetektHookBytes("detekt-pre-commit.sh");
+    await writeFile(pre, legacyPre);
+    await writeFile(post, "consumer-owned\n", "utf8");
+    await chmod(pre, 0o644);
+    await chmod(post, 0o644);
+
+    const result = await syncHooks(REAL_L0_ROOT, projectRoot);
+
+    expect(result.conflicts).toContain("detekt-post-write.sh");
+    expect(await readFile(pre)).toEqual(legacyPre);
+    expect(await readFile(post, "utf8")).toBe("consumer-owned\n");
+    if (process.platform !== "win32") {
+      expect((await stat(pre)).mode & 0o777).toBe(0o644);
+      expect((await stat(post)).mode & 0o777).toBe(0o644);
+    }
+  });
+
+  it("does not authorize a historical Detekt digest on the wrong hook path", async () => {
+    await createProjectRoot(projectRoot);
+    const pre = join(projectRoot, ".claude", "hooks", "detekt-pre-commit.sh");
+    const post = join(projectRoot, ".claude", "hooks", "detekt-post-write.sh");
+    const legacyPre = await legacyDetektHookBytes("detekt-pre-commit.sh");
+    const legacyPost = await legacyDetektHookBytes("detekt-post-write.sh");
+    await writeFile(pre, legacyPost);
+    await writeFile(post, legacyPre);
+
+    const result = await syncHooks(REAL_L0_ROOT, projectRoot);
+
+    expect(result.conflicts).toEqual(expect.arrayContaining(["detekt-pre-commit.sh", "detekt-post-write.sh"]));
+    expect(await readFile(pre)).toEqual(legacyPost);
+    expect(await readFile(post)).toEqual(legacyPre);
+  });
+
   it("keeps every hook with an external relative dependency source-referenced", async () => {
     await createProjectRoot(projectRoot);
     const hookDir = join(REAL_L0_ROOT, ".claude", "hooks");
@@ -193,6 +259,78 @@ describe("source-referenced runtime installation", () => {
 
   afterEach(async () => {
     await rm(projectRoot, { recursive: true, force: true });
+  });
+
+  it("upgrades a checksum-less historical L1 hook install before runtime and stays idempotent", async () => {
+    await mkdir(join(projectRoot, ".claude", "hooks"), { recursive: true });
+    for (const filename of ["detekt-pre-commit.sh", "detekt-post-write.sh"] as const) {
+      const destination = join(projectRoot, ".claude", "hooks", filename);
+      await writeFile(destination, await legacyDetektHookBytes(filename));
+      await chmod(destination, 0o644);
+    }
+
+    const ordinary = await syncL0(projectRoot, REAL_L0_ROOT);
+    expect(ordinary.errors).toEqual([]);
+    const runtime = await installRuntimeConsumer(projectRoot, REAL_L0_ROOT);
+    expect(runtime.ok).toBe(true);
+    const manifestPath = join(projectRoot, "l0-manifest.json");
+    const stableManifest = await readFile(manifestPath, "utf8");
+
+    for (const filename of ["detekt-pre-commit.sh", "detekt-post-write.sh"] as const) {
+      const relative = `.claude/hooks/${filename}`;
+      const destination = join(projectRoot, relative);
+      const current = await readFile(join(REAL_L0_ROOT, relative));
+      expect(await readFile(destination)).toEqual(current);
+      const manifest = JSON.parse(stableManifest);
+      expect(manifest.checksums[relative]).toBe(`sha256:${createHash("sha256").update(current).digest("hex")}`);
+      if (process.platform !== "win32") expect((await stat(destination)).mode & 0o777).toBe(0o755);
+    }
+
+    expect((await syncL0(projectRoot, REAL_L0_ROOT)).errors).toEqual([]);
+    expect((await installRuntimeConsumer(projectRoot, REAL_L0_ROOT)).ok).toBe(true);
+    expect(await readFile(manifestPath, "utf8")).toBe(stableManifest);
+  });
+
+  it("direct runtime install claims both exact checksum-less historical Detekt hooks atomically", async () => {
+    await mkdir(join(projectRoot, ".claude", "hooks"), { recursive: true });
+    for (const filename of ["detekt-pre-commit.sh", "detekt-post-write.sh"] as const) {
+      const destination = join(projectRoot, ".claude", "hooks", filename);
+      await writeFile(destination, await legacyDetektHookBytes(filename));
+      await chmod(destination, 0o644);
+    }
+
+    const installed = await installRuntimeConsumer(projectRoot, REAL_L0_ROOT);
+
+    expect(installed.ok).toBe(true);
+    const manifest = JSON.parse(await readFile(join(projectRoot, "l0-manifest.json"), "utf8"));
+    for (const filename of ["detekt-pre-commit.sh", "detekt-post-write.sh"] as const) {
+      const relative = `.claude/hooks/${filename}`;
+      const current = await readFile(join(REAL_L0_ROOT, relative));
+      const destination = join(projectRoot, relative);
+      expect(await readFile(destination)).toEqual(current);
+      expect(manifest.checksums[relative]).toBe(
+        `sha256:${createHash("sha256").update(current).digest("hex")}`,
+      );
+      if (process.platform !== "win32") expect((await stat(destination)).mode & 0o777).toBe(0o755);
+    }
+  });
+
+  it("direct runtime install rejects cross-path historical Detekt bytes without partial writes", async () => {
+    await mkdir(join(projectRoot, ".claude", "hooks"), { recursive: true });
+    const pre = join(projectRoot, ".claude", "hooks", "detekt-pre-commit.sh");
+    const post = join(projectRoot, ".claude", "hooks", "detekt-post-write.sh");
+    const legacyPre = await legacyDetektHookBytes("detekt-pre-commit.sh");
+    const legacyPost = await legacyDetektHookBytes("detekt-post-write.sh");
+    await writeFile(pre, legacyPost);
+    await writeFile(post, legacyPre);
+
+    const installed = await installRuntimeConsumer(projectRoot, REAL_L0_ROOT);
+
+    expect(installed.ok).toBe(false);
+    expect(installed.reason).toBe("runtime-consumer-file-conflict:.claude/hooks/detekt-post-write.sh");
+    expect(await readFile(pre)).toEqual(legacyPost);
+    expect(await readFile(post)).toEqual(legacyPre);
+    await expect(readFile(join(projectRoot, ".claude", "settings.json"), "utf8")).rejects.toThrow();
   });
 
   it("preflights without writes, then installs exact roles and portable owned hook registrations idempotently", async () => {
@@ -532,7 +670,7 @@ describe("source-referenced runtime installation", () => {
 
       const first = spawnSync(process.execPath, args, { encoding: "utf8" });
       expect(first.status, first.stderr || first.stdout).toBe(0);
-      expect(first.stdout).toContain(`Required Claude launch: claude --add-dir ${JSON.stringify(REAL_L0_ROOT)}`);
+      expect(first.stdout).toContain(`Required Claude launch: claude --add-dir ${JSON.stringify(REAL_L0_ROOT)} --effort high`);
       expect(runtimeContext.verifyRuntimeConsumerInstallation(cliRoot, { verifyContent: true }).ok).toBe(true);
       const settingsBefore = await readFile(join(cliRoot, ".claude", "settings.json"), "utf8");
       const second = spawnSync(process.execPath, args, { encoding: "utf8" });

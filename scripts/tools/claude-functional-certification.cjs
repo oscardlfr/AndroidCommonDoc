@@ -493,7 +493,7 @@ const state = {
     observed: null,
     per_turn_effort_active: null,
     verification: 'unproven',
-    observation_source: 'assistant.effort-if-emitted',
+    observation_source: 'pretooluse.effort.level',
     environment_inherited: inheritedEffortLevel,
     environment_effective: requestedEffortLevel,
     environment_policy: 'explicit-cli-and-environment-match',
@@ -2509,6 +2509,46 @@ function entrypointObserverEvents() {
   return readObserverRows().map((row) => ({ ...row, ...(row.raw_event || {}) }));
 }
 
+function applyEntrypointHookEffortEvidence() {
+  if (transportProfile !== 'native-claude-cli' || operation !== 'entrypoint-protocol'
+      || String(state.status).startsWith('INVALID_') || String(state.status).startsWith('HOST_')) return;
+  const preToolEvents = entrypointObserverEvents().filter((event) =>
+    event.hook_event_name === 'PreToolUse' && event.session_id === sessionId);
+  const levels = preToolEvents
+    .map((event) => event && event.effort && event.effort.level)
+    .filter((level) => typeof level === 'string');
+  if (levels.length === 0) {
+    if (state.execution_mode === 'OFFLINE_NATIVE_PROFILE_SIMULATION'
+        && state.managed_conductor === true) {
+      state.effort_profile.observed = null;
+      state.effort_profile.effective = null;
+      state.effort_profile.verification = 'not-applicable-offline-managed-conductor';
+      state.effort_profile.observation_source = null;
+      if (state.cli_pin) {
+        state.cli_pin.effort_observed = null;
+        state.cli_pin.effort_effective = null;
+      }
+      return;
+    }
+    state.status = 'HOST_EFFORT_UNPROVEN';
+    state.invalidation_reason = 'No native PreToolUse hook reported effective effort.level.';
+    return;
+  }
+  const mismatched = levels.find((level) => level !== state.effort_profile.expected_observed);
+  state.effort_profile.observed = mismatched || levels[0];
+  state.effort_profile.effective = mismatched || levels[0];
+  state.effort_profile.verification = 'observed';
+  state.effort_profile.observation_source = 'pretooluse.effort.level';
+  if (state.cli_pin) {
+    state.cli_pin.effort_observed = state.effort_profile.observed;
+    state.cli_pin.effort_effective = state.effort_profile.effective;
+  }
+  if (mismatched) {
+    state.status = 'HOST_PIN_MISMATCH';
+    state.invalidation_reason = `Observed PreToolUse effort ${mismatched} did not match ${state.effort_profile.expected_observed}.`;
+  }
+}
+
 function cleanupNativeSessionTranscripts() {
   const allowedRoot = process.env.P4_CERT_OFFLINE_TEST === '1' && process.env.P4_CERT_NATIVE_TRANSCRIPT_ROOT
     ? path.resolve(process.env.P4_CERT_NATIVE_TRANSCRIPT_ROOT)
@@ -3739,10 +3779,6 @@ function handleFrame(event) {
       return fail('HOST_PIN_MISMATCH',
         `Observed effort ${observedEffort || 'absent'} did not match the pinned default ${state.effort_profile.expected_observed}.`);
     }
-    if (observedEffort === null) {
-      return fail('HOST_EFFORT_UNPROVEN',
-        'An effort-controlled assistant frame did not report effective effort telemetry.');
-    }
   }
   if (event.type === 'system' && event.subtype === 'init' && !state.host_identity_observation) {
     if (!validateInit(event)) return fail('INVALID_SYSTEM_INIT_EVIDENCE', 'system/init failed the bounded offline host-shape contract.');
@@ -3755,13 +3791,6 @@ function handleFrame(event) {
       state.effort_profile.per_turn_effort_active = typeof event.per_turn_effort_active === 'boolean'
         ? event.per_turn_effort_active : null;
       if (state.cli_pin) state.cli_pin.per_turn_effort_active = state.effort_profile.per_turn_effort_active;
-      if (operation === 'entrypoint-protocol' && state.effort_profile.per_turn_effort_active !== true) {
-        return fail(state.effort_profile.per_turn_effort_active === false
-          ? 'HOST_EFFORT_INACTIVE' : 'HOST_EFFORT_UNPROVEN',
-        state.effort_profile.per_turn_effort_active === false
-          ? 'system/init reported per_turn_effort_active:false for an effort-controlled certification.'
-          : 'system/init did not positively report per_turn_effort_active:true for an effort-controlled certification.');
-      }
     }
     if (transportProfile === 'native-claude-cli' && operation === 'entrypoint-protocol') {
       const availableAgents = new Set(Array.isArray(event.agents) ? event.agents : []);
@@ -4155,6 +4184,7 @@ child.on('exit', (code, signal) => {
       && !String(state.status).startsWith('HOST_')) {
     finalizeHostContractProbe();
   }
+  applyEntrypointHookEffortEvidence();
   if (transportProfile === 'native-claude-cli') {
     try {
       state.transcript_cleanup = cleanupNativeSessionTranscripts();

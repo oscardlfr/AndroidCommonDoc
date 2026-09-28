@@ -495,7 +495,8 @@ function findUniqueRootConsultIntent(projectRoot, question, route, worktreeId, p
 function planWorkStep(intent, projectRoot) {
   const route = workRoute(intent);
   if (!route) return { command: null, commandArg: null, roleScope: intent.role };
-  const plan = lifecycleOwner.discoverPlan(projectRoot);
+  const plan = lifecycleOwner.discoverPlan(projectRoot,
+    intent.wave_slug ? { waveSlug: intent.wave_slug, expectedDigest: null } : null);
   if (!plan.ok) return { command: null, commandArg: null, roleScope: route.requesterRole };
   const question = workQuestion(intent);
   const worktreeId = lifecycleOwner.computeWorktreeId(projectRoot);
@@ -632,15 +633,22 @@ function planEntrypointStep(entrypoint, intent, projectRoot) {
     if (intent.mode === 'start') {
       command = 'ensure';
       roleScope = [...supportRoles].sort();
-      argvDigest = crypto.createHash('sha256').update('ensure:' + roleScope.join(',')).digest('hex');
+      argvDigest = crypto.createHash('sha256').update('ensure:' + roleScope.join(',')
+        + (intent.wave_slug ? ':wave:' + intent.wave_slug : '')).digest('hex');
     } else {
-      command = 'status';
-      argvDigest = crypto.createHash('sha256').update('status:').digest('hex');
+      const dashboardPlan = lifecycleOwner.discoverPlan(projectRoot,
+        intent.wave_slug ? { waveSlug: intent.wave_slug, expectedDigest: null } : null);
+      if (dashboardPlan.ok) {
+        command = 'status';
+        argvDigest = crypto.createHash('sha256').update('status:'
+          + (intent.wave_slug ? ':wave:' + intent.wave_slug : '')).digest('hex');
+      }
     }
   } else if (entrypoint === 'resume-work') {
     command = 'ensure';
     roleScope = [...supportRoles].sort();
-    argvDigest = digestArgv('ensure', roleScope.join(',') + ':resume:' + intent.checkpoint_ref);
+    argvDigest = digestArgv('ensure', roleScope.join(',') + ':resume:' + intent.checkpoint_ref
+      + (intent.wave_slug ? ':wave:' + intent.wave_slug : ''));
   } else if (entrypoint === 'work') {
     const step = planWorkStep(intent, projectRoot);
     command = step.command;
@@ -648,7 +656,7 @@ function planEntrypointStep(entrypoint, intent, projectRoot) {
     roleScope = step.roleScope;
     argvDigest = command === null
       ? digestArgv(`entrypoint:${entrypoint}`, 'blocked')
-      : digestArgv(command, commandArg);
+      : digestArgv(command, commandArg + (intent.wave_slug ? ':wave:' + intent.wave_slug : ''));
   } else if (entrypoint === 'ingest-content' && intent.approval_ref !== '') {
     const resolved = resolveIngestionArtifacts(projectRoot, intent);
     if (resolved.ok && resolved.resultPath === null) {
@@ -742,6 +750,10 @@ function createProductionPorts(parsed, plan, admission) {
       args.push('--intent-id', commandArg);
     } else if (plan.command === 'notify') {
       args.push('--role', 'doc-updater', '--artifact', commandArg, '--kind', 'ingestion-request');
+    }
+    if (['ensure', 'status', 'root-source', 'root-source-status', 'consult-root', 'consult-root-status'].includes(plan.command)
+        && parsed.intent.wave_slug) {
+      args.push('--wave-slug', parsed.intent.wave_slug);
     }
     args.push('--lifecycle-binding', parsed.lifecycleBinding);
     const child = childProcess.spawnSync(process.execPath, args, { cwd: parsed.projectRoot, encoding: 'utf8' });
@@ -852,6 +864,7 @@ async function main(argv) {
       entrypoint: parsed.entrypoint,
       argvDigest: plan.argv_digest,
       roleScope: plan.role_scope,
+      waveSlug: waveScope ? waveScope.waveSlug : null,
       planDigest: waveScope ? waveScope.planDigest : null,
       worktreeId: waveScope ? waveScope.worktreeId : null,
     });

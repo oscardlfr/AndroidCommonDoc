@@ -105,6 +105,24 @@ const EXECUTABLE_CONSUMER_FILES = new Set<string>([
   ".claude/hooks/detekt-pre-commit.sh",
 ]);
 
+/**
+ * Exact checksum-less Detekt hook revisions distributed by the legacy L0
+ * installer. Ownership is deliberately scoped by destination path as well as
+ * content digest: a digest copied to the other hook path, or any locally
+ * edited bytes, remains consumer-owned and must fail closed.
+ */
+const LEGACY_DETEKT_HOOK_SHA256_BY_PATH: Readonly<Record<string, string>> = Object.freeze({
+  ".claude/hooks/detekt-pre-commit.sh":
+    "fd79f0f45adf279d9b0cd41240cb89e96786b3e1c994f68b138781d3e0d22312",
+  ".claude/hooks/detekt-post-write.sh":
+    "a263152549291c949e77a9f76dfdbeedcabec50c07a5f1cc3e5305ed331cc8d4",
+});
+
+function isKnownLegacyDetektHook(relativePath: string, content: string | Buffer): boolean {
+  const expected = LEGACY_DETEKT_HOOK_SHA256_BY_PATH[relativePath];
+  return expected !== undefined && createHash("sha256").update(content).digest("hex") === expected;
+}
+
 const L0_SOURCE_HOOK_LAUNCHER = "l0-source-hook-launcher.js";
 
 function portableSourceHookCommand(file: string): string {
@@ -1296,7 +1314,7 @@ export async function installRuntimeConsumer(
         }
         const recorded = manifest.checksums[relative];
         const existingDigest = `sha256:${createHash("sha256").update(existing).digest("hex")}`;
-        if (recorded !== existingDigest) {
+        if (recorded !== existingDigest && !isKnownLegacyDetektHook(relative, existing)) {
           return { ok: false, reason: `runtime-consumer-file-conflict:${relative}`, dryRun };
         }
       } catch (err) {
@@ -2672,6 +2690,53 @@ export async function syncHooks(
     return result;
   }
 
+  type ShellHookState = "missing" | "current" | "legacy" | "conflict" | "error";
+  interface ShellHookPlan {
+    source: string;
+    destination: string;
+    state: ShellHookState;
+  }
+  const shellPlans = new Map<string, ShellHookPlan>();
+
+  // Preflight both managed shell hooks before claiming either historical
+  // revision. This prevents a half-migration when one path is the exact legacy
+  // L0 asset but its sibling contains consumer-owned bytes.
+  for (const filename of entries) {
+    if (!filename.endsWith(".sh") || excludeSet.has(filename) || SOURCE_REFERENCED_HOOK_FILES.has(filename)) {
+      continue;
+    }
+    const source = path.join(l0HooksDir, filename);
+    const destination = path.join(destHooksDir, filename);
+    try {
+      const sourceBytes = await readFile(source);
+      let destinationBytes: Buffer | undefined;
+      try {
+        destinationBytes = await readFile(destination);
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+      }
+      let state: ShellHookState = "missing";
+      if (destinationBytes) {
+        const relative = `.claude/hooks/${filename}`;
+        state = sourceBytes.equals(destinationBytes)
+          ? "current"
+          : isKnownLegacyDetektHook(relative, destinationBytes) ? "legacy" : "conflict";
+      }
+      shellPlans.set(filename, { source, destination, state });
+      if (state === "conflict") {
+        result.conflicts.push(filename);
+        result.errors.push(`Conflict: ${filename} differs from the toolkit`);
+      }
+    } catch (err) {
+      shellPlans.set(filename, { source, destination, state: "error" });
+      result.errors.push(
+        `Failed to copy hook ${filename}: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+  }
+  const legacyMigrationBlocked = [...shellPlans.values()].some((plan) =>
+    plan.state === "conflict" || plan.state === "error");
+
   if (!dryRun) {
     await mkdir(destHooksDir, { recursive: true });
   }
@@ -2682,37 +2747,34 @@ export async function syncHooks(
       continue;
     }
     try {
-      const source = path.join(l0HooksDir, filename);
-      const destination = path.join(destHooksDir, filename);
       if (filename.endsWith(".sh")) {
-        const sourceBytes = await readFile(source);
-        let destinationBytes: Buffer | undefined;
-        try { destinationBytes = await readFile(destination); }
-        catch (error) {
-          if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
-        }
-        if (destinationBytes && !sourceBytes.equals(destinationBytes)) {
-          result.conflicts.push(filename);
-          result.errors.push(`Conflict: ${filename} differs from the toolkit`);
+        const plan = shellPlans.get(filename);
+        if (!plan || plan.state === "conflict" || plan.state === "error") {
           continue;
         }
-        if (!destinationBytes) {
+        if (plan.state === "legacy" && legacyMigrationBlocked) {
+          result.skipped.push(filename);
+          continue;
+        }
+        if (plan.state === "missing" || plan.state === "legacy") {
           result.copied.push(filename);
           if (!dryRun) {
-            await copyFile(source, destination);
-            await chmod(destination, 0o755);
+            await copyFile(plan.source, plan.destination);
+            await chmod(plan.destination, 0o755);
           }
           continue;
         }
-        const info = await lstat(destination);
+        const info = await lstat(plan.destination);
         if (process.platform !== "win32" && (info.mode & 0o777) !== 0o755) {
           result.repaired.push(filename);
-          if (!dryRun) await chmod(destination, 0o755);
+          if (!dryRun) await chmod(plan.destination, 0o755);
         } else {
           result.skipped.push(filename);
         }
         continue;
       }
+      const source = path.join(l0HooksDir, filename);
+      const destination = path.join(destHooksDir, filename);
       if (dryRun) {
         result.copied.push(filename);
         continue;

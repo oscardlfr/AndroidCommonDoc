@@ -240,6 +240,8 @@ test('CE-01 managed conductor waits for system/init and owns every protocol comm
   assert.equal(run.state.status, 'PROTOCOL_COMPLETED');
   assert.equal(run.state.managed_conductor, true);
   assert.equal(run.state.model_host_command_count, 0);
+  assert.equal(run.state.effort_profile.effective, null,
+    'an offline conductor-only fixture must not fabricate native effort evidence');
   const handshake = fs.readFileSync(path.join(run.evidenceRoot, 'sequence-0-input.jsonl'), 'utf8');
   assert.match(handshake, /Open this fresh no-persistence test conversation/);
   assert.match(handshake, /READY_FOR_FIRST_STEP/);
@@ -1152,7 +1154,7 @@ test('NATIVE-ENTRYPOINT runs entrypoint-protocol through the pinned native launc
     observed: 'high',
     per_turn_effort_active: true,
     verification: 'observed',
-    observation_source: 'assistant.effort-if-emitted',
+    observation_source: 'pretooluse.effort.level',
     environment_inherited: null,
     environment_effective: 'high',
     environment_policy: 'explicit-cli-and-environment-match',
@@ -2056,14 +2058,15 @@ test('CFC-T transport handles chunking and fails closed on malformed, foreign-se
   assert.equal(abnormal.state.writers_settled, true);
 });
 
-test('CFC-NT-01 a text-only Agent turn terminates cleanly without confirmation relay or accepted progress', async () => {
+test('CFC-NT-01 a text-only Agent turn cannot prove effective effort or accepted progress', async () => {
   const run = await runScenario('agent-no-tool-turn', {
     operation: 'entrypoint-protocol',
     transportProfile: 'native-claude-cli',
     nativeFixture: true,
   });
   assert.notEqual(run.code, 0);
-  assert.equal(run.state.status, 'MODEL_DECLINED_ACTION_SET');
+  assert.equal(run.state.status, 'HOST_EFFORT_UNPROVEN');
+  assert.match(run.state.invalidation_reason, /No native PreToolUse hook reported effective effort/);
   assert.equal(run.state.agent_call_count, 0);
   assert.equal(run.state.agent_calls_exact, false);
   assert.deepEqual(run.state.pending_action_ids, [
@@ -2120,14 +2123,17 @@ test('CFC-PIN fails an effort-controlled entrypoint certification when effort te
   assert.equal(run.state.effort_profile.verification, 'unproven');
 });
 
-test('CFC-PIN fails an effort-controlled entrypoint certification when init reports effort inactive', async () => {
+test('CFC-PIN treats init effort flag as diagnostic when PreToolUse proves effective effort', async () => {
   const run = await runScenario('effort-inactive', {
     operation: 'entrypoint-protocol', transportProfile: 'native-claude-cli', nativeFixture: true,
   });
-  assert.notEqual(run.code, 0);
-  assert.equal(run.state.status, 'HOST_EFFORT_INACTIVE');
+  assert.equal(run.code, 0, run.stderr);
+  assert.equal(run.state.status, 'PROTOCOL_COMPLETED');
   assert.equal(run.state.effort_profile.per_turn_effort_active, false);
-  assert.equal(run.state.effort_profile.effective, null);
+  assert.equal(run.state.effort_profile.effective, 'high');
+  assert.equal(run.state.effort_profile.observed, 'high');
+  assert.equal(run.state.effort_profile.verification, 'observed');
+  assert.equal(run.state.effort_profile.observation_source, 'pretooluse.effort.level');
 });
 
 test('CFC-PIN rejects a conflicting inherited effort authority before Claude starts', async () => {

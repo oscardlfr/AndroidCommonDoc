@@ -24,11 +24,13 @@ function handleRootSource(rawArgv) {
   if (!parsed.ok || !path.isAbsolute(parsed.values['--project-root'])) { usageError('root-source'); return; }
   const projectRoot = parsed.values['--project-root'];
   const encodedIntent = parsed.values['--intent'];
+  const waveSlug = parsed.values['--wave-slug'];
   const decoded = decodeRootSourceIntent(encodedIntent);
   if (!decoded.ok) { invalidError('root-source', 'POLICY_INVALID'); return; }
   const context = s16ResolveMainContext(
-    projectRoot, parsed.values['--lifecycle-binding'], sha256String('root-source:' + encodedIntent),
-    'toolkit-specialist', 'root-source', null, true,
+    projectRoot, parsed.values['--lifecycle-binding'], sha256String('root-source:' + encodedIntent
+      + (waveSlug === undefined ? '' : ':wave:' + waveSlug)),
+    'toolkit-specialist', 'root-source', null, true, waveSlug === undefined ? null : waveSlug,
   );
   if (!context.ok) { invalidError('root-source', 'IDENTITY_MISMATCH'); return; }
   // Validate one live reporting architect before any materialization. P4's
@@ -148,14 +150,16 @@ function handleRootSourceStatus(rawArgv) {
   if (!parsed.ok || !path.isAbsolute(parsed.values['--project-root'])) { usageError('root-source-status'); return; }
   const projectRoot = parsed.values['--project-root'];
   const actionId = parsed.values['--action'];
+  const waveSlug = parsed.values['--wave-slug'];
   const actionRead = readRegistryRecord(actionPathFor(projectRoot, actionId));
   if (!actionRead.ok || actionRead.absent || !actionRead.obj || actionRead.obj.kind !== 'root-source-spawn') { invalidError('root-source-status', 'IDENTITY_MISMATCH'); return; }
   const action = actionRead.obj;
   const actionValid = validateRootSourceAction(action);
   if (!actionValid.ok) { invalidError('root-source-status', 'IDENTITY_MISMATCH'); return; }
   const context = s16ResolveMainContext(
-    projectRoot, parsed.values['--lifecycle-binding'], sha256String('root-source-status:' + actionId),
-    'toolkit-specialist', 'root-source-status', actionId, false,
+    projectRoot, parsed.values['--lifecycle-binding'], sha256String('root-source-status:' + actionId
+      + (waveSlug === undefined ? '' : ':wave:' + waveSlug)),
+    'toolkit-specialist', 'root-source-status', actionId, false, waveSlug === undefined ? null : waveSlug,
   );
   // M7 section 9 (defect 8): a read-only root-source-status invocation
   // deliberately does NOT require action.session_generation_id to equal the
@@ -202,8 +206,8 @@ function handleRootSourceStatus(rawArgv) {
   // EXACTLY ONCE -- its own fd-bound terminalState/ref/digest fields drive
   // the whole projection directly; the legacy retirement marker is never
   // consulted (section 4.4/6: non-authoritative whether or not it exists).
-  const waveSlug = path.basename(path.dirname(context.plan.planPath)).replace(/^wave-/, '');
-  const planRoot = path.join(context.coordRoot, context.repoId, waveSlug, context.plan.planDigest);
+  const selectedWaveSlug = path.basename(path.dirname(context.plan.planPath)).replace(/^wave-/, '');
+  const planRoot = path.join(context.coordRoot, context.repoId, selectedWaveSlug, context.plan.planDigest);
   const api = s16ConsultationApi();
   let terminal;
   try {
@@ -337,6 +341,7 @@ function handleStatus(rawArgv) {
     return;
   }
   const role = parsed.values['--role'];
+  const waveSlug = parsed.values['--wave-slug'];
   if (role !== undefined && !CANONICAL_ROLES.includes(role)) {
     invalidError('status', 'NONE');
     return;
@@ -357,14 +362,17 @@ function handleStatus(rawArgv) {
     invalidError('status', 'IDENTITY_MISMATCH');
     return;
   }
-  const argvDigest = sha256String('status:' + (role === undefined ? '' : role));
+  const argvDigest = sha256String('status:' + (role === undefined ? '' : role)
+    + (waveSlug === undefined ? '' : ':wave:' + waveSlug));
   const consumeResult = validateAndConsumeLifecycleCommandGrant(projectRoot, lifecycleBindingRef, argvDigest, role === undefined ? null : role, 'status');
   if (!consumeResult.ok) {
     invalidError('status', 'IDENTITY_MISMATCH');
     return;
   }
   const binding = consumeResult.binding;
-  const planResult = discoverPlan(projectRoot);
+  const planResult = waveSlug === undefined
+    ? discoverPlan(projectRoot)
+    : discoverPlan(projectRoot, { waveSlug, expectedDigest: binding.plan_digest });
   if (!planResult.ok) {
     invalidError('status', 'POLICY_INVALID');
     return;

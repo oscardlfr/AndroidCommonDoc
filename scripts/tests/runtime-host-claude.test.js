@@ -916,7 +916,8 @@ function mintProductionAdmission(overrides) {
   assert.match(sessionEvidence.record.host_contract_digest, DIGEST_RE);
   const base = {
     projectRoot,
-    event: { hook_event_name: 'PreToolUse', tool_name: 'Bash', session_id: sessionId },
+    event: { hook_event_name: 'PreToolUse', tool_name: 'Bash', session_id: sessionId,
+      effort: { level: 'high' } },
     entrypoint: 'monitor-docs',
     argvDigest: sha256hex('entrypoint:monitor-docs:readonly'),
     roleScope: null,
@@ -931,7 +932,7 @@ test('R131-HOST-PRODUCTION-SIGNED-ADMISSION-POSITIVE-31: signed production admis
   const minted = mintProductionAdmission();
   assert.strictEqual(minted.ok, true);
   assert.match(minted.compositionId, /^[0-9a-f]{32}$/);
-  assert.strictEqual(minted.record.schema, 'runtime/claude-host-composition/v2');
+  assert.strictEqual(minted.record.schema, 'runtime/claude-host-composition/v3');
   assert.strictEqual(minted.record.requested_profile_name, 'balanced');
   assert.match(minted.record.requested_profile_digest, DIGEST_RE);
   assert.strictEqual(minted.record.actual_model, 'claude-sonnet-5');
@@ -1045,7 +1046,7 @@ test('HC-CE managed ingest denial needs host composition but no lifecycle grant'
   });
 });
 
-test('P1-MODEL-32: actual model is an observed bounded literal distinct from the requested profile alias', () => {
+test('P1-MODEL-32: observed model must belong to the requested profile family', () => {
   const mod = requireHostClaude();
   const fixture = sessionHostFixture();
   const projectRoot = fixture.projectRoot;
@@ -1055,7 +1056,7 @@ test('P1-MODEL-32: actual model is an observed bounded literal distinct from the
     event: { hook_event_name: 'SessionStart', source: 'startup', session_id: sessionId, model: 'claude-haiku-4-5', cwd: projectRoot },
     hostPin: sessionHostPin(fixture),
   }).ok, false);
-  const observed = mod.recordProductionSessionIdentity({
+  const mismatched = mod.recordProductionSessionIdentity({
     projectRoot,
     event: {
       type: 'system', subtype: 'init', session_id: sessionId,
@@ -1064,8 +1065,19 @@ test('P1-MODEL-32: actual model is an observed bounded literal distinct from the
     },
     hostPin: sessionHostPin(fixture),
   });
+  assert.strictEqual(mismatched.ok, false);
+  assert.strictEqual(mismatched.reason, 'HOST_MODEL_PROFILE_MISMATCH');
+  const observed = mod.recordProductionSessionIdentity({
+    projectRoot,
+    event: {
+      type: 'system', subtype: 'init', session_id: sessionId,
+      model: 'claude-sonnet-5', cwd: projectRoot,
+      tools: ['Task', 'Bash', 'SendMessage', 'Read'], mcp_servers: [{ name: 'docs' }],
+    },
+    hostPin: sessionHostPin(fixture),
+  });
   assert.strictEqual(observed.ok, true);
-  assert.strictEqual(observed.record.actual_model, 'claude-fable-5-1');
+  assert.strictEqual(observed.record.actual_model, 'claude-sonnet-5');
   assert.strictEqual(observed.record.requested_profile_name, 'balanced');
   assert.notStrictEqual(observed.record.actual_model, 'sonnet');
   const base = {
@@ -1073,13 +1085,226 @@ test('P1-MODEL-32: actual model is an observed bounded literal distinct from the
     entrypoint: 'monitor-docs', argvDigest: sha256hex('entrypoint:monitor-docs:readonly'), roleScope: null,
   };
   const minted = mod.mintProductionHostComposition(Object.assign({}, base, {
-    event: { hook_event_name: 'PreToolUse', tool_name: 'Bash', session_id: sessionId, model: 'forged-model-is-ignored' },
+    event: { hook_event_name: 'PreToolUse', tool_name: 'Bash', session_id: sessionId,
+      model: 'forged-model-is-ignored', effort: { level: 'high' } },
   }));
   assert.strictEqual(minted.ok, true);
-  assert.strictEqual(minted.record.actual_model, 'claude-fable-5-1');
+  assert.strictEqual(minted.record.actual_model, 'claude-sonnet-5');
   assert.strictEqual(mod.mintProductionHostComposition(Object.assign({}, base, {
     event: { hook_event_name: 'PreToolUse', tool_name: 'Bash' },
   })).ok, false);
+});
+
+test('interactive SessionStart model plus same live host ancestry mints one exact wave composition', () => {
+  const mod = requireHostClaude();
+  const fixture = writeHostContractFixture('interactive-session');
+  try {
+    const published = mod.publishClaudeHostContractPackage({
+      projectRoot: fixture.projectRoot, qualificationPath: fixture.qualificationPath,
+      evidenceRoot: fixture.evidenceRoot, observerPath: fixture.observerPath,
+    });
+    assert.strictEqual(published.ok, true, JSON.stringify(published));
+    const sessionId = 'interactive-session-id';
+    const toolUseId = 'toolu_interactive_entrypoint';
+    const transcriptPath = path.join(fixture.projectRoot, 'session.jsonl');
+    const liveObservation = {
+      ok: true, observationSource: mod.__TEST_ONLY__pinObservationSourceFor(process.platform),
+      processId: process.pid, processBirth: new Date().toISOString(), executablePath: fixture.executablePath,
+      executableDigest: sha256bytes(fs.readFileSync(fixture.executablePath)), cliVersion: '2.1.283', cliFamily: '2.1',
+      pinDigest: published.pinDigest, hostContractDigest: published.hostContractDigest,
+    };
+    const recorded = withCapabilityEnv(() => mod.recordInteractiveSessionPin({
+      projectRoot: fixture.projectRoot,
+      event: { hook_event_name: 'SessionStart', session_id: sessionId, cwd: fixture.projectRoot,
+        transcript_path: transcriptPath, model: 'claude-sonnet-5' },
+      __testObserved: liveObservation,
+    }));
+    assert.strictEqual(recorded.ok, true, JSON.stringify(recorded));
+    assert.strictEqual(fs.existsSync(transcriptPath), false,
+      'SessionStart must bind a canonical transcript leaf before Claude creates it');
+    fs.writeFileSync(transcriptPath, '');
+    const plan = rll.discoverPlan(fixture.projectRoot, { waveSlug: 'host-package', expectedDigest: null });
+    const options = {
+      projectRoot: fixture.projectRoot,
+      event: { hook_event_name: 'PreToolUse', tool_name: 'Bash', session_id: sessionId,
+        tool_use_id: toolUseId, transcript_path: transcriptPath, cwd: fixture.projectRoot,
+        effort: { level: 'high' }, tool_input: { command: 'node launcher init-session' } },
+      entrypoint: 'init-session', argvDigest: sha256hex('interactive argv'), roleScope: ['context-provider'],
+      waveSlug: 'host-package', planDigest: plan.planDigest, worktreeId: rll.computeWorktreeId(fixture.projectRoot),
+      __testObserved: liveObservation,
+    };
+    assert.strictEqual(withCapabilityEnv(() => mod.mintProductionHostComposition({ ...options,
+      __testObserved: { ...liveObservation, processId: process.pid + 1 } })).ok, false);
+    assert.strictEqual(withCapabilityEnv(() => mod.mintProductionHostComposition({
+      ...options, waveSlug: 'missing-wave',
+    })).ok, false);
+    assert.strictEqual(withCapabilityEnv(() => mod.mintProductionHostComposition({ ...options,
+      event: { ...options.event, effort: { level: 'low' } },
+    })).ok, false);
+    assert.strictEqual(withCapabilityEnv(() => mod.mintProductionHostComposition({ ...options,
+      event: { ...options.event, effort: undefined },
+    })).ok, false);
+    const minted = withCapabilityEnv(() => mod.mintProductionHostComposition(options));
+    assert.strictEqual(minted.ok, true, JSON.stringify(minted));
+    assert.strictEqual(minted.record.actual_model, 'claude-sonnet-5');
+    assert.strictEqual(minted.record.wave_slug, 'host-package');
+    const expected = { entrypoint: options.entrypoint, argvDigest: options.argvDigest, roleScope: options.roleScope,
+      waveSlug: options.waveSlug, planDigest: options.planDigest, worktreeId: options.worktreeId };
+    assert.strictEqual(mod.consumeProductionHostComposition(fixture.projectRoot, minted.compositionId, expected).ok, true);
+    assert.strictEqual(mod.consumeProductionHostComposition(fixture.projectRoot, minted.compositionId, expected).ok, false);
+  } finally { cleanupHostContractFixture(fixture); }
+});
+
+test('planless init-session dashboard mints and consumes a read-only host composition', () => {
+  const mod = requireHostClaude();
+  const entrypoints = require('../lib/runtime-collaboration-entrypoints.cjs');
+  const fixture = writeHostContractFixture('interactive-planless-dashboard');
+  try {
+    const published = mod.publishClaudeHostContractPackage({
+      projectRoot: fixture.projectRoot, qualificationPath: fixture.qualificationPath,
+      evidenceRoot: fixture.evidenceRoot, observerPath: fixture.observerPath,
+    });
+    assert.strictEqual(published.ok, true, JSON.stringify(published));
+    const sessionId = 'interactive-planless-dashboard';
+    const transcriptPath = path.join(fixture.projectRoot, 'future-transcripts', 'nested', 'planless-dashboard.jsonl');
+    const observed = {
+      ok: true, observationSource: mod.__TEST_ONLY__pinObservationSourceFor(process.platform),
+      processId: process.pid, processBirth: new Date().toISOString(), executablePath: fixture.executablePath,
+      executableDigest: sha256bytes(fs.readFileSync(fixture.executablePath)), cliVersion: '2.1.283', cliFamily: '2.1',
+      pinDigest: published.pinDigest, hostContractDigest: published.hostContractDigest,
+    };
+    const symlinkTarget = path.join(fixture.projectRoot, 'symlink-target');
+    const symlinkParent = path.join(fixture.projectRoot, 'symlinked-transcripts');
+    fs.mkdirSync(symlinkTarget);
+    fs.symlinkSync(symlinkTarget, symlinkParent, process.platform === 'win32' ? 'junction' : 'dir');
+    assert.strictEqual(withCapabilityEnv(() => mod.recordInteractiveSessionPin({
+      projectRoot: fixture.projectRoot,
+      event: { hook_event_name: 'SessionStart', session_id: sessionId, cwd: fixture.projectRoot,
+        transcript_path: path.join(symlinkParent, 'rejected.jsonl'), model: 'claude-sonnet-5' },
+      __testObserved: observed,
+    })).reason, 'HOST_TRANSCRIPT_UNPROVEN');
+    const recorded = withCapabilityEnv(() => mod.recordInteractiveSessionPin({
+      projectRoot: fixture.projectRoot,
+      event: { hook_event_name: 'SessionStart', session_id: sessionId, cwd: fixture.projectRoot,
+        transcript_path: transcriptPath, model: 'claude-sonnet-5' },
+      __testObserved: observed,
+    }));
+    assert.strictEqual(recorded.ok, true, JSON.stringify(recorded));
+    fs.mkdirSync(path.dirname(transcriptPath), { recursive: true });
+    fs.writeFileSync(transcriptPath, '');
+    fs.rmSync(path.join(fixture.projectRoot, '.planning'), { recursive: true, force: true });
+    const plan = entrypoints.planEntrypointStep('init-session', { mode: 'dashboard' }, fixture.projectRoot);
+    assert.strictEqual(plan.command, null);
+    assert.strictEqual(plan.role_scope, null);
+    const options = {
+      projectRoot: fixture.projectRoot,
+      event: { hook_event_name: 'PreToolUse', tool_name: 'Bash', session_id: sessionId,
+        tool_use_id: 'toolu_planless_dashboard', transcript_path: transcriptPath, cwd: fixture.projectRoot,
+        effort: { level: 'high' }, tool_input: { command: 'node launcher init-session' } },
+      entrypoint: 'init-session', argvDigest: plan.argv_digest, roleScope: plan.role_scope,
+      waveSlug: null, planDigest: null, worktreeId: rll.computeWorktreeId(fixture.projectRoot),
+      __testObserved: observed,
+    };
+    const minted = withCapabilityEnv(() => mod.mintProductionHostComposition(options));
+    assert.strictEqual(minted.ok, true, JSON.stringify(minted));
+    assert.strictEqual(minted.record.plan_digest, null);
+    assert.strictEqual(mod.findCurrentProductionAdmission(fixture.projectRoot), null,
+      'a planless read-only composition must not become lifecycle admission');
+    const expected = { entrypoint: options.entrypoint, argvDigest: options.argvDigest,
+      roleScope: options.roleScope, waveSlug: null, planDigest: null, worktreeId: options.worktreeId };
+    assert.strictEqual(mod.consumeProductionHostComposition(fixture.projectRoot, minted.compositionId, expected).ok, true);
+  } finally { cleanupHostContractFixture(fixture); }
+});
+
+test('missing SessionStart model is finalized from the exact post-hook transcript tool use', () => {
+  const mod = requireHostClaude();
+  const fixture = writeHostContractFixture('interactive-model-finalization');
+  try {
+    const published = mod.publishClaudeHostContractPackage({
+      projectRoot: fixture.projectRoot, qualificationPath: fixture.qualificationPath,
+      evidenceRoot: fixture.evidenceRoot, observerPath: fixture.observerPath,
+    });
+    assert.strictEqual(published.ok, true, JSON.stringify(published));
+    const sessionId = 'interactive-pending-model';
+    const toolUseId = 'toolu_pending_model';
+    const transcriptPath = path.join(fixture.projectRoot, 'pending-model.jsonl');
+    const observed = {
+      ok: true, observationSource: mod.__TEST_ONLY__pinObservationSourceFor(process.platform),
+      processId: process.pid, processBirth: new Date().toISOString(), executablePath: fixture.executablePath,
+      executableDigest: sha256bytes(fs.readFileSync(fixture.executablePath)), cliVersion: '2.1.283', cliFamily: '2.1',
+      pinDigest: published.pinDigest, hostContractDigest: published.hostContractDigest,
+    };
+    const recorded = withCapabilityEnv(() => mod.recordInteractiveSessionPin({
+      projectRoot: fixture.projectRoot,
+      event: { hook_event_name: 'SessionStart', session_id: sessionId, cwd: fixture.projectRoot,
+        transcript_path: transcriptPath },
+      __testObserved: observed,
+    }));
+    assert.strictEqual(recorded.ok, true, JSON.stringify(recorded));
+    assert.strictEqual(recorded.record.actual_model, null);
+    fs.writeFileSync(transcriptPath, '');
+    const plan = rll.discoverPlan(fixture.projectRoot, { waveSlug: 'host-package', expectedDigest: null });
+    const toolInput = { command: 'node launcher init-session', description: 'exact pending input' };
+    const options = {
+      projectRoot: fixture.projectRoot,
+      event: { hook_event_name: 'PreToolUse', tool_name: 'Bash', session_id: sessionId,
+        tool_use_id: toolUseId, transcript_path: transcriptPath, cwd: fixture.projectRoot,
+        effort: { level: 'high' }, tool_input: toolInput },
+      entrypoint: 'init-session', argvDigest: sha256hex('pending model argv'), roleScope: ['context-provider'],
+      waveSlug: 'host-package', planDigest: plan.planDigest, worktreeId: rll.computeWorktreeId(fixture.projectRoot),
+      __testObserved: observed,
+    };
+    const minted = withCapabilityEnv(() => mod.mintProductionHostComposition(options));
+    assert.strictEqual(minted.ok, true, JSON.stringify(minted));
+    assert.strictEqual(minted.record.actual_model, null);
+    assert.strictEqual(minted.record.model_evidence_state, 'pending-transcript-tool-use');
+    const transcript = (model) => JSON.stringify({
+      type: 'assistant', sessionId, version: '2.1.283', cwd: fixture.projectRoot,
+      message: { model, content: [{ type: 'tool_use', id: toolUseId, name: 'Bash', input: toolInput }] },
+    }) + '\n';
+    const expected = { entrypoint: options.entrypoint, argvDigest: options.argvDigest, roleScope: options.roleScope,
+      waveSlug: options.waveSlug, planDigest: options.planDigest, worktreeId: options.worktreeId };
+    fs.writeFileSync(transcriptPath, transcript('claude-opus-5'));
+    assert.strictEqual(mod.consumeProductionHostComposition(fixture.projectRoot, minted.compositionId, expected).ok, false);
+    fs.writeFileSync(transcriptPath, transcript('claude-sonnet-5'));
+    const consumed = mod.consumeProductionHostComposition(fixture.projectRoot, minted.compositionId, expected);
+    assert.strictEqual(consumed.ok, true, JSON.stringify(consumed));
+    assert.strictEqual(consumed.record.actual_model, 'claude-sonnet-5');
+    assert.strictEqual(consumed.record.model_evidence_state, 'transcript-finalized');
+  } finally { cleanupHostContractFixture(fixture); }
+});
+
+test('interactive PreToolUse cannot self-assert a SessionStart model pin', () => {
+  const mod = requireHostClaude();
+  const fixture = writeHostContractFixture('interactive-pretool-pin');
+  try {
+    const published = mod.publishClaudeHostContractPackage({
+      projectRoot: fixture.projectRoot, qualificationPath: fixture.qualificationPath,
+      evidenceRoot: fixture.evidenceRoot, observerPath: fixture.observerPath,
+    });
+    assert.strictEqual(published.ok, true, JSON.stringify(published));
+    const sessionId = 'interactive-pretool-session';
+    const transcriptPath = path.join(fixture.projectRoot, 'pretool-session.jsonl');
+    fs.writeFileSync(transcriptPath, '{}\n');
+    const options = {
+      projectRoot: fixture.projectRoot,
+      event: {
+        hook_event_name: 'PreToolUse', tool_name: 'Bash', session_id: sessionId,
+        cwd: fixture.projectRoot, transcript_path: transcriptPath,
+      },
+      __testObserved: {
+        ok: true, observationSource: mod.__TEST_ONLY__pinObservationSourceFor(process.platform),
+        processId: process.pid, processBirth: new Date().toISOString(), executablePath: fixture.executablePath,
+        executableDigest: sha256bytes(fs.readFileSync(fixture.executablePath)), cliVersion: '2.1.283', cliFamily: '2.1',
+        pinDigest: published.pinDigest, hostContractDigest: published.hostContractDigest,
+      },
+    };
+    const recorded = withCapabilityEnv(() => mod.recordInteractiveSessionPin(options));
+    assert.strictEqual(recorded.ok, false, JSON.stringify(recorded));
+    assert.strictEqual(withCapabilityEnv(() => mod.recordInteractiveSessionPin({
+      ...options, event: { ...options.event, hook_event_name: 'PostToolUse' },
+    })).ok, false);
+  } finally { cleanupHostContractFixture(fixture); }
 });
 
 test('P1-CAPABILITIES-33: system/init requires a typed subset while permitting extra tools and MCP', () => {
@@ -1112,7 +1337,7 @@ test('P1-DRIFT-34: same-session model drift is stale rather than silently reusin
     tools: ['Agent', 'Bash', 'SendMessage'], mcp_servers: [],
   });
   assert.strictEqual(mod.recordProductionSessionIdentity({ projectRoot, event: event('claude-sonnet-5'), hostPin: sessionHostPin(fixture) }).ok, true);
-  const drift = mod.recordProductionSessionIdentity({ projectRoot, event: event('claude-fable-5-1'), hostPin: sessionHostPin(fixture) });
+  const drift = mod.recordProductionSessionIdentity({ projectRoot, event: event('claude-sonnet-5-202609'), hostPin: sessionHostPin(fixture) });
   assert.strictEqual(drift.ok, false);
   assert.strictEqual(drift.reason, 'STALE_OBSERVATION');
 });
@@ -1416,7 +1641,7 @@ test('P1-HOST-CERT-PUBLISH RED: independently verified retained observations pro
   }
 });
 
-test('P1-HOST-CERT-VERIFY RED: fixed package verifies across fresh registries and rejects evidence, signature, anchor, binary, observer, version, OS and transport drift', () => {
+test('P1-HOST-CERT-VERIFY: package certifies protocol family while process authenticity remains live evidence', () => {
   const mod = requireHostClaude();
   const fixture = writeHostContractFixture('verify');
   const consumers = [];
@@ -1445,15 +1670,18 @@ test('P1-HOST-CERT-VERIFY RED: fixed package verifies across fresh registries an
       transportProfile: 'native-claude-cli', os: process.platform,
     };
     for (const [label, mutateOptions] of [
-      ['binary', (o) => { o.executablePath = fixture.observerPath; }],
       ['observer', (o) => { o.observerPath = fixture.executablePath; }],
-      ['version', (o) => { o.cliVersion = '2.1.262'; }],
+      ['unsupported-family', (o) => { o.cliVersion = '2.2.0'; }],
       ['os', (o) => { o.os = 'foreign-os'; }],
       ['transport', (o) => { o.transportProfile = 'foreign-transport'; }],
     ]) {
       const options = Object.assign({}, baseOptions);
       mutateOptions(options);
       assert.strictEqual(mod.verifyClaudeHostContractPackage(fixture.projectRoot, options).ok, false, label);
+    }
+    for (const patchVersion of ['2.1.273', '2.1.283', '2.1.999']) {
+      const options = { ...baseOptions, executablePath: fixture.observerPath, cliVersion: patchVersion };
+      assert.strictEqual(mod.verifyClaudeHostContractPackage(fixture.projectRoot, options).ok, true, patchVersion);
     }
     const original = fs.readFileSync(published.packagePath);
     for (const mutate of [
@@ -2090,13 +2318,10 @@ const PIN_OBSERVATION_NOT_DARWIN = process.platform !== 'darwin'
   ? 'darwin-only: this case asserts the darwin ps/bare-image-name shape'
   : false;
 
-test('MACOS-PIN-03 a PATH-launched ancestor reports a bare name and stays unprovable', { skip: PIN_OBSERVATION_NOT_DARWIN }, () => {
-  // The hazard is concrete: a process launched through a PATH lookup reports a
-  // BARE image name, and resolving that against the current working directory
-  // can match an unrelated file of the same name. Here a decoy file literally
-  // named after the runtime sits in the child's cwd; the child reports its own
-  // chain row, and that row must be non-absolute so the production matcher
-  // excludes it instead of resolving the decoy.
+test('MACOS-PIN-03 a PATH-launched process resolves its kernel text image, never a cwd decoy', { skip: PIN_OBSERVATION_NOT_DARWIN }, () => {
+  // `ps comm` is a bare name for this launch shape. The runtime must recover
+  // the actual process image from lsof's kernel-backed text vnode rather than
+  // resolve that bare name against PATH or the child's current directory.
   const decoyDir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'rhc-decoy-')));
   const runtimeName = path.basename(process.execPath);
   const decoyPath = path.join(decoyDir, runtimeName);
@@ -2111,14 +2336,18 @@ test('MACOS-PIN-03 a PATH-launched ancestor reports a bare name and stays unprov
   if (run.error || run.status !== 0) return; // PATH lookup unavailable here; nothing to prove
   const self = JSON.parse(run.stdout);
   assert.ok(self, 'the child must observe its own chain row');
-  assert.equal(
-    path.isAbsolute(self.executable_path), false,
-    'a PATH-launched process reports a bare image name -- this is the hazard the guard exists for',
-  );
-  // And the decoy really was resolvable from that cwd, so the guard is what
-  // prevents it being proven, not mere absence of a file.
-  assert.equal(fs.existsSync(path.resolve(decoyDir, self.executable_path)), true,
-    'the decoy is resolvable from the cwd, so only the absolute-path guard prevents a false match');
+  assert.equal(path.isAbsolute(self.executable_path), true);
+  assert.equal(fs.realpathSync(self.executable_path), fs.realpathSync(process.execPath));
+  assert.notEqual(fs.realpathSync(self.executable_path), fs.realpathSync(decoyPath));
+});
+
+test('MACOS-PIN-03a lsof text-image parsing is strict and fail-closed', () => {
+  const parse = hostClaude.__TEST_ONLY__parseDarwinTextExecutable;
+  assert.equal(parse('p42\nftxt\nn/Applications/Claude/claude\n', 42), '/Applications/Claude/claude');
+  assert.equal(parse('p41\nftxt\nn/Applications/Claude/claude\n', 42), null);
+  assert.equal(parse('p42\nftxt\nnrelative/claude\n', 42), null);
+  assert.equal(parse('p42\nn/Applications/Claude/claude\n', 42), null);
+  assert.equal(parse('', 42), null);
 });
 
 test('MACOS-PIN-04 observation fails closed without a platform-matched host contract', () => {
@@ -2143,6 +2372,42 @@ test('MACOS-PIN-04 observation fails closed without a platform-matched host cont
   assert.equal(observed.executablePath, undefined, 'a refusal must not leak an executable path');
   assert.equal(observed.pinDigest, undefined, 'a refusal must not leak a pin digest');
 });
+
+test('MACOS-PIN-05 vendor admission verifies code integrity before trusting signing metadata',
+  { skip: process.platform !== 'darwin' }, () => {
+    const calls = [];
+    const validMetadata = [
+      'Identifier=com.anthropic.claude-code',
+      'TeamIdentifier=Q6L2SF6YDW',
+      'Authority=Developer ID Application: Anthropic PBC (Q6L2SF6YDW)',
+    ].join('\n');
+    const validRunner = (_command, args) => {
+      calls.push(args);
+      return args[0] === '--verify'
+        ? { status: 0, stdout: '', stderr: '' }
+        : { status: 0, stdout: '', stderr: validMetadata };
+    };
+    assert.equal(hostClaude.__TEST_ONLY__trustedClaudeVendorSignature('/signed/claude', validRunner), true);
+    assert.deepEqual(calls.map((args) => args.slice(0, 3)), [
+      ['--verify', '--strict', '--verbose=2'],
+      ['-dv', '--verbose=4', '/signed/claude'],
+    ]);
+
+    let metadataRead = false;
+    const tamperedRunner = (_command, args) => {
+      if (args[0] !== '--verify') metadataRead = true;
+      return args[0] === '--verify'
+        ? { status: 1, stdout: '', stderr: 'invalid signature' }
+        : { status: 0, stdout: '', stderr: validMetadata };
+    };
+    assert.equal(hostClaude.__TEST_ONLY__trustedClaudeVendorSignature('/tampered/claude', tamperedRunner), false);
+    assert.equal(metadataRead, false, 'invalid code must be rejected before metadata is consulted');
+
+    const wrongVendorRunner = (_command, args) => args[0] === '--verify'
+      ? { status: 0, stdout: '', stderr: '' }
+      : { status: 0, stdout: '', stderr: validMetadata.replace('Anthropic PBC', 'Other Vendor') };
+    assert.equal(hostClaude.__TEST_ONLY__trustedClaudeVendorSignature('/other/claude', wrongVendorRunner), false);
+  });
 
 // --- Wave 1 macOS stabilization: wake/resume ordering in the PUBLISHER (defect F) ---
 //

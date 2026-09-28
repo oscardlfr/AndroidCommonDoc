@@ -16,6 +16,7 @@ const STATE_KEYS = Object.freeze(['baseline_head', 'created_at', 'execution_mode
   'phase', 'plan_sha256', 'required_roles', 'revision', 'schema', 'transitions', 'updated_at', 'wave_class', 'wave_slug'].sort());
 const TRANSITION_KEYS = Object.freeze(['at', 'evidence', 'from', 'from_head', 'to', 'to_head']);
 const LOCK_WAIT_MS = 2000;
+const WAVE_CLASSES = Object.freeze(['HARNESS', 'DOC', 'FAST-PATH']);
 
 function sha256(bytes) { return crypto.createHash('sha256').update(bytes).digest('hex'); }
 function canonicalRoot(root) { return fs.realpathSync(path.resolve(root)); }
@@ -141,8 +142,12 @@ function gitHead(root) {
 function parsePlanClass(planText) {
   const section = /###\s+Wave\s+Class\s*\r?\n([\s\S]*?)(?=\r?\n#{1,6}\s|$)/.exec(planText);
   const source = section ? section[1] : planText;
-  const match = /\*\*Class\*\*:\s*([A-Za-z0-9._-]+)/.exec(source);
-  return match ? match[1] : 'HARNESS';
+  const lines = source.split(/\r?\n/).filter((line) => /\*\*Class\*\*:/.test(line));
+  if (lines.length === 0) return 'HARNESS';
+  if (lines.length !== 1) throw new Error('INVALID_WAVE_CLASS');
+  const match = /^\s*\*\*Class\*\*:\s*`?([A-Za-z0-9][A-Za-z0-9_-]*)`?\s*[.,;:!?]?\s*$/.exec(lines[0]);
+  if (!match || !WAVE_CLASSES.includes(match[1])) throw new Error('INVALID_WAVE_CLASS');
+  return match[1];
 }
 function topology(root) {
   // `root` is the consumer repository. Runtime dependencies belong to the L0

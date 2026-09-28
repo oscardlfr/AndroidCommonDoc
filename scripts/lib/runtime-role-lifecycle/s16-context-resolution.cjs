@@ -46,7 +46,7 @@ function s16CoordinationRelativeRef(coordRoot, absolutePath) {
   return rel;
 }
 
-function s16ResolveMainContext(projectRoot, lifecycleBindingRef, argvDigest, role, command, actionId, requireCreationLifetime) {
+function s16ResolveMainContext(projectRoot, lifecycleBindingRef, argvDigest, role, command, actionId, requireCreationLifetime, waveSlug = null) {
   if (lifecycleBindingRef === undefined) return { ok: false, reason: 'lifecycle-grant-absent' };
   const consumed = validateAndConsumeLifecycleCommandGrant(
     projectRoot, lifecycleBindingRef, argvDigest, role, command,
@@ -55,7 +55,8 @@ function s16ResolveMainContext(projectRoot, lifecycleBindingRef, argvDigest, rol
   if (!consumed.ok || consumed.bindingKind !== 'main-orchestrator') return { ok: false, reason: consumed.reason || 'main-binding-required' };
   const binding = consumed.binding;
   if (!attachDerivedSessionGenerationId(projectRoot, binding).ok) return { ok: false, reason: 'session-generation-invalid' };
-  const plan = discoverPlan(projectRoot);
+  const plan = discoverPlan(projectRoot,
+    waveSlug === null ? null : { waveSlug, expectedDigest: binding.plan_digest });
   const pair = resolvePolicyPair(projectRoot);
   const worktreeId = computeWorktreeId(projectRoot);
   if (!plan.ok || !pair.ok) return { ok: false, reason: 'policy-or-plan-invalid' };

@@ -20,23 +20,27 @@ The `<slug>` is required when `--orchestrate` is passed. Example: `/init-session
 
 ## Canonical Runtime Entrypoint
 
-All dashboard and support-plane operations enter through the shared product flow:
+Your first action after reading this skill MUST be exactly one standalone Bash
+call from the two forms below:
 
 ```bash
-'<resolved-node>' '<consumer-root>/.claude/runtime/l0-entrypoint-launcher.cjs' 'execute' '--entrypoint' 'init-session' '--project-root' '<consumer-root>' '--intent' '<base64url canonical JSON>'
+node .claude/runtime/l0-entrypoint-launcher.cjs init-session
+node .claude/runtime/l0-entrypoint-launcher.cjs init-session --orchestrate <slug>
 ```
 
-The Bash call must be one standalone direct Node command. `consumer-root` is the
-literal absolute repository root for L0, L1, and L2; L0 installs and uses the same
-consumer-local launcher as downstream projects. The launcher alone resolves and
-verifies the manifest-pinned L0 runtime before forwarding the command. Use the
-resolved Node executable. Never resolve the toolkit in model prose, invoke the L0
-entrypoint directly, or use `$(pwd)`, `$PWD`, `cd`, environment fallbacks, shell
-variables, command substitution, pipes, redirects, or command separators. If the
-launcher is absent or rejects the pin, fail closed and run the documented ordinary
-sync plus runtime refresh; do not fall back to a guessed toolkit path.
+Do not run `ls`, `find`, `which`, `pwd`, `node -e`, Read, Glob, Grep, or any
+other discovery/encoding step first. Do not quote, expand, reconstruct, or
+translate the command. The installed PreToolUse hook derives the absolute
+consumer root, trusted Node executable, and canonical base64url intent, verifies
+the manifest-pinned L0 runtime, and rewrites this shorthand to the internal
+entrypoint command. It rejects missing/extra arguments, unsafe slugs, shell
+operators, a foreign cwd, or an invalid runtime installation. If rejected, use
+the documented ordinary sync plus runtime refresh; never guess a toolkit path.
 
-Encode exactly `{"mode":"dashboard"}` for the read-only form or canonical `{"mode":"start","wave_slug":"<slug>"}` for orchestration. The shared entrypoint initializes/validates the control-plane state and derives the lifecycle role set itself. Treat `READY` as a proven dashboard result, execute only returned `ACTION_REQUIRED` actions through the runtime adapter, and report `BLOCKED|UNAVAILABLE|FAILED` without inventing readiness.
+The shared entrypoint initializes/validates the control-plane state and derives
+the lifecycle role set itself. Treat `READY` as a proven dashboard result,
+execute only returned `ACTION_REQUIRED` actions through the runtime adapter, and
+report `BLOCKED|UNAVAILABLE|FAILED` without inventing readiness.
 
 ## Step 0 — Core Support-Plane Dispatch (when --orchestrate <slug> is passed)
 
@@ -45,7 +49,7 @@ Skip this step if `--orchestrate` flag is absent. Default behavior is read-only 
 When `--orchestrate <slug>` is passed:
 
 1. Validate slug is present: if `--orchestrate` is passed without a slug, emit error: "Usage: /init-session --orchestrate <slug>" and exit.
-2. Submit the slug through the canonical runtime intent above. The entrypoint initializes or reads the shared phase state and obtains class-aware lifecycle work from the control plane; never run a second orchestration path, use a hard-coded roster, or embed vendor-specific dispatch/messaging calls:
+2. Submit the slug through the canonical shorthand above. The hook alone constructs the internal runtime intent. The entrypoint initializes or reads the shared phase state and obtains class-aware lifecycle work from the control plane; never run a second orchestration path, use a hard-coded roster, or embed vendor-specific dispatch/messaging calls:
    - `probe(profile)` reads the active `runtime-collaboration-policy.json` profile (`auto|persistent|ephemeral|disk-only`) and connector capabilities.
    - Execute each returned `ensure` action through the existing Wave-1 role-lifecycle manager. HARNESS, DOC and FAST-PATH role floors come only from `wave-topology.yaml` plus the active PLAN; `quality-gater` stays phase-scoped and is never parked in the persistent plane.
    - `waitReady` for the resulting bindings, bounded by the policy's `ready_timeout_seconds`.

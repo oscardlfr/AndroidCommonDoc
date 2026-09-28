@@ -812,6 +812,80 @@ const ENTRYPOINT_BARE_COMMAND_RE = /^[A-Za-z0-9_.\/:@+-]+(?: [A-Za-z0-9_.\/:@+-]
 const ENTRYPOINT_WINDOWS_TOKEN_RE = /(?:"([A-Za-z]:[\\/][A-Za-z0-9_.\\\/:@+ -]*)"|([A-Za-z0-9_.\/:@+-]+))(?: |$)/gy;
 const ENTRYPOINT_RELATIVE_CLI_PATH = 'scripts/lib/runtime-collaboration-entrypoints.cjs';
 
+// Claude must not have to discover an absolute consumer root, resolve Node, or
+// synthesize a base64url intent before it can start the runtime.  Keep the
+// public init-session surface deliberately tiny; this trusted hook derives all
+// host-owned values and then feeds the resulting command through the exact same
+// installed-launcher, inventory, intent, scope, and host-composition checks as
+// the long canonical form.  A command that starts with the installed launcher
+// but deviates from this closed grammar is recognized and denied, never handed
+// to ordinary Bash approval.
+function normalizeInitSessionShorthand(command, event) {
+  if (typeof command !== 'string') {
+    return { recognized: false, tokens: null, reason: null };
+  }
+  const documentedPrefix = 'node ' + ENTRYPOINT_LAUNCHER_RELATIVE_PATH;
+  const trustedPrefix = runtimeRoleLifecycle.resolvedNodePath() + ' ' + ENTRYPOINT_LAUNCHER_RELATIVE_PATH;
+  if (!ENTRYPOINT_BARE_COMMAND_RE.test(command)) {
+    const recognized = command === documentedPrefix || command.startsWith(documentedPrefix + ' ')
+      || command === trustedPrefix || command.startsWith(trustedPrefix + ' ');
+    return recognized
+      ? {
+          recognized: true,
+          tokens: null,
+          reason: 'installed init-session shorthand is not the closed documented shape',
+        }
+      : { recognized: false, tokens: null, reason: null };
+  }
+  const tokens = command.split(' ');
+  if (tokens.length < 2 || !isRecognizedNodeToken(tokens[0])
+      || tokens[1] !== ENTRYPOINT_LAUNCHER_RELATIVE_PATH) {
+    return { recognized: false, tokens: null, reason: null };
+  }
+  if (tokens[2] === 'execute') return { recognized: false, tokens: null, reason: null };
+  const dashboard = tokens.length === 3 && tokens[2] === 'init-session';
+  const orchestrate = tokens.length === 5 && tokens[2] === 'init-session'
+    && tokens[3] === '--orchestrate'
+    && /^[A-Za-z0-9._-]+$/.test(tokens[4]) && tokens[4] !== '.' && tokens[4] !== '..';
+  if (!dashboard && !orchestrate) {
+    return {
+      recognized: true,
+      tokens: null,
+      reason: 'installed init-session shorthand is not the closed documented shape',
+    };
+  }
+  let projectRoot;
+  try {
+    if (typeof event.cwd !== 'string' || !path.isAbsolute(event.cwd)) throw new Error('invalid-cwd');
+    projectRoot = fs.realpathSync(event.cwd);
+    if (!fs.statSync(projectRoot).isDirectory() || projectRoot !== path.resolve(event.cwd)) {
+      throw new Error('unsafe-cwd');
+    }
+    if (process.env.CLAUDE_PROJECT_DIR
+        && fs.realpathSync(process.env.CLAUDE_PROJECT_DIR) !== projectRoot) {
+      throw new Error('foreign-cwd');
+    }
+  } catch {
+    return {
+      recognized: true,
+      tokens: null,
+      reason: 'installed init-session shorthand project root is unresolved or foreign',
+    };
+  }
+  const intent = orchestrate
+    ? { mode: 'start', wave_slug: tokens[4] }
+    : { mode: 'dashboard' };
+  return {
+    recognized: true,
+    tokens: [
+      runtimeRoleLifecycle.resolvedNodePath(), ENTRYPOINT_LAUNCHER_RELATIVE_PATH, 'execute',
+      '--entrypoint', 'init-session', '--project-root', projectRoot,
+      '--intent', Buffer.from(JSON.stringify(intent), 'utf8').toString('base64url'),
+    ],
+    reason: null,
+  };
+}
+
 function parseEntrypointCliCommand(command, event) {
   const canonicalTokens = runtimeRoleLifecycle.parsePosixDirect(command);
   if (canonicalTokens) {
@@ -1007,7 +1081,7 @@ function extractFlagValues(tokens, repeatableFlags) {
 // or has no discoverable single-wave PLAN.md yet (pre-PLAN -- this mechanism
 // does not apply, mirrors resolvePostPlanContext's own passthrough precedent
 // elsewhere in this file).
-function resolveProjectRootScope(projectRoot) {
+function resolveProjectRootScope(projectRoot, waveSlug = null) {
   if (typeof projectRoot !== 'string' || !path.isAbsolute(projectRoot)) return null;
   let worktreeId;
   try {
@@ -1016,7 +1090,9 @@ function resolveProjectRootScope(projectRoot) {
     return null;
   }
   if (typeof worktreeId !== 'string' || worktreeId.length === 0) return null;
-  const planResult = runtimeRoleLifecycle.discoverPlan(projectRoot);
+  const planResult = waveSlug === null
+    ? runtimeRoleLifecycle.discoverPlan(projectRoot)
+    : runtimeRoleLifecycle.discoverPlan(projectRoot, { waveSlug, expectedDigest: null });
   if (!planResult.ok) return null;
   return { worktreeId, planDigest: planResult.planDigest };
 }
@@ -1038,7 +1114,8 @@ const LIFECYCLE_SUBCOMMAND_SCOPE_RESOLVERS = {
     };
   },
   ensure(values) {
-    const rootScope = resolveProjectRootScope(values['--project-root']);
+    const waveSlug = values['--wave-slug'] === undefined ? null : values['--wave-slug'];
+    const rootScope = resolveProjectRootScope(values['--project-root'], waveSlug);
     if (!rootScope) return null;
     const roles = values['--role'];
     if (!Array.isArray(roles) || roles.length === 0) return null;
@@ -1046,8 +1123,9 @@ const LIFECYCLE_SUBCOMMAND_SCOPE_RESOLVERS = {
     const role = sortedRoles.length === 1 ? sortedRoles[0] : sortedRoles;
     return {
       projectRootDescriptor: values['--project-root'], role,
-      argvDigest: runtimeConsultationLib.sha256String('ensure:' + sortedRoles.join(',')), actionId: null,
-      worktreeId: rootScope.worktreeId, planDigest: rootScope.planDigest,
+      argvDigest: runtimeConsultationLib.sha256String('ensure:' + sortedRoles.join(',')
+        + (waveSlug === null ? '' : ':wave:' + waveSlug)), actionId: null,
+      worktreeId: rootScope.worktreeId, planDigest: rootScope.planDigest, waveSlug,
     };
   },
   notify(values) {
@@ -1070,14 +1148,16 @@ const LIFECYCLE_SUBCOMMAND_SCOPE_RESOLVERS = {
     };
   },
   status(values) {
-    const rootScope = resolveProjectRootScope(values['--project-root']);
+    const waveSlug = values['--wave-slug'] === undefined ? null : values['--wave-slug'];
+    const rootScope = resolveProjectRootScope(values['--project-root'], waveSlug);
     if (!rootScope) return null;
     const roleValue = values['--role'];
     if (roleValue !== undefined && typeof roleValue !== 'string') return null;
     return {
       projectRootDescriptor: values['--project-root'], role: roleValue === undefined ? null : roleValue,
-      argvDigest: runtimeConsultationLib.sha256String('status:' + (roleValue === undefined ? '' : roleValue)), actionId: null,
-      worktreeId: rootScope.worktreeId, planDigest: rootScope.planDigest,
+      argvDigest: runtimeConsultationLib.sha256String('status:' + (roleValue === undefined ? '' : roleValue)
+        + (waveSlug === null ? '' : ':wave:' + waveSlug)), actionId: null,
+      worktreeId: rootScope.worktreeId, planDigest: rootScope.planDigest, waveSlug,
     };
   },
   rotate(values) {
@@ -1128,7 +1208,8 @@ const LIFECYCLE_SUBCOMMAND_SCOPE_RESOLVERS = {
     };
   },
   'consult-root'(values) {
-    const rootScope = resolveProjectRootScope(values['--project-root']);
+    const waveSlug = values['--wave-slug'] === undefined ? null : values['--wave-slug'];
+    const rootScope = resolveProjectRootScope(values['--project-root'], waveSlug);
     const encodedIntent = values['--intent'];
     if (!rootScope || typeof encodedIntent !== 'string') return null;
     let intent;
@@ -1140,8 +1221,9 @@ const LIFECYCLE_SUBCOMMAND_SCOPE_RESOLVERS = {
     if (!intent || !intent.ok || typeof intent.intent?.requester_role !== 'string') return null;
     return {
       projectRootDescriptor: values['--project-root'], role: intent.intent.requester_role,
-      argvDigest: runtimeConsultationLib.sha256String('consult-root:' + encodedIntent), actionId: null,
-      worktreeId: rootScope.worktreeId, planDigest: rootScope.planDigest,
+      argvDigest: runtimeConsultationLib.sha256String('consult-root:' + encodedIntent
+        + (waveSlug === null ? '' : ':wave:' + waveSlug)), actionId: null,
+      worktreeId: rootScope.worktreeId, planDigest: rootScope.planDigest, waveSlug,
     };
   },
   // P5 U2 live-wiring: exact mirror of the 'consult-root' resolver above --
@@ -1171,7 +1253,8 @@ const LIFECYCLE_SUBCOMMAND_SCOPE_RESOLVERS = {
     };
   },
   'consult-root-status'(values) {
-    const rootScope = resolveProjectRootScope(values['--project-root']);
+    const waveSlug = values['--wave-slug'] === undefined ? null : values['--wave-slug'];
+    const rootScope = resolveProjectRootScope(values['--project-root'], waveSlug);
     const intentId = values['--intent-id'];
     if (!rootScope || typeof intentId !== 'string') return null;
     let intentResult;
@@ -1183,12 +1266,14 @@ const LIFECYCLE_SUBCOMMAND_SCOPE_RESOLVERS = {
     if (!intentResult || !intentResult.ok || intentResult.absent || typeof intentResult.intent?.requester_role !== 'string') return null;
     return {
       projectRootDescriptor: values['--project-root'], role: intentResult.intent.requester_role,
-      argvDigest: runtimeConsultationLib.sha256String('consult-root-status:' + intentId), actionId: null,
-      worktreeId: rootScope.worktreeId, planDigest: rootScope.planDigest,
+      argvDigest: runtimeConsultationLib.sha256String('consult-root-status:' + intentId
+        + (waveSlug === null ? '' : ':wave:' + waveSlug)), actionId: null,
+      worktreeId: rootScope.worktreeId, planDigest: rootScope.planDigest, waveSlug,
     };
   },
   'root-source'(values) {
-    const rootScope = resolveProjectRootScope(values['--project-root']);
+    const waveSlug = values['--wave-slug'] === undefined ? null : values['--wave-slug'];
+    const rootScope = resolveProjectRootScope(values['--project-root'], waveSlug);
     const encodedIntent = values['--intent'];
     if (!rootScope || typeof encodedIntent !== 'string') return null;
     let intent;
@@ -1200,12 +1285,14 @@ const LIFECYCLE_SUBCOMMAND_SCOPE_RESOLVERS = {
     if (!intent || !intent.ok || intent.intent?.source_role !== 'toolkit-specialist') return null;
     return {
       projectRootDescriptor: values['--project-root'], role: 'toolkit-specialist',
-      argvDigest: runtimeConsultationLib.sha256String('root-source:' + encodedIntent), actionId: null,
-      worktreeId: rootScope.worktreeId, planDigest: rootScope.planDigest,
+      argvDigest: runtimeConsultationLib.sha256String('root-source:' + encodedIntent
+        + (waveSlug === null ? '' : ':wave:' + waveSlug)), actionId: null,
+      worktreeId: rootScope.worktreeId, planDigest: rootScope.planDigest, waveSlug,
     };
   },
   'root-source-status'(values) {
-    const rootScope = resolveProjectRootScope(values['--project-root']);
+    const waveSlug = values['--wave-slug'] === undefined ? null : values['--wave-slug'];
+    const rootScope = resolveProjectRootScope(values['--project-root'], waveSlug);
     const actionId = values['--action'];
     if (!rootScope || typeof actionId !== 'string') return null;
     let found;
@@ -1219,8 +1306,9 @@ const LIFECYCLE_SUBCOMMAND_SCOPE_RESOLVERS = {
       || found.action.worktree_id !== rootScope.worktreeId || found.action.plan_digest !== rootScope.planDigest) return null;
     return {
       projectRootDescriptor: values['--project-root'], role: 'toolkit-specialist',
-      argvDigest: runtimeConsultationLib.sha256String('root-source-status:' + actionId), actionId,
-      worktreeId: rootScope.worktreeId, planDigest: rootScope.planDigest,
+      argvDigest: runtimeConsultationLib.sha256String('root-source-status:' + actionId
+        + (waveSlug === null ? '' : ':wave:' + waveSlug)), actionId,
+      worktreeId: rootScope.worktreeId, planDigest: rootScope.planDigest, waveSlug,
     };
   },
 };
@@ -1258,6 +1346,7 @@ function resolveOrMintLifecycleGrant(subcommand, scope, sessionId) {
     actionId: scope.actionId,
     worktreeId: scope.worktreeId,
     planDigest: scope.planDigest,
+    waveSlug: scope.waveSlug,
   });
   return result.ok ? result.grantId : null;
 }
@@ -1377,8 +1466,12 @@ function tryInjectEntrypointComposition(toolInput, event) {
   const command = toolInput && toolInput.command;
   if (typeof command !== 'string' || command.length === 0 ||
       !runtimeRoleLifecycle || !runtimeHostClaude || !runtimeCollaborationEntrypoints) return null;
+  const shorthand = normalizeInitSessionShorthand(command, event);
+  if (shorthand.recognized && !shorthand.tokens) {
+    return m7DenyResult('[R131/P3] ' + shorthand.reason + '.');
+  }
   if (/[;&|`\n]|\$\(/.test(command)) return null;
-  const parsedTokens = parseEntrypointCliCommand(command, event);
+  const parsedTokens = shorthand.tokens || parseEntrypointCliCommand(command, event);
   if (!parsedTokens) return null;
   const surface = canonicalizeInstalledEntrypointSurface(parsedTokens, event);
   if (!surface.recognized) return null;
@@ -1402,6 +1495,7 @@ function tryInjectEntrypointComposition(toolInput, event) {
   let intent;
   let plan;
   let scope;
+  let explicitWaveScope = null;
   try {
     const bytes = Buffer.from(values['--intent'], 'base64url');
     if (bytes.toString('base64url') !== values['--intent']) throw new Error('noncanonical-intent');
@@ -1409,8 +1503,16 @@ function tryInjectEntrypointComposition(toolInput, event) {
     plan = runtimeCollaborationEntrypoints.planEntrypointStep(
       values['--entrypoint'], intent, values['--project-root'],
     );
-    const explicitWaveScope = runtimeCollaborationEntrypoints.plannedEntrypointWaveScope(plan);
-    const rootScope = explicitWaveScope || resolveProjectRootScope(values['--project-root']);
+    explicitWaveScope = runtimeCollaborationEntrypoints.plannedEntrypointWaveScope(plan);
+    let rootScope = explicitWaveScope || resolveProjectRootScope(values['--project-root']);
+    const planlessDashboard = values['--entrypoint'] === 'init-session' && intent.mode === 'dashboard' &&
+      intent.wave_slug === undefined && plan.command === null;
+    if (!rootScope && planlessDashboard) {
+      rootScope = {
+        worktreeId: runtimeRoleLifecycle.computeWorktreeId(values['--project-root']),
+        planDigest: null,
+      };
+    }
     if (!rootScope) throw new Error('scope-unavailable');
     scope = {
       projectRootDescriptor: values['--project-root'],
@@ -1421,14 +1523,25 @@ function tryInjectEntrypointComposition(toolInput, event) {
         : null,
       worktreeId: rootScope.worktreeId,
       planDigest: rootScope.planDigest,
+      waveSlug: explicitWaveScope ? explicitWaveScope.waveSlug : null,
     };
   } catch {
     return m7DenyResult('[R131/P3] collaboration entrypoint intent or scope is invalid.');
   }
-  let lifecycleBinding = null;
-  if (plan.command !== null) {
-    try { lifecycleBinding = resolveOrMintLifecycleGrant(plan.command, scope, event.session_id); } catch { lifecycleBinding = null; }
-    if (!lifecycleBinding) return m7DenyResult('[R131/P3] unable to mint the exact lifecycle grant for this entrypoint step.');
+  // SessionStart is the only hook event that can report the active model. The
+  // signed pin must therefore already exist; a PreToolUse payload can prove
+  // effective effort and live process ancestry, but must never self-assert a
+  // model or synthesize a missing session identity.
+  let interactivePin;
+  try {
+    interactivePin = runtimeHostClaude.getProductionSessionIdentity(
+      values['--project-root'], event.session_id,
+    );
+  } catch {
+    interactivePin = null;
+  }
+  if (!interactivePin || !interactivePin.ok) {
+    return m7DenyResult('[R131/P3] genuine claude-sonnet-5 host composition evidence is unavailable.');
   }
   let composition;
   try {
@@ -1436,6 +1549,7 @@ function tryInjectEntrypointComposition(toolInput, event) {
       projectRoot: values['--project-root'], event,
       entrypoint: values['--entrypoint'], argvDigest: plan.argv_digest,
       roleScope: plan.role_scope,
+      waveSlug: explicitWaveScope ? explicitWaveScope.waveSlug : null,
       planDigest: scope.planDigest,
       worktreeId: scope.worktreeId,
     });
@@ -1443,7 +1557,18 @@ function tryInjectEntrypointComposition(toolInput, event) {
     composition = null;
   }
   if (!composition || !composition.ok) {
+    if (composition && composition.reason === 'HOST_EFFORT_UNPROVEN') {
+      return m7DenyResult('[R131/P3] Claude did not report effective effort for this tool-use context.');
+    }
+    if (composition && composition.reason === 'HOST_EFFORT_MISMATCH') {
+      return m7DenyResult('[R131/P3] collaboration entrypoints require effective --effort high.');
+    }
     return m7DenyResult('[R131/P3] genuine claude-sonnet-5 host composition evidence is unavailable.');
+  }
+  let lifecycleBinding = null;
+  if (plan.command !== null) {
+    try { lifecycleBinding = resolveOrMintLifecycleGrant(plan.command, scope, event.session_id); } catch { lifecycleBinding = null; }
+    if (!lifecycleBinding) return m7DenyResult('[R131/P3] unable to mint the exact lifecycle grant for this entrypoint step.');
   }
   const appended = ['--host-composition', composition.compositionId];
   if (lifecycleBinding) appended.push('--lifecycle-binding', lifecycleBinding);
