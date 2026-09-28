@@ -216,7 +216,7 @@ test('runtime identity, private registry, and session generation are closed fact
   assert.deepStrictEqual(Object.keys(runtimeIdentity).sort(), [
     'computeCoordinationRootId', 'computeCoordinationRootIdFromPath', 'computePrincipalId',
     'computeRepoId', 'computeWorktreeId', 'coordinationRootPathFor', 'deepestExistingAncestorRealpath',
-    'discoverPlan', 'resolveCanonicalRoleProfile', 'roleProfileDigestFor', 'templateRootBase',
+    'discoverPlan', 'resolveCanonicalRoleProfile', 'resolveWavePlan', 'roleProfileDigestFor', 'templateRootBase',
   ]);
   assert.deepStrictEqual(Object.keys(privateRegistry).sort(), [
     'ensureSecureRegistryDir', 'readRegistryRecord', 'registryBaseDir', 'registryRepoDir',
