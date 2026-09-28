@@ -1420,8 +1420,9 @@ assert d['profiles']['advanced']['overrides'].get('debugger') == 'opus', 'debugg
     done
 }
 
-@test "arch: agents-hub references team-lead not dev-lead as orchestrator" {
-    grep -q "team-lead" "$L0_ROOT/docs/agents/agents-hub.md"
+@test "arch: agents-hub defines historical team-lead as the main orchestrator only" {
+    grep -Fq "Historical \`team-lead\` wording denotes that logical role; there is no installable \`team-lead\` agent template." "$L0_ROOT/docs/agents/agents-hub.md"
+    grep -Fq "Agent availability comes from the synchronized registry and runtime discovery; never duplicate a static roster in \`CLAUDE.md\`." "$L0_ROOT/docs/agents/agents-hub.md"
 }
 
 @test "arch: claude-code-workflow uses the main conversation as orchestrator" {
@@ -1433,12 +1434,15 @@ assert d['profiles']['advanced']['overrides'].get('debugger') == 'opus', 'debugg
     grep -q "Architects detect → orchestrator dispatches specialists" "$L0_ROOT/docs/agents/spec-driven-workflow.md"
 }
 
-@test "arch: claude-md-template examples use team-lead" {
-    grep -q "team-lead" "$L0_ROOT/docs/agents/claude-md-template.md"
+@test "arch: claude-md-template forbids separate team-lead and static rosters" {
+    grep -Fq 'Do not launch a separate `team-lead` or `project-manager` agent.' "$L0_ROOT/docs/agents/claude-md-template.md"
+    grep -Fq "Do not embed a static agent roster" "$L0_ROOT/docs/agents/claude-md-template.md"
 }
 
-@test "arch: multi-agent-patterns mentions PM in architect gate" {
-    grep -q "team-lead" "$L0_ROOT/docs/agents/multi-agent-patterns.md"
+@test "arch: multi-agent-patterns uses main-conversation orchestration and registry discovery" {
+    grep -Fq "The **main conversation owns orchestration**." "$L0_ROOT/docs/agents/multi-agent-patterns.md"
+    grep -Fq "Agent availability comes from the synchronized registry and runtime discovery." "$L0_ROOT/docs/agents/multi-agent-patterns.md"
+    grep -Fq "the main orchestrator re-plans and dispatches the owning specialist" "$L0_ROOT/docs/agents/multi-agent-patterns.md"
 }
 
 @test "arch: public entrypoints forbid shell-launching runtime CLIs" {
@@ -1458,8 +1462,9 @@ assert d['profiles']['advanced']['overrides'].get('debugger') == 'opus', 'debugg
     grep -Fq "create a manual fixed roster" "$L0_ROOT/docs/agents/claude-code-workflow.md"
 }
 
-@test "arch: /work skill routes to team-lead" {
-    grep -q "team-lead" "$L0_ROOT/skills/work/SKILL.md"
+@test "arch: /work treats team-lead as a non-persistent responsibility" {
+    grep -Fq "the main conversation acts as \`team-lead\`" "$L0_ROOT/skills/work/SKILL.md"
+    grep -Fq "not a persistent role" "$L0_ROOT/skills/work/SKILL.md"
 }
 
 @test "arch: spec-driven-workflow has How to Start Work section" {

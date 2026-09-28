@@ -79,6 +79,12 @@ fixture_output_fingerprint() {
         "$FIXTURE_ROOT/setup/copilot-agent-templates" -type f -exec cksum {} \; | sort
 }
 
+@test "portable AGENTS rule reaches generated Copilot instructions exactly once" {
+    instructions="$FIXTURE_ROOT/setup/copilot-templates/copilot-instructions-from-claude-md.md"
+    [ -f "$instructions" ]
+    [ "$(grep -Fxc -- '- Preserve generated output parity.' "$instructions")" -eq 1 ]
+}
+
 @test "copilot agent adapter parses quoted frontmatter portably without corrupting YAML" {
     output_file="$FIXTURE_ROOT/setup/copilot-agent-templates/demo-agent.agent.md"
     [ -f "$output_file" ]
