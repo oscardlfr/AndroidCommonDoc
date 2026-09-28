@@ -18,15 +18,17 @@ const BRAND_RECORDS = new WeakMap();
 const HANDLE_RECORDS = new WeakMap();
 const ANCHOR_SCHEMA = 'runtime/host-observation-trust-anchor/v1';
 const TICKET_SCHEMA = 'runtime/host-observation-admission/v1';
-const COMPOSITION_SCHEMA = 'runtime/claude-host-composition/v2';
+const COMPOSITION_SCHEMA = 'runtime/claude-host-composition/v3';
 const COMPOSITION_TTL_SECONDS = 120;
 const SESSION_EVIDENCE_SCHEMA = 'runtime/claude-session-evidence/v2';
 const SESSION_EVIDENCE_TTL_SECONDS = 12 * 60 * 60;
-const INTERACTIVE_PIN_EVIDENCE_SCHEMA = 'runtime/claude-interactive-pin-evidence/v1';
+const INTERACTIVE_PIN_EVIDENCE_SCHEMA = 'runtime/claude-interactive-pin-evidence/v2';
 const INTERACTIVE_PIN_EVIDENCE_KEYS = Object.freeze([
-  'executable_digest', 'expires_at', 'host_contract_digest', 'key_id', 'observed_at',
-  'observation_source', 'pin_digest', 'plan_digest', 'process_birth_digest',
-  'process_id', 'schema', 'session_digest', 'signature_ed25519_base64', 'worktree_id',
+  'actual_model', 'cli_family', 'cli_version', 'executable_digest', 'expires_at',
+  'host_contract_digest', 'key_id', 'observed_at', 'observation_source', 'pin_digest',
+  'process_birth_digest', 'process_id', 'project_root_digest', 'requested_profile_digest',
+  'requested_profile_name', 'schema', 'session_digest', 'signature_ed25519_base64',
+  'transcript_path_digest', 'worktree_id',
 ].sort());
 const SESSION_EVIDENCE_KEYS = Object.freeze([
   'actual_host', 'actual_model', 'actual_role_engine', 'continuity', 'expires_at',
@@ -46,6 +48,9 @@ const DIRECT_ROLE_HOST_KEYS = Object.freeze([
 const COMPOSITION_OPERATIONS = Object.freeze(['Agent', 'Bash', 'SendMessage', 'TaskOutput']);
 const COMPOSITION_RE = /^[0-9a-f]{32}$/;
 const PROFILE_NAME_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
+const SUPPORTED_CLAUDE_FAMILY = '2.1';
+const SUPPORTED_CLAUDE_VERSION_RE = /^2\.1\.\d+$/;
+const REQUIRED_ENTRYPOINT_EFFORT = 'high';
 const REQUESTED_MODEL_ALIASES = new Set(['haiku', 'sonnet', 'opus']);
 const NATIVE_TOOL_OUTCOME_SCHEMA = 'runtime/native-tool-outcome/v1';
 const NATIVE_TOOL_OUTCOME_KEYS = Object.freeze([
@@ -473,6 +478,12 @@ function resolveRequestedModelProfile(projectRoot, role) {
   };
 }
 
+function actualModelMatchesRequestedAlias(actualModel, requestedModel) {
+  if (!boundedLiteral(actualModel, 128) || !REQUESTED_MODEL_ALIASES.has(requestedModel)) return false;
+  if (requestedModel === 'sonnet') return /^claude-sonnet-5(?:-|$)/.test(actualModel);
+  return new RegExp(`^claude-${requestedModel}(?:-|$)`).test(actualModel);
+}
+
 function compositionDir(projectRoot) {
   return path.join(lifecycleOwner().registryRepoDir(projectRoot), 'host-compositions');
 }
@@ -568,6 +579,47 @@ function selectedHostPin(options) {
     executableRealpath,
     observerRealpath,
   };
+}
+
+function claudeVersionFamily(version) {
+  const match = /^(\d+)\.(\d+)\.\d+$/.exec(version || '');
+  return match ? `${match[1]}.${match[2]}` : null;
+}
+
+function observedClaudeVersion(executablePath) {
+  let child;
+  try {
+    child = spawnSync(executablePath, ['--version'], { encoding: 'utf8', timeout: 5000 });
+  } catch { return null; }
+  if (!child || child.status !== 0) return null;
+  const match = /(?:^|\s)(\d+\.\d+\.\d+)(?:\s|$)/.exec(`${child.stdout || ''}\n${child.stderr || ''}`);
+  return match && SUPPORTED_CLAUDE_VERSION_RE.test(match[1]) ? match[1] : null;
+}
+
+function trustedClaudeVendorSignature(executablePath, runProcess = spawnSync) {
+  if (process.platform === 'darwin') {
+    const verified = runProcess('/usr/bin/codesign', ['--verify', '--strict', '--verbose=2', executablePath], {
+      encoding: 'utf8', timeout: 5000,
+    });
+    if (!verified || verified.status !== 0) return false;
+    const result = runProcess('/usr/bin/codesign', ['-dv', '--verbose=4', executablePath], {
+      encoding: 'utf8', timeout: 5000,
+    });
+    const output = `${result.stdout || ''}\n${result.stderr || ''}`;
+    return result.status === 0 && /(?:^|\n)Identifier=com\.anthropic\.claude-code(?:\n|$)/.test(output)
+      && /(?:^|\n)TeamIdentifier=Q6L2SF6YDW(?:\n|$)/.test(output)
+      && /(?:^|\n)Authority=Developer ID Application: Anthropic PBC \(Q6L2SF6YDW\)(?:\n|$)/.test(output);
+  }
+  if (process.platform === 'win32') {
+    let powerShellPath;
+    try { powerShellPath = require('./runtime-bridge-codex.cjs').resolvedWindowsPowerShellPath(); } catch { return false; }
+    const escaped = executablePath.replace(/'/g, "''");
+    const result = runProcess(powerShellPath, ['-NoProfile', '-NonInteractive', '-Command',
+      `$s=Get-AuthenticodeSignature -LiteralPath '${escaped}'; if($s.Status -eq 'Valid' -and $s.SignerCertificate.Subject -match 'Anthropic'){exit 0}else{exit 1}`],
+    { encoding: 'utf8', timeout: 5000 });
+    return result.status === 0;
+  }
+  return false;
 }
 
 function parseJsonLines(bytes) {
@@ -920,10 +972,9 @@ function verifyClaudeHostContractPackage(projectRoot, options) {
   if (!verified.ok) return verified;
   const certificate = verified.certificate;
   const pin = selectedHostPin(options);
-  if (!pin.ok || pin.pinDigest !== certificate.pin_digest ||
-      pin.pin.executable_digest !== certificate.executable_digest ||
-      pin.pin.observer_digest !== certificate.observer_digest ||
-      pin.pin.cli_version !== certificate.cli_version || pin.pin.os !== certificate.os ||
+  if (!pin.ok || claudeVersionFamily(pin.pin.cli_version) !== SUPPORTED_CLAUDE_FAMILY ||
+      claudeVersionFamily(certificate.cli_version) !== SUPPORTED_CLAUDE_FAMILY ||
+      pin.pin.observer_digest !== certificate.observer_digest || pin.pin.os !== certificate.os ||
       pin.pin.transport_profile !== certificate.transport_profile) {
     return { ok: false, reason: 'HOST_CONTRACT_PIN_DRIFT' };
   }
@@ -1009,14 +1060,44 @@ function queryWindowsParentChain(powerShellPath, startingPid, timeoutMs) {
 // taken and the ppid chain is followed from the starting process, so every row
 // comes from a single consistent view of the process table rather than from a
 // sequence of races. `comm` on darwin is the executable path of the running
-// image, which is the only thing this observation is allowed to trust: never a
-// version string, never PATH, never configuration, never a SessionStart claim.
+// image. A PATH-launched process may expose only a bare `comm` value on current
+// macOS releases, so that case is completed from the process' kernel-backed
+// text vnode through `/usr/sbin/lsof`: never PATH, command arguments,
+// configuration, or a SessionStart claim.
 // Proven necessary on this host -- the executing binary was
 // .../Claude/claude-code/2.1.260/claude.app/Contents/MacOS/claude while the
 // `claude` on PATH was an entirely different 2.1.272 image.
 const DARWIN_PS_ROW_RE = /^\s*(\d+)\s+(\d+)\s+(\S{3}\s+\S{3}\s+\d{1,2}\s+\d{2}:\d{2}:\d{2}\s+\d{4})\s+(\S.*?)\s*$/;
 
+function parseDarwinTextExecutable(output, expectedPid) {
+  if (typeof output !== 'string' || !Number.isInteger(expectedPid) || expectedPid <= 0) return null;
+  const lines = output.split(/\r?\n/);
+  if (lines[0] !== `p${expectedPid}`) return null;
+  let sawTextDescriptor = false;
+  for (let index = 1; index < lines.length; index += 1) {
+    const line = lines[index];
+    if (line.startsWith('p')) return null;
+    if (line === 'ftxt') {
+      sawTextDescriptor = true;
+      continue;
+    }
+    if (!sawTextDescriptor || !line.startsWith('n')) continue;
+    const candidate = line.slice(1);
+    return path.isAbsolute(candidate) && !candidate.includes('\0') ? candidate : null;
+  }
+  return null;
+}
+
+function queryDarwinTextExecutable(processId, timeoutMs) {
+  const result = spawnSync('/usr/sbin/lsof', ['-a', '-p', String(processId), '-d', 'txt', '-Fn'], {
+    encoding: 'utf8', timeout: timeoutMs, maxBuffer: 1 << 20,
+  });
+  if (result.status !== 0 || result.error) return null;
+  return parseDarwinTextExecutable(result.stdout, processId);
+}
+
 function queryDarwinParentChain(startingPid, timeoutMs) {
+  const startedMs = Date.now();
   const result = spawnSync('/bin/ps', ['-Awwo', 'pid=,ppid=,lstart=,comm='], {
     encoding: 'utf8', timeout: timeoutMs, maxBuffer: 1 << 24,
   });
@@ -1042,7 +1123,13 @@ function queryDarwinParentChain(startingPid, timeoutMs) {
   while (Number.isInteger(current) && current > 0 && byPid.has(current) && !seen.has(current) && rows.length < 8) {
     seen.add(current);
     const row = byPid.get(current);
-    rows.push(row);
+    const remainingMs = timeoutMs - (Date.now() - startedMs);
+    if (remainingMs <= 0) return null;
+    const executablePath = path.isAbsolute(row.executable_path)
+      ? row.executable_path
+      : queryDarwinTextExecutable(row.process_id, remainingMs);
+    if (executablePath === null) return null;
+    rows.push({ ...row, executable_path: executablePath });
     current = row.parent_process_id;
   }
   if (rows.length === 0) return null;
@@ -1081,16 +1168,23 @@ function observeClaudeExecutablePin(options) {
   const startingPid = options && options.startingPid !== undefined ? options.startingPid : process.pid;
   const observationSource = pinObservationSourceFor(process.platform);
   if (observationSource === null || !isUsableRoot(projectRoot) || !Number.isInteger(startingPid) || startingPid <= 0) {
-    return { ok: false, reason: 'HOST_PIN_UNPROVEN' };
+    return { ok: false, reason: 'HOST_PIN_UNPROVEN', detail: 'HOST_PIN_INPUT_INVALID' };
   }
   const startedMs = Date.now();
   const contract = readVerifiedHostContractPackage(projectRoot);
   // The certificate must have been issued for the platform doing the observing.
   // A Windows-issued certificate can never be discharged by a darwin chain, and
   // vice versa.
-  if (!contract.ok || contract.certificate.os !== process.platform) return { ok: false, reason: 'HOST_PIN_UNPROVEN' };
+  if (!contract.ok || contract.certificate.os !== process.platform) {
+    return { ok: false, reason: 'HOST_PIN_UNPROVEN', detail: 'HOST_PIN_CONTRACT_INVALID' };
+  }
   const before = queryHostParentChain(startingPid, 10000);
-  if (!before || Date.now() - startedMs >= 15000) return { ok: false, reason: 'HOST_PIN_UNPROVEN' };
+  if (!before || Date.now() - startedMs >= 15000) {
+    return { ok: false, reason: 'HOST_PIN_UNPROVEN', detail: 'HOST_PIN_PARENT_CHAIN_UNAVAILABLE' };
+  }
+  if (claudeVersionFamily(contract.certificate.cli_version) !== SUPPORTED_CLAUDE_FAMILY) {
+    return { ok: false, reason: 'HOST_PROTOCOL_FAMILY_UNSUPPORTED' };
+  }
   const matches = [];
   for (const row of before) {
     // A non-absolute image name (darwin `comm` reports a bare name for a process
@@ -1101,17 +1195,25 @@ function observeClaudeExecutablePin(options) {
     try {
       const resolved = fs.realpathSync(row.executable_path);
       const stat = fs.statSync(resolved);
-      if (stat.isFile() && digestBytes(fs.readFileSync(resolved)) === contract.certificate.executable_digest) {
-        matches.push({ row, resolved });
+      const signatureTrusted = stat.isFile() && trustedClaudeVendorSignature(resolved);
+      const cliVersion = signatureTrusted ? observedClaudeVersion(resolved) : null;
+      if (cliVersion && claudeVersionFamily(cliVersion) === SUPPORTED_CLAUDE_FAMILY) {
+        matches.push({ row, resolved, cliVersion });
       }
     } catch { /* this ancestor is not a provable selected Claude binary */ }
-    if (Date.now() - startedMs >= 15000) return { ok: false, reason: 'HOST_PIN_UNPROVEN' };
+    if (Date.now() - startedMs >= 15000) {
+      return { ok: false, reason: 'HOST_PIN_UNPROVEN', detail: 'HOST_PIN_OBSERVATION_TIMEOUT' };
+    }
   }
-  if (matches.length !== 1) return { ok: false, reason: 'HOST_PIN_UNPROVEN' };
+  if (matches.length !== 1) {
+    return { ok: false, reason: 'HOST_PIN_UNPROVEN', detail: 'HOST_PIN_VENDOR_MATCH_COUNT_' + matches.length };
+  }
   const remainingMs = 15000 - (Date.now() - startedMs);
-  if (remainingMs <= 0) return { ok: false, reason: 'HOST_PIN_UNPROVEN' };
+  if (remainingMs <= 0) return { ok: false, reason: 'HOST_PIN_UNPROVEN', detail: 'HOST_PIN_OBSERVATION_TIMEOUT' };
   const after = queryHostParentChain(startingPid, Math.min(10000, remainingMs));
-  if (!after || Date.now() - startedMs > 15000) return { ok: false, reason: 'HOST_PIN_UNPROVEN' };
+  if (!after || Date.now() - startedMs > 15000) {
+    return { ok: false, reason: 'HOST_PIN_UNPROVEN', detail: 'HOST_PIN_PARENT_CHAIN_RECHECK_UNAVAILABLE' };
+  }
   const match = matches[0];
   // Same identity test on both platforms: the pid, its birth time, and the image
   // path must all still agree. Windows keeps its case-insensitive comparison;
@@ -1126,14 +1228,18 @@ function observeClaudeExecutablePin(options) {
   };
   const stable = after.filter((row) => row.process_id === match.row.process_id &&
     row.creation_time === match.row.creation_time && samePath(row.executable_path));
-  if (stable.length !== 1) return { ok: false, reason: 'HOST_PIN_UNPROVEN' };
+  if (stable.length !== 1) {
+    return { ok: false, reason: 'HOST_PIN_UNPROVEN', detail: 'HOST_PIN_PARENT_CHAIN_DRIFT' };
+  }
   return {
     ok: true,
     observationSource,
     processId: match.row.process_id,
     processBirth: match.row.creation_time,
     executablePath: match.resolved,
-    executableDigest: contract.certificate.executable_digest,
+    executableDigest: digestBytes(fs.readFileSync(match.resolved)),
+    cliVersion: match.cliVersion,
+    cliFamily: SUPPORTED_CLAUDE_FAMILY,
     pinDigest: contract.pinDigest,
     hostContractDigest: contract.hostContractDigest,
   };
@@ -1141,7 +1247,9 @@ function observeClaudeExecutablePin(options) {
 
 function interactivePinEvidencePayload(record) {
   return Buffer.from(JSON.stringify([
-    record.schema, record.session_digest, record.worktree_id, record.plan_digest,
+    record.schema, record.session_digest, record.project_root_digest, record.worktree_id,
+    record.requested_profile_name, record.requested_profile_digest, record.transcript_path_digest,
+    record.actual_model, record.cli_family, record.cli_version,
     record.pin_digest, record.host_contract_digest, record.executable_digest,
     record.process_id, record.process_birth_digest, record.observation_source,
     record.observed_at, record.expires_at, record.key_id,
@@ -1151,7 +1259,11 @@ function interactivePinEvidencePayload(record) {
 function verifyInteractivePinEvidence(projectRoot, record, sessionId) {
   if (!record || !hasExactKeys(record, INTERACTIVE_PIN_EVIDENCE_KEYS) ||
       record.schema !== INTERACTIVE_PIN_EVIDENCE_SCHEMA || record.session_digest !== digest(sessionId) ||
-      !DIGEST_RE.test(record.worktree_id) || !DIGEST_RE.test(record.plan_digest) ||
+      record.project_root_digest !== projectRootIdentityDigest(projectRoot) ||
+      !DIGEST_RE.test(record.worktree_id) || !DIGEST_RE.test(record.transcript_path_digest) ||
+      !PROFILE_NAME_RE.test(record.requested_profile_name) || !DIGEST_RE.test(record.requested_profile_digest) ||
+      !(record.actual_model === null || boundedLiteral(record.actual_model, 128)) ||
+      record.cli_family !== SUPPORTED_CLAUDE_FAMILY || !SUPPORTED_CLAUDE_VERSION_RE.test(record.cli_version || '') ||
       !DIGEST_RE.test(record.pin_digest) || !DIGEST_RE.test(record.host_contract_digest) ||
       !DIGEST_RE.test(record.executable_digest) || !DIGEST_RE.test(record.process_birth_digest) ||
       !Number.isInteger(record.process_id) || record.process_id <= 0 ||
@@ -1163,13 +1275,46 @@ function verifyInteractivePinEvidence(projectRoot, record, sessionId) {
   if (!Number.isFinite(observed) || !Number.isFinite(expires) || observed > Date.now() || expires <= Date.now() ||
       expires - observed > SESSION_EVIDENCE_TTL_SECONDS * 1000) return false;
   const contract = readVerifiedHostContractPackage(projectRoot);
-  if (!contract.ok || contract.pinDigest !== record.pin_digest || contract.hostContractDigest !== record.host_contract_digest ||
-      contract.certificate.executable_digest !== record.executable_digest) return false;
+  if (!contract.ok || contract.hostContractDigest !== record.host_contract_digest ||
+      claudeVersionFamily(contract.certificate.cli_version) !== record.cli_family) return false;
+  const profile = resolveRequestedModelProfile(projectRoot, null);
+  if (!profile.ok || profile.name !== record.requested_profile_name || profile.digest !== record.requested_profile_digest ||
+      (record.actual_model !== null && !actualModelMatchesRequestedAlias(record.actual_model, profile.requestedModel))) return false;
   const anchor = readJsonFile(compositionKeyPaths(projectRoot).anchor);
   const publicKey = verifiedAnchor(anchor);
   if (!publicKey || anchor.key_id !== record.key_id) return false;
   return crypto.verify(null, interactivePinEvidencePayload(record), publicKey,
     Buffer.from(record.signature_ed25519_base64, 'base64'));
+}
+
+function canonicalFutureTranscriptLeaf(rawPath) {
+  if (!boundedLiteral(rawPath, 4096) || !path.isAbsolute(rawPath)) return null;
+  const absolute = path.resolve(rawPath);
+  const leaf = path.basename(absolute);
+  let cursor = path.dirname(absolute);
+  const missing = [];
+  while (true) {
+    try {
+      const stat = fs.lstatSync(cursor);
+      if (!stat.isDirectory() || stat.isSymbolicLink()) return null;
+      const existingParent = fs.realpathSync(cursor);
+      const candidate = path.join(existingParent, ...missing, leaf);
+      try {
+        const candidateStat = fs.lstatSync(candidate);
+        if (!candidateStat.isFile() || candidateStat.isSymbolicLink() ||
+            fs.realpathSync(candidate) !== candidate) return null;
+      } catch (error) {
+        if (!error || error.code !== 'ENOENT') return null;
+      }
+      return candidate;
+    } catch (error) {
+      if (!error || error.code !== 'ENOENT') return null;
+      const next = path.dirname(cursor);
+      if (next === cursor) return null;
+      missing.unshift(path.basename(cursor));
+      cursor = next;
+    }
+  }
 }
 
 function recordInteractiveSessionPin(options) {
@@ -1178,18 +1323,41 @@ function recordInteractiveSessionPin(options) {
   if (!isUsableRoot(projectRoot) || !event || event.hook_event_name !== 'SessionStart' ||
       !boundedLiteral(event.session_id, 4096) || typeof event.cwd !== 'string' ||
       path.resolve(event.cwd) !== path.resolve(projectRoot)) return { ok: false, reason: 'HOST_PIN_UNPROVEN' };
-  const observed = observeClaudeExecutablePin({ projectRoot, startingPid: process.pid });
+  // Claude 2.1.x may emit SessionStart before it creates either the transcript
+  // leaf or its project-specific parent directory. Bind the future path only
+  // through the nearest existing non-symlink ancestor. PreToolUse still
+  // requires the exact resulting leaf to exist as a regular non-symlink file.
+  const transcriptPath = canonicalFutureTranscriptLeaf(event.transcript_path);
+  if (!transcriptPath) return { ok: false, reason: 'HOST_TRANSCRIPT_UNPROVEN' };
+  const destination = interactivePinEvidencePath(projectRoot, event.session_id);
+  const existing = readJsonFile(destination);
+  if (verifyInteractivePinEvidence(projectRoot, existing, event.session_id)) {
+    return { ok: true, record: existing, idempotent: true };
+  }
+  const observed = isTestCapability() && options.__testObserved
+    ? options.__testObserved
+    : observeClaudeExecutablePin({ projectRoot, startingPid: process.pid });
   if (!observed.ok) return observed;
+  const profile = resolveRequestedModelProfile(projectRoot, null);
+  if (!profile.ok) return profile;
+  if (event.model !== undefined && (!boundedLiteral(event.model, 128) ||
+      !actualModelMatchesRequestedAlias(event.model, profile.requestedModel))) {
+    return { ok: false, reason: 'HOST_MODEL_PROFILE_MISMATCH' };
+  }
   const owner = lifecycleOwner();
   let worktreeId;
   try { worktreeId = owner.computeWorktreeId(projectRoot); } catch { return { ok: false, reason: 'HOST_PIN_UNPROVEN' }; }
-  const plan = owner.discoverPlan(projectRoot);
-  if (!plan.ok) return { ok: false, reason: 'HOST_PIN_UNPROVEN' };
+  const rootDigest = projectRootIdentityDigest(projectRoot);
+  if (!rootDigest) return { ok: false, reason: 'HOST_PIN_UNPROVEN' };
   const keys = loadOrCreateProductionKey(projectRoot);
   const now = new Date();
   const record = {
     schema: INTERACTIVE_PIN_EVIDENCE_SCHEMA,
-    session_digest: digest(event.session_id), worktree_id: worktreeId, plan_digest: plan.planDigest,
+    session_digest: digest(event.session_id), project_root_digest: rootDigest, worktree_id: worktreeId,
+    requested_profile_name: profile.name, requested_profile_digest: profile.digest,
+    transcript_path_digest: digest(transcriptPath),
+    actual_model: event.model === undefined ? null : event.model,
+    cli_family: observed.cliFamily, cli_version: observed.cliVersion,
     pin_digest: observed.pinDigest, host_contract_digest: observed.hostContractDigest,
     executable_digest: observed.executableDigest, process_id: observed.processId,
     process_birth_digest: digest(observed.processBirth),
@@ -1197,12 +1365,11 @@ function recordInteractiveSessionPin(options) {
     expires_at: new Date(now.getTime() + SESSION_EVIDENCE_TTL_SECONDS * 1000).toISOString(), key_id: keys.keyId,
   };
   record.signature_ed25519_base64 = crypto.sign(null, interactivePinEvidencePayload(record), keys.privateKey).toString('base64');
-  const destination = interactivePinEvidencePath(projectRoot, event.session_id);
   try { publishNoClobber(destination, Buffer.from(canonicalJSONStringify(record), 'utf8'), {}); }
   catch {
-    const existing = readJsonFile(destination);
-    if (!verifyInteractivePinEvidence(projectRoot, existing, event.session_id)) return { ok: false, reason: 'HOST_PIN_UNPROVEN' };
-    return { ok: true, record: existing, idempotent: true };
+    const concurrentlyPublished = readJsonFile(destination);
+    if (!verifyInteractivePinEvidence(projectRoot, concurrentlyPublished, event.session_id)) return { ok: false, reason: 'HOST_PIN_UNPROVEN' };
+    return { ok: true, record: concurrentlyPublished, idempotent: true };
   }
   return { ok: true, record, idempotent: false };
 }
@@ -1277,6 +1444,9 @@ function recordProductionSessionIdentity(options) {
   }
   const profile = resolveRequestedModelProfile(projectRoot, null);
   if (!profile.ok) return profile;
+  if (!actualModelMatchesRequestedAlias(event.model, profile.requestedModel)) {
+    return { ok: false, reason: 'HOST_MODEL_PROFILE_MISMATCH' };
+  }
   const hostContract = verifyClaudeHostContractPackage(projectRoot, options && options.hostPin);
   if (!hostContract.ok) return { ok: false, reason: hostContract.reason || 'HOST_PIN_UNPROVEN' };
   const owner = lifecycleOwner();
@@ -1326,10 +1496,37 @@ function recordProductionSessionIdentity(options) {
   return { ok: true, record };
 }
 
-function productionSessionObservation(projectRoot, event) {
+function productionSessionObservation(projectRoot, event, testObserved) {
   if (!event || typeof event.session_id !== 'string' || event.session_id.length === 0) return null;
   const record = readJsonFile(sessionEvidencePath(projectRoot, event.session_id));
-  return verifyProductionSessionRecord(projectRoot, record, event.session_id) ? record : null;
+  if (verifyProductionSessionRecord(projectRoot, record, event.session_id)) return record;
+  const interactive = readJsonFile(interactivePinEvidencePath(projectRoot, event.session_id));
+  if (!verifyInteractivePinEvidence(projectRoot, interactive, event.session_id) ||
+      !boundedLiteral(event.tool_use_id, 4096) || !boundedLiteral(event.transcript_path, 4096) ||
+      !path.isAbsolute(event.transcript_path) || typeof event.cwd !== 'string' ||
+      path.resolve(event.cwd) !== path.resolve(projectRoot)) return null;
+  let transcriptPath;
+  try {
+    transcriptPath = fs.realpathSync(event.transcript_path);
+    const stat = fs.lstatSync(transcriptPath);
+    if (!stat.isFile() || stat.isSymbolicLink() ||
+        digest(transcriptPath) !== interactive.transcript_path_digest) return null;
+  } catch { return null; }
+  const profile = resolveRequestedModelProfile(projectRoot, null);
+  if (!profile.ok || (interactive.actual_model !== null &&
+      !actualModelMatchesRequestedAlias(interactive.actual_model, profile.requestedModel))) return null;
+  const observed = isTestCapability() && testObserved
+    ? testObserved
+    : observeClaudeExecutablePin({ projectRoot, startingPid: process.pid });
+  if (!observed || !observed.ok || observed.observationSource !== interactive.observation_source ||
+      observed.processId !== interactive.process_id || digest(observed.processBirth) !== interactive.process_birth_digest ||
+      observed.executableDigest !== interactive.executable_digest || observed.cliVersion !== interactive.cli_version ||
+      observed.cliFamily !== interactive.cli_family || observed.pinDigest !== interactive.pin_digest ||
+      observed.hostContractDigest !== interactive.host_contract_digest) return null;
+  return {
+    ...interactive,
+    actual_host: 'claude', actual_role_engine: 'claude', continuity: 'session-persistent',
+  };
 }
 
 function getProductionSessionIdentity(projectRoot, sessionId) {
@@ -1733,21 +1930,40 @@ function recordProductionNativeToolOutcome(options) {
 function compositionPayload(record) {
   return Buffer.from(JSON.stringify([
     record.schema, record.composition_id, record.project_root_digest,
-    record.worktree_id, record.plan_digest, record.entrypoint,
+    record.worktree_id, record.wave_slug, record.plan_digest, record.entrypoint,
     record.argv_digest, record.role_scope_digest, record.actual_host,
     record.actual_model, record.actual_role_engine, record.continuity,
+    record.model_evidence_state, record.actual_effort, record.session_digest,
+    record.tool_use_digest, record.tool_input_digest, record.transcript_path,
+    record.transcript_path_digest,
     record.requested_profile_name, record.requested_profile_digest,
     record.supported_operations, record.created_at, record.expires_at,
     record.key_id,
   ]), 'utf8');
 }
 
+function isPlanlessDashboardComposition(record) {
+  return record.entrypoint === 'init-session' && record.wave_slug === null &&
+    record.plan_digest === null &&
+    record.argv_digest === digest('entrypoint:init-session:readonly') &&
+    record.role_scope_digest === digest(JSON.stringify(null));
+}
+
 function verifyProductionRecord(projectRoot, record, expected) {
   if (!record || record.schema !== COMPOSITION_SCHEMA || !COMPOSITION_RE.test(record.composition_id) ||
       record.project_root_digest !== projectRootIdentityDigest(projectRoot) ||
-      typeof record.worktree_id !== 'string' || typeof record.plan_digest !== 'string' ||
-      record.actual_host !== 'claude' || !boundedLiteral(record.actual_model, 128) ||
+      typeof record.worktree_id !== 'string' ||
+      !(record.plan_digest === null || DIGEST_RE.test(record.plan_digest)) ||
+      !(record.wave_slug === null || (/^[A-Za-z0-9._-]+$/.test(record.wave_slug) && record.wave_slug !== '.' && record.wave_slug !== '..')) ||
+      record.actual_host !== 'claude' || !(record.actual_model === null || boundedLiteral(record.actual_model, 128)) ||
       record.actual_role_engine !== 'claude' || record.continuity !== 'session-persistent' ||
+      !['managed-system-init-stream', 'session-start-model', 'pending-transcript-tool-use'].includes(record.model_evidence_state) ||
+      !(record.actual_effort === null || record.actual_effort === REQUIRED_ENTRYPOINT_EFFORT) ||
+      !(record.session_digest === null || DIGEST_RE.test(record.session_digest)) ||
+      !(record.tool_use_digest === null || DIGEST_RE.test(record.tool_use_digest)) ||
+      !(record.tool_input_digest === null || DIGEST_RE.test(record.tool_input_digest)) ||
+      !(record.transcript_path === null || (boundedLiteral(record.transcript_path, 4096) && path.isAbsolute(record.transcript_path))) ||
+      !(record.transcript_path_digest === null || DIGEST_RE.test(record.transcript_path_digest)) ||
       !PROFILE_NAME_RE.test(record.requested_profile_name) || !DIGEST_RE.test(record.requested_profile_digest) ||
       JSON.stringify(record.supported_operations) !== JSON.stringify(COMPOSITION_OPERATIONS) ||
       typeof record.key_id !== 'string' || !DIGEST_RE.test(record.key_id) ||
@@ -1759,13 +1975,32 @@ function verifyProductionRecord(projectRoot, record, expected) {
   const scope = lifecycleOwner();
   let worktreeId;
   try { worktreeId = scope.computeWorktreeId(projectRoot); } catch { return false; }
+  const planlessDashboard = isPlanlessDashboardComposition(record);
   const expectedPlanDigest = expected && expected.planDigest;
-  const plan = scope.discoverPlan(projectRoot, expectedPlanDigest || null);
-  if (!plan.ok || record.worktree_id !== worktreeId || record.plan_digest !== plan.planDigest) return false;
+  const expectedWaveSlug = expected && expected.waveSlug;
+  // The signed record always contributes its own exact plan selector. Callers
+  // may additionally constrain it, but an omitted expectation must not degrade
+  // verification to an ambiguous global PLAN.md scan in a multi-wave repo.
+  if (record.worktree_id !== worktreeId) return false;
+  if (!planlessDashboard) {
+    const selectedPlanDigest = expectedPlanDigest || record.plan_digest;
+    const selectedWaveSlug = expectedWaveSlug || record.wave_slug;
+    const selector = selectedWaveSlug
+      ? { waveSlug: selectedWaveSlug, expectedDigest: selectedPlanDigest }
+      : selectedPlanDigest;
+    const plan = scope.discoverPlan(projectRoot, selector);
+    if (!plan.ok || record.plan_digest !== plan.planDigest) return false;
+  }
   const profile = resolveRequestedModelProfile(projectRoot, null);
   if (!profile.ok || profile.name !== record.requested_profile_name || profile.digest !== record.requested_profile_digest) return false;
+  if (record.model_evidence_state === 'pending-transcript-tool-use') {
+    if (record.actual_model !== null || record.actual_effort !== REQUIRED_ENTRYPOINT_EFFORT ||
+        !record.session_digest || !record.tool_use_digest || !record.tool_input_digest ||
+        !record.transcript_path || !record.transcript_path_digest) return false;
+  } else if (!actualModelMatchesRequestedAlias(record.actual_model, profile.requestedModel)) return false;
   if (expected && (record.entrypoint !== expected.entrypoint || record.argv_digest !== expected.argvDigest ||
       record.role_scope_digest !== digest(JSON.stringify(expected.roleScope)) ||
+      (expected.waveSlug !== null && expected.waveSlug !== undefined && record.wave_slug !== expected.waveSlug) ||
       (expected.planDigest !== null && expected.planDigest !== undefined && record.plan_digest !== expected.planDigest) ||
       (expected.worktreeId !== null && expected.worktreeId !== undefined && record.worktree_id !== expected.worktreeId))) return false;
   const anchor = readJsonFile(compositionKeyPaths(projectRoot).anchor);
@@ -1785,6 +2020,13 @@ function mintHostCompositionFromSessionObservation(options, sessionObservation) 
   if (!isUsableRoot(projectRoot) || !sessionObservation || !ENTRYPOINT_NAME_RE.test(options.entrypoint) ||
       typeof options.argvDigest !== 'string' || !DIGEST_RE.test(options.argvDigest)) return { ok: false };
   const owner = lifecycleOwner();
+  const currentProfile = resolveRequestedModelProfile(projectRoot, null);
+  if (!currentProfile.ok || currentProfile.name !== sessionObservation.requested_profile_name ||
+      currentProfile.digest !== sessionObservation.requested_profile_digest ||
+      (sessionObservation.actual_model !== null &&
+        !actualModelMatchesRequestedAlias(sessionObservation.actual_model, currentProfile.requestedModel))) {
+    return { ok: false };
+  }
   const pair = owner.resolvePolicyPair(projectRoot);
   if (!pair.ok || pair.policy.schema !== 'runtime-collaboration-policy/v2' || pair.policy.version !== 2 ||
       pair.policy.selection.requested_host !== 'claude' ||
@@ -1796,20 +2038,39 @@ function mintHostCompositionFromSessionObservation(options, sessionObservation) 
   let worktreeId;
   try { worktreeId = owner.computeWorktreeId(projectRoot); } catch { return { ok: false }; }
   const expectedPlanDigest = options.planDigest || null;
-  const plan = owner.discoverPlan(projectRoot, expectedPlanDigest);
-  if (!plan.ok) return { ok: false };
+  const waveSlug = options.waveSlug || null;
+  const planlessDashboard = options.entrypoint === 'init-session' && waveSlug === null &&
+    expectedPlanDigest === null && options.roleScope === null &&
+    options.argvDigest === digest('entrypoint:init-session:readonly');
+  const plan = planlessDashboard ? null : owner.discoverPlan(projectRoot, waveSlug
+    ? { waveSlug, expectedDigest: expectedPlanDigest }
+    : expectedPlanDigest);
+  if (!planlessDashboard && !plan.ok) return { ok: false };
   if (options.worktreeId && options.worktreeId !== worktreeId) return { ok: false };
   const rootDigest = projectRootIdentityDigest(projectRoot);
   if (!rootDigest) return { ok: false };
   const keys = loadOrCreateProductionKey(projectRoot);
   const compositionId = crypto.randomBytes(16).toString('hex');
   const createdAt = new Date();
+  const interactiveEvent = sessionObservation.observation_source !== 'managed-system-init-stream' &&
+    options.event && options.event.hook_event_name === 'PreToolUse'
+    ? options.event : null;
+  if (interactiveEvent && (!boundedLiteral(interactiveEvent.session_id, 4096) ||
+      !boundedLiteral(interactiveEvent.tool_use_id, 4096) || !isPlainObject(interactiveEvent.tool_input))) {
+    return { ok: false };
+  }
+  const pendingModel = sessionObservation.actual_model === null;
+  let transcriptPath = null;
+  if (interactiveEvent) {
+    try { transcriptPath = fs.realpathSync(interactiveEvent.transcript_path); } catch { return { ok: false }; }
+  }
   const record = {
     schema: COMPOSITION_SCHEMA,
     composition_id: compositionId,
     project_root_digest: rootDigest,
     worktree_id: worktreeId,
-    plan_digest: plan.planDigest,
+    wave_slug: waveSlug,
+    plan_digest: planlessDashboard ? null : plan.planDigest,
     entrypoint: options.entrypoint,
     argv_digest: options.argvDigest,
     role_scope_digest: digest(JSON.stringify(options.roleScope)),
@@ -1817,6 +2078,15 @@ function mintHostCompositionFromSessionObservation(options, sessionObservation) 
     actual_model: sessionObservation.actual_model,
     actual_role_engine: 'claude',
     continuity: 'session-persistent',
+    model_evidence_state: sessionObservation.observation_source === 'managed-system-init-stream'
+      ? 'managed-system-init-stream'
+      : pendingModel ? 'pending-transcript-tool-use' : 'session-start-model',
+    actual_effort: interactiveEvent ? REQUIRED_ENTRYPOINT_EFFORT : null,
+    session_digest: interactiveEvent ? digest(interactiveEvent.session_id) : null,
+    tool_use_digest: interactiveEvent ? digest(interactiveEvent.tool_use_id) : null,
+    tool_input_digest: interactiveEvent ? digest(canonicalJSONStringify(interactiveEvent.tool_input)) : null,
+    transcript_path: transcriptPath,
+    transcript_path_digest: transcriptPath ? digest(transcriptPath) : null,
     requested_profile_name: sessionObservation.requested_profile_name,
     requested_profile_digest: sessionObservation.requested_profile_digest,
     supported_operations: [...COMPOSITION_OPERATIONS],
@@ -1834,8 +2104,14 @@ function mintProductionHostComposition(options) {
   const projectRoot = options && options.projectRoot;
   if (!isUsableRoot(projectRoot) || !options.event || options.event.hook_event_name !== 'PreToolUse' ||
       options.event.tool_name !== 'Bash') return { ok: false };
+  if (!isPlainObject(options.event.effort) || !boundedLiteral(options.event.effort.level, 16)) {
+    return { ok: false, reason: 'HOST_EFFORT_UNPROVEN' };
+  }
+  if (options.event.effort.level !== REQUIRED_ENTRYPOINT_EFFORT) {
+    return { ok: false, reason: 'HOST_EFFORT_MISMATCH' };
+  }
   return mintHostCompositionFromSessionObservation(
-    options, productionSessionObservation(projectRoot, options.event),
+    options, productionSessionObservation(projectRoot, options.event, options.__testObserved),
   );
 }
 
@@ -1865,6 +2141,7 @@ function mintManagedLifecycleCommandAuthority(options) {
     actionId: options.actionId === undefined ? null : options.actionId,
     worktreeId: options.worktreeId,
     planDigest: options.planDigest,
+    waveSlug: options.waveSlug,
   });
 }
 
@@ -1878,10 +2155,55 @@ function mintManagedSupervisorStartAuthority(options) {
 
 const ENTRYPOINT_NAME_RE = /^(init-session|resume-work|work|ingest-content|monitor-docs)$/;
 
+function resolvePendingCompositionModel(projectRoot, record) {
+  if (record.model_evidence_state !== 'pending-transcript-tool-use') return record;
+  const profile = resolveRequestedModelProfile(projectRoot, null);
+  if (!profile.ok) return null;
+  const deadline = Date.now() + 2000;
+  const waitCell = new Int32Array(new SharedArrayBuffer(4));
+  do {
+    let bytes = null;
+    try {
+      const real = fs.realpathSync(record.transcript_path);
+      const stat = fs.lstatSync(real);
+      if (!stat.isFile() || stat.isSymbolicLink() || stat.size < 1 || stat.size > 32 * 1024 * 1024 ||
+          digest(real) !== record.transcript_path_digest) return null;
+      bytes = fs.readFileSync(real, 'utf8');
+    } catch { /* Claude may still be flushing the just-approved tool-use row. */ }
+    if (bytes !== null) {
+      const matches = [];
+      for (const line of bytes.split(/\r?\n/)) {
+        if (!line) continue;
+        let row;
+        try { row = JSON.parse(line); } catch { continue; }
+        if (!row || row.type !== 'assistant' || digest(row.sessionId || '') !== record.session_digest ||
+            path.resolve(row.cwd || '') !== path.resolve(projectRoot) ||
+            claudeVersionFamily(row.version) !== SUPPORTED_CLAUDE_FAMILY || !row.message ||
+            !boundedLiteral(row.message.model, 128) || !Array.isArray(row.message.content)) continue;
+        const uses = row.message.content.filter((item) => item && item.type === 'tool_use' &&
+          digest(item.id || '') === record.tool_use_digest &&
+          isPlainObject(item.input) &&
+          digest(canonicalJSONStringify(item.input)) === record.tool_input_digest);
+        if (uses.length === 1) matches.push(row);
+      }
+      if (matches.length > 1) return null;
+      if (matches.length === 1) {
+        const actualModel = matches[0].message.model;
+        if (!actualModelMatchesRequestedAlias(actualModel, profile.requestedModel)) return null;
+        return { ...record, actual_model: actualModel, model_evidence_state: 'transcript-finalized' };
+      }
+    }
+    if (Date.now() < deadline) Atomics.wait(waitCell, 0, 0, 25);
+  } while (Date.now() < deadline);
+  return null;
+}
+
 function consumeProductionHostComposition(projectRoot, compositionId, expected) {
   if (!COMPOSITION_RE.test(compositionId)) return { ok: false };
   const record = readJsonFile(compositionRecordPath(projectRoot, compositionId));
   if (!verifyProductionRecord(projectRoot, record, expected)) return { ok: false };
+  const resolvedRecord = resolvePendingCompositionModel(projectRoot, record);
+  if (!resolvedRecord) return { ok: false };
   try {
     fs.writeFileSync(compositionConsumedPath(projectRoot, compositionId), JSON.stringify({
       schema: 'runtime/claude-host-composition-consumed/v1', composition_id: compositionId,
@@ -1891,7 +2213,7 @@ function consumeProductionHostComposition(projectRoot, compositionId, expected) 
     if (error && error.code === 'EEXIST') return { ok: false };
     throw error;
   }
-  return { ok: true, record };
+  return { ok: true, record: resolvedRecord };
 }
 
 function validateProductionHostComposition(projectRoot, compositionId, expected) {
@@ -1907,7 +2229,7 @@ function findCurrentProductionAdmission(projectRoot) {
   for (const name of names) {
     if (!/^[0-9a-f]{32}\.json$/.test(name)) continue;
     const record = readJsonFile(path.join(compositionDir(projectRoot), name));
-    if (verifyProductionRecord(projectRoot, record, null)) records.push(record);
+    if (record && record.plan_digest !== null && verifyProductionRecord(projectRoot, record, null)) records.push(record);
   }
   records.sort((a, b) => b.created_at.localeCompare(a.created_at));
   return records[0] || null;
@@ -1945,7 +2267,9 @@ module.exports = {
   operationForAction,
   COMPOSITION_OPERATIONS,
   __TEST_ONLY__queryHostParentChain: queryHostParentChain,
+  __TEST_ONLY__parseDarwinTextExecutable: parseDarwinTextExecutable,
   __TEST_ONLY__pinObservationSourceFor: pinObservationSourceFor,
+  __TEST_ONLY__trustedClaudeVendorSignature: trustedClaudeVendorSignature,
   __TEST_ONLY__mintHostAdapterBrand: mintHostAdapterBrand,
   __TEST_ONLY__admitIbindEvidence: admitIbindEvidence,
 };

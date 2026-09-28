@@ -108,7 +108,7 @@ Claude must be given access to the sibling toolkit on every normal launch:
 
 ```bash
 cd /path/to/my-project
-claude --add-dir "$ANDROID_COMMON_DOC"
+claude --add-dir "$ANDROID_COMMON_DOC" --effort high
 ```
 
 See [Runtime consumer operations](../runtime-consumer-operations.md) for runtime

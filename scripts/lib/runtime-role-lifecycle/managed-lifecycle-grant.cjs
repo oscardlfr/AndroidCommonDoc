@@ -46,7 +46,10 @@ function resolveOrMintManagedLifecycleGrant(options) {
     }
   } else {
     const expectedPlanDigest = options.planDigest || null;
-    const plan = discoverPlan(projectRootDescriptor, expectedPlanDigest);
+    const selector = options.waveSlug === null || options.waveSlug === undefined
+      ? expectedPlanDigest
+      : { waveSlug: options.waveSlug, expectedDigest: expectedPlanDigest };
+    const plan = discoverPlan(projectRootDescriptor, selector);
     if (!plan.ok) return { ok: false, reason: 'MANAGED_LIFECYCLE_PLAN_INVALID' };
     try { worktreeId = computeWorktreeId(projectRootDescriptor); } catch {
       return { ok: false, reason: 'MANAGED_LIFECYCLE_WORKTREE_INVALID' };

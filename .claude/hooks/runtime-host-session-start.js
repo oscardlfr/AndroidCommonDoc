@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 'use strict';
 
-// SessionStart is intentionally not promoted to full host identity. The
-// recorder accepts only the richer system/init frame observed by the live
-// conductor; this hook merely forwards genuine SessionStart fields so the
-// same fail-closed validator can reject any attempt to fabricate model/tools.
+// Interactive Claude does not expose the print-mode system/init frame. This
+// hook records a signed, process-bound model/session pin from the host-owned
+// SessionStart payload. PreToolUse later proves effective effort and the same
+// live Claude process ancestry; it cannot manufacture a missing model pin.
 
 let input = '';
 const timeout = setTimeout(() => process.exit(0), 20000);
@@ -18,11 +18,19 @@ process.stdin.on('end', () => {
     const context = require('../../scripts/lib/runtime-project-context.cjs')
       .verifyRuntimeConsumerInstallation(projectRoot, { verifyContent: true });
     if (!context.ok) process.exit(0);
-    require('../../scripts/lib/runtime-host-claude.cjs')
+    const recorded = require('../../scripts/lib/runtime-host-claude.cjs')
       .recordInteractiveSessionPin({ projectRoot, event });
-  } catch {
+    if (!recorded || recorded.ok !== true) {
+      process.stderr.write('[runtime-host-session-start] '
+        + String(recorded && (recorded.detail || recorded.reason) || 'HOST_PIN_UNPROVEN') + '\n');
+    }
+  } catch (error) {
     // SessionStart cannot block. A missing observation remains fail-closed at
     // the later collaboration entrypoint PreToolUse gate.
+    const code = error && typeof error.code === 'string' && /^[A-Z0-9_]+$/.test(error.code)
+      ? error.code
+      : 'HOOK_EXCEPTION';
+    process.stderr.write('[runtime-host-session-start] ' + code + '\n');
   }
   process.exit(0);
 });

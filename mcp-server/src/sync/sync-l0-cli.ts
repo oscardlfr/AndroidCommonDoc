@@ -428,7 +428,7 @@ async function main(): Promise<void> {
         runtimeResult.repairedExecutables!.join(", "),
       );
     }
-    console.log(`Required Claude launch: claude --add-dir ${JSON.stringify(l0Root)}`);
+    console.log(`Required Claude launch: claude --add-dir ${JSON.stringify(l0Root)} --effort high`);
   }
   process.stdout.write(`${dryRun
     ? "Manifest unchanged: l0-manifest.json (dry-run)"

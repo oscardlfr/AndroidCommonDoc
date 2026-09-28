@@ -100,7 +100,7 @@ launch Claude with the sibling toolkit explicitly allowed:
 node "$ANDROID_COMMON_DOC/mcp-server/build/sync/sync-l0-cli.js" \
   --project-root /path/to/my-project --runtime
 cd /path/to/my-project
-claude --add-dir "$ANDROID_COMMON_DOC"
+claude --add-dir "$ANDROID_COMMON_DOC" --effort high
 ```
 
 Operational details and recovery: [Runtime consumer operations](../runtime-consumer-operations.md).

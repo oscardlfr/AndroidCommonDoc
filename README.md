@@ -24,9 +24,9 @@ Cross-platform scripts, AI agent skills (Claude Code + GitHub Copilot), 28 custo
 
 > **Start here:** `/work` (smart task routing), `/init-session` (project context dashboard), `/resume-work` (CEO-level session resume). These three entry points discover your agents, skills, and modules automatically.
 
-> **L1/L2 runtime consumers:** install and launch with the exact procedure in [Runtime consumer operations](docs/guides/runtime-consumer-operations.md), including required `claude --add-dir <L0-root>`, worktree behavior, safe-mode recovery, and atomic Claude host recertification.
+> **L1/L2 runtime consumers:** install and launch with the exact procedure in [Runtime consumer operations](docs/guides/runtime-consumer-operations.md), including required `claude --add-dir <L0-root>`, worktree behavior, safe-mode recovery, and the patch-tolerant Claude `2.1.x` host adapter.
 
-> **Consumer stabilization status:** [PR #251](https://github.com/oscardlfr/AndroidCommonDoc/pull/251) closed the 13 first-consumer findings, [PR #252](https://github.com/oscardlfr/AndroidCommonDoc/pull/252) shipped the bounded stabilization, and [PR #253](https://github.com/oscardlfr/AndroidCommonDoc/pull/253) shipped consumer-contract convergence at `develop@a89005cf`. Its temporary `PRUNEABLE` workstreams have been collapsed into shipped history in [BACKLOG.md](BACKLOG.md). Until `BL-CONS-P0-01` lands, a requested coverage run with `modules_contributing=0` or only `no_xml` modules is **not** valid coverage evidence, even when its tests pass.
+> **Consumer stabilization status:** [PRs #251–#254](https://github.com/oscardlfr/AndroidCommonDoc/pull/254) shipped first-consumer hardening, bounded stabilization, contract convergence, and the first adoption follow-up through `develop@59087cb`. Superseded `PRUNEABLE` workstreams are collapsed into shipped history in [BACKLOG.md](BACKLOG.md); only the active finalization remains temporary. Until `BL-CONS-P0-01` lands, a requested coverage run with `modules_contributing=0` or only `no_xml` modules is **not** valid coverage evidence, even when its tests pass.
 
 > **Platform support:** All skills, agents, and Detekt rules work on both **Android-only (AGP 8.x)** and **KMP (AGP 9.0+)** projects. A small subset is KMP-only (noted below).
 

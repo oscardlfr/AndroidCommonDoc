@@ -5,6 +5,31 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 
 ## [Unreleased]
 
+### Fixed (runtime adoption finalization)
+
+- Claude Code `2.1.x` is treated as one supported protocol family: patch updates
+  no longer require an exact executable-hash certificate or manual
+  recertification. Live sessions remain fail-closed through platform vendor
+  signature, process ancestry, session/worktree identity, and host-owned model
+  plus PreToolUse effort evidence. When Claude omits the optional SessionStart
+  model, the runtime finalizes it against the exact post-hook transcript
+  `tool_use`. First launch also supports a not-yet-created project transcript
+  directory without trusting symlinked ancestors; `2.2+` requires a separately
+  reviewed adapter.
+- Effective effort is proven only by native `PreToolUse.effort.level`. CLI
+  arguments, token volume and `system/init.per_turn_effort_active` remain
+  diagnostics and cannot grant composition authority.
+- The documented read-only `init-session` dashboard now remains available
+  before a consumer has any `PLAN.md`; it receives host admission without
+  inventing plan-scoped lifecycle authority.
+- Historical checksum-less L0 Detekt hooks can migrate only from their exact
+  per-path shipped hashes. Customized or cross-file bytes remain conflicts, and
+  successful migration converges content, executable mode and manifest ownership.
+- `/init-session` now exposes one closed consumer-local shorthand. The hook owns
+  Node/root resolution and canonical intent encoding, so Claude cannot derail
+  startup with path discovery or auxiliary encoding commands; malformed forms
+  and shell composition fail closed.
+
 ### Fixed (runtime-adoption follow-up)
 
 - Wave-scoped runtime entrypoints resolve the exact requested `PLAN.md` even when

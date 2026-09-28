@@ -22,12 +22,14 @@ function handleConsultRoot(rawArgv) {
   if (!parsed.ok || !path.isAbsolute(parsed.values['--project-root'])) { usageError('consult-root'); return; }
   const projectRoot = parsed.values['--project-root'];
   const encodedIntent = parsed.values['--intent'];
+  const waveSlug = parsed.values['--wave-slug'];
   const decoded = decodeRootConsultIntent(encodedIntent);
   if (!decoded.ok) { invalidError('consult-root', 'POLICY_INVALID'); return; }
   const intentInput = decoded.intent;
   const context = s16ResolveMainContext(
-    projectRoot, parsed.values['--lifecycle-binding'], sha256String('consult-root:' + encodedIntent),
-    intentInput.requester_role, 'consult-root', null, true,
+    projectRoot, parsed.values['--lifecycle-binding'], sha256String('consult-root:' + encodedIntent
+      + (waveSlug === undefined ? '' : ':wave:' + waveSlug)),
+    intentInput.requester_role, 'consult-root', null, true, waveSlug === undefined ? null : waveSlug,
   );
   if (!context.ok) { invalidError('consult-root', 'IDENTITY_MISMATCH'); return; }
 
@@ -220,12 +222,14 @@ function handleConsultRootStatus(rawArgv) {
   if (!parsed.ok || !path.isAbsolute(parsed.values['--project-root'])) { usageError('consult-root-status'); return; }
   const projectRoot = parsed.values['--project-root'];
   const intentId = parsed.values['--intent-id'];
+  const waveSlug = parsed.values['--wave-slug'];
   const intentRead = readRootConsultIntent(projectRoot, intentId);
   if (!intentRead.ok || intentRead.absent) { invalidError('consult-root-status', 'IDENTITY_MISMATCH'); return; }
   const intent = intentRead.intent;
   const context = s16ResolveMainContext(
-    projectRoot, parsed.values['--lifecycle-binding'], sha256String('consult-root-status:' + intentId),
-    intent.requester_role, 'consult-root-status', null, false,
+    projectRoot, parsed.values['--lifecycle-binding'], sha256String('consult-root-status:' + intentId
+      + (waveSlug === undefined ? '' : ':wave:' + waveSlug)),
+    intent.requester_role, 'consult-root-status', null, false, waveSlug === undefined ? null : waveSlug,
   );
   if (!context.ok || context.binding.binding_id !== intent.main_binding_id
       || context.binding.actor_instance_id !== intent.main_actor_instance_id

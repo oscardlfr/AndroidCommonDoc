@@ -77,6 +77,7 @@ const P4_FULL_SCENARIOS = new Set([
 
 const observedAgentScenarios = new Set([
   'success',
+  'effort-inactive',
   'p4-effort-telemetry-absent',
   'chunked-success',
   'five-role-split-deviation',
@@ -265,7 +266,8 @@ function writeAgentObservations(rawInputs, canonicalInputs, options = {}) {
     const executedInput = options.wrongExecutedIndex === index
       ? { ...canonicalInputs[index], prompt: `${canonicalInputs[index].prompt}-executed-wrong` }
       : canonicalInputs[index];
-    rows.push({ evidence_mode: 'fake-fixture', producer: 'fake-claude-functional-child', hook_event_name: 'PreToolUse', session_id: observedSession, tool_use_id: toolUseId, tool_name: 'Agent', tool_input: rawInputs[index], updated_input: canonicalInputs[index] });
+    rows.push({ evidence_mode: 'fake-fixture', producer: 'fake-claude-functional-child', hook_event_name: 'PreToolUse', session_id: observedSession, tool_use_id: toolUseId, tool_name: 'Agent', tool_input: rawInputs[index], updated_input: canonicalInputs[index],
+      ...(scenario === 'p4-effort-telemetry-absent' ? {} : { effort: { level: 'high' } }) });
     if (options.missingStartIndex !== index) {
       rows.push({ evidence_mode: 'fake-fixture', producer: 'fake-claude-functional-child', hook_event_name: 'SubagentStart', session_id: observedSession, agent_id: agentId, agent_type: canonicalInputs[index].name });
       if (options.duplicateStartIndex === index) {
@@ -336,6 +338,13 @@ function writeHostProbeObservations({ phase = 'all' } = {}) {
     fs.writeFileSync(transientTranscripts.actor, '{"transient":"actor"}\n', { flag: 'wx' });
   }
   function add(event, updatedInput = null) {
+    if (event.hook_event_name === 'PreToolUse' && event.effort === undefined
+        && scenario !== 'p4-effort-telemetry-absent') {
+      event = {
+        ...event,
+        effort: { level: scenario === 'p4-effort-mismatch' ? 'max' : 'high' },
+      };
+    }
     rows.push({
       schema: 'runtime/claude-host-contract-probe-event/v1',
       evidence_mode: evidenceMode,

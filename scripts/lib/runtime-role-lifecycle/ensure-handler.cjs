@@ -79,14 +79,14 @@ function handleEnsure(rawArgv) {
   // Order-independent binding scope (PLAN.md ~L748) -- sorted roles, never
   // the literal repeated-flag order a caller happened to type.
   const sortedRoles = roles.slice().sort();
-  const resumeCheckpointRef = parsed.values['--resume-checkpoint'];
+  const waveSlug = parsed.values['--wave-slug']; const resumeCheckpointRef = parsed.values['--resume-checkpoint'];
   if (resumeCheckpointRef !== undefined && !RESUME_CHECKPOINT_REF_RE.test(resumeCheckpointRef)) {
     invalidError('ensure', 'NONE');
     return;
   }
   const argvDigest = sha256String(
     'ensure:' + sortedRoles.join(',')
-    + (resumeCheckpointRef === undefined ? '' : ':resume:' + resumeCheckpointRef),
+    + (resumeCheckpointRef === undefined ? '' : ':resume:' + resumeCheckpointRef) + (waveSlug === undefined ? '' : ':wave:' + waveSlug),
   );
   // PLAN.md ~L576's closed role union: canonical STRING for single-role,
   // sorted-unique ARRAY for multi-role -- never a comma-joined string.
@@ -103,12 +103,12 @@ function handleEnsure(rawArgv) {
     return;
   }
 
-  let planResult = discoverPlan(projectRoot, binding.plan_digest);
+  let planResult = waveSlug === undefined ? discoverPlan(projectRoot, binding.plan_digest) : discoverPlan(projectRoot, { waveSlug, expectedDigest: binding.plan_digest });
   // Preserve the established stale-binding diagnostic when the repository has
   // one unambiguous current PLAN: the comparison below must report identity
   // mismatch, not misclassify a valid policy surface as POLICY_INVALID. In a
   // multi-wave repository there is intentionally no guessing fallback.
-  if (!planResult.ok) {
+  if (!planResult.ok && waveSlug === undefined) {
     const unscopedPlan = discoverPlan(projectRoot);
     if (unscopedPlan.ok) planResult = unscopedPlan;
   }

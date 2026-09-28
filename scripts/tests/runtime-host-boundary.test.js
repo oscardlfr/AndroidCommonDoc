@@ -1030,7 +1030,8 @@ test('R131-BOUNDARY-ADMITTED-ENTRYPOINT-PRETOOLUSE-26: exact signed rewritten en
     }).ok, true);
     const minted = host.mintProductionHostComposition({
       projectRoot: consumerRoot,
-      event: { hook_event_name: 'PreToolUse', tool_name: 'Bash', session_id: sessionId },
+      event: { hook_event_name: 'PreToolUse', tool_name: 'Bash', session_id: sessionId,
+        effort: { level: 'high' } },
       entrypoint: 'monitor-docs', argvDigest: plan.argv_digest, roleScope: plan.role_scope,
     });
     assert.strictEqual(minted.ok, true);

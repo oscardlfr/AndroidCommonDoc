@@ -1,15 +1,15 @@
 # AndroidCommonDoc Backlog
 
 > **Last updated**: 2026-09-28
-> **Roadmap baseline**: `develop@a89005cfd764b53956df5045c94f94da0a8c0384` (PR #253). **H1, G0, ordered Waves 1–7, first-consumer hardening, and consumer-contract convergence are SHIPPED.**
-> **Current delivery**: PR #253 shipped the bounded post-#252 convergence without modifying a product repository. The current runtime-adoption follow-up is limited to independently reproduced upstream defects: wave-scoped admission, sync idempotency diagnostics, planner write confinement, ViewModel-rule precision, and operational guidance. There is no numbered wave marked `NEXT`. **R33 remains deferred.**
+> **Roadmap baseline**: `develop@59087cb248ea441843a0395f756f249d5d14be3b` (PR #254). **H1, G0, ordered Waves 1–7, first-consumer hardening, consumer-contract convergence, and the first runtime-adoption follow-up are SHIPPED.**
+> **Current delivery**: PR #254 shipped the bounded post-#253 adoption fixes without modifying a product repository. The active finalization below is limited to defects independently reproduced after that merge. There is no numbered wave marked `NEXT`. **R33 remains deferred.**
 > **Source of truth**: this file owns ordering and scope. `git log`, merged PRs, and `project_*shipped.md` memory entries own historical detail.
 
 ## Operating contract
 
 - The load-bearing portability floor is **validated disk artifacts**. Runtime messaging is an optional acceleration layer.
 - Adapter delivery, message text, an MCP return value, or a live peer saying “GO” is never evidence. Only a valid, correlated result artifact counts as a protocol-valid consultation answer; phase and push authorization still require their own contracts.
-- Waves 1–7 were executed in order and shipped through PR #250; first-consumer hardening shipped through PR #251 and its bounded stabilization through PR #252.
+- Waves 1–7 were executed in order and shipped through PR #250; consumer hardening and bounded follow-ups shipped through PRs #251–#254.
 - Re-audit observations and file counts at each wave's starting HEAD. Post-G0 counts below were recorded by PR #245 at `619d9a7`; they are a planning baseline, not permanent truth.
 - Each wave must have one frozen scope, explicit no-go boundaries, proportional tests, and a shipped memory entry before the backlog advances.
 - Rich runtimes may add `SendMessage`, persistent peers, MCP invocation, app-server threads, or wakeups; failure or absence of those capabilities must not invalidate the disk floor.
@@ -71,9 +71,9 @@ and did not modify a product repository.
 | 4 | Documented entrypoints must use canonical single-quoted POSIX rendering | **CLOSED by #251** — canonical skills and mirrors |
 | 5 | Runtime installation owns `.claude/registry/wave-topology.yaml` | **CLOSED by #251** — conflict, checksum, and idempotency coverage |
 | 6 | YAML resolves from the toolkit runtime closure | **CLOSED by #251** — consumer fixture has no `mcp-server` tree |
-| 7–8 | Exact binary pinning needs one safe probe→qualification→atomic-publish flow | **CLOSED by #251** — recertification CLI; no manual certificate surgery |
+| 7–8 | Host compatibility must survive supported patch updates without certificate surgery | **REOPENED by real consumer; closing in `wave-runtime-adoption-final`** — `2.1.x` family adapter plus vendor-signed live-session evidence; exact executable hashes are diagnostic, not patch gates |
 | 9 | R131 must not read mutable real-repository `.planning/` | **CLOSED by #251** — isolated one-plan fixture |
-| 10 | Requested effort is not effective effort | **REOPENED by consumer validation; pending in current stabilization** — #251 separated requested/observed/effective and rejected explicit inactive telemetry, but still admitted absent telemetry |
+| 10 | Requested effort is not effective effort | **REOPENED by real consumer; closing in `wave-runtime-adoption-final`** — native `PreToolUse.effort.level` must equal the requested profile; CLI flags, token use and `system/init.per_turn_effort_active` are non-authoritative |
 | 11 | Spawn→`system/init` needs a bounded deadline | **CLOSED by #251** — certification startup watchdog and silent-child negative test |
 | 12 | Normal, safe-mode, bare, and print modes need distinct recovery guidance | **CLOSED by #251** — operations runbook |
 | 13 | Acceptance must execute from a clean consumer and linked worktree | **CLOSED by #251** — real worktree and runtime fixtures |
@@ -92,7 +92,7 @@ post-#251 defects and moved them out of the executable queue.
 |---|---|
 | `BL-CONS-P0-02` malformed settings fail-open | Missing settings may seed a file; malformed JSON/root/hooks, directory paths, and non-`ENOENT` failures preserve consumer state and abort before sync writes. Settings replacement is atomic. |
 | `BL-CONS-P1-02` silent recovery one-shot | `claude-safe-one-shot.cjs` applies bounded init/activity/total deadlines, exact none/read/repair `--tools` profiles verified against `system/init`, partial streaming, terminal-result/accounting/subagent receipts, budget-error classification, and incomplete-accounting evidence after forced termination. |
-| Finding 10 effort effectiveness | Effort-controlled certification requires positive active telemetry plus an observed value equal to the request. False, absent, mismatched, or conflicting inherited `CLAUDE_CODE_EFFORT_LEVEL` evidence fails closed before authority is claimed; the recovery launcher rejects ambiguous CLI/environment selection and the transport-only probe cannot publish an effort claim. |
+| Finding 10 effort effectiveness | PR #252 separated requested, observed and effective effort and rejected ambiguous CLI/environment selection. Subsequent live Claude 2.1.283 evidence showed that `system/init.per_turn_effort_active` is not a reliable authority; the active finalization replaces it with native `PreToolUse.effort.level` evidence while retaining the #252 conflict checks. |
 | Formal-wave Bats fixture isolation | Wave-resolution fixtures now clear or explicitly override inherited `CLAUDE_WAVE_SLUG`, proving their intended fallback/CLI-precedence contracts even when the full suite runs inside a named QG wave. |
 | Host-specific source-hook registrations | A standalone consumer launcher resolves the one manifest-declared local L0 source across normal checkouts and linked worktrees. Remote, unresolved, ambiguous, unsupported, and symlinked targets fail closed; prior generated absolute registrations migrate. |
 | Ordinary/runtime composition | Runtime-owned topology survives ordinary prune; repeated ordinary/runtime dry-runs are clean; generated settings contain no developer home or Node installation path. |
@@ -116,11 +116,30 @@ entrypoint launcher, and clean L1/L2/worktree acceptance with exact operations
 guidance. Those execution summaries are intentionally pruned; DawSync remains
 consumer evidence, never an edited product repository.
 
-## Active backlog after PR #253
+## PR #254 runtime-adoption follow-up — SHIPPED
+
+PR #254 was squash-merged as
+`59087cb248ea441843a0395f756f249d5d14be3b`. It shipped exact wave-scoped
+admission, post-admission PREP creation, ordinary/runtime timeout idempotency,
+planner write confinement, ViewModel-rule precision, recovery guidance, and the
+bounded consumer acceptance that exposed the finalization defects below.
+
+## Active backlog after PR #254
 
 Priority is impact, not implementation size. Every item needs an accepted PLAN,
 negative and positive tests, and a clean-consumer acceptance when it changes a
 consumer-facing contract.
+
+### Runtime adoption finalization — ACTIVE, PRUNEABLE after merge
+
+This bounded workstream closes defects found only when upgrading and launching
+real consumers: punctuation-safe class parsing, exact multi-wave selection,
+planless read-only dashboard bootstrap, post-admission PREP creation, interactive host-composition production, native
+effective-effort proof, Claude `2.1.x` patch compatibility, and allowlisted
+migration of checksum-less legacy Detekt hooks. It is complete only after the same final commit passes disposable
+`shared-kmp-libs` L1 upgrade, clean L2/worktree launch, one local full aggregate,
+and the existing required GitHub CI. Collapse this paragraph into
+shipped history after the PR merges; do not preserve it as a parallel roadmap.
 
 ### P0 — evidence integrity and consumer data safety
 

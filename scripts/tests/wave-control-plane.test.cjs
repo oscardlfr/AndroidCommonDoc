@@ -176,6 +176,18 @@ test('lifecycle roles reject duplicates and invalid names independently of verdi
   }
 });
 
+test('wave class grammar normalizes bounded prose punctuation and backticks without accepting prefixes', () => {
+  for (const expected of ['HARNESS', 'DOC', 'FAST-PATH']) {
+    for (const rendered of [expected, `${expected}.`, `${expected};`, `\`${expected}\``, `\`${expected}\`.`]) {
+      assert.strictEqual(control.parsePlanClass(`### Wave Class\n**Class**: ${rendered}\n`), expected);
+    }
+  }
+  for (const invalid of ['HARNESS.foo', 'HARNESS-extra', 'UNKNOWN', '`HARNESS.foo`', 'HARNESS trailing']) {
+    assert.throws(() => control.parsePlanClass(`### Wave Class\n**Class**: ${invalid}\n`), /INVALID_WAVE_CLASS/);
+  }
+  assert.throws(() => control.parsePlanClass('### Wave Class\n**Class**: HARNESS\n**Class**: DOC\n'), /INVALID_WAVE_CLASS/);
+});
+
 test('canonical runtime entrypoint preflights exact wave without mutating state', () => {
   const root = fixture({
     className: 'HARNESS',
@@ -210,6 +222,76 @@ test('wave-scoped init-session selects its exact PLAN when sibling waves exist',
     const selected = require('../lib/runtime-role-lifecycle.cjs').discoverPlan(root, scope.planDigest);
     assert.strictEqual(selected.ok, true);
     assert.strictEqual(selected.planPath, path.join(root, '.planning', 'wave-demo', 'PLAN.md'));
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
+
+test('exact wave selection remains unambiguous for byte-identical sibling plans and rejects unsafe targets', () => {
+  const root = fixture({ lifecycleRoles: '[context-provider]' });
+  try {
+    const target = path.join(root, '.planning', 'wave-demo', 'PLAN.md');
+    const bytes = fs.readFileSync(target);
+    fs.mkdirSync(path.join(root, '.planning', 'wave-copy'), { recursive: true });
+    fs.writeFileSync(path.join(root, '.planning', 'wave-copy', 'PLAN.md'), bytes);
+    const digest = require('crypto').createHash('sha256').update(bytes).digest('hex');
+    const rll = require('../lib/runtime-role-lifecycle.cjs');
+    assert.strictEqual(rll.discoverPlan(root, digest).ok, false, 'digest-only lookup remains deliberately ambiguous');
+    assert.deepStrictEqual(rll.discoverPlan(root, { waveSlug: 'demo', expectedDigest: digest }), {
+      ok: true, planPath: path.join(fs.realpathSync(root), '.planning', 'wave-demo', 'PLAN.md'), planDigest: digest, waveSlug: 'demo',
+    });
+    const entrypointPlan = entrypoints.planEntrypointStep(
+      'init-session', { mode: 'start', wave_slug: 'demo' }, root,
+    );
+    const scope = entrypoints.plannedEntrypointWaveScope(entrypointPlan);
+    const exactGrant = rll.resolveOrMintManagedLifecycleGrant({
+      projectRootDescriptor: root,
+      sessionId: 'wave-exact-managed-grant',
+      subcommand: entrypointPlan.command,
+      argvDigest: entrypointPlan.argv_digest,
+      role: entrypointPlan.role_scope,
+      actionId: null,
+      worktreeId: scope.worktreeId,
+      planDigest: scope.planDigest,
+      waveSlug: scope.waveSlug,
+    });
+    assert.strictEqual(exactGrant.ok, true,
+      'the managed lifecycle grant must preserve the exact wave selector');
+    assert.deepStrictEqual(rll.resolveOrMintManagedLifecycleGrant({
+      projectRootDescriptor: root,
+      sessionId: 'wave-ambiguous-managed-grant',
+      subcommand: entrypointPlan.command,
+      argvDigest: entrypointPlan.argv_digest,
+      role: entrypointPlan.role_scope,
+      actionId: null,
+      worktreeId: scope.worktreeId,
+      planDigest: scope.planDigest,
+    }), { ok: false, reason: 'MANAGED_LIFECYCLE_PLAN_INVALID' },
+    'digest-only managed lifecycle selection must remain fail-closed when two plans share bytes');
+    assert.strictEqual(rll.discoverPlan(root, { waveSlug: '../demo', expectedDigest: digest }).ok, false);
+    assert.strictEqual(rll.discoverPlan(root, { waveSlug: 'demo', expectedDigest: '0'.repeat(64) }).ok, false);
+    fs.renameSync(target, `${target}.real`);
+    fs.symlinkSync(`${target}.real`, target);
+    assert.strictEqual(rll.discoverPlan(root, { waveSlug: 'demo', expectedDigest: digest }).ok, false);
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
+
+test('wave-scoped work keeps the exact selector when sibling plans are byte-identical', () => {
+  const root = fixture({ lifecycleRoles: '[]' });
+  try {
+    const target = path.join(root, '.planning', 'wave-demo', 'PLAN.md');
+    fs.mkdirSync(path.join(root, '.planning', 'wave-copy'), { recursive: true });
+    fs.copyFileSync(target, path.join(root, '.planning', 'wave-copy', 'PLAN.md'));
+    control.initialize(root, 'demo');
+    control.transition(root, 'demo', 'EXECUTE');
+    const plan = entrypoints.planEntrypointStep('work', {
+      role: 'toolkit-specialist',
+      subject_ref: `subject:${'a'.repeat(64)}`,
+      task: 'bounded exact-wave task',
+      wave_slug: 'demo',
+    }, root);
+    assert.strictEqual(plan.command, 'root-source',
+      'work planning must not fall back to blocked merely because another wave has identical PLAN bytes');
+    assert.match(plan.argv_digest, /^[0-9a-f]{64}$/);
+    assert.deepStrictEqual(entrypoints.plannedEntrypointWaveScope(plan).waveSlug, 'demo');
   } finally { fs.rmSync(root, { recursive: true, force: true }); }
 });
 

@@ -163,9 +163,22 @@ function primeProductionClaudeHostAdmission(options) {
   const roleScope = options.roleScope === undefined ? null : options.roleScope;
   const argvDigest = options.argvDigest || rc.sha256String(`entrypoint:${entrypoint}:readonly`);
   ensureDurableSessionEvidence(projectRoot, sessionId);
+  const transcriptDir = path.join(projectRoot, '.androidcommondoc-test', 'claude-host-contract', 'transcripts');
+  const transcriptPath = path.join(transcriptDir, rc.sha256String(sessionId) + '.jsonl');
+  const toolUseId = `fixture-host-admission-${rc.sha256String(sessionId).slice(0, 16)}`;
+  const toolInput = { command: `node .claude/runtime/l0-entrypoint-launcher.cjs ${entrypoint}` };
+  fs.mkdirSync(transcriptDir, { recursive: true });
+  fs.writeFileSync(transcriptPath, JSON.stringify({
+    type: 'assistant', session_id: sessionId,
+    message: { content: [{ type: 'tool_use', id: toolUseId, name: 'Bash', input: toolInput }] },
+  }) + '\n', { mode: 0o600 });
   const minted = claudeHost.mintProductionHostComposition({
     projectRoot,
-    event: { hook_event_name: 'PreToolUse', tool_name: 'Bash', session_id: sessionId },
+    event: {
+      hook_event_name: 'PreToolUse', tool_name: 'Bash', session_id: sessionId,
+      tool_use_id: toolUseId, tool_input: toolInput, transcript_path: transcriptPath,
+      effort: { level: 'high' },
+    },
     entrypoint,
     argvDigest,
     roleScope,

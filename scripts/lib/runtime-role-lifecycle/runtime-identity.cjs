@@ -110,7 +110,38 @@ function createRuntimeIdentityModule({
    * @param {string} projectRoot
    * @returns {{ok:true,planPath:string,planDigest:string}|{ok:false}}
    */
-  function discoverPlan(projectRoot, expectedDigest = null) {
+  function resolveWavePlan(projectRoot, waveSlug, expectedDigest = null) {
+    if (!/^[A-Za-z0-9._-]+$/.test(waveSlug || '') || waveSlug === '.' || waveSlug === '..' ||
+        (expectedDigest !== null && !/^[0-9a-f]{64}$/.test(expectedDigest))) return { ok: false };
+    let canonicalRoot;
+    try { canonicalRoot = fs.realpathSync(projectRoot); } catch { return { ok: false }; }
+    const candidate = path.join(canonicalRoot, '.planning', 'wave-' + waveSlug, 'PLAN.md');
+    const prefix = canonicalRoot.endsWith(path.sep) ? canonicalRoot : canonicalRoot + path.sep;
+    if (!candidate.startsWith(prefix)) return { ok: false };
+    let cursor = canonicalRoot;
+    for (const part of path.relative(canonicalRoot, candidate).split(path.sep)) {
+      cursor = path.join(cursor, part);
+      let stat;
+      try { stat = fs.lstatSync(cursor); } catch { return { ok: false }; }
+      if (stat.isSymbolicLink() || (cursor !== candidate && !stat.isDirectory()) ||
+          (cursor === candidate && !stat.isFile())) return { ok: false };
+    }
+    let planDigest;
+    try {
+      if (fs.realpathSync(candidate) !== candidate) return { ok: false };
+      planDigest = sha256File(candidate);
+    } catch { return { ok: false }; }
+    if (expectedDigest !== null && planDigest !== expectedDigest) return { ok: false };
+    return { ok: true, planPath: candidate, planDigest, waveSlug };
+  }
+
+  function discoverPlan(projectRoot, expected = null) {
+    if (expected && typeof expected === 'object' && !Array.isArray(expected)) {
+      const keys = Object.keys(expected).sort();
+      if (JSON.stringify(keys) !== JSON.stringify(['expectedDigest', 'waveSlug'])) return { ok: false };
+      return resolveWavePlan(projectRoot, expected.waveSlug, expected.expectedDigest);
+    }
+    const expectedDigest = expected;
     if (expectedDigest !== null && !/^[0-9a-f]{64}$/.test(expectedDigest)) return { ok: false };
     const planningDir = path.join(projectRoot, '.planning');
     let entries;
@@ -213,7 +244,7 @@ function createRuntimeIdentityModule({
     computePrincipalId, computeRepoId, computeWorktreeId,
     deepestExistingAncestorRealpath, coordinationRootPathFor,
     computeCoordinationRootIdFromPath, computeCoordinationRootId,
-    discoverPlan, templateRootBase, roleProfileDigestFor, resolveCanonicalRoleProfile,
+    discoverPlan, resolveWavePlan, templateRootBase, roleProfileDigestFor, resolveCanonicalRoleProfile,
   });
 }
 

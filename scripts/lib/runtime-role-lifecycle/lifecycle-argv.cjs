@@ -23,6 +23,9 @@ const SUBCOMMAND_SPEC = Object.freeze({
       // code-owned by runtime-collaboration-entrypoints, never accepted as
       // actor/session identity.
       '--resume-checkpoint': { required: false, repeatable: false },
+      // Internal entrypoint-owned selector. When present, the grant digest
+      // binds this exact wave and the handler resolves only its PLAN.md.
+      '--wave-slug': { required: false, repeatable: false },
       // WP3: optional -- hook-injected in production (context-provider-gate.js,
       // real wiring is WP4); its ABSENCE is the normal ephemeral-fallback path
       // this file already implemented in WP1, unchanged. Its VALUE, when
@@ -72,6 +75,7 @@ const SUBCOMMAND_SPEC = Object.freeze({
     flags: {
       '--project-root': { required: true, repeatable: false },
       '--role': { required: false, repeatable: false },
+      '--wave-slug': { required: false, repeatable: false },
       // Point 1.1 (R4): see the `probe` entry above for the same rationale.
       '--lifecycle-binding': { required: false, repeatable: false },
     },
@@ -97,6 +101,7 @@ const SUBCOMMAND_SPEC = Object.freeze({
     flags: {
       '--project-root': { required: true, repeatable: false },
       '--intent': { required: true, repeatable: false },
+      '--wave-slug': { required: false, repeatable: false },
       '--lifecycle-binding': { required: false, repeatable: false },
     },
   },
@@ -112,6 +117,7 @@ const SUBCOMMAND_SPEC = Object.freeze({
     flags: {
       '--project-root': { required: true, repeatable: false },
       '--intent-id': { required: true, repeatable: false },
+      '--wave-slug': { required: false, repeatable: false },
       '--lifecycle-binding': { required: false, repeatable: false },
     },
   },
@@ -119,6 +125,7 @@ const SUBCOMMAND_SPEC = Object.freeze({
     flags: {
       '--project-root': { required: true, repeatable: false },
       '--intent': { required: true, repeatable: false },
+      '--wave-slug': { required: false, repeatable: false },
       '--lifecycle-binding': { required: false, repeatable: false },
     },
   },
@@ -126,6 +133,7 @@ const SUBCOMMAND_SPEC = Object.freeze({
     flags: {
       '--project-root': { required: true, repeatable: false },
       '--action': { required: true, repeatable: false },
+      '--wave-slug': { required: false, repeatable: false },
       '--lifecycle-binding': { required: false, repeatable: false },
     },
   },
