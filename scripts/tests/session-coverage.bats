@@ -1176,7 +1176,8 @@ assert d['profiles']['advanced']['overrides'].get('debugger') == 'opus', 'debugg
 
 @test "templates: main agent is the orchestrator and retired team-lead is not spawned" {
     grep -q "main agent IS the team lead" "$L0_ROOT/docs/agents/main-agent-orchestration-guide.md"
-    grep -q "retired template is not spawned" "$L0_ROOT/docs/agents/claude-code-workflow.md"
+    grep -Fq "The main conversation owns orchestration." "$L0_ROOT/docs/agents/claude-code-workflow.md"
+    grep -Fq '`team-lead` is a historical name for that logical responsibility, not an installable agent profile.' "$L0_ROOT/docs/agents/claude-code-workflow.md"
 }
 
 @test "templates: team-lead has agent roster with team roles" {
@@ -1424,8 +1425,8 @@ assert d['profiles']['advanced']['overrides'].get('debugger') == 'opus', 'debugg
 }
 
 @test "arch: claude-code-workflow uses the main conversation as orchestrator" {
-    grep -q "main conversation as the primary workflow coordinator" "$L0_ROOT/docs/agents/claude-code-workflow.md"
-    grep -q "Delegate to specialists with Write" "$L0_ROOT/docs/agents/claude-code-workflow.md"
+    grep -Fq "The main conversation owns orchestration." "$L0_ROOT/docs/agents/claude-code-workflow.md"
+    grep -Fq "dispatch only the specialists required by the plan" "$L0_ROOT/docs/agents/claude-code-workflow.md"
 }
 
 @test "arch: spec-driven-workflow shows orchestrator dispatching architects" {
@@ -1452,9 +1453,9 @@ assert d['profiles']['advanced']['overrides'].get('debugger') == 'opus', 'debugg
     done
 }
 
-@test "arch: claude-code-workflow forbids Bash spawning" {
-    grep -q "never shell-launch a retired.*team-lead.*template" "$L0_ROOT/docs/agents/claude-code-workflow.md"
-    grep -q 'WRONG: `Bash' "$L0_ROOT/docs/agents/claude-code-workflow.md"
+@test "arch: claude-code-workflow forbids legacy team-lead launch and fixed rosters" {
+    grep -Fq 'Do not combine this path with `--agent team-lead`' "$L0_ROOT/docs/agents/claude-code-workflow.md"
+    grep -Fq "create a manual fixed roster" "$L0_ROOT/docs/agents/claude-code-workflow.md"
 }
 
 @test "arch: /work skill routes to team-lead" {

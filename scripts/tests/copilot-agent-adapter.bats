@@ -53,12 +53,17 @@ targets: [all]
 
 - Keep generated fixtures deterministic.
 EOF
-    cat > "$FIXTURE_ROOT/CLAUDE.md" <<'EOF'
+    cat > "$FIXTURE_ROOT/AGENTS.md" <<'EOF'
 # Fixture
 
 ## Rules
 
 - Preserve generated output parity.
+EOF
+    cat > "$FIXTURE_ROOT/CLAUDE.md" <<'EOF'
+# Fixture
+
+@AGENTS.md
 EOF
 
     HOME="$FIXTURE_HOME" bash "$FIXTURE_ROOT/adapters/generate-all.sh" \
