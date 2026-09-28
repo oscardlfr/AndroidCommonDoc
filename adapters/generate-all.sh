@@ -66,10 +66,10 @@ if [[ "$CHECK" == true ]]; then
   fi
 
   drift=0
-  if ! diff -qr "$EXPECTED_ROOT/setup/copilot-templates" "$STAGED_ROOT/setup/copilot-templates"; then
+  if ! diff -qr "$EXPECTED_ROOT/setup/copilot-templates" "$STAGED_ROOT/setup/copilot-templates" >&2; then
     drift=1
   fi
-  if ! diff -qr "$EXPECTED_ROOT/setup/copilot-agent-templates" "$STAGED_ROOT/setup/copilot-agent-templates"; then
+  if ! diff -qr "$EXPECTED_ROOT/setup/copilot-agent-templates" "$STAGED_ROOT/setup/copilot-agent-templates" >&2; then
     drift=1
   fi
   if [[ "$drift" -ne 0 ]]; then
