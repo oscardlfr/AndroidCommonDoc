@@ -94,10 +94,14 @@ jobs:
           check "README: Ingestion Loop mentioned"        "ingestion|ingest-content"       "README.md"
           check "README: team-lead (not project-manager)" "team-lead"                      "README.md"
 
-          # CLAUDE.md must have Wave History + ingestion loop + MCP wiring note
-          check "CLAUDE.md: Wave History section"         "^## Wave History"               "CLAUDE.md"
-          check "CLAUDE.md: ingestion loop"               "Ingestion Loop"                 "CLAUDE.md"
-          check "CLAUDE.md: team-lead"                    "team-lead"                      "CLAUDE.md"
+          # CLAUDE.md is intentionally a thin runtime adapter. Durable workflow,
+          # orchestration and memory rules live in the portable AGENTS.md contract.
+          check "CLAUDE.md: imports portable authority"    "^@AGENTS\\.md$"                 "CLAUDE.md"
+          check "CLAUDE.md: path-scoped rules"             "\\.claude/rules/"               "CLAUDE.md"
+          check "CLAUDE.md: canonical launcher"            "/init-session --orchestrate"     "CLAUDE.md"
+          check "AGENTS.md: main orchestrator"             "main conversation is the orchestrator" "AGENTS.md"
+          check "AGENTS.md: no team-lead peer"             "Never spawn a separate.*team-lead"     "AGENTS.md"
+          check "AGENTS.md: durable memory only"           "Auto-memory may record durable"        "AGENTS.md"
 
           # README + CLAUDE.md must not contain active "project-manager" references
           # (historical mentions in .planning/ or MIGRATIONS.json are fine)
@@ -112,7 +116,7 @@ jobs:
 
           if [ $FAIL -ne 0 ]; then
             echo ""
-            echo "Behavioral README content is incomplete or stale. Review docs/agents/ingestion-loop.md + CLAUDE.md + README.md."
+            echo "Behavioral documentation or the portable instruction contract is incomplete or stale."
             exit 1
           fi
 
