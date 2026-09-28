@@ -16,8 +16,7 @@ description: "Exact installation, launch, recovery, worktree, and Claude host co
 
 ## Install or refresh a consumer
 
-Build the toolkit first. Preflight and apply ordinary sync before preflighting
-and applying the source-referenced runtime install:
+Build the toolkit first. Preflight and apply ordinary sync before preflighting and applying the source-referenced runtime install:
 
 ```bash
 cd "$ANDROID_COMMON_DOC/mcp-server"
@@ -28,13 +27,11 @@ node build/sync/sync-l0-cli.js --project-root /absolute/path/to/consumer --runti
 node build/sync/sync-l0-cli.js --project-root /absolute/path/to/consumer --runtime
 ```
 
-An L1 must own `skills/registry.json`; generate it with `npm run generate-registry -- /absolute/path/to/L1`
-from the toolkit `mcp-server`. Without that marker the portable layer contract intentionally classifies it as L2.
+An L1 must own `skills/registry.json`; generate it with `npm run generate-registry -- /absolute/path/to/L1` from the toolkit `mcp-server`. Without that marker the portable layer contract intentionally classifies it as L2.
 
 `--runtime` installs the consumer-owned wave topology, the standalone `.claude/runtime/l0-entrypoint-launcher.cjs`,
 and a toolkit runtime-closure digest. Every runtime skill invokes that local launcher; L0 self-hosts the same path.
-Hooks that import L0 modules are not copied partially. Instead,
-the consumer also receives `.claude/hooks/l0-source-hook-launcher.js`; registrations call that stable local hook
+Hooks that import L0 modules are not copied partially. Instead, the consumer also receives `.claude/hooks/l0-source-hook-launcher.js`; registrations call that stable local hook
 launcher. Both launchers resolve the one local L0 tooling source from `l0-manifest.json` at execution time. The
 runtime entrypoint launcher verifies the installed pin and content before forwarding; the source-hook launcher
 confines source resolution and delegates the hook without certifying the runtime installation. No Node installation
@@ -43,8 +40,7 @@ runtime installer materializes and checksums every consumer-local hook target re
 the context-bundle write gate and tool-use logger, together with the context provider's sanctioned
 `scripts/sh/write-bundle.sh` closure. Installation fails closed on missing, customized, or incomplete local targets.
 Standalone hooks remain copyable.
-Remote, missing, ambiguous, or symlinked source targets fail closed. Re-run both
-commands after changing toolkit revisions. A managed topology from an older sync is updated automatically only
+Remote, missing, ambiguous, or symlinked source targets fail closed. Re-run both commands after changing toolkit revisions. A managed topology from an older sync is updated automatically only
 when its current bytes still match the checksum recorded by that sync. Local
 topology drift or a customized role remains a conflict and is never overwritten.
 
