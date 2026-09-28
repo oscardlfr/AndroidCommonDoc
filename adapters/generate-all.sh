@@ -31,7 +31,8 @@ if [[ "$CHECK" == true ]]; then
   CHECK_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/androidcommondoc-adapter-check.XXXXXX")"
   trap 'rm -rf -- "$CHECK_ROOT"' EXIT HUP INT TERM
   STAGED_ROOT="$CHECK_ROOT/repo"
-  mkdir -p "$STAGED_ROOT/setup"
+  EXPECTED_ROOT="$CHECK_ROOT/expected"
+  mkdir -p "$STAGED_ROOT/setup" "$EXPECTED_ROOT/setup"
 
   # Copy only canonical inputs, adapter programs, and the two generated trees.
   # The real checkout is never an output target in check mode.
@@ -41,6 +42,8 @@ if [[ "$CHECK" == true ]]; then
   cp -R "$REPO_ROOT/setup/agent-templates" "$STAGED_ROOT/setup/agent-templates"
   cp -R "$REPO_ROOT/setup/copilot-templates" "$STAGED_ROOT/setup/copilot-templates"
   cp -R "$REPO_ROOT/setup/copilot-agent-templates" "$STAGED_ROOT/setup/copilot-agent-templates"
+  cp -R "$REPO_ROOT/setup/copilot-templates" "$EXPECTED_ROOT/setup/copilot-templates"
+  cp -R "$REPO_ROOT/setup/copilot-agent-templates" "$EXPECTED_ROOT/setup/copilot-agent-templates"
   cp "$REPO_ROOT/AGENTS.md" "$STAGED_ROOT/AGENTS.md"
   cp "$REPO_ROOT/CLAUDE.md" "$STAGED_ROOT/CLAUDE.md"
 
@@ -54,6 +57,8 @@ if [[ "$CHECK" == true ]]; then
     bash "$STAGED_ROOT/adapters/copilot-agent-adapter.sh" --l0-root "$STAGED_ROOT"
     python3 "$STAGED_ROOT/adapters/normalize-line-endings.py" "$STAGED_ROOT/setup/copilot-templates"
     python3 "$STAGED_ROOT/adapters/normalize-line-endings.py" "$STAGED_ROOT/setup/copilot-agent-templates"
+    python3 "$STAGED_ROOT/adapters/normalize-line-endings.py" "$EXPECTED_ROOT/setup/copilot-templates"
+    python3 "$STAGED_ROOT/adapters/normalize-line-endings.py" "$EXPECTED_ROOT/setup/copilot-agent-templates"
   } >"$CHECK_LOG" 2>&1; then
     cat "$CHECK_LOG" >&2
     echo "Adapter check failed: staged generation did not complete." >&2
@@ -61,10 +66,10 @@ if [[ "$CHECK" == true ]]; then
   fi
 
   drift=0
-  if ! diff -qr "$REPO_ROOT/setup/copilot-templates" "$STAGED_ROOT/setup/copilot-templates"; then
+  if ! diff -qr "$EXPECTED_ROOT/setup/copilot-templates" "$STAGED_ROOT/setup/copilot-templates"; then
     drift=1
   fi
-  if ! diff -qr "$REPO_ROOT/setup/copilot-agent-templates" "$STAGED_ROOT/setup/copilot-agent-templates"; then
+  if ! diff -qr "$EXPECTED_ROOT/setup/copilot-agent-templates" "$STAGED_ROOT/setup/copilot-agent-templates"; then
     drift=1
   fi
   if [[ "$drift" -ne 0 ]]; then

@@ -96,6 +96,10 @@ describe("deterministic generated adapters", () => {
   it("stages both checked-in instruction files in check mode", () => {
     expect(generator).toContain('cp "$REPO_ROOT/AGENTS.md" "$STAGED_ROOT/AGENTS.md"');
     expect(generator).toContain('cp "$REPO_ROOT/CLAUDE.md" "$STAGED_ROOT/CLAUDE.md"');
+    expect(generator).toContain('EXPECTED_ROOT="$CHECK_ROOT/expected"');
+    expect(generator).toContain(
+      'diff -qr "$EXPECTED_ROOT/setup/copilot-templates" "$STAGED_ROOT/setup/copilot-templates"',
+    );
   });
 
   it("preserves ordered workflow obligations in the generated adapter", () => {
