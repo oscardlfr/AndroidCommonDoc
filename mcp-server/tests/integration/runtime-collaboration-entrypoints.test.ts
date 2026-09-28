@@ -811,7 +811,7 @@ describe("P3 runtime-collaboration-entrypoints (RED)", () => {
     writeFileSpy.mockRestore();
   });
 
-  it("18. all five canonical skills contain the exact CLI prefix and their own --entrypoint value; the work skill never dispatches TeamCreate/SendMessage/Agent( directly; a static module scan proves the entrypoints module imports only node builtins plus the four named siblings", () => {
+  it("18. init-session documents the exact public shorthand while the other four skills retain the exact internal CLI contract; the work skill never dispatches TeamCreate/SendMessage/Agent( directly; a static module scan proves the entrypoints module imports only node builtins plus the four named siblings", () => {
     loadEntrypoint({ fresh: true });
 
     const skillEntrypoints: Record<string, string> = {
@@ -824,9 +824,15 @@ describe("P3 runtime-collaboration-entrypoints (RED)", () => {
     for (const [skillDir, entrypointValue] of Object.entries(skillEntrypoints)) {
       const skillPath = path.join(ROOT, "skills", skillDir, "SKILL.md");
       const text = fs.readFileSync(skillPath, "utf8");
-      expect(text).toContain("'<resolved-node>' '<consumer-root>/.claude/runtime/l0-entrypoint-launcher.cjs' 'execute'");
-      expect(text).toContain(`'--entrypoint' '${entrypointValue}'`);
-      expect(text).toContain("consumer-root");
+      if (skillDir === "init-session") {
+        expect(text).toContain("node .claude/runtime/l0-entrypoint-launcher.cjs init-session\n");
+        expect(text).toContain("node .claude/runtime/l0-entrypoint-launcher.cjs init-session --orchestrate <slug>");
+        expect(text).not.toContain("'node' '.claude/runtime/l0-entrypoint-launcher.cjs' 'init-session'");
+      } else {
+        expect(text).toContain("'<resolved-node>' '<consumer-root>/.claude/runtime/l0-entrypoint-launcher.cjs' 'execute'");
+        expect(text).toContain(`'--entrypoint' '${entrypointValue}'`);
+        expect(text).toContain("consumer-root");
+      }
       expect(text).not.toContain("'<toolkit-root>/scripts/lib/runtime-collaboration-entrypoints.cjs'");
       if (skillDir === "work") {
         expect(text).not.toMatch(/TeamCreate/);
