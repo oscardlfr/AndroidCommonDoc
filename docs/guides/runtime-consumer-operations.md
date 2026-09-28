@@ -292,9 +292,8 @@ Use `recertify-claude-host-contract.cjs` only for a new protocol family: it capt
 and verifies. `promote-claude-host-contract.cjs` only finishes that reviewed publication from retained evidence;
 it is neither a normal `2.1.x` update step nor a shortcut around the live probe.
 
-Effective effort is not inferred from `--effort`, latency, token use, or legacy
-`system/init.per_turn_effort_active`. `effective` remains null unless native
-`PreToolUse.effort.level` equals the request; absent or mismatched evidence fails
+Effective effort is not inferred from `--effort`, latency, token use, or legacy `system/init.per_turn_effort_active`.
+`effective` remains null unless native `PreToolUse.effort.level` equals the request; absent or mismatched evidence fails
 closed. Certification rejects conflicting inherited `CLAUDE_CODE_EFFORT_LEVEL`
 and aligns the child environment with canonical `--effort high`, preventing a
 hidden global `max` from masquerading as the requested profile.
