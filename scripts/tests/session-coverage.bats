@@ -1180,7 +1180,7 @@ assert d['profiles']['advanced']['overrides'].get('debugger') == 'opus', 'debugg
     grep -Fq '`team-lead` is a historical name for that logical responsibility, not an installable agent profile.' "$L0_ROOT/docs/agents/claude-code-workflow.md"
 }
 
-@test "templates: team-lead has agent roster with team roles" {
+@test "templates: main orchestrator exposes the dynamic role catalog" {
     # BL-W45 hub-split: content may be in tl-* sub-docs
     orchestration_guide_grep -q "Agent Roster"
     orchestration_guide_grep -q "arch-testing"
@@ -1188,7 +1188,7 @@ assert d['profiles']['advanced']['overrides'].get('debugger') == 'opus', 'debugg
     orchestration_guide_grep -q "planner"
 }
 
-@test "templates: team-lead delegates testing to skills" {
+@test "templates: main orchestrator delegates testing through skills" {
     # BL-W45 hub-split: content may be in tl-* sub-docs
     orchestration_guide_grep -q "/test"
     orchestration_guide_grep -q "/test-full-parallel"
