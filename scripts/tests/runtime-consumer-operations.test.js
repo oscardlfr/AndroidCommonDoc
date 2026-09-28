@@ -22,7 +22,7 @@ test('consumer operations document required launch, recovery, and recertificatio
 
 test('consumer operations document distinguishes interactive input and permission modes', () => {
   const text = fs.readFileSync(path.join(root, 'docs', 'guides', 'runtime-consumer-operations.md'), 'utf8');
-  assert.match(text, /send `Ctrl\+U`.*then send the new prompt.*finally send `Enter`/s);
+  assert.match(text, /send `Ctrl\+U`, wait, send the new prompt, then send `Enter`/);
   assert.match(text, /`-p` \/ `--print`.*one-turn invocation/s);
   assert.match(text, /`--permission-mode acceptEdits`.*initial permission mode/s);
   assert.match(text, /Bash.*still require explicit approval/s);
