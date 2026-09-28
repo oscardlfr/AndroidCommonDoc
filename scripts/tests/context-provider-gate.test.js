@@ -4162,7 +4162,11 @@ console.log('\nAll context-provider-gate tests passed.');
   try {
     assert.strictEqual(spawnSync('git', ['init', '--quiet', consumer]).status, 0);
     fs.mkdirSync(path.join(consumer, '.planning', 'wave-entrypoint-gate'), { recursive: true });
-    fs.writeFileSync(path.join(consumer, '.planning', 'wave-entrypoint-gate', 'PLAN.md'), '# Entrypoint gate fixture\n');
+    fs.writeFileSync(
+      path.join(consumer, '.planning', 'wave-entrypoint-gate', 'PLAN.md'),
+      '# Entrypoint gate fixture\n\n### Wave Class\n\n- **Class**: HARNESS\n',
+    );
+    fs.writeFileSync(path.join(consumer, '.planning', 'wave-entrypoint-gate', 'CLASS'), 'HARNESS\n');
     const manifest = {
       version: 2,
       sources: [{ layer: 'L0', path: path.relative(consumer, path.resolve(__dirname, '../..')), role: 'tooling' }],
