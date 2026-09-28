@@ -129,9 +129,12 @@ jobs:
           # Every /slash command mentioned in README/CLAUDE.md must have a file
           # Exclusions: literal placeholder tokens like /skill-name
           PLACEHOLDERS="skill-name|command-name|slash-name"
+          # Claude Code owns these commands; they are not repository skills and
+          # must not require a skills/<name>/SKILL.md shadow implementation.
+          RUNTIME_NATIVE="context|doctor"
           echo "--- Checking slash commands referenced in README.md / CLAUDE.md ---"
           MENTIONED=$(grep -oE '`/[a-z][a-z-]+`' README.md CLAUDE.md 2>/dev/null | \
-            grep -oE '/[a-z][a-z-]+' | sort -u | grep -vE "^/($PLACEHOLDERS)$")
+            grep -oE '/[a-z][a-z-]+' | sort -u | grep -vE "^/($PLACEHOLDERS|$RUNTIME_NATIVE)$")
           for cmd in $MENTIONED; do
             name=${cmd#/}
             # Check if file exists as skill or slash command
