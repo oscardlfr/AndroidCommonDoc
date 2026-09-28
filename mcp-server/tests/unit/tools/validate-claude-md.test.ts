@@ -13,6 +13,7 @@
 import { describe, it, expect } from "vitest";
 import {
   validateTemplateStructure,
+  validatePortableInstructionContract,
   validateLineCount,
   validateCanonicalCoverage,
   detectCircularReferences,
@@ -23,6 +24,86 @@ import {
   type ClaudeMdFile,
   type ValidationIssue,
 } from "../../../src/tools/validate-claude-md.js";
+
+describe("portable instruction contract", () => {
+  const agents = `# Project agent contract\n\n- Work on a feature branch.\n`;
+
+  it("accepts an explicit AGENTS.md import", () => {
+    expect(
+      validatePortableInstructionContract(
+        "# Claude adapter\n\n@AGENTS.md\n",
+        agents,
+      ),
+    ).toEqual([]);
+  });
+
+  it("rejects coexistence without an explicit import", () => {
+    const issues = validatePortableInstructionContract(
+      "# Claude-only rules\n",
+      agents,
+    );
+    expect(issues).toContainEqual(
+      expect.objectContaining({
+        level: "error",
+        category: "portable-instructions",
+      }),
+    );
+  });
+
+  it("rejects a missing portable contract", () => {
+    const issues = validatePortableInstructionContract(
+      "# Claude adapter\n\n@AGENTS.md\n",
+      undefined,
+    );
+    expect(issues).toContainEqual(
+      expect.objectContaining({
+        level: "error",
+        file: "AGENTS.md",
+      }),
+    );
+  });
+
+  it("rejects the retired dev-lead orchestrator contract", () => {
+    const issues = validatePortableInstructionContract(
+      "# Claude adapter\n\n@AGENTS.md\n\ndev-lead is the ORCHESTRATOR\n",
+      agents,
+    );
+    expect(issues).toContainEqual(
+      expect.objectContaining({
+        level: "error",
+        category: "retired-topology",
+      }),
+    );
+  });
+
+  it.each(["team-lead is the orchestrator", "project-manager must be the main orchestrator"])(
+    "rejects a retired static orchestrator in AGENTS.md: %s",
+    (instruction) => {
+      const issues = validatePortableInstructionContract(
+        "# Claude adapter\n\n@AGENTS.md\n",
+        `${agents}\n${instruction}\n`,
+      );
+      expect(issues).toContainEqual(expect.objectContaining({
+        level: "error",
+        category: "retired-topology",
+        file: "AGENTS.md + CLAUDE.md",
+      }));
+    },
+  );
+
+  it("warns when always-loaded instructions contain live PR state", () => {
+    const issues = validatePortableInstructionContract(
+      "# Claude adapter\n\n@AGENTS.md\n",
+      `${agents}\nPR #247 OPEN`,
+    );
+    expect(issues).toContainEqual(
+      expect.objectContaining({
+        level: "warning",
+        category: "instruction-hygiene",
+      }),
+    );
+  });
+});
 
 // ---------------------------------------------------------------------------
 // Helpers

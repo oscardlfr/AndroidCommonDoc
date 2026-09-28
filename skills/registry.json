@@ -1495,7 +1495,7 @@
       "description": "Synchronize L0 assets, and optionally install the source-referenced collaboration runtime in an L1/L2 consumer.",
       "category": "guides",
       "tier": "extended",
-      "hash": "sha256:6c6e3da8275d6e986b5550fff0bf5a82341bcd52af994f97755d602793ebe3e0",
+      "hash": "sha256:2d4ee8f60c829b8b9b09817aabc41253f9716b91c048873e5ac98626bb5e87d3",
       "dependencies": [],
       "frontmatter": {
         "name": "sync-l0",
@@ -2124,7 +2124,7 @@
       "description": "Context oracle. Pre-caches L0 pattern index on spawn, then answers queries about patterns, docs, rules, specs, and cross-project state via MCP tools. Read-only.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:543031e90f5d9940e288ea408e964b46a5f3726bf31f8d7b6ea4044f99406c69",
+      "hash": "sha256:bff9d03e6d521c6836f2ae0d23e2fe0e84af266f0aba7151039eb36675841038",
       "dependencies": [],
       "frontmatter": {
         "name": "context-provider",
@@ -2139,7 +2139,7 @@
           "state"
         ],
         "token_budget": 2000,
-        "template_version": "3.8.0"
+        "template_version": "3.9.0"
       }
     },
     {
@@ -2245,7 +2245,7 @@
       "description": "Read-only proactive agent that scans changed files and reports documentation drift. Use after code changes to detect when docs are out of sync with code.",
       "category": "guides",
       "tier": "extended",
-      "hash": "sha256:d5777f30925f26794246f58d6dd1a384979e077b041016ec2d2fd3526507b0b2",
+      "hash": "sha256:60efd5e6247ba547916e3ab6f0ba58b4f529730b4b29e6216079f212cbbe3a8c",
       "dependencies": [],
       "frontmatter": {
         "name": "doc-alignment-agent",
@@ -2260,7 +2260,7 @@
           "stale"
         ],
         "token_budget": 2000,
-        "template_version": "1.1.0",
+        "template_version": "1.2.0",
         "memory": "project",
         "skills": [
           "audit-docs",
@@ -2328,7 +2328,7 @@
       "description": "Documentation updater. Updates roadmap, memory, CHANGELOG, specs after work. Ingests approved external patterns via MCP. Follows L0 patterns (frontmatter, line limits, hub structure).",
       "category": "guides",
       "tier": "extended",
-      "hash": "sha256:b9c884c26b7a3a743f9474629dce117586ba087b7d53509a45e295cc7453e91c",
+      "hash": "sha256:b4a5fd73cd186922f7b559ffcd0bf87a31f4b917c78d33779826dda2950cec9f",
       "dependencies": [],
       "frontmatter": {
         "name": "doc-updater",
@@ -2344,7 +2344,7 @@
           "ingest"
         ],
         "token_budget": 2000,
-        "template_version": "2.12.0",
+        "template_version": "2.13.0",
         "skills": [
           "audit-docs",
           "readme-audit",
@@ -2564,7 +2564,7 @@
       "description": "Single-use planning subagent. Reads context, specs, architecture to produce structured execution plans. Spawned without team_name; results land as PLAN.md on disk. Works alongside context-provider via SendMessage.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:e2343dcf323efc335154ecf4ecea3ec8e22e3409cfb7465543dc5e7aebad3ff8",
+      "hash": "sha256:9aeec90fd827f44b65c6c5564f4b9a2999719ecad1cd2e56ea546423b0156f56",
       "dependencies": [],
       "frontmatter": {
         "name": "planner",
@@ -2579,7 +2579,7 @@
           "estimate"
         ],
         "token_budget": 4000,
-        "template_version": "1.20.0"
+        "template_version": "1.22.0"
       }
     },
     {
@@ -2731,7 +2731,7 @@
       "description": "QG owner (Phase 3). Runs sequential verification on the final committed HEAD after VERIFY-FINAL architect approval. Reports structured PASS/FAIL.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:cb2370fe4a4a2ef05c1ad05b6c506781d8dc0b87342ea20a5d61f66761bff667",
+      "hash": "sha256:5582ba8875bf3e2787454a36f4a555c5f0a2f03187536942e0d79ba696b7c770",
       "dependencies": [],
       "frontmatter": {
         "name": "quality-gater",
@@ -2747,7 +2747,7 @@
           "detekt"
         ],
         "token_budget": 3000,
-        "template_version": "2.27.0"
+        "template_version": "2.28.0"
       }
     },
     {

@@ -37,7 +37,7 @@ function sha256hex(text) { return sha256bytes(Buffer.from(text, 'utf8')); }
  *   rc: require('../lib/runtime-consultation.cjs') (canonicalJSONStringify)
  *   runtimeHostClaude: require('../lib/runtime-host-claude.cjs')
  *   event: the system/init event to record (session_id/model/cwd/tools/mcp_servers)
- * @returns {{result: object, worktreeRoot: string, cleanup: () => void}}
+ * @returns {{result: object, worktreeRoot: string, waveSlug: string, cleanup: () => void}}
  */
 function mintIsolatedHostContractSession(repoRoot, { rc, runtimeHostClaude, wakeInterleaved, initFrameCount, event }) {
   // realpath: the session identity minted below is recorded against this root
@@ -59,9 +59,17 @@ function mintIsolatedHostContractSession(repoRoot, { rc, runtimeHostClaude, wake
     // fixture needs (the observer probe script, .claude/model-profiles.json);
     // only the wave-plan directory is untracked (.gitignore'd local state) and
     // the throwaway executable/evidence are inherently not tracked anywhere.
-    const waveSlug = path.basename(fs.readdirSync(path.join(repoRoot, '.planning')).filter((n) => n.startsWith('wave-'))[0]);
-    fs.mkdirSync(path.join(worktreeRoot, '.planning', waveSlug), { recursive: true });
-    fs.writeFileSync(path.join(worktreeRoot, '.planning', waveSlug, 'PLAN.md'), '# host contract fixture placeholder\n');
+    // Never inherit a mutable wave name or PLAN from the maintainer checkout.
+    // The fixture owns one complete canonical HARNESS wave so qualification
+    // and later hook admission bind to the same deterministic project context.
+    const waveSlug = 'host-contract-fixture';
+    const waveDir = path.join(worktreeRoot, '.planning', 'wave-' + waveSlug);
+    fs.mkdirSync(waveDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(waveDir, 'PLAN.md'),
+      '# Host contract fixture\n\n### Wave Class\n\n- **Class**: HARNESS\n',
+    );
+    fs.writeFileSync(path.join(waveDir, 'CLASS'), 'HARNESS\n');
 
     const observerPath = path.join(worktreeRoot, 'scripts', 'tests', 'fixtures', 'claude-host-contract-probe.cjs');
     const executablePath = path.join(worktreeRoot, 'bin', 'claude-synthetic');
@@ -208,7 +216,7 @@ function mintIsolatedHostContractSession(repoRoot, { rc, runtimeHostClaude, wake
         transportProfile: qualification.transport_profile, os: process.platform,
       },
     });
-    return { result, worktreeRoot, cleanup };
+    return { result, worktreeRoot, waveSlug, cleanup };
   } catch (err) {
     cleanup();
     throw err;

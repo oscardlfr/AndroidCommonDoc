@@ -571,8 +571,8 @@ agents:
   context-provider:
     canonical_name: context-provider
     subagent_type: context-provider
-    template_version: "3.8.0"
-    template_frontmatter_sha256: eec352d944861a4061b2c7947e80185e416377db27eee1495df2bd1bae1498a3
+    template_version: "3.9.0"
+    template_frontmatter_sha256: de3af1ee87f3e98bc272d4fa6f98e7d93ddcad194c828d6953de393a244f9261
     category: context
     lifecycle: persistent
     description: "Context oracle. Pre-caches L0 pattern index on spawn, then answers queries about patterns, docs, rules, specs, and cross-project state via MCP tools. Read-only."
@@ -630,8 +630,8 @@ agents:
   doc-updater:
     canonical_name: doc-updater
     subagent_type: doc-updater
-    template_version: "2.12.0"
-    template_frontmatter_sha256: 2d44469f849baa8ac4fd941bb02649daae22a0eca4ddde7fac22ee6b3547c526
+    template_version: "2.13.0"
+    template_frontmatter_sha256: 57e329ebe890ad2d0e084dd47b18573cced09420cb48cea5a7d9fe2c7227167c
     category: doc-owner
     lifecycle: persistent
     description: "Documentation updater. Updates roadmap, memory, CHANGELOG, specs after work. Ingests approved external patterns via MCP. Follows L0 patterns (frontmatter, line limits, hub structure)."
@@ -732,8 +732,8 @@ agents:
   doc-alignment-agent:
     canonical_name: doc-alignment-agent
     subagent_type: doc-alignment-agent
-    template_version: "1.1.0"
-    template_frontmatter_sha256: a65d7aa37719b6e9553a9ee777d9d5fb8c376c24de687bf770a542865382e954
+    template_version: "1.2.0"
+    template_frontmatter_sha256: 5cff794134819184648661a7111e70aa7a8e1c179336ba5382c311bd2408061f
     category: auditor
     lifecycle: per-task
     description: "Read-only proactive agent that scans changed files and reports documentation drift. Use after code changes to detect when docs are out of sync with code."
@@ -904,8 +904,8 @@ agents:
   quality-gater:
     canonical_name: quality-gater
     subagent_type: quality-gater
-    template_version: "2.27.0"
-    template_frontmatter_sha256: 3b047562df57663d181c684211243d584f1fb6b6e3afde3f0d25e73f3467a72f
+    template_version: "2.28.0"
+    template_frontmatter_sha256: 08665a2fd1d91c81ca4c2161ce52ff493060c5fdf46fa7d843f6de25e5055e65
     category: orchestrator
     lifecycle: ephemeral
     description: "QG owner (Phase 3). Runs sequential verification on the final committed HEAD after VERIFY-FINAL architect approval. Reports structured PASS/FAIL."
@@ -955,8 +955,8 @@ agents:
     memory: null
     applicable_project_types: [node, gradle, hybrid]
     notes:
-      - "Spawned ONLY in Phase 3 (post-architect APPROVE, pre-commit). Dies at session end."
-      - "Dynamic rule discovery: reads CLAUDE.md + asks context-provider + runs `/pre-pr` (project's own validation pipeline)."
+      - "Spawned ONLY in Phase 3 after the final implementation commit and architect APPROVE. Dies at session end."
+      - "Dynamic rule discovery: reads AGENTS.md + thin CLAUDE.md adapter + applicable path-scoped rules, asks context-provider, and runs `/pre-pr`."
       - "T-BUG-015 Search Dispatch Protocol: pattern discovery via Grep/Glob/Read on docs/agents/templates is hook-blocked. Project-file Grep/Read still allowed."
       - "BL-W31.7-10: Step 0.5 detects PROJECT_TYPE via scripts/sh/detect-project-type.sh; Steps 2.5/5/7/9.5 gate on gradle/hybrid; Step 2.6 gates on node/hybrid. Manifest applicable_project_types declares this coverage envelope."
     aliases: []
@@ -1618,8 +1618,8 @@ agents:
   planner:
     canonical_name: planner
     subagent_type: planner
-    template_version: "1.20.0"
-    template_frontmatter_sha256: ba76a8d95e9a080057567f052abb9ea4debe3087cb88d9e293da9f4d8defd6a2
+    template_version: "1.22.0"
+    template_frontmatter_sha256: fd3c3047517e11ce01db3ca3bb346505d2b64bb8aeba2672a127d79b77bbc018
     category: orchestrator
     lifecycle: ephemeral
     description: "Single-use planning subagent. Reads context, specs, architecture to produce structured execution plans. Spawned without team_name; results land as PLAN.md on disk. Works alongside context-provider via SendMessage."

@@ -489,8 +489,8 @@ describe('quality-gater template — gate protocol', () => {
     expect(content).toMatch(/[Cc]ross-cutting/);
   });
 
-  it('has template version 2.27.0', () => {
-    expect(content).toContain('template_version: "2.27.0"');
+  it('has template version 2.28.0', () => {
+    expect(content).toContain('template_version: "2.28.0"');
   });
 });
 
@@ -851,8 +851,8 @@ describe('context-provider template — spawn protocol (v3.0.0 pre-cache)', () =
     expect(cpContent).toMatch(/find-pattern/);
   });
 
-  it('has template version 3.8.0', () => {
-    expect(cpContent).toContain('template_version: "3.8.0"'); // bumped 3.7.0 -> 3.8.0 (Wave 1 WP5 runtime-messaging-adapters pointer)
+  it('has template version 3.9.0', () => {
+    expect(cpContent).toContain('template_version: "3.9.0"');
   });
 
   it('has External Context section with Context7 call sequence', () => {
@@ -917,8 +917,8 @@ describe('architect templates — PRE-TASK protocol', () => {
     expect(plannerContent).toMatch(/context-provider/);
   });
 
-  it('planner version 1.20.0', () => {
-    expect(plannerContent).toContain('template_version: "1.20.0"');
+  it('planner version 1.22.0', () => {
+    expect(plannerContent).toContain('template_version: "1.22.0"');
   });
 
   it('arch-testing has template_version field in frontmatter', () => {

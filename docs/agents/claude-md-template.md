@@ -1,194 +1,64 @@
 ---
-scope: [claude-md, template, context-management, agent-workflow]
-sources: [anthropic-claude-code]
+scope: [agents, workflow, claude-code, codex]
+sources: [androidcommondoc, anthropic-claude-code, openai-codex]
 targets: [all]
 slug: claude-md-template
 status: active
 layer: L0
-parent: agents-hub
 category: agents
-description: "Boris Cherny-style CLAUDE.md template: workflow orchestration, agent delegation, project constraints, commands"
-version: "2.0.0"
-last_updated: "2026-03"
-monitor_urls:
-  - url: "https://docs.anthropic.com/en/docs/claude-code/overview"
-    type: doc-page
-    tier: 3
-assumes_read: guides-hub
-token_budget: 1800
+description: "Portable repository instructions with thin runtime adapters and path-scoped detail"
+version: 3
+last_updated: "2026-09-28"
 ---
+# Portable instruction template
 
-# CLAUDE.md Template — Boris Cherny Style
+Every repository owns one portable contract. Runtime-specific files adapt that contract; they do not replace or silently contradict it.
 
-CLAUDE.md is the **workflow instruction file** for AI agents, not project documentation. Keep it under 80 lines. It tells the agent *how to work*, not *what the project is*.
+## Required files
 
-## Design Principles
+| File | Responsibility |
+|---|---|
+| `AGENTS.md` | Concise repository authority: scope, safety, workflow, commands and architectural boundaries |
+| `CLAUDE.md` | Thin Claude Code adapter containing `@AGENTS.md` plus only Claude-specific launch guidance |
+| `.claude/rules/*.md` | Conditional detail with explicit `paths:` frontmatter |
+| `skills/*/SKILL.md` | Multi-step, on-demand procedures and their supporting resources |
+| hooks and permissions | Mechanical enforcement for security and write boundaries |
 
-| Principle | Rule |
-|-----------|------|
-| **Workflow, not docs** | CLAUDE.md = operational instructions. Project docs go in `docs/` and `README.md` |
-| **< 80 lines** | Agents lose rules in long files. Compress to one-liners. |
-| **Delegation-first** | List agents + trigger conditions. The scoped specialist performs the audit; the main conversation coordinates. |
-| **Boris Cherny 4 pillars** | Plan Mode, Agent Delegation, Verification Before Done, Autonomous Execution |
-| **Layer separation** | L0 auto-loads via `~/.claude/CLAUDE.md`. L1/L2 add ONLY project-specific rules. |
+`~/.claude/CLAUDE.md`, Codex personal defaults and auto-memory are user context. Builds, generated adapters, CI and repository validation must not depend on their contents.
 
-## Template Structure
+## Minimal Claude adapter
 
 ```markdown
-# {Project Name}
+# Project Claude Code adapter
 
-> {Layer} — {one-line description}
+@AGENTS.md
 
-## Workflow Orchestration
-
-### 1. Plan Mode Default
-- Enter plan mode for ANY non-trivial task (3+ steps or architectural impact)
-- {Project-specific plan triggers — e.g., "Modifying core/domain/ → plan mode"}
-- If something goes sideways, STOP and re-plan immediately
-
-### 2. Agent Delegation
-- The main conversation is the orchestrator; do not add or spawn a `team-lead` template
-- Use specialized agents — don't do domain audits manually
-- One task per agent for focused execution
-- → delegate to `{agent-name}`: "{specific task description}"
-
-| Agent | Domain | When |
-|-------|--------|------|
-| `arch-testing` | Test verification | Architect gate after each wave |
-| `arch-platform` | Architecture verification | Architect gate after each wave |
-| `arch-integration` | Integration verification | Architect gate after each wave |
-| `{specialist-1}` | {domain} | {trigger condition} |
-| `{specialist-2}` | {domain} | {trigger condition} |
-
-### 3. Verification Before Done
-- Never mark done without proving it works — run tests, check logs, demonstrate
-- {Project-specific verification — e.g., "DAW change → test SILENT mode"}
-- **Before any PR → `/pre-pr`**
-
-### 4. Autonomous Execution
-- When given a bug: just fix it. Logs → errors → root cause → fix → verify
-- Use L0 skills, never raw Gradle: `/test <mod>`, `/test-changed`, `/coverage`
-- Zero context switching — go fix failing tests without being told how
-
-## Project Constraints
-
-{3-5 hard rules as compact one-liners. These are the rules an agent must never violate.}
-
-### Git Flow
-- `master` ← releases only. `develop` ← integration. `feature/*` ← from develop.
-- Every PR must pass `/pre-pr` locally. Conventional Commits enforced.
-
-## Commands
-- `/pre-pr` — full pre-merge validation
-- `/test-full-parallel` — all modules parallel + coverage
-- `/test <module>` — single module with retry
-- {other project-specific commands}
-
-## Doc Consultation
-- {file/module pattern} → {doc path}
-- {file/module pattern} → {doc path}
+Use `/init-session --orchestrate` for managed orchestration. Do not launch a separate `team-lead` or `project-manager` agent.
 ```
 
-## Layer Examples
+Keep the adapter small. Project architecture, test policy and Git rules belong in `AGENTS.md`; file-specific detail belongs in path-scoped rules. Do not embed a static agent roster, current PR state, branch hashes, CI results or active-wave status.
 
-### L1 (Ecosystem Library)
+## Layer identity
+
+Declare layer identity in `AGENTS.md`:
+
 ```markdown
-# {l1-project}
-
-> L1 Ecosystem Library — Version authority for all KMP modules.
-
-## Workflow Orchestration
-### 1. Plan Mode Default
-- Adding a new module → plan first: name, targets, api/impl split
-- Changing foundation modules → plan mode — blast radius is every consumer
-
-### 2. Agent Delegation
-The main conversation orchestrates through `/work` and the shared control plane.
-
-| Agent | Domain | When |
-|-------|--------|------|
-| `arch-testing` | Test verification | Architect gate after each wave |
-| `arch-platform` | Architecture verification | Architect gate after each wave |
-| `arch-integration` | Integration verification | Architect gate after each wave |
-| `api-contract-guardian` | API purity | Changing -api modules |
-| `platform-auditor` | Cross-cluster | Changes spanning multiple clusters |
-| `module-lifecycle` | Module mgmt | Adding or removing modules |
-...
+> **Layer:** L0
 ```
 
-### L2 (Application)
-```markdown
-# {l2-project}
+Consumers use `L1` or `L2`. Validators classify the bundle from this portable authority, never from a thin runtime adapter.
 
-> L2 Application — {domain description}.
+## Memory contract
 
-## Workflow Orchestration
-### 1. Plan Mode Default
-- Modifying core/domain/ → plan mode — SSOT blast radius
-- {Critical-path changes} → plan mode — high risk
-
-### 2. Agent Delegation
-The main conversation orchestrates through `/work` and the shared control plane.
-
-| Agent | Domain | When |
-|-------|--------|------|
-| `arch-testing` | Test verification | Architect gate after each wave |
-| `arch-platform` | Architecture verification | Architect gate after each wave |
-| `arch-integration` | Integration verification | Architect gate after each wave |
-| `<feature-guardian>` | Domain safety | Background work, file I/O, schedulers |
-| `data-layer-specialist` | Data layer | core/data/, repositories |
-| `<gate-checker>` | Feature gates | New features, tier changes |
-...
-```
-
-## What Does NOT Go in CLAUDE.md
-
-| Content | Where it belongs |
-|---------|-----------------|
-| Architecture diagrams | `docs/architecture/` |
-| API contracts | `docs/core-{module}/` |
-| Git Flow full branch diagram | `README.md` Development section |
-| Pattern details (PHANTOM→FULL, StateFlow events) | `docs/architecture/patterns-*.md` |
-| Temporal context (active sprints, tracks) | Plan Mode, Memory (native) — primary; `.gsd/milestones/` (optional) |
-| Command `--help` details | `skills/*/SKILL.md` (each skill carries its own docs) |
-| CI workflow details | `.github/workflows/` |
-| Sub-project listing | `README.md` Ecosystem section |
-
-## CLAUDE.md + Agent Connection
-
-```
-CLAUDE.md                    docs/agents/main-agent-orchestration-guide.md
-┌──────────────────────┐     ┌──────────────────────────┐
-│ ## Agent Delegation │     │ ## Specialist Delegation  │
-│ | <feature-guardian> |...│────▶│ invoke <feature-guardian> │
-│ | data-layer  | ...  │     │ invoke data-layer when    │
-│                      │     │                           │
-│ ## Commands           │     │ ## L0 Skills Usage        │
-│ /pre-pr, /test ...   │     │ /test, /coverage, /pre-pr │
-└──────────────────────┘     └──────────────────────────┘
-         │                              │
-         │ Agent Roster tells Claude     │ Agent body tells the agent
-         │ WHICH agents exist            │ HOW to do the audit
-         │                              │
-         ▼                              ▼
-   .claude/agents/                   Claude Code reads these natively.
-   (canonical definitions)           GSD/pi mirrors (optional) to .gsd/agents/
-```
-
-The CLAUDE.md Agent Roster is the **discovery** mechanism. Without it, Claude Code uses generic agents (Explore, Plan, Code) instead of your specialists.
+Memory is advisory and durable-only. It may retain stable preferences, recurring corrections and accepted architecture decisions. It must not become authority for current branches, PRs, CI, agent rosters, certificates, hashes, live waves or temporary workarounds. See [instruction-memory-contract](instruction-memory-contract.md).
 
 ## Validation
 
-`validate-claude-md` checks:
-- Line count ≤ 150
-- Has Workflow Orchestration section
-- Has Agent Roster table
-- Has Commands section
-- No L0 rule duplication (L0 auto-loads)
-- No upward references (L1→L2, L0→L1)
+Run the generator check and instruction validator from a clean environment:
 
-## Related Docs
+```bash
+bash adapters/generate-all.sh --check
+cd mcp-server && npm test -- --run tests/integration/claude-md-validation.test.ts tests/unit/tools/validate-claude-md.test.ts
+```
 
-- [claude-code-workflow](claude-code-workflow.md) — How the team-lead workflow operates
-- [autonomous-multi-agent-workflow](multi-agent-patterns.md) — Multi-agent patterns and cost control
-- [agent-consumption-guide](agent-consumption-guide.md) — How agents load and use pattern docs
+The integration suite poisons personal-home instructions deliberately. A passing result proves that checked-in repository files are sufficient.

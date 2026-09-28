@@ -120,10 +120,23 @@
         "date": "2026-04-25",
         "breaking": true,
         "note": "Template retired W31.6 -- replaced by docs/agents/main-agent-orchestration-guide.md (canonical pattern: main IS team lead, not subagent)",
-        "migration_hint": "The main agent reads docs/agents/main-agent-orchestration-guide.md directly. No team-lead subagent should be spawned. Agent(name='team-lead', team_name=...) is FORBIDDEN per T-BUG-010."
+        "migration_hint": "The main agent reads docs/agents/main-agent-orchestration-guide.md directly. No team-lead subagent should be spawned. Agent(name='team-lead', team_name=...) is FORBIDDEN per T-BUG-010.",
+        "retired_artifact_registry": "skills/sync-l0/retired-artifacts.json",
+        "retired_paths": [
+          ".claude/agents/team-lead.md"
+        ],
+        "known_l0_sha256": [
+          "01c2f6e75d4e441bae0975ab459afda8501e0dbe57a2d60cf1827cd42ed969ba"
+        ]
       }
     },
     "planner": {
+      "1.22.0": {
+        "date": "2026-09-28",
+        "breaking": false,
+        "summary": "Use the repository-owned AGENTS.md instruction authority, its thin CLAUDE.md adapter, and applicable path-scoped rules during architecture discovery.",
+        "migration_hint": "Re-sync the deployed template; planning behavior and artifact interfaces are unchanged."
+      },
       "1.21.0": {
         "date": "2026-09-22",
         "breaking": false,
@@ -233,6 +246,12 @@
       }
     },
     "quality-gater": {
+      "2.28.0": {
+        "date": "2026-09-28",
+        "breaking": false,
+        "summary": "Keep quality-gater phase-scoped and discover rules from AGENTS.md, the thin CLAUDE.md adapter, and applicable path-scoped rules without grepping the adapter.",
+        "migration_hint": "Re-sync the deployed template; dispatch quality-gater only for Phase 3 after the final implementation commit."
+      },
       "2.27.0": {
         "date": "2026-09-27",
         "breaking": true,
@@ -888,6 +907,12 @@
       }
     },
     "context-provider": {
+      "3.9.0": {
+        "date": "2026-09-28",
+        "breaking": false,
+        "summary": "Read the portable repository instruction bundle and treat personal/project memory as durable advisory context rather than live authority.",
+        "migration_hint": "Re-sync the deployed template; the read-only tool boundary is unchanged."
+      },
       "3.8.0": {
         "date": "2026-08-22",
         "breaking": false,
@@ -973,6 +998,12 @@
       }
     },
     "doc-updater": {
+      "2.13.0": {
+        "date": "2026-09-28",
+        "breaking": false,
+        "summary": "Keep CLAUDE.md as a thin adapter, route scoped guidance to .claude/rules, and prohibit volatile runtime state in durable memory.",
+        "migration_hint": "Re-sync the deployed template; existing documentation ownership is unchanged."
+      },
       "2.12.0": {
         "date": "2026-08-22",
         "breaking": false,
@@ -1696,6 +1727,12 @@
       }
     },
     "doc-alignment-agent": {
+      "1.2.0": {
+        "date": "2026-09-28",
+        "breaking": false,
+        "summary": "Audit repository instructions from AGENTS.md plus its thin CLAUDE.md adapter instead of treating CLAUDE.md as the standalone authority.",
+        "migration_hint": "Re-sync the deployed template; the agent remains read-only."
+      },
       "1.0.0": {
         "date": "2026-04-20",
         "breaking": false,

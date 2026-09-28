@@ -122,7 +122,7 @@ With `--prune`:
 The `l0-manifest.json` controls what gets synced:
 
 - **include-all** (default): Syncs everything except items in `exclude_*` lists and `exclude_categories`
-- **explicit**: Only syncs entries already present in `checksums` (opt-in mode)
+- **explicit**: Closed-world opt-in. Only destination paths already present in `checksums` are selected; registry source paths are translated to their consumer destinations before comparison. Hooks are copied or newly registered only when their `.claude/hooks/<file>` destination is selected. An empty hook selection means zero hooks.
 - **l2_specific**: Lists project-owned files that sync will never touch
 
 ## Migration Detection
@@ -158,7 +158,7 @@ Not every skill on a consumer's machine is managed by L0. Google's Android Skill
 
 ## Agent Templates
 
-Agent templates (`setup/agent-templates/`) are the authoritative source for team-lead, quality-gater, architects, and other team agents. These are also materialized in `.claude/agents/` so the registry scanner picks them up and `/sync-l0` distributes them to consumers.
+Agent templates (`setup/agent-templates/`) are the authoritative source for phase-scoped and specialist agents. The main conversation owns orchestration; retired `team-lead` and `project-manager` templates are permanent tombstones. Active templates are materialized in `.claude/agents/` so the registry scanner picks them up and `/sync-l0` distributes them to consumers.
 
 When editing a template:
 1. Edit `setup/agent-templates/<name>.md`
@@ -196,6 +196,8 @@ effective update even when file content is unchanged.
 ```
 
 The `exclude_hooks` field defaults to `[]`. An exclusion prevents ordinary sync from copying or newly registering that hook, including a source-coupled hook. Sync is additive: adding an exclusion does not delete a file or registration already present, so removal of a previously adopted enforcement hook remains an explicit reviewed operation. Existing manifests without this field auto-migrate via schema default.
+
+In `explicit` mode, `exclude_hooks` is an additional deny-list over the closed selected set. Hooks absent from `checksums` stay unselected even when `exclude_hooks` is empty.
 
 ## .commitlintrc.json — Project-Specific, NOT Propagated
 

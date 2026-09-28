@@ -131,6 +131,7 @@ function pathsFor(root, slug) {
   return {
     root: canonical,
     plan: path.join(canonical, '.planning', 'wave-' + slug, 'PLAN.md'),
+    classSentinel: path.join(canonical, '.planning', 'wave-' + slug, 'CLASS'),
     state: path.join(canonical, '.androidcommondoc', 'wave-control', slug + '.json'),
   };
 }
@@ -140,14 +141,54 @@ function gitHead(root) {
   return result.stdout.trim();
 }
 function parsePlanClass(planText) {
-  const section = /###\s+Wave\s+Class\s*\r?\n([\s\S]*?)(?=\r?\n#{1,6}\s|$)/.exec(planText);
-  const source = section ? section[1] : planText;
-  const lines = source.split(/\r?\n/).filter((line) => /\*\*Class\*\*:/.test(line));
-  if (lines.length === 0) return 'HARNESS';
-  if (lines.length !== 1) throw new Error('INVALID_WAVE_CLASS');
-  const match = /^\s*\*\*Class\*\*:\s*`?([A-Za-z0-9][A-Za-z0-9_-]*)`?\s*[.,;:!?]?\s*$/.exec(lines[0]);
-  if (!match || !WAVE_CLASSES.includes(match[1])) throw new Error('INVALID_WAVE_CLASS');
-  return match[1];
+  const lines = planText.split(/\r?\n/);
+  const structural = [];
+  let fence = null;
+  for (const line of lines) {
+    const marker = /^ {0,3}(`{3,}|~{3,})(.*)$/.exec(line);
+    if (marker) {
+      const candidate = marker[1];
+      if (fence === null) fence = { char: candidate[0], length: candidate.length };
+      else if (candidate[0] === fence.char && candidate.length >= fence.length && /^[ \t]*$/.test(marker[2])) fence = null;
+      structural.push(false);
+      continue;
+    }
+    structural.push(fence === null);
+  }
+
+  const headings = [];
+  for (let index = 0; index < lines.length; index += 1) {
+    if (structural[index] && /^#{2,3}[ \t]+Wave[ \t]+Class[ \t]*$/.test(lines[index])) headings.push(index);
+  }
+  if (headings.length === 0) throw new Error('WAVE_CLASS_SECTION_MISSING');
+  if (headings.length !== 1) throw new Error('WAVE_CLASS_SECTION_AMBIGUOUS');
+
+  const declarations = [];
+  for (let index = headings[0] + 1; index < lines.length; index += 1) {
+    if (!structural[index]) continue;
+    if (/^#{1,6}[ \t]+/.test(lines[index])) break;
+    if (/^[ \t]*(?:-[ \t]+)?\*\*Class\*\*:/.test(lines[index])) declarations.push(lines[index]);
+  }
+  if (declarations.length === 0) throw new Error('PLAN_WAVE_CLASS_MISSING');
+  if (declarations.length !== 1) throw new Error('PLAN_WAVE_CLASS_AMBIGUOUS');
+
+  const match = /^[ \t]*(?:-[ \t]+)?\*\*Class\*\*:[ \t]*(?:`([A-Za-z0-9][A-Za-z0-9_-]*)`|([A-Za-z0-9][A-Za-z0-9_-]*))[ \t]*[.,;:!?]?[ \t]*$/.exec(declarations[0]);
+  const className = match && (match[1] || match[2]);
+  if (!className || !WAVE_CLASSES.includes(className)) throw new Error('INVALID_WAVE_CLASS');
+  return className;
+}
+function readClassSentinel(root, sentinelPath) {
+  if (!fs.existsSync(sentinelPath)) throw new Error('WAVE_CLASS_SENTINEL_MISSING');
+  let value;
+  try { value = readRootFile(root, sentinelPath).toString('utf8').trim(); }
+  catch (error) {
+    if (error && (error.code === 'ENOENT' || error.message === 'PHASE_STATE_ANCESTRY_MISSING')) {
+      throw new Error('WAVE_CLASS_SENTINEL_MISSING');
+    }
+    throw new Error('INVALID_WAVE_CLASS_SENTINEL');
+  }
+  if (!WAVE_CLASSES.includes(value)) throw new Error('INVALID_WAVE_CLASS_SENTINEL');
+  return value;
 }
 function topology(root) {
   // `root` is the consumer repository. Runtime dependencies belong to the L0
@@ -194,7 +235,12 @@ function currentInputs(root, slug) {
   const p = pathsFor(root, slug);
   const planBytes = readRootFile(p.root, p.plan);
   const planText = planBytes.toString('utf8');
-  const className = parsePlanClass(planText);
+  const planClass = parsePlanClass(planText);
+  const sentinelClass = readClassSentinel(p.root, p.classSentinel);
+  if (sentinelClass !== planClass) {
+    throw new Error(`WAVE_CLASS_MISMATCH:sentinel=${sentinelClass}:plan=${planClass}`);
+  }
+  const className = planClass;
   return { ...p, head: gitHead(p.root), planDigest: sha256(planBytes), className,
     roles: requiredRoles(p.root, planText, className), lifecycleRoles: lifecycleRoles(p.root, className),
     executionMode: executionMode(p.root, className) };

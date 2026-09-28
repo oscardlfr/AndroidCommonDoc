@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# CLAUDE.md Copilot Adapter -- Generates copilot-instructions.md from CLAUDE.md files
-# Reads L0 global (~/.claude/CLAUDE.md) + project-root CLAUDE.md, merges and flattens
-# into a plain-markdown Copilot instructions file.
+# Portable instruction Copilot adapter.
+# Reads the checked-in AGENTS.md contract plus the project-root CLAUDE.md adapter.
+# Personal ~/.claude state is intentionally never an input to generated artifacts.
 #
 # Part of the AndroidCommonDoc adapter pipeline.
 set -euo pipefail
@@ -17,12 +17,12 @@ OUTPUT_FILE="$OUTPUT_DIR/copilot-instructions-from-claude-md.md"
 
 mkdir -p "$OUTPUT_DIR"
 
-# Determine L0 global CLAUDE.md path
-L0_GLOBAL="${HOME}/.claude/CLAUDE.md"
+AGENTS_CONTRACT="AGENTS.md"
 L0_PROJECT="CLAUDE.md"
 
-if [ ! -f "$L0_GLOBAL" ]; then
-  echo "WARNING: L0 global CLAUDE.md not found at $L0_GLOBAL" >&2
+if [ ! -f "$AGENTS_CONTRACT" ]; then
+  echo "ERROR: Portable instruction contract not found at $AGENTS_CONTRACT" >&2
+  exit 1
 fi
 
 if [ ! -f "$L0_PROJECT" ]; then
@@ -113,7 +113,8 @@ def extract_rules(lines):
             in_table = False
 
         # Bullet point rules
-        if stripped.startswith('- '):
+        # Preserve both unordered rules and ordered workflow obligations.
+        if stripped.startswith('- ') or re.match(r'^\d+\.\s+', stripped):
             rules.append(stripped)
 
     return rules
@@ -129,21 +130,21 @@ SKIP_SECTIONS = {
     'test coverage',
 }
 
-# Read both CLAUDE.md files
-l0_global = read_file(os.path.expanduser('~/.claude/CLAUDE.md'))
-l0_project = read_file('CLAUDE.md')
+# Read the checked-in portable contract and Claude adapter.
+agents_contract = read_file('AGENTS.md')
+claude_adapter = read_file('CLAUDE.md')
 
 # Extract sections from both
-global_sections = extract_sections(l0_global)
-project_sections = extract_sections(l0_project)
+contract_sections = extract_sections(agents_contract)
+adapter_sections = extract_sections(claude_adapter)
 
 # Build output
 output_lines = []
-output_lines.append('<!-- GENERATED from CLAUDE.md files -- DO NOT EDIT MANUALLY -->')
+output_lines.append('<!-- GENERATED from AGENTS.md + CLAUDE.md -- DO NOT EDIT MANUALLY -->')
 output_lines.append('<!-- Regenerate: bash adapters/claude-md-copilot-adapter.sh -->')
 output_lines.append('# Coding Instructions')
 output_lines.append('')
-output_lines.append('These instructions are generated from the CLAUDE.md ecosystem (L0 global + project-specific).')
+output_lines.append('These instructions are generated only from the checked-in portable contract and Claude adapter.')
 output_lines.append('Follow these rules when writing code in this project.')
 output_lines.append('')
 
@@ -151,8 +152,8 @@ output_lines.append('')
 emitted_headings = set()
 section_count = 0
 
-# First emit L0 global sections
-for heading, lines in global_sections:
+# First emit the portable contract.
+for heading, lines in contract_sections:
     if heading.lower() in SKIP_SECTIONS:
         continue
 
@@ -168,8 +169,8 @@ for heading, lines in global_sections:
     output_lines.append('')
     emitted_headings.add(heading.lower())
 
-# Then emit project-specific sections (skip duplicates)
-for heading, lines in project_sections:
+# Then emit Claude-specific adapter sections (skip duplicates).
+for heading, lines in adapter_sections:
     if heading.lower() in SKIP_SECTIONS:
         continue
 
@@ -194,4 +195,4 @@ print('\n'.join(output_lines))
 " > "$OUTPUT_FILE"
 
 count=$(grep -c '^## ' "$OUTPUT_FILE" || echo "0")
-echo "CLAUDE.md Copilot adapter: generated $OUTPUT_FILE with $count sections."
+echo "Portable instruction Copilot adapter: generated $OUTPUT_FILE with $count sections."

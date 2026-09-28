@@ -191,7 +191,7 @@ function computeRuntimeToolkitInventory(toolkitRoot) {
     'scripts/lib/runtime-collaboration-policy.json', 'scripts/lib/runtime-routing.json',
     'scripts/lib/runtime-bridge-codex.cjs', 'scripts/lib/runtime-project-context.cjs',
     '.claude/settings.json', '.claude/model-profiles.json', 'setup/claude-host-contract.json',
-    'mcp-server/package-lock.json',
+    'mcp-server/package-lock.json', 'skills/sync-l0/retired-artifacts.json',
     ...CORE_HOOK_FILES.map((file) => `.claude/hooks/${file}`),
     ...CONSUMER_FILES,
     ...ROLE_TEMPLATES.map((role) => `.claude/agents/${role}.md`),

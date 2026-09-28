@@ -114,4 +114,51 @@ describe("validateAgents — tool-body-xref inline backtick fix", () => {
     );
     expect(xrefWarns.length).toBeGreaterThan(0);
   });
+
+  it("does not warn for an explicit No Agent() prohibition", async () => {
+    const templatesDir = path.join(tmpDir, "setup", "agent-templates");
+    await mkdir(templatesDir, { recursive: true });
+    await writeFile(
+      path.join(templatesDir, "test-agent.md"),
+      agentContent("No Agent(): coordinate through SendMessage only."),
+    );
+    await writeFile(path.join(templatesDir, "MIGRATIONS.json"), MINIMAL_MIGRATIONS);
+
+    const result = await validateAgents(tmpDir);
+
+    expect(result.issues.filter((issue) =>
+      issue.category === "tool-body-xref" && issue.message.includes("Agent"),
+    )).toHaveLength(0);
+  });
+
+  it("rejects retired orchestrator templates", async () => {
+    const templatesDir = path.join(tmpDir, "setup", "agent-templates");
+    await mkdir(templatesDir, { recursive: true });
+    await writeFile(path.join(templatesDir, "team-lead.md"), agentContent("SendMessage to coordinator."));
+    await writeFile(path.join(templatesDir, "MIGRATIONS.json"), MINIMAL_MIGRATIONS);
+
+    const result = await validateAgents(tmpDir);
+
+    expect(result.issues).toContainEqual(expect.objectContaining({
+      level: "error",
+      category: "retired-topology",
+      file: "team-lead.md",
+    }));
+  });
+
+  it("rejects exact dated model pins but accepts stable aliases", async () => {
+    const templatesDir = path.join(tmpDir, "setup", "agent-templates");
+    await mkdir(templatesDir, { recursive: true });
+    const pinned = agentContent("SendMessage to coordinator.")
+      .replace("model: claude-sonnet-4-6", "model: claude-sonnet-5-20260928");
+    await writeFile(path.join(templatesDir, "test-agent.md"), pinned);
+    await writeFile(path.join(templatesDir, "MIGRATIONS.json"), MINIMAL_MIGRATIONS);
+
+    const result = await validateAgents(tmpDir);
+
+    expect(result.issues).toContainEqual(expect.objectContaining({
+      level: "error",
+      category: "model-portability",
+    }));
+  });
 });

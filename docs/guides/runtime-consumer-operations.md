@@ -139,7 +139,7 @@ fail-closed evidence validation remain unchanged.
 customizations such as CLAUDE.md, auto-memory, hooks, plugins, and MCP. It is not a
 tool-capability boundary: built-in agents or tools may still be advertised or usable
 unless `--tools` removes them.
-Use it to inspect or repair the consumer, then exit and relaunch normally:
+Use it to inspect or repair the consumer, then exit normally. It disables plugins and MCP; Context7 tasks use the [bounded research profile](runtime-consumer-research-mode.md):
 
 ```bash
 cd /absolute/path/to/consumer

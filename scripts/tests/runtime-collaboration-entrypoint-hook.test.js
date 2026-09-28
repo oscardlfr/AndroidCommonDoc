@@ -109,13 +109,17 @@ function recordManagedSystemInit(sessionId) {
     '.claude/hooks/context-provider-gate.js',
     'scripts/lib/runtime-collaboration-entrypoints.cjs',
     'scripts/lib/runtime-host-claude.cjs',
+    'scripts/lib/runtime-project-context.cjs',
     'scripts/lib/runtime-role-lifecycle/cli-rootsource-handlers.cjs',
     'scripts/lib/runtime-role-lifecycle/ensure-handler.cjs',
+    'scripts/lib/runtime-role-lifecycle/lifecycle-action-payloads.cjs',
     'scripts/lib/runtime-role-lifecycle/lifecycle-argv.cjs',
     'scripts/lib/runtime-role-lifecycle/managed-lifecycle-grant.cjs',
     'scripts/lib/runtime-role-lifecycle/runtime-identity.cjs',
     'scripts/lib/wave-control-plane.cjs',
+    'skills/sync-l0/retired-artifacts.json',
   ]) {
+    fs.mkdirSync(path.dirname(path.join(minted.worktreeRoot, relativePath)), { recursive: true });
     fs.copyFileSync(path.join(REPO_ROOT, relativePath), path.join(minted.worktreeRoot, relativePath));
   }
   assert.ok(runtimeHostClaude.getProductionSessionIdentity(minted.worktreeRoot, sessionId),
@@ -323,9 +327,7 @@ function assertDenied(command, cwd, expectedReason, label) {
   const minted = recordManagedSystemInit(sessionId);
   try {
     const ctx = buildWorktreeContext(minted.worktreeRoot);
-    const waveDir = fs.readdirSync(path.join(ctx.worktreeRoot, '.planning'))
-      .find((name) => name.startsWith('wave-'));
-    const slug = waveDir.slice('wave-'.length);
+    const slug = minted.waveSlug;
     fs.symlinkSync(
       path.join(REPO_ROOT, 'mcp-server', 'node_modules'),
       path.join(ctx.worktreeRoot, 'mcp-server', 'node_modules'),

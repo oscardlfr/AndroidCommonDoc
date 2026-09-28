@@ -261,6 +261,33 @@ describe("source-referenced runtime installation", () => {
     await rm(projectRoot, { recursive: true, force: true });
   });
 
+  it("removes known retired-agent manifest provenance during runtime installation", async () => {
+    const manifestPath = join(projectRoot, "l0-manifest.json");
+    const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
+    manifest.checksums[".claude/agents/team-lead.md"] =
+      "sha256:01c2f6e75d4e441bae0975ab459afda8501e0dbe57a2d60cf1827cd42ed969ba";
+    await writeFile(manifestPath, JSON.stringify(manifest, null, 2) + "\n");
+
+    const installed = await installRuntimeConsumer(projectRoot, REAL_L0_ROOT);
+
+    expect(installed.ok).toBe(true);
+    const updated = JSON.parse(await readFile(manifestPath, "utf8"));
+    expect(updated.checksums[".claude/agents/team-lead.md"]).toBeUndefined();
+  });
+
+  it("runtime preflight preserves and rejects an unrecognized retired agent", async () => {
+    const retired = join(projectRoot, ".claude", "agents", "team-lead.md");
+    await mkdir(join(projectRoot, ".claude", "agents"), { recursive: true });
+    await writeFile(retired, "project-owned team lead\n");
+
+    const installed = await installRuntimeConsumer(projectRoot, REAL_L0_ROOT);
+
+    expect(installed.ok).toBe(false);
+    expect(installed.reason).toBe("retired-artifact-local-content-conflict:.claude/agents/team-lead.md");
+    expect(await readFile(retired, "utf8")).toBe("project-owned team lead\n");
+    await expect(readFile(join(projectRoot, ".claude", "settings.json"), "utf8")).rejects.toThrow();
+  });
+
   it("upgrades a checksum-less historical L1 hook install before runtime and stays idempotent", async () => {
     await mkdir(join(projectRoot, ".claude", "hooks"), { recursive: true });
     for (const filename of ["detekt-pre-commit.sh", "detekt-post-write.sh"] as const) {
@@ -356,6 +383,7 @@ describe("source-referenced runtime installation", () => {
     expect(inventoryPaths.has("scripts/lib/verdict-evidence-contract.cjs")).toBe(true);
     expect(inventoryPaths.has("scripts/lib/verdict-artifact-confinement.cjs")).toBe(true);
     expect(inventoryPaths.has("scripts/lib/verdict-artifact-store.cjs")).toBe(true);
+    expect(inventoryPaths.has("skills/sync-l0/retired-artifacts.json")).toBe(true);
     expect(inventoryPaths.has(".claude/registry/wave-topology.yaml")).toBe(true);
     expect(inventoryPaths.has(".claude/hooks/l0-source-hook-launcher.js")).toBe(true);
     expect(inventoryPaths.has(".claude/hooks/plan-md-write-gate.js")).toBe(true);
@@ -603,7 +631,12 @@ describe("source-referenced runtime installation", () => {
     await mkdir(join(projectRoot, ".planning", "wave-consumer-fixture"), { recursive: true });
     await writeFile(
       join(projectRoot, ".planning", "wave-consumer-fixture", "PLAN.md"),
-      "### Wave Class\n\n**Class**: HARNESS\n",
+      "### Wave Class\n\n- **Class**: HARNESS\n",
+      "utf8",
+    );
+    await writeFile(
+      join(projectRoot, ".planning", "wave-consumer-fixture", "CLASS"),
+      "HARNESS\n",
       "utf8",
     );
     for (const args of [
@@ -688,6 +721,11 @@ describe("source-referenced runtime installation", () => {
     try {
       await mkdir(mainRoot, { recursive: true });
       await writeRuntimeManifest(mainRoot);
+      const manifestPath = join(mainRoot, "l0-manifest.json");
+      const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
+      manifest.checksums[".claude/agents/team-lead.md"] =
+        "sha256:01c2f6e75d4e441bae0975ab459afda8501e0dbe57a2d60cf1827cd42ed969ba";
+      await writeFile(manifestPath, JSON.stringify(manifest, null, 2) + "\n");
       for (const args of [
         ["init", "-q"],
         ["config", "user.email", "test@example.invalid"],
@@ -710,6 +748,8 @@ describe("source-referenced runtime installation", () => {
       });
       expect(installed.status, installed.stderr || installed.stdout).toBe(0);
       expect(runtimeContext.verifyRuntimeConsumerInstallation(linkedRoot, { verifyContent: true }).ok).toBe(true);
+      expect(JSON.parse(await readFile(join(linkedRoot, "l0-manifest.json"), "utf8"))
+        .checksums[".claude/agents/team-lead.md"]).toBeUndefined();
       expect(await readFile(join(linkedRoot, ".claude", "registry", "wave-topology.yaml"), "utf8"))
         .toBe(await readFile(join(REAL_L0_ROOT, ".claude", "registry", "wave-topology.yaml"), "utf8"));
     } finally {

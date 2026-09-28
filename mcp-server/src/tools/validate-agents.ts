@@ -3,7 +3,7 @@
  *
  * Validates agent templates and production agents for:
  * - Frontmatter completeness (name, description, tools, model, token_budget, template_version)
- * - Role keyword contracts (PM: TeamCreate, arch: APPROVE, etc.)
+ * - Role keyword contracts (architect verdicts, phase-scoped quality gate, etc.)
  * - Imperative instruction style (detects passive prose anti-patterns)
  * - Tool-body cross-reference (body tool references match frontmatter tools)
  * - Anti-pattern detection (missing triggers, Write on architects, named devs)
@@ -46,16 +46,7 @@ interface ValidationResult {
 // ---------------------------------------------------------------------------
 
 const ROLE_KEYWORDS: Record<string, string[]> = {
-  "project-manager": [
-    "TeamCreate",
-    "SendMessage",
-    "FORBIDDEN",
-    "ALLOWED",
-    "IMMEDIATELY",
-    "DISPOSABLE",
-    "PHASE TRANSITIONS ARE AUTOMATIC",
-  ],
-  planner: ["SendMessage", "Planning Team"],
+  planner: ["SendMessage"],
   "quality-gater": ["SendMessage", "PASS", "FAIL"],
   "arch-testing": ["SendMessage", "APPROVE", "ESCALATE"],
   "arch-platform": ["SendMessage", "APPROVE", "ESCALATE"],
@@ -235,7 +226,7 @@ function validateToolBodyXref(
             .split("\n")
             .filter((line) => pattern.test(line))
             .join(" ");
-          if (/WRONG|NEVER|FORBIDDEN|CANNOT/i.test(context)) continue;
+          if (/WRONG|NEVER|FORBIDDEN|CANNOT|\bNO\b/i.test(context)) continue;
 
           issues.push({
             level: "warning",
@@ -263,34 +254,6 @@ function validateAntiPatterns(
     );
     const bodyNoFences = stripCodeFences(getBody(file.content));
 
-    // PM must have phase transition enforcement
-    if (agentName === "project-manager") {
-      if (!/PHASE TRANSITIONS ARE AUTOMATIC|STOP PLANNING/i.test(bodyNoFences)) {
-        issues.push({
-          level: "warning",
-          category: "anti-patterns",
-          file: file.name,
-          message: "PM missing phase transition enforcement rule",
-        });
-      }
-      if (!/DISPOSABLE/i.test(bodyNoFences)) {
-        issues.push({
-          level: "warning",
-          category: "anti-patterns",
-          file: file.name,
-          message: "PM missing DISPOSABLE dev rule",
-        });
-      }
-      if (!/TeamDelete/i.test(toolsField)) {
-        issues.push({
-          level: "warning",
-          category: "anti-patterns",
-          file: file.name,
-          message: "PM missing TeamDelete in tools (causes team zombies)",
-        });
-      }
-    }
-
     // Architects must NOT have Write/Edit
     if (agentName?.startsWith("arch-")) {
       if (/Write|Edit/i.test(toolsField)) {
@@ -303,7 +266,7 @@ function validateAntiPatterns(
       }
     }
 
-    // Planner/quality-gater must be "peer" not "sub-agent"
+    // Planner and quality-gater are phase-scoped, never generic PM subagents.
     if (agentName === "planner" || agentName === "quality-gater") {
       if (/sub-agent spawned by PM/i.test(bodyNoFences)) {
         issues.push({
@@ -313,6 +276,34 @@ function validateAntiPatterns(
           message: `${agentName} describes self as sub-agent — should be "team peer"`,
         });
       }
+    }
+  }
+  return issues;
+}
+
+function validateModernAgentContract(
+  files: Array<{ name: string; content: string }>,
+): ValidationIssue[] {
+  const issues: ValidationIssue[] = [];
+  for (const file of files) {
+    if (file.name === "team-lead.md" || file.name === "project-manager.md") {
+      issues.push({
+        level: "error",
+        category: "retired-topology",
+        file: file.name,
+        message: "Retired orchestrator template must not be distributed; the main conversation owns orchestration",
+      });
+    }
+    const model = String(
+      (parseFrontmatter(file.content)?.data as Record<string, unknown>)?.model ?? "",
+    );
+    if (/^claude-[a-z0-9.-]*-\d{8}$/i.test(model)) {
+      issues.push({
+        level: "error",
+        category: "model-portability",
+        file: file.name,
+        message: `Exact dated model pin is forbidden in portable agent templates: ${model}`,
+      });
     }
   }
   return issues;
@@ -426,6 +417,7 @@ export async function validateAgents(
   allIssues.push(...validateImperativeStyle(allFiles));
   allIssues.push(...validateToolBodyXref(allFiles));
   allIssues.push(...validateAntiPatterns(allFiles));
+  allIssues.push(...validateModernAgentContract(allFiles));
   allIssues.push(...validateSizeLimits(allFiles));
   allIssues.push(...validateVersioning(templateFiles, migrations));
 

@@ -250,11 +250,12 @@ export function resolveSyncPlan(
   const excludeCategories = new Set(selection.exclude_categories);
 
   if (selection.mode === "explicit") {
-    // Explicit mode: only include entries whose paths are already in checksums
+    // Manifest checksums are keyed by consumer destination paths, while the
+    // registry stores toolkit source paths.
     const checksumPaths = new Set(Object.keys(manifest.checksums));
     return registry.entries.filter((entry) => {
       if (isL2Specific(entry, l2Commands, l2Agents, l2Skills)) return false;
-      return checksumPaths.has(entry.path);
+      return checksumPaths.has(destPath(entry.path));
     });
   }
 
@@ -506,6 +507,35 @@ export function destPath(sourcePath: string): string {
   return sourcePath;
 }
 
+/**
+ * Explicit selection is a closed world for hooks too. An empty hook selection
+ * means zero hook copies and zero new registrations, not "install every hook".
+ */
+async function hookExclusionsForManifest(
+  manifest: Manifest,
+  l0Root: string,
+): Promise<string[]> {
+  const configured = new Set(manifest.selection?.exclude_hooks ?? []);
+  if (manifest.selection?.mode !== "explicit") return [...configured];
+
+  const selected = new Set(
+    Object.keys(manifest.checksums)
+      .filter((relative) => relative.startsWith(".claude/hooks/"))
+      .map((relative) => path.basename(relative)),
+  );
+  try {
+    for (const filename of await readdir(path.join(l0Root, ".claude", "hooks"))) {
+      if (!selected.has(filename)) configured.add(filename);
+    }
+  } catch {
+    // syncHooks handles a missing hook directory as an empty source.
+  }
+  for (const registration of L0_REQUIRED_HOOK_REGISTRATIONS) {
+    if (!selected.has(registration.file)) configured.add(registration.file);
+  }
+  return [...configured];
+}
+
 // ---------------------------------------------------------------------------
 // L0 source resolution (Fix #2)
 // ---------------------------------------------------------------------------
@@ -678,7 +708,7 @@ export function cleanupClone(dirPath: string): void {
  */
 export function getGitCommit(dirPath: string): string | undefined {
   try {
-    return execFileSync("git", ["rev-parse", "--short", "HEAD"], {
+    return execFileSync("git", ["rev-parse", "HEAD"], {
       cwd: dirPath,
       encoding: "utf-8",
       stdio: ["pipe", "pipe", "pipe"],
@@ -821,6 +851,206 @@ function hasL0Header(content: string): boolean {
     content.includes("l0_source:") &&
     content.includes("l0_hash:")
   );
+}
+
+// ---------------------------------------------------------------------------
+// Permanent retired-artifact tombstones
+// ---------------------------------------------------------------------------
+
+const RETIRED_ARTIFACT_REGISTRY = "skills/sync-l0/retired-artifacts.json";
+
+interface RetiredArtifactTombstone {
+  id: string;
+  kind: "agent";
+  path: string;
+  retired_in: string;
+  replacement: string;
+  known_l0_sha256: string[];
+}
+
+interface RetiredArtifactRegistry {
+  format_version: "1.0";
+  artifacts: RetiredArtifactTombstone[];
+}
+
+export interface RetiredArtifactReconciliationPlan {
+  removePaths: string[];
+  removeChecksumPaths: string[];
+  observedSha256: Record<string, string>;
+  tombstonePaths: string[];
+}
+
+function normalizedSha256(content: string): string {
+  return createHash("sha256")
+    .update(stripL0Metadata(content).replace(/\r\n/g, "\n"))
+    .digest("hex");
+}
+
+function validateRetiredArtifactRegistry(value: unknown): RetiredArtifactRegistry {
+  if (!isJsonObject(value) || value.format_version !== "1.0" || !Array.isArray(value.artifacts)) {
+    throw new Error("retired-artifact-registry-malformed");
+  }
+  const ids = new Set<string>();
+  const paths = new Set<string>();
+  for (const raw of value.artifacts) {
+    if (!isJsonObject(raw) || typeof raw.id !== "string" || raw.kind !== "agent" ||
+        typeof raw.path !== "string" || typeof raw.retired_in !== "string" ||
+        typeof raw.replacement !== "string" || !Array.isArray(raw.known_l0_sha256) ||
+        raw.known_l0_sha256.length === 0 ||
+        raw.known_l0_sha256.some((digest) => typeof digest !== "string" || !/^[0-9a-f]{64}$/.test(digest))) {
+      throw new Error("retired-artifact-registry-malformed");
+    }
+    const normalized = path.posix.normalize(raw.path.replace(/\\/g, "/"));
+    if (normalized !== raw.path || normalized.startsWith("../") || path.posix.isAbsolute(normalized) ||
+        !normalized.startsWith(".claude/agents/") || ids.has(raw.id) || paths.has(normalized)) {
+      throw new Error("retired-artifact-registry-malformed");
+    }
+    ids.add(raw.id);
+    paths.add(normalized);
+  }
+  return value as unknown as RetiredArtifactRegistry;
+}
+
+async function readRetiredArtifactRegistry(toolkitRoot: string): Promise<RetiredArtifactRegistry> {
+  const registryPath = path.join(toolkitRoot, RETIRED_ARTIFACT_REGISTRY);
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(await readFile(registryPath, "utf8"));
+  } catch (err) {
+    throw new Error(`retired-artifact-registry-unreadable:${err instanceof Error ? err.message : String(err)}`);
+  }
+  return validateRetiredArtifactRegistry(parsed);
+}
+
+async function caseInsensitiveMatches(root: string, relativePath: string): Promise<string[]> {
+  const parentRelative = path.posix.dirname(relativePath);
+  const basename = path.posix.basename(relativePath);
+  let current = root;
+  for (const segment of parentRelative.split("/")) {
+    current = path.join(current, segment);
+    try {
+      const info = await lstat(current);
+      if (!info.isDirectory() || info.isSymbolicLink()) {
+        throw new Error(`retired-artifact-unsafe-parent:${relativePath}`);
+      }
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code === "ENOENT") return [];
+      throw err;
+    }
+  }
+  try {
+    const entries = await readdir(current);
+    return entries.filter((entry) => entry.toLowerCase() === basename.toLowerCase());
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") return [];
+    throw err;
+  }
+}
+
+/**
+ * Inspect permanent tombstones without mutating the consumer. Exact historical
+ * bytes at the exact retired path are L0-owned provenance and may be removed.
+ * Every ambiguous condition is preserved and fails closed.
+ */
+export async function planRetiredArtifactReconciliation(
+  projectRoot: string,
+  toolkitRoot: string,
+  manifest: Manifest,
+): Promise<RetiredArtifactReconciliationPlan> {
+  const registry = await readRetiredArtifactRegistry(toolkitRoot);
+  const plan: RetiredArtifactReconciliationPlan = {
+    removePaths: [],
+    removeChecksumPaths: [],
+    observedSha256: {},
+    tombstonePaths: registry.artifacts.map((artifact) => artifact.path),
+  };
+
+  for (const artifact of registry.artifacts) {
+    const toolkitMatches = await caseInsensitiveMatches(toolkitRoot, artifact.path);
+    if (toolkitMatches.length > 0) {
+      throw new Error(`retired-artifact-reintroduced-in-toolkit:${artifact.path}`);
+    }
+
+    const artifactName = path.posix.basename(artifact.path, ".md");
+    if (manifest.l2_specific.agents.some((name) => name.toLowerCase() === artifactName.toLowerCase())) {
+      throw new Error(`retired-artifact-declared-l2-specific:${artifact.path}`);
+    }
+
+    const checksumMatches = Object.keys(manifest.checksums)
+      .filter((candidate) => candidate.toLowerCase() === artifact.path.toLowerCase());
+    if (checksumMatches.length > 1 || (checksumMatches.length === 1 && checksumMatches[0] !== artifact.path)) {
+      throw new Error(`retired-artifact-ambiguous-manifest-path:${artifact.path}`);
+    }
+    const recorded = manifest.checksums[artifact.path];
+    if (recorded !== undefined &&
+        !artifact.known_l0_sha256.includes(recorded.replace(/^sha256:/, ""))) {
+      throw new Error(`retired-artifact-unrecognized-manifest-provenance:${artifact.path}`);
+    }
+
+    const consumerMatches = await caseInsensitiveMatches(projectRoot, artifact.path);
+    if (consumerMatches.length > 1 || (consumerMatches.length === 1 && consumerMatches[0] !== path.posix.basename(artifact.path))) {
+      throw new Error(`retired-artifact-ambiguous-consumer-path:${artifact.path}`);
+    }
+    if (consumerMatches.length === 0) {
+      if (recorded !== undefined) plan.removeChecksumPaths.push(artifact.path);
+      continue;
+    }
+
+    const destination = path.join(projectRoot, artifact.path);
+    const info = await lstat(destination);
+    if (!info.isFile() || info.isSymbolicLink() || info.nlink !== 1) {
+      throw new Error(`retired-artifact-not-regular-file:${artifact.path}`);
+    }
+    const observed = normalizedSha256(await readFile(destination, "utf8"));
+    if (!artifact.known_l0_sha256.includes(observed)) {
+      throw new Error(`retired-artifact-local-content-conflict:${artifact.path}`);
+    }
+    plan.removePaths.push(artifact.path);
+    plan.observedSha256[artifact.path] = observed;
+    if (recorded !== undefined) plan.removeChecksumPaths.push(artifact.path);
+  }
+
+  return plan;
+}
+
+function prepareRetiredArtifactChecksums(
+  manifest: Manifest,
+  plan: RetiredArtifactReconciliationPlan,
+): void {
+  for (const relative of plan.removeChecksumPaths) delete manifest.checksums[relative];
+}
+
+function assertRegistryDoesNotReintroduceRetiredArtifacts(
+  entries: SkillRegistryEntry[],
+  plan: RetiredArtifactReconciliationPlan,
+): void {
+  const retired = new Set(plan.tombstonePaths.map((relative) => relative.toLowerCase()));
+  const reintroduced = entries.find((entry) => retired.has(destPath(entry.path).toLowerCase()));
+  if (reintroduced) {
+    throw new Error(`retired-artifact-reintroduced-by-registry:${destPath(reintroduced.path)}`);
+  }
+}
+
+async function applyRetiredArtifactPlan(
+  projectRoot: string,
+  plan: RetiredArtifactReconciliationPlan,
+): Promise<void> {
+  for (const relative of plan.removePaths) {
+    const matches = await caseInsensitiveMatches(projectRoot, relative);
+    if (matches.length !== 1 || matches[0] !== path.posix.basename(relative)) {
+      throw new Error(`retired-artifact-changed-before-removal:${relative}`);
+    }
+    const destination = path.join(projectRoot, relative);
+    const info = await lstat(destination);
+    if (!info.isFile() || info.isSymbolicLink() || info.nlink !== 1) {
+      throw new Error(`retired-artifact-changed-before-removal:${relative}`);
+    }
+    const observed = normalizedSha256(await readFile(destination, "utf8"));
+    if (observed !== plan.observedSha256[relative]) {
+      throw new Error(`retired-artifact-changed-before-removal:${relative}`);
+    }
+    await unlink(destination);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -1119,7 +1349,7 @@ export async function computeRuntimeToolkitInventory(toolkitRoot: string): Promi
     "scripts/lib/runtime-collaboration-policy.json", "scripts/lib/runtime-routing.json",
     "scripts/lib/runtime-bridge-codex.cjs", "scripts/lib/runtime-project-context.cjs",
     ".claude/settings.json", ".claude/model-profiles.json", "setup/claude-host-contract.json",
-    "mcp-server/package-lock.json",
+    "mcp-server/package-lock.json", RETIRED_ARTIFACT_REGISTRY,
     ...RUNTIME_CORE_HOOK_FILES.map((file) => `.claude/hooks/${file}`),
     ...RUNTIME_CONSUMER_FILES,
     ...RUNTIME_ROLE_TEMPLATES.map((role) => `.claude/agents/${role}.md`),
@@ -1161,6 +1391,7 @@ export interface RuntimeConsumerInstallResult {
   registrations?: number;
   manifestChanged?: boolean;
   repairedExecutables?: string[];
+  retiredArtifacts?: string[];
 }
 
 /**
@@ -1207,11 +1438,14 @@ export async function installRuntimeConsumer(
     if (consumer === toolkit) return { ok: false, reason: "runtime-consumer-must-be-distinct", dryRun };
     const manifestPath = path.join(consumer, "l0-manifest.json");
     const manifest = await readManifest(manifestPath);
+    const manifestBefore = manifestStateWithoutTimestamp(manifest);
     const l0Sources = manifest.sources.filter((source) => source.layer === "L0" && source.role === "tooling");
     if (l0Sources.length !== 1 || l0Sources[0].remote !== undefined ||
         !(await l0SourceResolvesToToolkit(projectRoot, l0Sources[0].path, toolkit))) {
       return { ok: false, reason: "runtime-l0-source-invalid", dryRun };
     }
+    const retiredArtifactPlan = await planRetiredArtifactReconciliation(consumer, toolkit, manifest);
+    prepareRetiredArtifactChecksums(manifest, retiredArtifactPlan);
     const consumerLayer: "L1" | "L2" = await access(path.join(consumer, "skills", "registry.json"))
       .then(() => "L1" as const).catch(() => "L2" as const);
     const toolkitCommit = execFileSync("git", ["rev-parse", "HEAD"], { cwd: toolkit, encoding: "utf8" }).trim();
@@ -1325,8 +1559,8 @@ export async function installRuntimeConsumer(
       consumerFileWrites.push({ relative, destination, content });
     }
 
-    const manifestBefore = manifestStateWithoutTimestamp(manifest);
     if (!dryRun) {
+      await applyRetiredArtifactPlan(consumer, retiredArtifactPlan);
       for (const write of consumerFileWrites) {
         await mkdir(path.dirname(write.destination), { recursive: true });
         await writeFile(write.destination, write.content, "utf8");
@@ -1364,6 +1598,7 @@ export async function installRuntimeConsumer(
       migratedRoles: roleWrites.filter((write) => write.migration).map((write) => write.role),
       registrations: RUNTIME_HOOK_REGISTRATIONS.length,
       manifestChanged,
+      retiredArtifacts: retiredArtifactPlan.removePaths,
       repairedExecutables: executableRepairs.map((destination) =>
         path.relative(consumer, destination).replace(/\\/g, "/")),
     };
@@ -1518,6 +1753,11 @@ export async function mergeHookRegistrations(
       for (const hook of block.hooks) {
         const file = classifyOwnedHookCommand(hook.command, managedFiles);
         if (!file) { retained.push(hook); continue; }
+        // Exclusions are additive: they prevent this invocation from copying
+        // or registering a hook, but must not delete a registration already
+        // owned by the consumer. This is especially important for explicit
+        // manifests, where every unselected hook is treated as excluded.
+        if (excludeSet.has(file)) { retained.push(hook); continue; }
         const desired = desiredCommandFor(file);
         const spec = L0_REQUIRED_HOOK_REGISTRATIONS.find((entry) =>
           entry.event === event && entry.matcher === block.matcher && entry.file === file);
@@ -1925,8 +2165,15 @@ export async function syncMultiSource(
     sourceCounts[source.layer] = registry.entries.length;
   }
 
+  const l0Layer = orderedSources.find((source) => source.layer === "L0" && source.role === "tooling");
+  const msL0Root = l0Layer ? resolvedPaths[l0Layer.layer] : undefined;
+  if (!msL0Root) throw new Error("retired-artifact-l0-source-missing");
+  const retiredArtifactPlan = await planRetiredArtifactReconciliation(projectRoot, msL0Root, manifest);
+  prepareRetiredArtifactChecksums(manifest, retiredArtifactPlan);
+
   // Merge registries — last wins per name+type
   const merged = mergeRegistries(registryTuples);
+  assertRegistryDoesNotReintroduceRetiredArtifacts(merged, retiredArtifactPlan);
 
   // Detect overrides (entries from earlier layers replaced by later ones)
   const overrides: MultiSourceSyncReport["overrides"] = [];
@@ -1990,6 +2237,15 @@ export async function syncMultiSource(
     sourceCounts,
     overrides,
   };
+  if (retiredArtifactPlan.removePaths.length > 0) {
+    report.warnings.push(
+      `Permanent L0 retirement ${dryRun ? "would remove" : "will remove"}: ${retiredArtifactPlan.removePaths.join(", ")}`,
+    );
+    if (dryRun) {
+      report.removed += retiredArtifactPlan.removePaths.length;
+      report.removedPaths.push(...retiredArtifactPlan.removePaths);
+    }
+  }
 
   // Log overrides as warnings for visibility
   for (const ov of overrides) {
@@ -2121,10 +2377,12 @@ export async function syncMultiSource(
   // Reconcile hooks and settings before publishing the manifest. A hook
   // conflict or settings failure must never bless a partially reconciled
   // consumer by advancing checksums/last_synced.
-  const msL0Root = resolvedPaths[orderedSources[0].layer] ?? "";
+  const msHookExclusions = msL0Root
+    ? await hookExclusionsForManifest(manifest, msL0Root)
+    : manifest.selection?.exclude_hooks ?? [];
   if (msL0Root) {
     const hookResult = options.runtime ? { copied: [], skipped: [], errors: [] }
-      : await syncHooks(msL0Root, projectRoot, manifest.selection?.exclude_hooks ?? [], dryRun);
+      : await syncHooks(msL0Root, projectRoot, msHookExclusions, dryRun);
     for (const err of hookResult.errors) report.errors.push(`Hook sync: ${err}`);
     if ("repaired" in hookResult && hookResult.repaired.length > 0) {
       report.warnings.push(
@@ -2137,7 +2395,7 @@ export async function syncMultiSource(
     const msMergeResult = options.runtime
       ? { added: [], skipped: [], dryRun }
       : await mergeHookRegistrations(
-        projectRoot, dryRun, msL0Root, manifest.selection?.exclude_hooks ?? [],
+        projectRoot, dryRun, msL0Root, msHookExclusions,
       );
     if (msMergeResult.added.length > 0) {
       report.warnings.push(
@@ -2177,6 +2435,16 @@ export async function syncMultiSource(
             `Post-sync verification failed: ${dest} was not written to disk`,
           );
         }
+      }
+    }
+
+    if (report.errors.length === 0) {
+      try {
+        await applyRetiredArtifactPlan(projectRoot, retiredArtifactPlan);
+        report.removed += retiredArtifactPlan.removePaths.length;
+        report.removedPaths.push(...retiredArtifactPlan.removePaths);
+      } catch (err) {
+        report.errors.push(err instanceof Error ? err.message : String(err));
       }
     }
 
@@ -2342,8 +2610,12 @@ export async function syncL0(
     await readHookSettingsOrThrow(path.join(projectRoot, ".claude", "settings.json"));
   }
 
+  const retiredArtifactPlan = await planRetiredArtifactReconciliation(projectRoot, l0Root, manifest);
+  prepareRetiredArtifactChecksums(manifest, retiredArtifactPlan);
+
   // Generate registry from L0 root
   const registry = await generateRegistry(l0Root);
+  assertRegistryDoesNotReintroduceRetiredArtifacts(registry.entries, retiredArtifactPlan);
 
   // ── Fix #1: Empty registry guardrail ──────────────────────────────────
   if (registry.entries.length === 0) {
@@ -2386,6 +2658,15 @@ export async function syncL0(
     conflictPaths: [],
     manifestChanged: false,
   };
+  if (retiredArtifactPlan.removePaths.length > 0) {
+    report.warnings.push(
+      `Permanent L0 retirement ${dryRun ? "would remove" : "will remove"}: ${retiredArtifactPlan.removePaths.join(", ")}`,
+    );
+    if (dryRun) {
+      report.removed += retiredArtifactPlan.removePaths.length;
+      report.removedPaths.push(...retiredArtifactPlan.removePaths);
+    }
+  }
 
   // ── Fix #1 + #5: Count removes and apply threshold ────────────────────
   const removeActions = actions.filter((a) => a.action === "remove");
@@ -2508,8 +2789,9 @@ export async function syncL0(
 
   // Reconcile hooks/settings first; only a fully successful reconciliation may
   // publish new manifest checksums or last_synced.
+  const slHookExclusions = await hookExclusionsForManifest(manifest, l0Root);
   const slHookResult = options.runtime ? { copied: [], skipped: [], errors: [] }
-    : await syncHooks(l0Root, projectRoot, manifest.selection?.exclude_hooks ?? [], dryRun);
+    : await syncHooks(l0Root, projectRoot, slHookExclusions, dryRun);
   for (const err of slHookResult.errors) report.errors.push(`Hook sync: ${err}`);
   if ("repaired" in slHookResult && slHookResult.repaired.length > 0) {
     report.warnings.push(
@@ -2521,7 +2803,7 @@ export async function syncL0(
     const slMergeResult = options.runtime
       ? { added: [], skipped: [], dryRun }
       : await mergeHookRegistrations(
-        projectRoot, dryRun, l0Root, manifest.selection?.exclude_hooks ?? [],
+        projectRoot, dryRun, l0Root, slHookExclusions,
       );
     if (slMergeResult.added.length > 0) {
       report.warnings.push(
@@ -2563,6 +2845,16 @@ export async function syncL0(
             `Post-sync verification failed: ${dest} was not written to disk`,
           );
         }
+      }
+    }
+
+    if (report.errors.length === 0) {
+      try {
+        await applyRetiredArtifactPlan(projectRoot, retiredArtifactPlan);
+        report.removed += retiredArtifactPlan.removePaths.length;
+        report.removedPaths.push(...retiredArtifactPlan.removePaths);
+      } catch (err) {
+        report.errors.push(err instanceof Error ? err.message : String(err));
       }
     }
 

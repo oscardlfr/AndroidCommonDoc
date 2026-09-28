@@ -1,0 +1,15 @@
+{
+  "format_version": "1.0",
+  "artifacts": [
+    {
+      "id": "R001",
+      "kind": "agent",
+      "path": ".claude/agents/team-lead.md",
+      "retired_in": "W31.6",
+      "replacement": "docs/agents/main-agent-orchestration-guide.md",
+      "known_l0_sha256": [
+        "01c2f6e75d4e441bae0975ab459afda8501e0dbe57a2d60cf1827cd42ed969ba"
+      ]
+    }
+  ]
+}

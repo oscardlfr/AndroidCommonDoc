@@ -350,6 +350,19 @@ describe("syncMultiSource", () => {
       path.join(l0Root, "skills", "lint", "SKILL.md"),
       "---\ndescription: L0 lint skill\n---\n# Lint Skill",
     );
+    await fs.mkdir(path.join(l0Root, "skills", "sync-l0"), { recursive: true });
+    const retiredFixture = "---\nname: team-lead\n---\nlegacy\n";
+    await fs.writeFile(
+      path.join(l0Root, "skills", "sync-l0", "retired-artifacts.json"),
+      JSON.stringify({
+        format_version: "1.0",
+        artifacts: [{
+          id: "R001", kind: "agent", path: ".claude/agents/team-lead.md",
+          retired_in: "test", replacement: "docs/replacement.md",
+          known_l0_sha256: [createHash("sha256").update(retiredFixture).digest("hex")],
+        }],
+      }),
+    );
 
     // Create L1 with its own registry (overrides test, adds deploy)
     await fs.mkdir(path.join(l1Root, "skills", "test"), { recursive: true });
@@ -396,6 +409,19 @@ describe("syncMultiSource", () => {
     // Should have adds for all merged entries
     expect(report.added).toBeGreaterThan(0);
     expect(report.errors).toEqual([]);
+  });
+
+  it("removes an exact retired L0 agent in a chained L1/L2 sync without --prune", async () => {
+    const retiredFixture = "---\nname: team-lead\n---\nlegacy\n";
+    const retiredPath = path.join(projectRoot, ".claude", "agents", "team-lead.md");
+    await fs.mkdir(path.dirname(retiredPath), { recursive: true });
+    await fs.writeFile(retiredPath, retiredFixture);
+
+    const report = await syncMultiSource(projectRoot);
+
+    expect(report.errors).toEqual([]);
+    expect(report.removedPaths).toContain(".claude/agents/team-lead.md");
+    await expect(fs.access(retiredPath)).rejects.toThrow();
   });
 
   it("reports overrides when L1 replaces L0 entry", async () => {
@@ -480,6 +506,8 @@ describe("syncMultiSource", () => {
       { layer: "L0", path: REAL_L0_ROOT, role: "tooling" },
       { layer: "L1", path: l1Root, role: "ecosystem" },
     ]);
+    manifest.checksums[".claude/agents/team-lead.md"] =
+      "sha256:01c2f6e75d4e441bae0975ab459afda8501e0dbe57a2d60cf1827cd42ed969ba";
     const manifestPath = path.join(projectRoot, "l0-manifest.json");
     await writeManifest(manifestPath, manifest);
     await fs.mkdir(path.join(projectRoot, "skills"), { recursive: true });
@@ -487,6 +515,8 @@ describe("syncMultiSource", () => {
 
     const ordinary = await syncMultiSource(projectRoot);
     expect(ordinary.errors).toEqual([]);
+    expect(JSON.parse(await fs.readFile(manifestPath, "utf8")).checksums[".claude/agents/team-lead.md"])
+      .toBeUndefined();
     const installed = await installRuntimeConsumer(projectRoot, REAL_L0_ROOT);
     expect(installed.ok).toBe(true);
     expect(installed.consumerLayer).toBe("L1");

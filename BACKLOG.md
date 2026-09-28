@@ -1,15 +1,15 @@
 # AndroidCommonDoc Backlog
 
 > **Last updated**: 2026-09-28
-> **Roadmap baseline**: `develop@59087cb248ea441843a0395f756f249d5d14be3b` (PR #254). **H1, G0, ordered Waves 1–7, first-consumer hardening, consumer-contract convergence, and the first runtime-adoption follow-up are SHIPPED.**
-> **Current delivery**: PR #254 shipped the bounded post-#253 adoption fixes without modifying a product repository. The active finalization below is limited to defects independently reproduced after that merge. There is no numbered wave marked `NEXT`. **R33 remains deferred.**
+> **Roadmap baseline**: `develop@8ee5d831439312504a98e636c071583528824316` (PR #255). **H1, G0, ordered Waves 1–7, first-consumer hardening, consumer-contract convergence, and runtime-adoption finalization are SHIPPED.**
+> **Current delivery**: the active bounded convergence below contains only defects independently reproduced by a live consumer after PR #255 plus the portable agent/memory modernization. There is no numbered wave marked `NEXT`. **R33 remains deferred.**
 > **Source of truth**: this file owns ordering and scope. `git log`, merged PRs, and `project_*shipped.md` memory entries own historical detail.
 
 ## Operating contract
 
 - The load-bearing portability floor is **validated disk artifacts**. Runtime messaging is an optional acceleration layer.
 - Adapter delivery, message text, an MCP return value, or a live peer saying “GO” is never evidence. Only a valid, correlated result artifact counts as a protocol-valid consultation answer; phase and push authorization still require their own contracts.
-- Waves 1–7 were executed in order and shipped through PR #250; consumer hardening and bounded follow-ups shipped through PRs #251–#254.
+- Waves 1–7 were executed in order and shipped through PR #250; consumer hardening and bounded follow-ups shipped through PRs #251–#255.
 - Re-audit observations and file counts at each wave's starting HEAD. Post-G0 counts below were recorded by PR #245 at `619d9a7`; they are a planning baseline, not permanent truth.
 - Each wave must have one frozen scope, explicit no-go boundaries, proportional tests, and a shipped memory entry before the backlog advances.
 - Rich runtimes may add `SendMessage`, persistent peers, MCP invocation, app-server threads, or wakeups; failure or absence of those capabilities must not invalidate the disk floor.
@@ -124,22 +124,33 @@ admission, post-admission PREP creation, ordinary/runtime timeout idempotency,
 planner write confinement, ViewModel-rule precision, recovery guidance, and the
 bounded consumer acceptance that exposed the finalization defects below.
 
-## Active backlog after PR #254
+## PR #255 runtime-adoption finalization — SHIPPED
+
+PR #255 was squash-merged as
+`8ee5d831439312504a98e636c071583528824316`. It shipped the Claude `2.1.x`
+family adapter, native PreToolUse effort proof, exact host composition,
+planless dashboard admission, first-launch transcript handling, and
+checksum-allowlisted legacy Detekt hook migration. The former temporary
+finalization workstream is pruned; its detailed evidence remains in the merged
+PR, changelog, tests, and runtime consumer runbook.
+
+## Active backlog after PR #255
 
 Priority is impact, not implementation size. Every item needs an accepted PLAN,
 negative and positive tests, and a clean-consumer acceptance when it changes a
 consumer-facing contract.
 
-### Runtime adoption finalization — ACTIVE, PRUNEABLE after merge
+### Live-consumer agent/runtime convergence — ACTIVE, PRUNEABLE after merge
 
-This bounded workstream closes defects found only when upgrading and launching
-real consumers: punctuation-safe class parsing, exact multi-wave selection,
-planless read-only dashboard bootstrap, post-admission PREP creation, interactive host-composition production, native
-effective-effort proof, Claude `2.1.x` patch compatibility, and allowlisted
-migration of checksum-less legacy Detekt hooks. It is complete only after the same final commit passes disposable
-`shared-kmp-libs` L1 upgrade, clean L2/worktree launch, one local full aggregate,
-and the existing required GitHub CI. Collapse this paragraph into
-shipped history after the PR merges; do not preserve it as a parallel roadmap.
+This single bounded workstream closes the current compatibility cluster:
+permanent retirement of the legacy `team-lead` artifact; runtime executable
+paths rooted in the qualified toolkit rather than the consumer; exact
+PLAN/class-sentinel parsing; a portable `AGENTS.md`/thin-Claude-adapter/
+path-rules/durable-memory contract; and explicit sync that maps source paths to
+consumer destinations, records a full provenance SHA, and cannot install hooks
+outside its selected set. It requires negative and positive fixtures, clean L1
+and L2/worktree acceptance, one local full aggregate, and required GitHub CI.
+After merge, replace this paragraph with one shipped-history line.
 
 ### P0 — evidence integrity and consumer data safety
 
@@ -157,7 +168,6 @@ shipped history after the PR merges; do not preserve it as a parallel roadmap.
 | `BL-CONS-P1-05` | **`L0_SYNC` changes over-trigger consumer CI**. A clean auto-sync merge tree was classified `FULL` solely because generated `l0-manifest.json` was an `unmapped executable path`, forcing the complete product matrix. | Add a fail-closed `L0_SYNC` class for machine-proven sync-only changes. It must validate manifest schema/digests, generated inventory/parity, runtime sync, and the relevant smoke tests. Any malformed manifest, undeclared path, mixed product change, missing provenance, or classifier error remains `FULL`. Add positive sync-only and all negative downgrade-bypass cases. | L0 owns the portable policy/template; consumers may implement their local classifier without weakening the unknown-path fallback. |
 | `BL-CONS-P1-06` | **Root-source human-consent boundary is undecided**. The runtime can derive a binding from observed session/worktree/PLAN identity without a request-scoped human confirmation, while other roadmap text calls true human/OS authentication out of contract. | Decide the threat model first. If required, design a request-bound confirmation, mint-time gate, and dispatch-time freshness/scope check backed by a capability an AI cannot self-assert. Otherwise remove the stronger claim and document the explicit boundary. | Architecture decision; do not implement a prose-only or self-signed “human” artifact. |
 | `BL-CONS-P1-07` | **Windows drive-letter confinement remains brittle in `write-coordination-artifact.sh`**. Two incorrect path behaviors currently cancel each other. | Correct absolute drive-letter classification and physical/lexical confinement atomically, with outside-root and fallback-tier negatives. | Do not port only the R131 normalization; preserve fail-closed behavior at every cut point. |
-| `BL-CONS-P1-08` | **Retired pre-manifest L0 agents survive sync and remain executable**. A consumer retained the W31.6-retired `.claude/agents/team-lead.md`; ordinary sync and `--prune` could not see it because it predated `manifest.checksums`, while the actionable sync migration registry has no retirement/tombstone operation. Loading it through `--agent team-lead` reinstated a fixed six-peer roster and persistent `quality-gater`, contradicting the current control plane. | Add one authoritative retired-artifact/tombstone contract to sync. Detect known legacy paths even when absent from manifest checksums; remove automatically only when bytes/provenance match a known L0 version; preserve and fail with an explicit diagnostic when locally modified or consumer-owned; record the migration atomically and make runtime preflight reject incompatible executable leftovers. Cover exact legacy, locally modified, absent, idempotent, L1, L2, and linked-worktree cases. | Deferred follow-up; DawSync may remove the known legacy file manually to unblock current work. Do not reopen the launcher/control-plane fixes unless the canonical path fails without `--agent team-lead`. |
 | `BL-QG-P1-01` | **Quality-gate session ordering can make the one expensive local full run stale before minting**. The first consumer ran Bats before explicit QG initialization/wave binding, so otherwise-green evidence carried unusable provenance; planning defects were detected only after the cost was paid. | Provide one canonical orchestration entrypoint that preflights `CLASS`, exact Path Manifest, clean HEAD, architect verdict bindings, and explicit wave/PLAN inputs; initializes QG; then runs/selects the one six-shard full aggregate exactly once. Reject incomplete planning before any expensive suite starts. | Separate workflow-hardening PLAN; do not weaken freshness, path audit, aggregate completeness, or required GitHub `CI Gate` merge authority. |
 | `BL-QG-P1-02` | **A valid PLAN amendment cannot supersede its stale PREP verdict**. The protocol requires stale PREP authority to be superseded, but `write-verdict` rejects the superseding record because the old and new `plan_sha256` differ (`superseded-binding-mismatch`), forcing a fresh wave slug instead of the documented same-wave recovery. | Define one narrow PLAN-transition supersession contract: verify the old record and lineage, require the new PLAN/request/HEAD binding to be current, publish atomically, and reject cross-wave, cross-role, cross-phase, unrelated-request, or unproven old records. Add positive amended-PLAN recovery and every mismatch negative. | Separate workflow-hardening PLAN; do not relax ordinary binding equality or mix this with runtime stabilization. |
 | `BL-QG-P1-03` | **Verdict checker result depends on project-root spelling**. The same valid record produced `INTERNAL_ERROR` with a relative project root and PASS with the canonical absolute root. | Normalize and confine the project root once, or reject relative input explicitly with a stable validation error. Prove relative, absolute, symlink/alias, missing, and outside-root cases return deterministic equivalent policy outcomes. | Separate workflow-hardening PLAN; no runtime dependency. |
@@ -804,9 +814,9 @@ For full history use `git log` and the corresponding `project_*shipped.md` memor
 
 ## How to use this document
 
-1. Select from **Active backlog after PR #253**, normally highest priority first; there is no legacy numbered `NEXT` wave.
+1. Select from **Active backlog after PR #255**, normally highest priority first; there is no legacy numbered `NEXT` wave.
 2. Reproduce the selected item independently at current `develop`, accept one bounded PLAN, and freeze its exact path manifest before implementation.
 3. Preserve the item's dependencies and fail-closed acceptance. Do not combine unrelated P0/P1 entries merely to reduce PR count.
-4. Treat Waves 1–7, G0, and PRs #251–#253 as shipped history; do not reopen them implicitly or execute old wave prose literally.
+4. Treat Waves 1–7, G0, and PRs #251–#255 as shipped history; do not reopen them implicitly or execute old wave prose literally.
 5. On completion, record final PR/commit/tests, move only the closed ID to shipped history, and reprioritize remaining evidence.
 6. Trigger-only work enters the active queue only with the stated current evidence and an explicit owner.

@@ -57,9 +57,15 @@ function claudeReadyBootstrapMessageFor(actionId, role, projectRoot) {
     throw new TypeError('invalid-project-root');
   }
   const nodePath = resolvedNodePath();
+  // Runtime executables belong to the qualified L0 toolkit that loaded this
+  // facade. `projectRoot` is the operated L1/L2 consumer and owns only the
+  // coordination state. Resolving executable paths below that consumer made
+  // generated actions target missing -- or attacker-controlled decoy -- files.
+  const lifecycleCliPath = path.join(facadeDirname, 'runtime-role-lifecycle.cjs');
+  const consultationCliPath = path.join(facadeDirname, 'runtime-consultation.cjs');
   const readyCommand = renderPosixDirect([
     nodePath,
-    path.resolve(projectRoot, 'scripts', 'lib', 'runtime-role-lifecycle.cjs'),
+    lifecycleCliPath,
     'ready',
     '--action',
     actionId,
@@ -72,11 +78,20 @@ function claudeReadyBootstrapMessageFor(actionId, role, projectRoot) {
     p: projectRoot,
     r: role,
   });
+  // Preserve the compact self-hosted envelope: when L0 operates on itself,
+  // the already-bound consumer root also identifies the toolkit scripts.
+  // External consumers must instead receive the qualified absolute toolkit
+  // executable; deriving it from `p` is exactly the cross-layer bug fixed here.
+  const consultationAssignment = realpathOrSelf(projectRoot) === realpathOrSelf(path.resolve(facadeDirname, '..', '..'))
+    ? 'C=p+"/scripts/lib/runtime-consultation.cjs"'
+    : 'C=' + JSON.stringify(consultationCliPath);
   return [
     `FIRST Bash=${readyCommand};require READY else report/stop;WAIT.`,
     receiverContract,
-    'Only COORDINATION_CONSULT/v1\\n+JSON keys{artifact_path,kind,request_id,role,target_role};kind=consult;target_role=r.A=artifact_path;C=p+"/scripts/lib/runtime-consultation.cjs";Q=p+"/.planning/coordination";X=[n,C];Y=["--coordination-root",Q,"--request",A].',
-    'Bash=single-quote tokens;no chain.Before reads:X+["claim"]+Y+["--role",r];need SUCCESS;K=artifact_ref;Work.Heartbeat<=60s:X+["lease-heartbeat"]+Y+["--claim",K].Finish:X+["publish-result"]+Y+["--claim",K,"--content",B];B=base64url(UTF8 result);Invalid=>no tool.',
+    'Only COORDINATION_CONSULT/v1\\nJSON exact{artifact_path,kind,request_id,role,target_role};kind=consult;target_role=r;A=artifact_path;'
+      + consultationAssignment
+      + ';Q=p+"/.planning/coordination";X=[n,C];Y=["--coordination-root",Q,"--request",A].',
+    'Bash=single-quote tokens;no chain.Before reads:X+["claim"]+Y+["--role",r];need SUCCESS;K=artifact_ref;60s:X+["lease-heartbeat"]+Y+["--claim",K];X+["publish-result"]+Y+["--claim",K,"--content",B];B=b64url(result);Invalid=>no tool',
   ].join('\n');
 }
 

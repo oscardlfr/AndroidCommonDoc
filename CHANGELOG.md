@@ -5,6 +5,42 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 
 ## [Unreleased]
 
+### Changed (portable agent and memory contract)
+
+- `AGENTS.md` is now the concise cross-runtime authority; `CLAUDE.md` is a thin
+  explicit adapter and path-specific Claude guidance lives in `.claude/rules/`.
+  Generated Copilot instructions depend only on checked-in sources and no longer
+  ingest a maintainer's personal `~/.claude/CLAUDE.md`.
+- Added a validated instruction/memory ownership contract that rejects retired
+  static leadership roles, warns on transient PR/CI state, validates canonical
+  rule ownership and bounds startup-instruction size. Personal memory was reduced
+  to durable lessons.
+- Explicit L0 sync now compares registry source paths through their consumer
+  destination mapping, emits full 40-character provenance commits, and treats
+  hooks as part of the same closed selection instead of installing registrations
+  outside the plan.
+- Agent templates now treat memory as durable-only advisory context, keep the
+  quality gate phase-scoped, and reject retired orchestrators or dated model pins.
+
+### Fixed (post-#255 live-consumer convergence)
+
+- Runtime lifecycle and consultation action payloads resolve executable code
+  from the qualified L0 toolkit while keeping coordination state under the L1/L2
+  consumer root. Distinct-root fixtures include malicious consumer decoys.
+- The wave control plane accepts the planner's canonical bullet-form class,
+  ignores decoys and code fences, rejects missing or ambiguous declarations,
+  and binds the PLAN class to the mandatory `CLASS` sentinel before publication.
+- Permanent sync tombstones remove only cryptographically identified historical
+  L0 artifacts such as the retired `team-lead` agent. Locally modified,
+  consumer-owned, symlinked, ambiguously cased, or unknown-provenance files are
+  preserved and fail closed across ordinary, prune, runtime, L1/L2, and linked
+  worktree paths.
+- Recovery and research modes are now separated explicitly: safe mode disables
+  plugins and MCP, while a bounded Context7 research session restores only the
+  explicit user setting source under restricted mode, preauthorizes the two
+  required provider tools, denies execution/write/general-network tools, and
+  requires inspection of the actual `system/init` surface.
+
 ### Fixed (runtime adoption finalization)
 
 - Claude Code `2.1.x` is treated as one supported protocol family: patch updates
@@ -397,6 +433,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 Manifests bumped (1.29.0→1.30.0 arch-testing, 1.23.0→1.24.0 test-specialist, 1.15.0→1.16.0 data-layer, 1.15.0→1.16.0 domain-model, 1.17.0→1.18.0 ui-specialist) + MIGRATIONS.json entries + 4 vitest test files updated.
 
 ### Changed
+
 
 - **kmp-test-runner-gate.js gate-expansion** (CLI-only mandate enforcement). Allowlist-then-block architecture replaces the 3-pattern literal blocklist. Allowlist (10 patterns): `kmp-test info|describe`, `assembleAndroidTest`, `kover*Report`, `createDebugCoverageReport`, `dependencyInsight`, `outgoingVariants`, `testRuntimeClasspath`, `*PrintCommand`/`*DryRun` helpers, plus existing env+inline bypass. Block regex (4 patterns) catches all `*Test` task variants KMP-wide (jvm, common, android-unit, android-instrumented, ios, macos, js, wasm) plus `allTests`, `check`, and module-qualified `:module:*Test`. Special JS/Wasm error message acknowledges that kmp-test-runner v0.9.0 does not yet support JS/Wasm targets. Bats coverage: 22 new cases (gate file 8→30 cases, full suite ~1093→1116).
 - **kmp-test-runner v0.8.1 → v0.9.0** across L0 toolkit. v0.9.0 introduces ENVELOPE_SCHEMA_VERSION 2 (semantic exit-code split + `flavor_unused` promotion + `isolated_runtime_race` guard) — not consumed by L0 wrappers (verified GREEN pre-flight). New v0.9.0 features: `kmp-test info|describe|update` discovery subcommands, `--gradle-args` escape hatch, `--isolated` Windows-safe cache for re-enabling parallel tests, `--variant` truly global. No flag renames. No deprecations. Files: workflow, hook, agent template (dual-location), 6 wrapper scripts, 4 SKILL.md, README, AGENTS.md, gradle-run.bats. PR #TBD.

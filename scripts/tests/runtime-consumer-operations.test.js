@@ -10,6 +10,7 @@ const root = path.resolve(__dirname, '..', '..');
 
 test('consumer operations document required launch, recovery, and host-family compatibility contracts', () => {
   const text = fs.readFileSync(path.join(root, 'docs', 'guides', 'runtime-consumer-operations.md'), 'utf8');
+  const research = fs.readFileSync(path.join(root, 'docs', 'guides', 'runtime-consumer-research-mode.md'), 'utf8');
   assert.match(text, /claude --add-dir "\$ANDROID_COMMON_DOC" --effort high/);
   assert.match(text, /--safe-mode/);
   assert.match(text, /--bare/);
@@ -23,6 +24,14 @@ test('consumer operations document required launch, recovery, and host-family co
   assert.match(text, /Versions outside `2\.1\.x`.*fail closed/s);
   assert.match(text, /An L1 must own `skills\/registry\.json`/);
   assert.match(text, /effective` remains\s+null/);
+  assert.match(text, /It disables plugins and MCP/);
+  assert.match(text, /bounded research profile/);
+  assert.match(research, /claude --restricted --setting-sources user/);
+  assert.match(research, /mcp__plugin_context7_context7__resolve-library-id/);
+  assert.match(research, /mcp__plugin_context7_context7__query-docs/);
+  assert.match(research, /--disallowedTools "Bash,PowerShell,Edit,Write,NotebookEdit,WebFetch,WebSearch"/);
+  assert.match(research, /`--allowedTools` preauthorizes names; it does\s+not by itself hide every other tool/);
+  assert.match(research, /Inspect `system\/init` and stop if either required Context7 tool is absent/);
 });
 
 test('consumer operations document distinguishes interactive input and permission modes', () => {

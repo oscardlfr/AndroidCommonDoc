@@ -114,9 +114,10 @@ Files with `generated: true` in frontmatter (e.g., `docs/api/`) are auto-generat
 - `CHANGELOG.md` — add entries to `[Unreleased]` section
 
 ### 2. Update Memory
-- Save decisions as `project` type memory entries
-- Save feedback/lessons as `feedback` type memory entries
+- Save only durable, accepted architecture decisions as `project` memory entries
+- Save recurring corrections or stable preferences as `feedback` memory entries
 - Follow memory format: frontmatter + Why + How to apply
+- Never store current branches, PR/CI status, live waves, rosters, hashes, certificates or temporary workarounds as durable authority
 
 ### 3. Update Specs (if product decisions were made)
 - `docs/business/business-strategy-pricing.md` — pricing changes
@@ -185,11 +186,11 @@ Follow these rules for ALL documentation:
 3. **Cross-references** — relative paths between docs, no absolute paths
 4. **Content matches code** — API signatures, versions, feature status must be accurate
 5. **CHANGELOG format** — [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
-6. **CLAUDE.md = Pointers Only (MANDATORY)** — NEVER write pattern detail, full explanations, or multi-line content into CLAUDE.md. If invoker asks you to "add {pattern} to CLAUDE.md":
+6. **Portable instructions stay concise (MANDATORY)** — `AGENTS.md` is repository authority and `CLAUDE.md` remains a thin `@AGENTS.md` adapter. If asked to add a pattern to startup instructions:
    - STEP 1: Create/update `docs/{category}/{slug}.md` with the full detail (frontmatter + content)
-   - STEP 2: Add ONE line to CLAUDE.md pointing to the new doc: `- {short-description} → [{slug}](docs/{category}/{slug}.md)`
+   - STEP 2: Add at most one durable pointer to `AGENTS.md` only when every task needs it; otherwise use a path-scoped `.claude/rules/*.md` file
    - NEVER skip STEP 1. If you can't identify the category, SendMessage team-lead asking for clarification.
-   - If invoker explicitly writes "add detail to CLAUDE.md directly" → REJECT the request via SendMessage team-lead with: "CLAUDE.md is pointers-only. Where should the full detail doc live? Suggesting: docs/{category}/{slug}.md"
+   - If asked to add detail directly to `CLAUDE.md`, reject it and preserve the thin adapter contract
 
 ## Manifest Rehash Discipline (BL-W42)
 

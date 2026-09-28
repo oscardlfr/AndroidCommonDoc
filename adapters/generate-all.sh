@@ -41,21 +41,16 @@ if [[ "$CHECK" == true ]]; then
   cp -R "$REPO_ROOT/setup/agent-templates" "$STAGED_ROOT/setup/agent-templates"
   cp -R "$REPO_ROOT/setup/copilot-templates" "$STAGED_ROOT/setup/copilot-templates"
   cp -R "$REPO_ROOT/setup/copilot-agent-templates" "$STAGED_ROOT/setup/copilot-agent-templates"
+  cp "$REPO_ROOT/AGENTS.md" "$STAGED_ROOT/AGENTS.md"
   cp "$REPO_ROOT/CLAUDE.md" "$STAGED_ROOT/CLAUDE.md"
 
   CHECK_LOG="$CHECK_ROOT/generate.log"
-  # Regenerate every repository-deterministic adapter output. The legacy
-  # CLAUDE.md adapter intentionally merges a user-global ~/.claude/CLAUDE.md.
-  # Check it when that declared input exists; in a clean CI checkout, preserve
-  # the copied output rather than inventing different host-global rules.
+  # Regenerate every repository-deterministic adapter output. Generated files
+  # must depend only on checked-in inputs, never on a maintainer's home folder.
   if ! {
     bash "$STAGED_ROOT/adapters/copilot-adapter.sh" --project-root "$STAGED_ROOT" --clean
     bash "$STAGED_ROOT/adapters/copilot-instructions-adapter.sh"
-    if [[ -f "${HOME}/.claude/CLAUDE.md" ]]; then
-      bash "$STAGED_ROOT/adapters/claude-md-copilot-adapter.sh"
-    else
-      echo "Skipping host-derived CLAUDE.md adapter check: ~/.claude/CLAUDE.md is absent."
-    fi
+    bash "$STAGED_ROOT/adapters/claude-md-copilot-adapter.sh"
     bash "$STAGED_ROOT/adapters/copilot-agent-adapter.sh" --l0-root "$STAGED_ROOT"
   } >"$CHECK_LOG" 2>&1; then
     cat "$CHECK_LOG" >&2
@@ -93,7 +88,7 @@ echo "Generating Copilot instructions..."
 bash "$SCRIPT_DIR/copilot-instructions-adapter.sh"
 echo ""
 
-echo "Generating Copilot instructions from CLAUDE.md..."
+echo "Generating Copilot instructions from portable agent contract..."
 bash "$SCRIPT_DIR/claude-md-copilot-adapter.sh"
 echo ""
 
