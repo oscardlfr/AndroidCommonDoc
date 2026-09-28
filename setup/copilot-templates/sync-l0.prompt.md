@@ -45,6 +45,9 @@ With `--runtime`, the CLI additionally installs the closed runtime consumer cont
   toolkit or Node installation path.
 - Registers source-coupled hooks through the source-hook launcher; their L0
   module closure is never copied partially into the consumer.
+- Materializes every consumer-local hook target together with the
+  context-provider bundle-writer closure; registration and managed checksums
+  are published atomically so a missing local target fails qualification.
 - Installs the ten canonical runtime role templates byte-for-byte and records their checksums.
 - Preserves unrelated settings and local files, rejects customized runtime-role or hook conflicts, and is idempotent.
 - Reconciles owned executable modes as well as content. Identical Detekt hooks

@@ -31,6 +31,16 @@ function installConsumer(layer: "L1" | "L2", suppliedRoot?: string, sourceBase?:
   const hookLauncher = path.join(consumerRoot, ".claude/hooks/l0-source-hook-launcher.js");
   fs.mkdirSync(path.dirname(hookLauncher), { recursive: true });
   fs.copyFileSync(path.join(ROOT, ".claude/hooks/l0-source-hook-launcher.js"), hookLauncher);
+  for (const relative of [
+    ".claude/hooks/context-provider-write-gate.js",
+    ".claude/hooks/tool-use-logger.js",
+    "scripts/sh/write-bundle.sh",
+    "scripts/sh/lib/wave-slug.sh",
+  ]) {
+    const destination = path.join(consumerRoot, relative);
+    fs.mkdirSync(path.dirname(destination), { recursive: true });
+    fs.copyFileSync(path.join(ROOT, relative), destination);
+  }
   for (const shellHook of ["detekt-post-write.sh", "detekt-pre-commit.sh"]) {
     const destination = path.join(consumerRoot, ".claude/hooks", shellHook);
     fs.copyFileSync(path.join(ROOT, ".claude/hooks", shellHook), destination);

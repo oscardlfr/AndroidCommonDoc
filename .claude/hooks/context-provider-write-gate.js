@@ -34,6 +34,7 @@
 // reader should not "fix" this into calling parsePosixDirect again: that
 // grammar is closed-single-quoted-only and this call site is not.
 
+const fs = require('fs');
 const path = require('path');
 
 // Grammar transcribed verbatim from scripts/sh/write-bundle.sh (read from
@@ -92,7 +93,9 @@ function takeToken(text) {
 
 function resolveCandidatePath(raw, projectRoot) {
   const candidate = path.isAbsolute(raw) ? raw : path.resolve(projectRoot, raw);
-  return path.resolve(candidate).replace(/\\/g, '/');
+  const resolved = path.resolve(candidate);
+  try { return fs.realpathSync(resolved).replace(/\\/g, '/'); }
+  catch { return resolved.replace(/\\/g, '/'); }
 }
 
 /**
@@ -111,7 +114,9 @@ function recognizeWriteBundleInvocation(cmd, projectRoot) {
   const pathToken = takeToken(afterInterp);
   if (!pathToken || pathToken.value.length === 0) return { recognized: false };
   const resolvedCandidate = resolveCandidatePath(pathToken.value, projectRoot);
-  const canonical = path.resolve(WRITE_BUNDLE_SH_PATH).replace(/\\/g, '/');
+  let canonical;
+  try { canonical = fs.realpathSync(WRITE_BUNDLE_SH_PATH).replace(/\\/g, '/'); }
+  catch { canonical = path.resolve(WRITE_BUNDLE_SH_PATH).replace(/\\/g, '/'); }
   if (resolvedCandidate !== canonical) return { recognized: false };
 
   // Recognized as a genuine write-bundle.sh invocation attempt -- every

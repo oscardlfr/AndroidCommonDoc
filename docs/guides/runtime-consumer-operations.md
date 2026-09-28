@@ -38,7 +38,11 @@ the consumer also receives `.claude/hooks/l0-source-hook-launcher.js`; registrat
 launcher. Both launchers resolve the one local L0 tooling source from `l0-manifest.json` at execution time. The
 runtime entrypoint launcher verifies the installed pin and content before forwarding; the source-hook launcher
 confines source resolution and delegates the hook without certifying the runtime installation. No Node installation
-path, user home, or toolkit checkout is serialized into consumer `settings.json` or generated skill commands. Standalone hooks remain copyable.
+path, user home, or toolkit checkout is serialized into consumer `settings.json` or generated skill commands. The
+runtime installer materializes and checksums every consumer-local hook target registered in `settings.json`, including
+the context-bundle write gate and tool-use logger, together with the context provider's sanctioned
+`scripts/sh/write-bundle.sh` closure. Installation fails closed on missing, customized, or incomplete local targets.
+Standalone hooks remain copyable.
 Remote, missing, ambiguous, or symlinked source targets fail closed. Re-run both
 commands after changing toolkit revisions. A managed topology from an older sync is updated automatically only
 when its current bytes still match the checksum recorded by that sync. Local

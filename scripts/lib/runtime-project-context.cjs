@@ -29,9 +29,13 @@ const SOURCE_REFERENCED_HOOK_FILES = new Set([
 const CONSUMER_FILES = Object.freeze([
   '.claude/runtime/l0-entrypoint-launcher.cjs',
   '.claude/hooks/l0-source-hook-launcher.js',
+  '.claude/hooks/context-provider-write-gate.js',
   '.claude/hooks/detekt-post-write.sh',
   '.claude/hooks/detekt-pre-commit.sh',
+  '.claude/hooks/tool-use-logger.js',
   '.claude/registry/wave-topology.yaml',
+  'scripts/sh/write-bundle.sh',
+  'scripts/sh/lib/wave-slug.sh',
 ]);
 const EXECUTABLE_CONSUMER_FILES = new Set([
   '.claude/hooks/detekt-post-write.sh',

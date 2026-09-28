@@ -417,6 +417,24 @@ describe("source-referenced runtime installation", () => {
       .toBeGreaterThanOrEqual(30);
     expect(commands.every((command: string) => !command.includes(REAL_L0_ROOT.replace(/\\/g, "/")))).toBe(true);
     expect(commands.every((command: string) => !command.includes(process.execPath.replace(/\\/g, "/")))).toBe(true);
+    for (const command of commands as string[]) {
+      const localTarget = command.match(/"\$CLAUDE_PROJECT_DIR"\/([^\s"]+)/)?.[1];
+      if (localTarget) {
+        expect(
+          await readFile(join(projectRoot, localTarget), "utf8"),
+          `registered consumer-local hook target is missing: ${command}`,
+        ).not.toBe("");
+      }
+    }
+    for (const relative of [
+      ".claude/hooks/context-provider-write-gate.js",
+      ".claude/hooks/tool-use-logger.js",
+      "scripts/sh/write-bundle.sh",
+      "scripts/sh/lib/wave-slug.sh",
+    ]) {
+      expect(await readFile(join(projectRoot, relative), "utf8"))
+        .toBe(await readFile(join(REAL_L0_ROOT, relative), "utf8"));
+    }
     expect(await readFile(join(projectRoot, ".claude", "hooks", "l0-source-hook-launcher.js"), "utf8"))
       .toBe(await readFile(join(REAL_L0_ROOT, ".claude", "hooks", "l0-source-hook-launcher.js"), "utf8"));
     await expect(readFile(join(projectRoot, ".claude", "hooks", "plan-md-write-gate.js"), "utf8"))
@@ -458,6 +476,41 @@ describe("source-referenced runtime installation", () => {
     );
     expect(deniedPlannerWrite.status).toBe(2);
     expect(deniedPlannerWrite.stdout).toContain("planner writes are confined");
+    const bundleCommand = [
+      "bash scripts/sh/write-bundle.sh --role test-specialist --plan-id \"wave-consumer-fixture/PLAN.md#T1\" --slug consumer-fixture <<'BODY'",
+      "## Patterns",
+      "- fixture pattern",
+      "## Status Snapshot",
+      "- fixture status",
+      "BODY",
+    ].join("\n");
+    const bundleGate = spawnSync(
+      process.execPath,
+      [join(projectRoot, ".claude", "hooks", "context-provider-write-gate.js")],
+      {
+        cwd: projectRoot,
+        encoding: "utf8",
+        env: hookEnvironment,
+        input: JSON.stringify({ tool_name: "Bash", tool_input: { command: bundleCommand } }),
+      },
+    );
+    expect(bundleGate.status, bundleGate.stderr || bundleGate.stdout).toBe(0);
+    expect(JSON.parse(bundleGate.stdout).hookSpecificOutput.permissionDecision).toBe("allow");
+    const bundleWrite = spawnSync(
+      "bash",
+      ["scripts/sh/write-bundle.sh", "--role", "test-specialist", "--plan-id",
+        "wave-consumer-fixture/PLAN.md#T1", "--slug", "consumer-fixture"],
+      {
+        cwd: projectRoot,
+        encoding: "utf8",
+        input: "## Patterns\n- fixture pattern\n## Status Snapshot\n- fixture status\n",
+      },
+    );
+    expect(bundleWrite.status, bundleWrite.stderr || bundleWrite.stdout).toBe(0);
+    expect(await readFile(
+      join(projectRoot, ".planning", "wave-consumer-fixture", "context-bundles", "test-specialist.md"),
+      "utf8",
+    )).toContain("fixture pattern");
     const manifest = JSON.parse(await readFile(join(projectRoot, "l0-manifest.json"), "utf8"));
     expect(manifest.runtime.consumer_layer).toBe("L2");
     expect(manifest.runtime.toolkit_content_sha256).toBe(first.toolkitContentDigest);
@@ -465,6 +518,14 @@ describe("source-referenced runtime installation", () => {
       .toBe(await readFile(join(REAL_L0_ROOT, ".claude", "registry", "wave-topology.yaml"), "utf8"));
     expect(manifest.checksums[".claude/registry/wave-topology.yaml"]).toMatch(/^sha256:[0-9a-f]{64}$/);
     expect(manifest.checksums[".claude/hooks/l0-source-hook-launcher.js"]).toMatch(/^sha256:[0-9a-f]{64}$/);
+    for (const relative of [
+      ".claude/hooks/context-provider-write-gate.js",
+      ".claude/hooks/tool-use-logger.js",
+      "scripts/sh/write-bundle.sh",
+      "scripts/sh/lib/wave-slug.sh",
+    ]) {
+      expect(manifest.checksums[relative]).toMatch(/^sha256:[0-9a-f]{64}$/);
+    }
     for (const file of ["detekt-post-write.sh", "detekt-pre-commit.sh"]) {
       const relative = `.claude/hooks/${file}`;
       expect(await readFile(join(projectRoot, relative), "utf8")).toBe(await readFile(join(REAL_L0_ROOT, relative), "utf8"));

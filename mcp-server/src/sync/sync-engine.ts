@@ -95,9 +95,13 @@ export interface SyncOptions {
 const RUNTIME_CONSUMER_FILES = [
   ".claude/runtime/l0-entrypoint-launcher.cjs",
   ".claude/hooks/l0-source-hook-launcher.js",
+  ".claude/hooks/context-provider-write-gate.js",
   ".claude/hooks/detekt-post-write.sh",
   ".claude/hooks/detekt-pre-commit.sh",
+  ".claude/hooks/tool-use-logger.js",
   ".claude/registry/wave-topology.yaml",
+  "scripts/sh/write-bundle.sh",
+  "scripts/sh/lib/wave-slug.sh",
 ] as const;
 
 const EXECUTABLE_CONSUMER_FILES = new Set<string>([

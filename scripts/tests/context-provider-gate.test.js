@@ -4221,9 +4221,13 @@ console.log('\nAll context-provider-gate tests passed.');
     for (const relative of [
       '.claude/runtime/l0-entrypoint-launcher.cjs',
       '.claude/hooks/l0-source-hook-launcher.js',
+      '.claude/hooks/context-provider-write-gate.js',
       '.claude/hooks/detekt-post-write.sh',
       '.claude/hooks/detekt-pre-commit.sh',
+      '.claude/hooks/tool-use-logger.js',
       '.claude/registry/wave-topology.yaml',
+      'scripts/sh/write-bundle.sh',
+      'scripts/sh/lib/wave-slug.sh',
     ]) {
       const destination = path.join(consumer, relative);
       fs.mkdirSync(path.dirname(destination), { recursive: true });
