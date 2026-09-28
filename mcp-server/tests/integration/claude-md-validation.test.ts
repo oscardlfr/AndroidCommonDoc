@@ -124,6 +124,31 @@ describe("deterministic generated adapters", () => {
       rmSync(fakeHome, { recursive: true, force: true });
     }
   });
+
+  it("normalizes Windows CRLF bytes before comparing generated adapters", () => {
+    const generatedRoot = mkdtempSync(path.join(tmpdir(), "l0-generated-crlf-"));
+    try {
+      const generated = path.join(generatedRoot, "fixture.md");
+      writeFileSync(generated, "# Generated\r\n\r\n- portable\r\n", "utf8");
+      execFileSync(
+        "python3",
+        ["adapters/normalize-line-endings.py", generatedRoot],
+        { cwd: root, stdio: "pipe" },
+      );
+      expect(readFileSync(generated, "utf8")).toBe("# Generated\n\n- portable\n");
+    } finally {
+      rmSync(generatedRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects a missing generated root instead of silently skipping it", () => {
+    const missingRoot = path.join(tmpdir(), `l0-missing-generated-${Date.now()}`);
+    expect(() => execFileSync(
+      "python3",
+      ["adapters/normalize-line-endings.py", missingRoot],
+      { cwd: root, stdio: "pipe" },
+    )).toThrow();
+  });
 });
 
 describe("canonical rule ownership", () => {

@@ -52,6 +52,8 @@ if [[ "$CHECK" == true ]]; then
     bash "$STAGED_ROOT/adapters/copilot-instructions-adapter.sh"
     bash "$STAGED_ROOT/adapters/claude-md-copilot-adapter.sh"
     bash "$STAGED_ROOT/adapters/copilot-agent-adapter.sh" --l0-root "$STAGED_ROOT"
+    python3 "$STAGED_ROOT/adapters/normalize-line-endings.py" "$STAGED_ROOT/setup/copilot-templates"
+    python3 "$STAGED_ROOT/adapters/normalize-line-endings.py" "$STAGED_ROOT/setup/copilot-agent-templates"
   } >"$CHECK_LOG" 2>&1; then
     cat "$CHECK_LOG" >&2
     echo "Adapter check failed: staged generation did not complete." >&2
@@ -94,6 +96,10 @@ echo ""
 
 echo "Generating Copilot agent templates..."
 bash "$SCRIPT_DIR/copilot-agent-adapter.sh"
+echo ""
+
+python3 "$SCRIPT_DIR/normalize-line-endings.py" "$REPO_ROOT/setup/copilot-templates"
+python3 "$SCRIPT_DIR/normalize-line-endings.py" "$REPO_ROOT/setup/copilot-agent-templates"
 echo ""
 
 echo "Done. Generated files are in setup/copilot-templates/ and setup/copilot-agent-templates/"
