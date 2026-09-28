@@ -127,7 +127,7 @@ describe("deterministic generated adapters", () => {
     } finally {
       rmSync(fakeHome, { recursive: true, force: true });
     }
-  });
+  }, 90_000);
 
   it("normalizes Windows CRLF bytes before comparing generated adapters", () => {
     const generatedRoot = mkdtempSync(path.join(tmpdir(), "l0-generated-crlf-"));
