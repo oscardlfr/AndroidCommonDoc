@@ -365,18 +365,18 @@ function findClaudeResumeHandlesForActor(projectRoot, expected) {
     const handleId = entry.name.slice(0, -5);
     const read = readRegistryRecord(claudeResumeHandlePathFor(projectRoot, handleId));
     if (!read.ok || read.absent || !read.obj) return { ok: false, reason: 'INVALID' };
+    // Scope append-only history before current-shape validation; an exact
+    // actor-tuple claimant remains fail-closed below.
+    const correlated = read.obj.worktree_id === expected.worktreeId && read.obj.plan_digest === expected.planDigest
+      && read.obj.role === expected.role && read.obj.session === expected.session
+      && read.obj.agent_id === expected.agentId && read.obj.actor_binding_id === expected.actorBindingId;
+    if (!correlated) continue;
     const shaped = validateClaudeResumeHandleRecordShape(read.obj, handleId);
     if (!shaped.ok) return { ok: false, reason: 'INVALID' };
     const record = shaped.record;
-    if (
-      record.worktree_id === expected.worktreeId && record.plan_digest === expected.planDigest
-      && record.role === expected.role && record.session === expected.session
-      && record.agent_id === expected.agentId && record.actor_binding_id === expected.actorBindingId
-    ) {
-      const live = validateClaudeResumeHandleRecord(record, handleId);
-      if (!live.ok) return { ok: false, reason: 'INVALID' };
-      records.push(live.record);
-    }
+    const live = validateClaudeResumeHandleRecord(record, handleId);
+    if (!live.ok) return { ok: false, reason: 'INVALID' };
+    records.push(live.record);
   }
   return { ok: true, records };
 }

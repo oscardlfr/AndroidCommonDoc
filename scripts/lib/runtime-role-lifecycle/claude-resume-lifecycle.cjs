@@ -238,6 +238,19 @@ function findUniqueClaudeResumeHandleForTarget(projectRoot, expected) {
       const read = readRegistryRecord(claudeResumeHandlePathFor(projectRoot, handleId));
       if (!read.ok) return { ok: false, reason: 'INVALID' };
       if (read.absent || !read.obj) continue;
+      // Resume-handle history is append-only across runtime upgrades. Scope
+      // it before enforcing the current exact shape so an unrelated earlier
+      // schema cannot disable a later session. A raw record that claims this
+      // role/worktree/PLAN and main session remains fail-closed below.
+      if (
+        read.obj.role !== expected.targetRole || read.obj.worktree_id !== expected.worktreeId
+        || read.obj.plan_digest !== expected.planDigest
+      ) {
+        continue;
+      }
+      if (typeof read.obj.session === 'string' && sha256String(read.obj.session) !== expected.sessionDigest) {
+        continue;
+      }
       // Expiry is routine immutable history, not structural corruption. Read
       // and validate the complete closed shape first so malformed stale files
       // still poison the scan; then skip a well-formed expired record before
@@ -331,16 +344,22 @@ function findUniqueConsumedClaudeResumeHandleForBusyTarget(projectRoot, expected
       const handleId = entry.name.slice(0, -5);
       const raw = readRegistryRecord(claudeResumeHandlePathFor(projectRoot, handleId));
       if (!raw.ok || raw.absent || !raw.obj) return { ok: false, reason: 'INVALID' };
+      // Apply the generation/scope discriminator before current-schema
+      // validation. Historical records outside this BUSY target cannot
+      // poison it; a record claiming this exact target still fails closed.
+      if (raw.obj.session_generation_id !== expected.generationId
+          || raw.obj.role !== expected.targetRole
+          || raw.obj.worktree_id !== expected.worktreeId
+          || raw.obj.plan_digest !== expected.planDigest) {
+        continue;
+      }
+      if (typeof raw.obj.session === 'string' && sha256String(raw.obj.session) !== expected.sessionDigest) {
+        continue;
+      }
       const shaped = validateClaudeResumeHandleRecordShape(raw.obj, handleId);
       if (!shaped.ok) return { ok: false, reason: 'INVALID' };
       const record = shaped.record;
-      if (record.session_generation_id !== expected.generationId
-          || sha256String(record.session) !== expected.sessionDigest
-          || record.role !== expected.targetRole
-          || record.worktree_id !== expected.worktreeId
-          || record.plan_digest !== expected.planDigest) {
-        continue;
-      }
+      if (sha256String(record.session) !== expected.sessionDigest) return { ok: false, reason: 'INVALID' };
       const live = validateClaudeResumeHandleRecord(record, handleId);
       if (!live.ok) return { ok: false, reason: 'INVALID' };
       const markerRead = readRegistryRecord(claudeResumeHandleConsumedMarkerPathFor(projectRoot, handleId));
