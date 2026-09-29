@@ -404,6 +404,103 @@ test('ensure resume checkpoint emits one idempotent SendMessage action and becom
   }
 });
 
+test('failed resume SendMessage settles the exact BUSY actor as DEAD and ordinary ensure rehydrates it', () => {
+  const dir = makeGitProject();
+  try {
+    writePlanFixture(dir, 'resume-delivery-failure');
+    const sessionKey = 'resume-delivery-failure-session';
+    const role = LIVE_ROLE;
+    ensureLiveRoleSpawnAction(dir, sessionKey, role);
+    const worktreeId = rll.computeWorktreeId(dir);
+    const planDigest = rll.discoverPlan(dir).planDigest;
+    const generationId = rll.peekSessionGeneration(dir, identityFor(sessionKey)).generationId;
+    const profileDigest = rll.roleProfileDigestFor(role);
+    const starting = rll.readRoleBindingState(dir, worktreeId, planDigest, profileDigest, generationId, role);
+    assert.strictEqual(rll.transitionRoleBinding(
+      dir, worktreeId, planDigest, profileDigest, generationId, role,
+      'STARTING', 'READY', starting.record, {},
+    ).ok, true);
+    assert.strictEqual(rll.createRoleActorBinding(
+      dir, role, worktreeId, planDigest, generationId, 600,
+    ).ok, true);
+    const parked = rll.parkClaudeResumeHandleForRoleActor(dir, {
+      sessionId: sessionKey, agentId: 'resume-delivery-failure-agent', agentType: role,
+    });
+    assert.strictEqual(parked.ok, true, JSON.stringify(parked));
+
+    const checkpointRef = 'checkpoint:' + '9'.repeat(64);
+    const resumeGrant = mintGrant(dir, sessionKey, role, 'ensure', ensureResumeDigest([role], checkpointRef));
+    const resumed = runCli([
+      'ensure', '--project-root', dir, '--role', role,
+      '--resume-checkpoint', checkpointRef,
+      '--lifecycle-binding', resumeGrant.grantId,
+    ], { RUNTIME_ROLE_LIFECYCLE_FAKE_CAPABILITIES: LIVE_CAPS });
+    assert.strictEqual(resumed.result.status, 'ACTION_REQUIRED', JSON.stringify(resumed.result));
+    const action = resumed.result.actions[0];
+    const toolUseId = 'resume-delivery-failure-tool';
+    const consumed = rll.consumeClaudeResumeHandleForObservedActor(dir, {
+      actionId: action.action_id,
+      sessionId: sessionKey,
+      toolUseId,
+      recipient: role,
+      message: action.payload.message,
+    });
+    assert.strictEqual(consumed.ok, true, JSON.stringify(consumed));
+    assert.strictEqual(rll.readRoleBindingState(
+      dir, worktreeId, planDigest, profileDigest, generationId, role,
+    ).state, 'BUSY');
+
+    const failure = {
+      actionId: action.action_id,
+      sessionId: sessionKey,
+      toolUseId,
+      recipient: role,
+      message: action.payload.message,
+    };
+    assert.deepStrictEqual(rll.settleNativeResumeNotificationFailure(dir, {
+      ...failure, sessionId: 'wrong-session',
+    }), { ok: false, reason: 'resume-delivery-correlation-mismatch' });
+    assert.deepStrictEqual(rll.settleNativeResumeNotificationFailure(dir, {
+      ...failure, toolUseId: 'wrong-tool-use',
+    }), { ok: false, reason: 'resume-delivery-correlation-mismatch' });
+    assert.deepStrictEqual(rll.settleNativeResumeNotificationFailure(dir, {
+      ...failure, actionId: 'f'.repeat(32),
+    }), { ok: false, reason: 'resume-message-invalid' });
+    assert.strictEqual(rll.readRoleBindingState(
+      dir, worktreeId, planDigest, profileDigest, generationId, role,
+    ).state, 'BUSY', 'uncorrelated failures must not mutate the live binding');
+
+    const settled = rll.settleNativeResumeNotificationFailure(dir, failure);
+    assert.deepStrictEqual(settled, {
+      ok: true, actionId: action.action_id, handleId: parked.record.binding_id, idempotent: false,
+    });
+    assert.strictEqual(rll.readRoleBindingState(
+      dir, worktreeId, planDigest, profileDigest, generationId, role,
+    ).state, 'DEAD');
+    assert.deepStrictEqual(rll.settleNativeResumeNotificationFailure(dir, failure), {
+      ok: true, actionId: action.action_id, handleId: parked.record.binding_id, idempotent: true,
+    }, 'the exact repeated host failure is an idempotent replay');
+
+    const recoveryGrant = mintGrant(dir, sessionKey, role, 'ensure', ensureDigest([role]));
+    const recovered = runCli([
+      'ensure', '--project-root', dir, '--role', role,
+      '--lifecycle-binding', recoveryGrant.grantId,
+    ], { RUNTIME_ROLE_LIFECYCLE_FAKE_CAPABILITIES: LIVE_CAPS });
+    assert.strictEqual(recovered.result.status, 'ACTION_REQUIRED', JSON.stringify(recovered.result));
+    assert.strictEqual(recovered.result.actions.length, 1);
+    assert.strictEqual(recovered.result.actions[0].kind, 'role-spawn');
+    assert.strictEqual(recovered.result.actions[0].operation, 'Agent');
+    assert.strictEqual(rll.readRoleBindingState(
+      dir, worktreeId, planDigest, profileDigest, generationId, role,
+    ).state, 'REHYDRATING');
+    assert.deepStrictEqual(rll.settleNativeResumeNotificationFailure(dir, failure), {
+      ok: false, reason: 'resume-failure-stale',
+    }, 'a replay cannot kill the replacement actor after recovery begins');
+  } finally {
+    cleanup(dir);
+  }
+});
+
 test('resume checkpoint in a new host session rehydrates a new actor instead of messaging an unreachable prior teammate', () => {
   const dir = makeGitProject();
   try {

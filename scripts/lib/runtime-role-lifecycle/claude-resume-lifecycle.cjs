@@ -118,6 +118,80 @@ function consumeNativeResumeNotificationBeforeDelivery(projectRoot, event) {
 }
 
 /**
+ * Settles a host-reported failure for an exact resume notification that was
+ * already admitted by consumeNativeResumeNotificationBeforeDelivery(). The
+ * immutable consumed marker is the correlation receipt: its action, session,
+ * and tool-use digests must all match this failure observation before the
+ * parked binding can move BUSY -> DEAD. A later ordinary ensure owns the
+ * existing DEAD -> REHYDRATING recovery path.
+ *
+ * Re-delivery of the same failure after the binding is already DEAD is an
+ * idempotent observation. Once another recovery transition has begun, the old
+ * failure is stale and cannot mutate the replacement actor.
+ */
+function settleNativeResumeNotificationFailure(projectRoot, event) {
+  const actionId = event && event.actionId;
+  if (typeof projectRoot !== 'string' || !isHexActionId(actionId) || !event ||
+      typeof event.sessionId !== 'string' || event.sessionId.length === 0 ||
+      typeof event.toolUseId !== 'string' || event.toolUseId.length === 0 ||
+      typeof event.recipient !== 'string' || typeof event.message !== 'string') {
+    return { ok: false, reason: 'invalid-arguments' };
+  }
+  const match = /^RUNTIME_RESUME\/v1\ncheckpoint:[0-9a-f]{64}\nresume-handle:([0-9a-f]{32})\nruntime-action:([0-9a-f]{32})\nhost-status:validated-and-consumed-before-delivery\nactor-action:none\nreply:none\nnext:wait-for-correlated-task$/.exec(event.message);
+  if (!match || match[2] !== actionId) return { ok: false, reason: 'resume-message-invalid' };
+  const handleId = match[1];
+  const lockKey = sha256String(canonicalJSONStringify(['native-resume-failure', actionId, handleId]));
+  const lockDir = path.join(registryRepoDir(projectRoot), 'locks', 'native-resume-failure-' + lockKey + '.lock');
+  const locked = withRegistryLock(lockDir, () => {
+    const actionRead = readRegistryRecord(actionPathFor(projectRoot, actionId));
+    if (!actionRead.ok || actionRead.absent || !actionRead.obj) return { ok: false, reason: 'action-unavailable' };
+    const action = actionRead.obj;
+    if (action.kind !== 'role-notify' || action.runtime !== 'claude-native' || !action.payload ||
+        action.payload.artifact_kind !== 'session-control' || action.payload.message !== event.message ||
+        action.payload.teammate_name !== event.recipient || action.role !== event.recipient) {
+      return { ok: false, reason: 'action-input-mismatch' };
+    }
+
+    const markerRead = readRegistryRecord(claudeResumeHandleConsumedMarkerPathFor(projectRoot, handleId));
+    if (!markerRead.ok || markerRead.absent || !markerRead.obj) {
+      return { ok: false, reason: 'resume-delivery-unconsumed' };
+    }
+    const marker = markerRead.obj;
+    if (!hasExactKeys(marker, ['action_id', 'consumed_at', 'handle_id', 'schema', 'session_digest', 'tool_use_digest']) ||
+        marker.schema !== 'runtime/native-resume-delivery/v1' || marker.action_id !== actionId ||
+        marker.handle_id !== handleId || marker.session_digest !== sha256String(event.sessionId) ||
+        marker.tool_use_digest !== sha256String(event.toolUseId) || !isCanonicalIsoUtc(marker.consumed_at)) {
+      return { ok: false, reason: 'resume-delivery-correlation-mismatch' };
+    }
+
+    const handleRead = readClaudeResumeHandle(projectRoot, handleId);
+    if (!handleRead.ok) return { ok: false, reason: 'resume-handle-unavailable' };
+    const handle = handleRead.record;
+    if (handle.role !== action.role || handle.worktree_id !== action.worktree_id ||
+        handle.plan_digest !== action.plan_digest || handle.session_generation_id !== action.session_generation_id ||
+        handle.session !== event.sessionId) return { ok: false, reason: 'resume-handle-scope-mismatch' };
+
+    const profileDigest = roleProfileDigestFor(action.role);
+    const state = readRoleBindingState(
+      projectRoot, action.worktree_id, action.plan_digest, profileDigest,
+      action.session_generation_id, action.role,
+    );
+    if (!state.ok || !state.record || state.record.driver !== 'claude-sendmessage') {
+      return { ok: false, reason: 'resume-role-state-invalid' };
+    }
+    if (state.state === 'DEAD') return { ok: true, actionId, handleId, idempotent: true };
+    if (state.state !== 'BUSY') return { ok: false, reason: 'resume-failure-stale' };
+    const dead = transitionRoleBinding(
+      projectRoot, action.worktree_id, action.plan_digest, profileDigest,
+      action.session_generation_id, action.role, 'BUSY', 'DEAD', state.record, {},
+    );
+    if (!dead.ok) return { ok: false, reason: 'resume-failure-transition-failed' };
+    return { ok: true, actionId, handleId, idempotent: false };
+  }, { maxWaitMs: 5000 });
+  return locked.ok && locked.value ? locked.value : { ok: false, reason: 'resume-failure-lock-failed' };
+}
+
+/**
  * Parks the exact correlated persistent claude-sendmessage role actor as
  * resumable WAITING, creating (or, no-clobber, returning) exactly one live
  * host-private resume handle. Succeeds only for a role-binding currently
@@ -462,6 +536,7 @@ function findUniqueConsumedClaudeResumeHandleForBusyTarget(projectRoot, expected
     CLAUDE_RESUME_HANDLE_TTL_SECONDS,
     parkClaudeResumeHandleForRoleActor,
     consumeClaudeResumeHandleForObservedActor,
+    settleNativeResumeNotificationFailure,
     findUniqueClaudeResumeHandleForTarget,
     findUniqueConsumedClaudeResumeHandleForBusyTarget,
   });

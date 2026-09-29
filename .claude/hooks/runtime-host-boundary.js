@@ -244,6 +244,31 @@ function recordProductionNativeOutcome(event) {
   }
 }
 
+function settleNativeResumeFailure(event) {
+  if (!event || event.hook_event_name !== 'PostToolUseFailure' || event.tool_name !== 'SendMessage' ||
+      !event.tool_input || typeof event.tool_input !== 'object') return { ok: false, ignored: true };
+  const projectRoot = typeof event.cwd === 'string' && path.isAbsolute(event.cwd)
+    ? event.cwd
+    : (typeof process.env.CLAUDE_PROJECT_DIR === 'string' && path.isAbsolute(process.env.CLAUDE_PROJECT_DIR)
+      ? process.env.CLAUDE_PROJECT_DIR : null);
+  const actionId = actionIdFromNativeEvent(event);
+  if (!projectRoot || !actionId || typeof event.session_id !== 'string' ||
+      typeof event.tool_use_id !== 'string' || typeof event.tool_input.recipient !== 'string' ||
+      typeof event.tool_input.message !== 'string') return { ok: false, ignored: true };
+  try {
+    const lifecycle = require('../../scripts/lib/runtime-role-lifecycle.cjs');
+    return lifecycle.settleNativeResumeNotificationFailure(projectRoot, {
+      actionId,
+      sessionId: event.session_id,
+      toolUseId: event.tool_use_id,
+      recipient: event.tool_input.recipient,
+      message: event.tool_input.message,
+    });
+  } catch {
+    return { ok: false };
+  }
+}
+
 function recordStartupReadyOutcome(event) {
   const projectRoot = event && typeof event.cwd === 'string' && path.isAbsolute(event.cwd)
     ? event.cwd
@@ -454,6 +479,7 @@ module.exports = {
   processPreToolUse,
   processPostToolUse,
   recordProductionNativeOutcome,
+  settleNativeResumeFailure,
   recordStartupReadyOutcome,
   admitEntrypointPreToolUse,
   admitNativeActionEvent,
@@ -485,6 +511,7 @@ if (require.main === module) {
         processPreToolUse(event, {});
       }
       else if (event && (event.hook_event_name === 'PostToolUse' || event.hook_event_name === 'PostToolUseFailure')) {
+        settleNativeResumeFailure(event);
         recordProductionNativeOutcome(event);
         if (event.hook_event_name === 'PostToolUse' && event.tool_name === 'Bash') recordStartupReadyOutcome(event);
         processPostToolUse(event, {});
