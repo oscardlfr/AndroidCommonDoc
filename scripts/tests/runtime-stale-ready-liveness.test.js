@@ -151,6 +151,35 @@ test('terminal tombstone preserves ABSENT after raw and startup traces are clean
   );
 });
 
+test('terminal publication accepts an expired startup identity after the authority fence is durable', (t) => {
+  const f = fixture();
+  t.after(() => fs.rmSync(f.root, { recursive: true, force: true }));
+  const role = ROLES[0];
+  const observed = f.add(role, { fencedActor: true });
+  const startup = JSON.parse(fs.readFileSync(observed.startupPath, 'utf8'));
+  startup.expiry = '2026-09-29T11:59:30Z';
+  fs.writeFileSync(observed.startupPath, JSON.stringify(startup));
+  const published = f.api.publishClaudeSupportRoleTerminal(f.root, {
+    sessionId: SESSION, agentId: observed.agentId, agentType: role,
+  });
+  assert.strictEqual(published.ok, true, JSON.stringify(published));
+  assert.strictEqual(published.skipped, undefined, JSON.stringify(published));
+});
+
+test('terminal publication does not block cleanup after the actor binding is no longer live', (t) => {
+  const f = fixture();
+  t.after(() => fs.rmSync(f.root, { recursive: true, force: true }));
+  const role = ROLES[0];
+  const observed = f.add(role, { fencedActor: true });
+  f.actors.delete(role);
+  const published = f.api.publishClaudeSupportRoleTerminal(f.root, {
+    sessionId: SESSION, agentId: observed.agentId, agentType: role,
+  });
+  assert.deepStrictEqual(published, {
+    ok: true, skipped: true, reason: 'terminal-actor-no-longer-live',
+  });
+});
+
 test('expired and unrelated raw traces are ignored instead of creating false ambiguity', (t) => {
   const f = fixture();
   t.after(() => fs.rmSync(f.root, { recursive: true, force: true }));
@@ -348,7 +377,7 @@ test('black-box A: durable READY plus expired startup/raw but no fence is not su
   const seeded = seedReadyClaudeActor(root, sessionId, 'host-wide-cancel-agent');
 
   const startup = JSON.parse(fs.readFileSync(seeded.startupPath, 'utf8'));
-  startup.expiry = new Date(Date.now() - 1_000).toISOString();
+  startup.expiry = new Date(Date.now() - 1_000).toISOString().replace(/\.\d{3}Z$/, 'Z');
   assert.strictEqual(rll.writeRegistryRecordReplace(
     seeded.startupPath, Buffer.from(rc.canonicalJSONStringify(startup), 'utf8'),
   ).ok, true);

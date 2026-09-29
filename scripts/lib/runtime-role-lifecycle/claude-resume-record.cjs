@@ -102,7 +102,6 @@ function publishClaudeSupportRoleTerminal(projectRoot, event) {
         || !isHexDigest64(startup.agent_digest) || !isHexDigest64(startup.session_generation_digest)
         || !isCanonicalIsoUtc(startup.created_at) || !isCanonicalIsoUtc(startup.expiry)
         || isoToMsForRegistry(startup.created_at) > currentClockMsForRegistry()
-        || currentClockMsForRegistry() >= isoToMsForRegistry(startup.expiry)
         || startup.session_digest !== sha256String(event.sessionId)
         || startup.agent_digest !== sha256String(event.agentId)
         || startup.session_generation_digest !== sha256String(generation.generationId)
@@ -113,7 +112,8 @@ function publishClaudeSupportRoleTerminal(projectRoot, event) {
       role: event.agentType, worktreeId,
     });
     if (!actor.ok || startup.actor_binding_id !== actor.binding.binding_id) {
-      return { ok: false, reason: 'terminal-actor-invalid' };
+      // A retired actor cannot authorize work or trap SubagentStop/trace cleanup.
+      return { ok: true, skipped: true, reason: 'terminal-actor-no-longer-live' };
     }
     const authorityIdentityId = computeClaudeAuthorityIdentityId(
       projectRoot, 'claude-hook', event.sessionId, event.agentId,

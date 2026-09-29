@@ -548,19 +548,24 @@ test('active probe durable record validation rejects wrong schema and wrong scop
   assert.notStrictEqual(runEnsure(root, sessionId).envelope.status, 'READY');
 });
 
-test('active probe action discovery is bounded at 1024 entries and fails closed without mutating READY', (t) => {
+test('active probe action discovery ignores unrelated global action accumulation through its scope index', (t) => {
   const root = makeProject();
   t.after(() => cleanup(root));
   const sessionId = 'active-probe-scan-cap';
   const seeded = seedFiveReadyActors(root, sessionId);
-  expectFiveProbeActions(runEnsure(root, sessionId), seeded.actors);
+  const probes = expectFiveProbeActions(runEnsure(root, sessionId), seeded.actors);
   const actionsDir = path.join(rll.registryRepoDir(root), 'actions');
   const currentCount = fs.readdirSync(actionsDir).length;
   for (let index = currentCount; index <= 1024; index += 1) {
     fs.writeFileSync(path.join(actionsDir, 'decoy-' + String(index).padStart(4, '0') + '.json'), '{}');
   }
   const bounded = runEnsure(root, sessionId);
-  assert.notStrictEqual(bounded.envelope.status, 'READY', JSON.stringify(bounded.envelope));
+  assert.strictEqual(bounded.envelope.status, 'ACTION_REQUIRED', JSON.stringify(bounded.envelope));
+  assert.deepStrictEqual(
+    bounded.envelope.actions.map((action) => action.action_id).sort(),
+    probes.map((action) => action.action_id).sort(),
+    'the per-scope index must re-report the exact probes without scanning unrelated actions',
+  );
   for (const role of ROLES) assert.strictEqual(roleState(root, seeded, role).state, 'READY');
 });
 
@@ -695,7 +700,7 @@ test('active probe input validation: empty sessionId toolUseId and recipient are
   }
 });
 
-test('active probe action discovery rejects a malformed canonical action entry below the scan cap', (t) => {
+test('active probe action discovery rejects a malformed action referenced by the scope index', (t) => {
   const root = makeProject();
   t.after(() => cleanup(root));
   const sessionId = 'active-probe-malformed-action';
@@ -706,9 +711,7 @@ test('active probe action discovery rejects a malformed canonical action entry b
   }
   assert.strictEqual(runEnsure(root, sessionId).envelope.status, 'READY');
 
-  const malformedId = 'f'.repeat(32);
-  assert.strictEqual(probes.some((action) => action.action_id === malformedId), false);
-  fs.writeFileSync(rll.actionPathFor(root, malformedId), '{}');
+  fs.writeFileSync(rll.actionPathFor(root, probes[0].action_id), '{}');
   const rejected = runEnsure(root, sessionId);
   assert.notStrictEqual(rejected.envelope.status, 'READY', JSON.stringify(rejected.envelope));
   for (const role of ROLES) assert.strictEqual(roleState(root, seeded, role).state, 'READY');

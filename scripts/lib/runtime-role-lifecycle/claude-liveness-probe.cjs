@@ -3,7 +3,6 @@
 function createClaudeLivenessProbe(deps) {
   const {
     actionPathFor,
-    CLAUDE_RESUME_HANDLE_SCAN_CAP,
     canonicalJSONStringify,
     currentClockMsForRegistry,
     ensureSecureRegistryDir,
@@ -25,10 +24,16 @@ function createClaudeLivenessProbe(deps) {
     transitionRoleBinding,
     validateRoleActorBindingFor,
     withRegistryLock,
+    writeRegistryRecordReplace,
   } = deps;
 
   const CLAUDE_LIVENESS_PROBE_SCHEMA = 'runtime/claude-liveness-probe/v1';
   const CLAUDE_LIVENESS_OUTCOME_SCHEMA = 'runtime/claude-liveness-outcome/v1';
+  const CLAUDE_LIVENESS_INDEX_SCHEMA = 'runtime/claude-liveness-index/v1';
+  const CLAUDE_LIVENESS_INDEX_KEYS = Object.freeze([
+    'action_id', 'actor_binding_id', 'actor_digest', 'plan_digest', 'role',
+    'schema', 'session_generation_id', 'worktree_id',
+  ]);
   const CLAUDE_LIVENESS_OUTCOME_TTL_SECONDS = 60;
   const CLAUDE_LIVENESS_MESSAGE_RE = /^RUNTIME_LIVENESS_PROBE\/v1\nactor-binding:([0-9a-f]{32})\nactor-digest:([0-9a-f]{64})\nruntime-action:([0-9a-f]{32})\nexpected-response:resumed-agent-id\nactor-action:none\nreply:none\nnext:wait$/;
 
@@ -45,6 +50,45 @@ function createClaudeLivenessProbe(deps) {
 
   function livenessProbePath(projectRoot, actionId, suffix) {
     return path.join(registryRepoDir(projectRoot), 'claude-liveness-probes', actionId + suffix);
+  }
+
+  function livenessIndexPath(projectRoot, expected) {
+    const scopeKey = sha256String(canonicalJSONStringify([
+      expected.generationId, expected.worktreeId, expected.planDigest,
+      expected.role, expected.actorBindingId, expected.actorDigest,
+    ]));
+    return path.join(registryRepoDir(projectRoot), 'claude-liveness-index', scopeKey + '.json');
+  }
+
+  function indexClaudeLivenessProbeAction(projectRoot, expected, action) {
+    try {
+      if (!action || action.kind !== 'role-notify' || action.runtime !== 'claude-native'
+          || action.action_id === undefined || action.role !== expected.role
+          || action.worktree_id !== expected.worktreeId || action.plan_digest !== expected.planDigest
+          || action.session_generation_id !== expected.generationId || !action.payload) {
+        return { ok: false, reason: 'liveness-index-action-invalid' };
+      }
+      const parsed = CLAUDE_LIVENESS_MESSAGE_RE.exec(action.payload.message);
+      if (!parsed || parsed[1] !== expected.actorBindingId || parsed[2] !== expected.actorDigest
+          || parsed[3] !== action.action_id) {
+        return { ok: false, reason: 'liveness-index-scope-mismatch' };
+      }
+      const record = {
+        schema: CLAUDE_LIVENESS_INDEX_SCHEMA,
+        action_id: action.action_id,
+        actor_binding_id: expected.actorBindingId,
+        actor_digest: expected.actorDigest,
+        role: expected.role,
+        worktree_id: expected.worktreeId,
+        plan_digest: expected.planDigest,
+        session_generation_id: expected.generationId,
+      };
+      const written = writeRegistryRecordReplace(
+        livenessIndexPath(projectRoot, expected),
+        Buffer.from(canonicalJSONStringify(record), 'utf8'),
+      );
+      return written.ok ? { ok: true } : { ok: false, reason: 'liveness-index-write-failed' };
+    } catch { return { ok: false, reason: 'liveness-index-internal' }; }
   }
 
   function reserveClaudeLivenessProbeBeforeDelivery(projectRoot, event) {
@@ -245,56 +289,63 @@ function createClaudeLivenessProbe(deps) {
 
   function findClaudeLivenessProbeState(projectRoot, expected) {
     try {
-      const dir = path.join(registryRepoDir(projectRoot), 'actions');
-      let entries;
-      try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch (error) {
-        return error && error.code === 'ENOENT' ? { ok: true, status: 'NONE' } : { ok: false, reason: 'liveness-action-scan-failed' };
+      const indexRead = readRegistryRecord(livenessIndexPath(projectRoot, expected));
+      if (!indexRead.ok) return { ok: false, reason: 'liveness-index-read-failed' };
+      if (indexRead.absent) return { ok: true, status: 'NONE' };
+      const index = indexRead.obj;
+      if (!index || !hasExactKeys(index, CLAUDE_LIVENESS_INDEX_KEYS)
+          || index.schema !== CLAUDE_LIVENESS_INDEX_SCHEMA
+          || index.actor_binding_id !== expected.actorBindingId || index.actor_digest !== expected.actorDigest
+          || index.role !== expected.role || index.worktree_id !== expected.worktreeId
+          || index.plan_digest !== expected.planDigest || index.session_generation_id !== expected.generationId
+          || !isHexActionId(index.action_id)) {
+        return { ok: false, reason: 'liveness-index-invalid' };
       }
-      if (entries.length > CLAUDE_RESUME_HANDLE_SCAN_CAP) return { ok: false, reason: 'liveness-action-scan-cap' };
-      const active = [];
-      for (const entry of entries) {
-        if (entry.name.startsWith('.')) continue;
-        if (!entry.isFile() || !/^[0-9a-f]{32}\.json$/.test(entry.name)) {
-          return { ok: false, reason: 'liveness-action-entry-invalid' };
-        }
-        const read = readRegistryRecord(path.join(dir, entry.name));
-        if (!read.ok || read.absent || !read.obj) return { ok: false, reason: 'liveness-action-read-failed' };
-        const action = read.obj;
-        if (action.kind !== 'role-notify' || action.runtime !== 'claude-native' || action.role !== expected.role
-            || action.worktree_id !== expected.worktreeId || action.plan_digest !== expected.planDigest
-            || action.session_generation_id !== expected.generationId || !action.payload) continue;
-        const parsed = CLAUDE_LIVENESS_MESSAGE_RE.exec(action.payload.message);
-        if (!parsed || parsed[1] !== expected.actorBindingId || parsed[2] !== expected.actorDigest || parsed[3] !== action.action_id) continue;
-        const outcomeRead = readRegistryRecord(livenessProbePath(projectRoot, action.action_id, '.outcome.json'));
-        if (!outcomeRead.ok) return { ok: false, reason: 'liveness-outcome-read-failed' };
-        if (outcomeRead.absent) {
-          if (currentClockMsForRegistry() < isoToMsForRegistry(action.expires_at)) active.push({ status: 'PENDING', action });
-          continue;
-        }
-        const outcome = outcomeRead.obj;
-        const outcomeKeys = ['action_id','actor_binding_id','actor_digest','expires_at','observed_at','plan_digest','role','schema','session_generation_id','status','worktree_id'];
-        if (!outcome || !hasExactKeys(outcome, outcomeKeys)
-            || outcome.schema !== CLAUDE_LIVENESS_OUTCOME_SCHEMA || outcome.action_id !== action.action_id
-            || outcome.actor_binding_id !== expected.actorBindingId || outcome.actor_digest !== expected.actorDigest
-            || outcome.role !== expected.role || outcome.worktree_id !== expected.worktreeId
-            || outcome.plan_digest !== expected.planDigest || outcome.session_generation_id !== expected.generationId
-            || !['ABSENT','LIVE','UNVERIFIED'].includes(outcome.status)
-            || !isCanonicalIsoUtc(outcome.observed_at) || !isCanonicalIsoUtc(outcome.expires_at)) {
-          return { ok: false, reason: 'liveness-outcome-invalid' };
-        }
-        const observedAtMs = isoToMsForRegistry(outcome.observed_at);
-        const expiresAtMs = isoToMsForRegistry(outcome.expires_at);
-        const nowMs = currentClockMsForRegistry();
-        if (!Number.isFinite(observedAtMs) || !Number.isFinite(expiresAtMs)
-            || observedAtMs > nowMs || expiresAtMs - observedAtMs !== CLAUDE_LIVENESS_OUTCOME_TTL_SECONDS * 1000) {
-          return { ok: false, reason: 'liveness-outcome-chronology-invalid' };
-        }
-        if (outcome.status === 'LIVE' && nowMs < expiresAtMs) active.push({ status: 'LIVE', action });
-        // UNVERIFIED and expired LIVE are settled history, so a new bounded
-        // probe may be minted; neither is proof of absence.
+      const actionRead = readRegistryRecord(actionPathFor(projectRoot, index.action_id));
+      if (!actionRead.ok || actionRead.absent || !actionRead.obj) {
+        return { ok: false, reason: 'liveness-action-read-failed' };
       }
-      if (active.length > 1) return { ok: false, reason: 'liveness-action-ambiguous' };
-      return active.length === 1 ? { ok: true, ...active[0] } : { ok: true, status: 'NONE' };
+      const action = actionRead.obj;
+      const parsed = action.payload && CLAUDE_LIVENESS_MESSAGE_RE.exec(action.payload.message);
+      if (action.kind !== 'role-notify' || action.runtime !== 'claude-native'
+          || action.action_id !== index.action_id || action.role !== expected.role
+          || action.worktree_id !== expected.worktreeId || action.plan_digest !== expected.planDigest
+          || action.session_generation_id !== expected.generationId
+          || !parsed || parsed[1] !== expected.actorBindingId || parsed[2] !== expected.actorDigest
+          || parsed[3] !== action.action_id) {
+        return { ok: false, reason: 'liveness-action-index-mismatch' };
+      }
+      const outcomeRead = readRegistryRecord(livenessProbePath(projectRoot, action.action_id, '.outcome.json'));
+      if (!outcomeRead.ok) return { ok: false, reason: 'liveness-outcome-read-failed' };
+      if (outcomeRead.absent) {
+        return currentClockMsForRegistry() < isoToMsForRegistry(action.expires_at)
+          ? { ok: true, status: 'PENDING', action }
+          : { ok: true, status: 'NONE' };
+      }
+      const outcome = outcomeRead.obj;
+      const outcomeKeys = ['action_id','actor_binding_id','actor_digest','expires_at','observed_at','plan_digest','role','schema','session_generation_id','status','worktree_id'];
+      if (!outcome || !hasExactKeys(outcome, outcomeKeys)
+          || outcome.schema !== CLAUDE_LIVENESS_OUTCOME_SCHEMA || outcome.action_id !== action.action_id
+          || outcome.actor_binding_id !== expected.actorBindingId || outcome.actor_digest !== expected.actorDigest
+          || outcome.role !== expected.role || outcome.worktree_id !== expected.worktreeId
+          || outcome.plan_digest !== expected.planDigest || outcome.session_generation_id !== expected.generationId
+          || !['ABSENT','LIVE','UNVERIFIED'].includes(outcome.status)
+          || !isCanonicalIsoUtc(outcome.observed_at) || !isCanonicalIsoUtc(outcome.expires_at)) {
+        return { ok: false, reason: 'liveness-outcome-invalid' };
+      }
+      const observedAtMs = isoToMsForRegistry(outcome.observed_at);
+      const expiresAtMs = isoToMsForRegistry(outcome.expires_at);
+      const nowMs = currentClockMsForRegistry();
+      if (!Number.isFinite(observedAtMs) || !Number.isFinite(expiresAtMs)
+          || observedAtMs > nowMs || expiresAtMs - observedAtMs !== CLAUDE_LIVENESS_OUTCOME_TTL_SECONDS * 1000) {
+        return { ok: false, reason: 'liveness-outcome-chronology-invalid' };
+      }
+      if (outcome.status === 'LIVE' && nowMs < expiresAtMs) return { ok: true, status: 'LIVE', action };
+      if (outcome.status === 'ABSENT' && nowMs < expiresAtMs) return { ok: true, status: 'ABSENT', action };
+      // UNVERIFIED and expired outcomes are settled history. The scope index
+      // is atomically replaced when the next probe is minted, so unrelated
+      // immutable actions can never exhaust or poison liveness discovery.
+      return { ok: true, status: 'NONE' };
     } catch { return { ok: false, reason: 'liveness-action-internal' }; }
   }
 
@@ -305,6 +356,7 @@ function createClaudeLivenessProbe(deps) {
     reserveClaudeLivenessProbeBeforeDelivery,
     settleClaudeLivenessProbeOutcome,
     findClaudeLivenessProbeState,
+    indexClaudeLivenessProbeAction,
   });
 }
 

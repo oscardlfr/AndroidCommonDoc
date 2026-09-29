@@ -832,15 +832,17 @@ const {
   publishClaudeSupportRoleTerminal,
 } = claudeResumeRecord;
 const claudeLivenessProbe = createClaudeLivenessProbe({
-  actionPathFor, CLAUDE_RESUME_HANDLE_SCAN_CAP, canonicalJSONStringify, currentClockMsForRegistry,
+  actionPathFor, canonicalJSONStringify, currentClockMsForRegistry,
   ensureSecureRegistryDir, fs, hasExactKeys, isCanonicalIsoUtc, isHexActionId,
   isoPlusSecondsForRegistry, isoToMsForRegistry, nowIsoForRegistry, path, publishNoClobber,
   readLiveSessionGenerationById, readRegistryRecord, readRoleBindingState, registryRepoDir,
   roleProfileDigestFor, sha256String, transitionRoleBinding, validateRoleActorBindingFor, withRegistryLock,
+  writeRegistryRecordReplace,
 });
 const {
   CLAUDE_LIVENESS_PROBE_SCHEMA, CLAUDE_LIVENESS_OUTCOME_SCHEMA, claudeLivenessProbeMessage,
   reserveClaudeLivenessProbeBeforeDelivery, settleClaudeLivenessProbeOutcome, findClaudeLivenessProbeState,
+  indexClaudeLivenessProbeAction,
 } = claudeLivenessProbe;
 const claudeResumeDelivery = createClaudeResumeDelivery({
   ...claudeResumeRecord,
@@ -1119,7 +1121,7 @@ const ensureActiveRouting = createEnsureActiveRouting({
   actionForEnvelope, buildRoleNotifyPayload, canonicalJSONStringify, claudeLivenessProbeMessage,
   codexAppServerStartupEligible, computeRepoId, effectiveActionTtlSeconds, findClaudeLivenessProbeState,
   futureIsoForRegistry, generateActionId, hasRegisteredValidatedDiskConsumer, isTestCapability,
-  mintRoleLifecycleAction, path, registryRepoDir, resolveHostOperationForAction,
+  indexClaudeLivenessProbeAction, mintRoleLifecycleAction, path, registryRepoDir, resolveHostOperationForAction,
   resolveSupervisorStartability, roleBindingForEnvelope, selectLifecycleEligibleDriverForRole,
   sha256String, transitionRoleBindingAtomicViaWaypoint, withRegistryLock,
 });

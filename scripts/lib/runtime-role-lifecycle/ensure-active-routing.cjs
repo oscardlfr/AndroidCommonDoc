@@ -14,6 +14,7 @@ function createEnsureActiveRouting(deps) {
     generateActionId,
     hasRegisteredValidatedDiskConsumer,
     isTestCapability,
+    indexClaudeLivenessProbeAction,
     mintRoleLifecycleAction,
     path,
     registryRepoDir,
@@ -55,9 +56,15 @@ function createEnsureActiveRouting(deps) {
         sha256String(canonicalJSONStringify(pair.routing)), binding.session_generation_id,
         role, payload, futureIsoForRegistry(ttl.ttlSeconds),
       );
-      return minted.ok
+      if (!minted.ok) return { ok: false, reason: 'liveness-action-mint-failed' };
+      const indexed = indexClaudeLivenessProbeAction(projectRoot, {
+        generationId: binding.session_generation_id, planDigest: binding.plan_digest,
+        role, worktreeId: binding.worktree_id,
+        actorBindingId: liveness.actorBindingId, actorDigest: liveness.actorDigest,
+      }, minted.action);
+      return indexed.ok
         ? { ok: true, status: 'PENDING', action: minted.action }
-        : { ok: false, reason: 'liveness-action-mint-failed' };
+        : { ok: false, reason: indexed.reason || 'liveness-action-index-failed' };
     }, { maxWaitMs: 5000 });
     return locked.ok && locked.value
       ? locked.value : { ok: false, reason: 'liveness-scope-lock-failed' };
