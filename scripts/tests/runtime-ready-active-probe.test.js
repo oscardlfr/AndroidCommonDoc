@@ -248,7 +248,7 @@ function deliverProbe(root, sessionId, action, toolUseId, outcome) {
   });
   if (outcome.kind === 'failure') post.error = 'simulated host delivery failure';
   else {
-    post.tool_response = { success: outcome.responseSuccess !== false };
+    post.tool_response = outcome.toolResponse || { success: outcome.responseSuccess !== false };
     if (outcome.resumedAgentId !== undefined) {
       post.tool_response.resumedAgentId = outcome.resumedAgentId;
     }
@@ -258,6 +258,37 @@ function deliverProbe(root, sessionId, action, toolUseId, outcome) {
   }
   runBoundary(post);
 }
+
+test('active probe accepts the closed pin and inbox receipts emitted by supported Claude 2.1 patch releases', (t) => {
+  const root = makeProject();
+  t.after(() => cleanup(root));
+  const sessionId = 'active-probe-compatible-receipts';
+  const seeded = seedFiveReadyActors(root, sessionId);
+  const actions = expectFiveProbeActions(runEnsure(root, sessionId), seeded.actors);
+  const pinned = actions[0];
+  deliverProbe(root, sessionId, pinned, 'probe-compatible-pin', {
+    kind: 'success',
+    toolResponse: {
+      success: true, message: 'Agent resumed',
+      pin: { id: seeded.actors.get(pinned.role).agentId, name: pinned.role, ref: 'agent-ref' },
+    },
+  });
+  const inbox = actions[1];
+  deliverProbe(root, sessionId, inbox, 'probe-compatible-inbox', {
+    kind: 'success',
+    toolResponse: {
+      success: true, message: `Message sent to ${inbox.role}'s inbox`, msg_id: 'message-id',
+      routing: { content: 'probe', sender: 'team-lead', summary: 'probe', target: '@' + inbox.role, targetColor: 'blue' },
+    },
+  });
+  for (let index = 2; index < actions.length; index += 1) {
+    settleExactProbe(root, sessionId, seeded, actions[index], 'probe-compatible-legacy-' + index);
+  }
+  const complete = runEnsure(root, sessionId);
+  assert.strictEqual(complete.exitCode, 0, JSON.stringify(complete));
+  assert.strictEqual(complete.envelope.status, 'READY', JSON.stringify(complete.envelope));
+  assert.deepStrictEqual(complete.envelope.actions, []);
+});
 
 function roleState(root, seeded, role) {
   const actor = seeded.actors.get(role);

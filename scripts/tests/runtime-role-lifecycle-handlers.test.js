@@ -378,6 +378,12 @@ test('ordinary ensure rejects WAITING without a live resume handle and preserves
       agentType: role,
     });
     assert.strictEqual(handle.ok, true, JSON.stringify(handle));
+    const probe = ensureOrdinaryClaudeRole(parked, 'waiting-handle-live-session', role);
+    assert.strictEqual(probe.result.status, 'ACTION_REQUIRED', JSON.stringify(probe.result));
+    assert.strictEqual(probe.result.actions.length, 1, JSON.stringify(probe.result));
+    settleLivenessProbeThroughRealBoundary(
+      parked, 'waiting-handle-live-session', probe.result.actions[0], parkedFixture.agentId, 0,
+    );
     const accepted = ensureOrdinaryClaudeRole(parked, 'waiting-handle-live-session', role);
     assert.strictEqual(accepted.status, 0, JSON.stringify(accepted.result));
     assert.strictEqual(accepted.result.status, 'READY', JSON.stringify(accepted.result));
@@ -389,6 +395,74 @@ test('ordinary ensure rejects WAITING without a live resume handle and preserves
   } finally {
     cleanup(missing);
     cleanup(parked);
+  }
+});
+
+test('resume lookup selects only the current generation when one Claude session retains older live handles', () => {
+  const dir = makeGitProject('waiting-handle-generation-');
+  const sessionKey = 'waiting-handle-generation-session';
+  const role = LIVE_ROLE;
+  try {
+    writePlanFixture(dir, 'waiting-handle-generation');
+    const g1 = createReadyClaudeRoleFixture(dir, sessionKey, role, 'waiting-handle-generation-agent-g1');
+    const oldHandle = rll.parkClaudeResumeHandleForRoleActor(dir, {
+      sessionId: sessionKey, agentId: g1.agentId, agentType: role,
+    });
+    assert.strictEqual(oldHandle.ok, true, JSON.stringify(oldHandle));
+
+    const rotated = rll.resolveSessionGeneration(
+      dir, identityFor(sessionKey), { invocationDigest: '7'.repeat(64), forceRotation: true },
+    );
+    assert.strictEqual(rotated.ok, true, JSON.stringify(rotated));
+    ensureLiveRoleSpawnAction(dir, sessionKey, role);
+    assert.strictEqual(action.session_generation_id, rotated.generationId);
+    const profileDigest = rll.roleProfileDigestFor(role);
+    const starting = rll.readRoleBindingState(
+      dir, action.worktree_id, action.plan_digest, profileDigest, rotated.generationId, role,
+    );
+    const ready = rll.transitionRoleBinding(
+      dir, action.worktree_id, action.plan_digest, profileDigest, rotated.generationId,
+      role, 'STARTING', 'READY', starting.record, {},
+    );
+    assert.strictEqual(ready.ok, true, JSON.stringify(ready));
+    const actor = rll.createRoleActorBinding(
+      dir, role, action.worktree_id, action.plan_digest, rotated.generationId, 600,
+    );
+    assert.strictEqual(actor.ok, true, JSON.stringify(actor));
+    const g2AgentId = 'waiting-handle-generation-agent-g2';
+    recordResumeMatrixLiveActor(dir, sessionKey, action, actor, g2AgentId);
+    const currentHandle = rll.parkClaudeResumeHandleForRoleActor(dir, {
+      sessionId: sessionKey, agentId: g2AgentId, agentType: role,
+    });
+    assert.strictEqual(currentHandle.ok, true, JSON.stringify(currentHandle));
+
+    const expected = {
+      generationId: rotated.generationId,
+      planDigest: action.plan_digest,
+      sessionDigest: crypto.createHash('sha256').update(sessionKey).digest('hex'),
+      targetRole: role,
+      worktreeId: action.worktree_id,
+    };
+    const selected = rll.findUniqueClaudeResumeHandleForTarget(dir, expected);
+    assert.strictEqual(selected.ok, true, JSON.stringify(selected));
+    assert.strictEqual(selected.record.binding_id, currentHandle.record.binding_id);
+
+    const oldPath = rll.claudeResumeHandlePathFor(dir, oldHandle.record.binding_id);
+    const incompatibleHistory = JSON.parse(fs.readFileSync(oldPath, 'utf8'));
+    delete incompatibleHistory.teammate_name;
+    fs.writeFileSync(oldPath, JSON.stringify(incompatibleHistory));
+    assert.strictEqual(rll.findUniqueClaudeResumeHandleForTarget(dir, expected).ok, true,
+      'malformed history from another generation must not poison the current target');
+
+    const currentPath = rll.claudeResumeHandlePathFor(dir, currentHandle.record.binding_id);
+    const malformedCurrent = JSON.parse(fs.readFileSync(currentPath, 'utf8'));
+    delete malformedCurrent.teammate_name;
+    fs.writeFileSync(currentPath, JSON.stringify(malformedCurrent));
+    assert.deepStrictEqual(rll.findUniqueClaudeResumeHandleForTarget(dir, expected), {
+      ok: false, reason: 'INVALID',
+    }, 'a malformed handle claiming the current generation must fail closed');
+  } finally {
+    cleanup(dir);
   }
 });
 
@@ -458,6 +532,12 @@ test('ordinary ensure rejects BUSY without a consumed receipt and preserves exac
       message: action.payload.message,
     });
     assert.strictEqual(consumed.ok, true, JSON.stringify(consumed));
+    const probe = ensureOrdinaryClaudeRole(resumed, 'busy-receipt-live-session', role);
+    assert.strictEqual(probe.result.status, 'ACTION_REQUIRED', JSON.stringify(probe.result));
+    assert.strictEqual(probe.result.actions.length, 1, JSON.stringify(probe.result));
+    settleLivenessProbeThroughRealBoundary(
+      resumed, 'busy-receipt-live-session', probe.result.actions[0], resumedFixture.agentId, 0,
+    );
     const accepted = ensureOrdinaryClaudeRole(resumed, 'busy-receipt-live-session', role);
     assert.strictEqual(accepted.status, 0, JSON.stringify(accepted.result));
     assert.strictEqual(accepted.result.status, 'READY', JSON.stringify(accepted.result));
@@ -742,7 +822,7 @@ test('ordinary ensure treats a parked Claude role in the current host-process ge
     writePlanFixture(dir, 'automatic-resume');
     const sessionKey = 'automatic-resume-session';
     const role = LIVE_ROLE;
-    ensureLiveRoleSpawnAction(dir, sessionKey, role);
+    const action = ensureLiveRoleSpawnAction(dir, sessionKey, role);
     const worktreeId = rll.computeWorktreeId(dir);
     const planDigest = rll.discoverPlan(dir).planDigest;
     const generationId = rll.peekSessionGeneration(dir, identityFor(sessionKey)).generationId;
@@ -752,10 +832,12 @@ test('ordinary ensure treats a parked Claude role in the current host-process ge
       dir, worktreeId, planDigest, profileDigest, generationId, role,
       'STARTING', 'READY', starting.record, {},
     ).ok, true);
-    assert.strictEqual(rll.createRoleActorBinding(
+    const actor = rll.createRoleActorBinding(
       dir, role, worktreeId, planDigest, generationId, 600,
-    ).ok, true);
+    );
+    assert.strictEqual(actor.ok, true);
     const event = { sessionId: sessionKey, agentId: 'automatic-resume-agent', agentType: role };
+    recordResumeMatrixLiveActor(dir, sessionKey, action, actor, event.agentId);
     const parked = rll.parkClaudeResumeHandleForRoleActor(dir, event);
     assert.strictEqual(parked.ok, true, JSON.stringify(parked));
 
@@ -765,6 +847,10 @@ test('ordinary ensure treats a parked Claude role in the current host-process ge
         'ensure', '--project-root', dir, '--role', role, '--lifecycle-binding', grant.grantId,
       ], { RUNTIME_ROLE_LIFECYCLE_FAKE_CAPABILITIES: LIVE_CAPS });
     };
+    const probe = runEnsure();
+    assert.strictEqual(probe.result.status, 'ACTION_REQUIRED', JSON.stringify(probe.result));
+    assert.strictEqual(probe.result.actions.length, 1);
+    settleLivenessProbeThroughRealBoundary(dir, sessionKey, probe.result.actions[0], event.agentId, 0);
     const first = runEnsure();
     assert.strictEqual(first.result.status, 'READY', JSON.stringify(first.result));
     assert.strictEqual(first.result.actions.length, 0);
@@ -3139,7 +3225,7 @@ test('P5SP-WHYUNAVAILABLE an unavailable ensure names which role and why', () =>
     "'retained-worker-'",
     "'binding-state-'",
     "'respawn-budget-exceeded'",
-    "'no-eligible-driver'",
+    "noteUnavailable(unavailable.role, unavailable.reason)",
     "'supervisor-transaction-'",
   ]) {
     assert.ok(classifier.includes(reason), 'missing distinguishable reason: ' + reason);
