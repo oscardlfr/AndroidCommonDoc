@@ -3,7 +3,7 @@
 require('./lib/private-registry-tmpdir-preload.cjs');
 
 const assert = require('node:assert');
-const { execFileSync, spawnSync } = require('node:child_process');
+const { execFile, execFileSync, spawnSync } = require('node:child_process');
 const crypto = require('node:crypto');
 const fs = require('node:fs');
 const os = require('node:os');
@@ -77,6 +77,14 @@ function childEnv() {
 }
 
 function runEnsure(root, sessionId) {
+  const invocation = mintEnsureInvocation(root, sessionId);
+  const child = spawnSync(process.execPath, invocation.args, {
+    encoding: 'utf8', env: childEnv(),
+  });
+  return parseEnsureResult(child.status, child.stdout, child.stderr);
+}
+
+function mintEnsureInvocation(root, sessionId) {
   const plan = rll.discoverPlan(root);
   assert.strictEqual(plan.ok, true, JSON.stringify(plan));
   const main = rll.createMainOrchestratorBinding(
@@ -92,12 +100,21 @@ function runEnsure(root, sessionId) {
   const args = [RLL_IMPL, 'ensure', '--project-root', root];
   for (const role of ROLES) args.push('--role', role);
   args.push('--lifecycle-binding', grant.grantId);
-  const child = spawnSync(process.execPath, args, {
-    encoding: 'utf8', env: childEnv(),
-  });
-  const lines = String(child.stdout || '').trim().split('\n');
+  return { args };
+}
+
+function parseEnsureResult(exitCode, stdout, stderr) {
+  const lines = String(stdout || '').trim().split('\n');
   const envelope = JSON.parse(lines[lines.length - 1]);
-  return { exitCode: child.status, envelope, stderr: child.stderr || '' };
+  return { exitCode, envelope, stderr: stderr || '' };
+}
+
+function runEnsureAsync(root, sessionId) {
+  const invocation = mintEnsureInvocation(root, sessionId);
+  return new Promise((resolve) => {
+    execFile(process.execPath, invocation.args, { encoding: 'utf8', env: childEnv() },
+      (error, stdout, stderr) => resolve(parseEnsureResult(error ? error.code : 0, stdout, stderr)));
+  });
 }
 
 function writeStartupObservation(root, sessionId, action, actorBinding, agentId) {
@@ -235,6 +252,9 @@ function deliverProbe(root, sessionId, action, toolUseId, outcome) {
     if (outcome.resumedAgentId !== undefined) {
       post.tool_response.resumedAgentId = outcome.resumedAgentId;
     }
+    if (outcome.responseMessage !== undefined) {
+      post.tool_response.message = outcome.responseMessage;
+    }
   }
   runBoundary(post);
 }
@@ -256,6 +276,16 @@ function storedActions(root) {
   return fs.readdirSync(dir, { withFileTypes: true })
     .filter((entry) => entry.isFile() && entry.name.endsWith('.json'))
     .map((entry) => JSON.parse(fs.readFileSync(path.join(dir, entry.name), 'utf8')));
+}
+
+function settleExactProbe(root, sessionId, seeded, action, toolUseId) {
+  deliverProbe(root, sessionId, action, toolUseId, {
+    kind: 'success', resumedAgentId: seeded.actors.get(action.role).agentId,
+  });
+}
+
+function unreachableMessage(recipient) {
+  return `No agent named '${recipient}' is reachable.\nUse ListAgents to see everyone you can message.`;
 }
 
 test('active probe success matrix: agents_killed inside startup TTL requires 5 probes, 4/5 is not READY, 5/5 exact Post is READY and next init is zero-action', (t) => {
@@ -442,6 +472,7 @@ test('active probe expiry: expired LIVE outcome is UNVERIFIED and a settled acti
   });
   const outcomePath = probeRecordPath(root, action.action_id, '.outcome.json');
   const outcome = JSON.parse(fs.readFileSync(outcomePath, 'utf8'));
+  outcome.observed_at = '1999-12-31T23:59:00Z';
   outcome.expires_at = '2000-01-01T00:00:00Z';
   fs.writeFileSync(outcomePath, rc.canonicalJSONStringify(outcome));
 
@@ -500,6 +531,243 @@ test('active probe action discovery is bounded at 1024 entries and fails closed 
   const bounded = runEnsure(root, sessionId);
   assert.notStrictEqual(bounded.envelope.status, 'READY', JSON.stringify(bounded.envelope));
   for (const role of ROLES) assert.strictEqual(roleState(root, seeded, role).state, 'READY');
+});
+
+test('active probe foreign-session isolation: both Pre and Post from session B are rejected for session A action', (t) => {
+  const root = makeProject();
+  t.after(() => cleanup(root));
+  const ownerSession = 'active-probe-owner-session-a';
+  const foreignSession = 'active-probe-foreign-session-b';
+  const seeded = seedFiveReadyActors(root, ownerSession);
+  const action = expectFiveProbeActions(runEnsure(root, ownerSession), seeded.actors)[0];
+  const foreignPre = preEvent(root, foreignSession, action, 'probe-foreign-session');
+  const preResult = runtimeHostBoundary.admitNativeActionEvent(foreignPre);
+  assert.strictEqual(preResult.admitted, false, JSON.stringify(preResult));
+  assert.strictEqual(preResult.owning, true, JSON.stringify(preResult));
+  assert.strictEqual(fs.existsSync(probeRecordPath(root, action.action_id, '.pending.json')), false);
+
+  const foreignPost = Object.assign({}, foreignPre, {
+    hook_event_name: 'PostToolUse',
+    tool_response: {
+      success: true,
+      resumedAgentId: seeded.actors.get(action.role).agentId,
+    },
+  });
+  const postResult = runtimeHostBoundary.settleNativeLivenessProbe(foreignPost);
+  assert.strictEqual(postResult.ok, false, JSON.stringify(postResult));
+  assert.strictEqual(roleState(root, seeded, action.role).state, 'READY');
+});
+
+test('active probe temporal boundary: Pre before action expiry and Post after expiry cannot become LIVE', (t) => {
+  const root = makeProject();
+  t.after(() => cleanup(root));
+  const sessionId = 'active-probe-late-post';
+  const seeded = seedFiveReadyActors(root, sessionId);
+  const action = expectFiveProbeActions(runEnsure(root, sessionId), seeded.actors)[0];
+  const pre = preEvent(root, sessionId, action, 'probe-late-post');
+  runBoundary(pre);
+
+  const actionPath = rll.actionPathFor(root, action.action_id);
+  const expiredAction = JSON.parse(fs.readFileSync(actionPath, 'utf8'));
+  expiredAction.expires_at = '2000-01-01T00:00:00Z';
+  fs.writeFileSync(actionPath, rc.canonicalJSONStringify(expiredAction));
+  const latePost = Object.assign({}, pre, {
+    hook_event_name: 'PostToolUse',
+    tool_response: {
+      success: true,
+      resumedAgentId: seeded.actors.get(action.role).agentId,
+    },
+  });
+  const settled = runtimeHostBoundary.settleNativeLivenessProbe(latePost);
+  assert.ok(settled.ok === false || settled.status !== 'LIVE', JSON.stringify(settled));
+  assert.strictEqual(roleState(root, seeded, action.role).state, 'READY');
+  assert.strictEqual(fs.existsSync(probeRecordPath(root, action.action_id, '.outcome.json')), false,
+    'an expired action must not publish a reusable positive outcome');
+});
+
+for (const chronology of [
+  {
+    name: 'far-future expiry',
+    mutate(outcome) { outcome.expires_at = '2099-01-01T00:00:00Z'; },
+  },
+  {
+    name: 'observed_at after expires_at',
+    mutate(outcome) {
+      outcome.observed_at = '2099-01-01T00:00:01Z';
+      outcome.expires_at = '2099-01-01T00:00:00Z';
+    },
+  },
+]) {
+  test('active probe outcome chronology: ' + chronology.name + ' is rejected instead of extending LIVE', (t) => {
+    const root = makeProject();
+    t.after(() => cleanup(root));
+    const sessionId = 'active-probe-chronology-' + chronology.name.replace(/[^a-z]+/g, '-');
+    const seeded = seedFiveReadyActors(root, sessionId);
+    const action = expectFiveProbeActions(runEnsure(root, sessionId), seeded.actors)[0];
+    settleExactProbe(root, sessionId, seeded, action, 'probe-chronology');
+    const outcomePath = probeRecordPath(root, action.action_id, '.outcome.json');
+    const outcome = JSON.parse(fs.readFileSync(outcomePath, 'utf8'));
+    chronology.mutate(outcome);
+    fs.writeFileSync(outcomePath, rc.canonicalJSONStringify(outcome));
+
+    const result = runEnsure(root, sessionId);
+    assert.notStrictEqual(result.envelope.status, 'READY', JSON.stringify(result.envelope));
+    assert.strictEqual(roleState(root, seeded, action.role).state, 'READY');
+  });
+}
+
+test('active probe concurrency: two real concurrent ensure calls mint at most one probe per generation role and actor', async (t) => {
+  const root = makeProject();
+  t.after(() => cleanup(root));
+  const sessionId = 'active-probe-concurrent-ensure';
+  const seeded = seedFiveReadyActors(root, sessionId);
+  const [left, right] = await Promise.all([
+    runEnsureAsync(root, sessionId),
+    runEnsureAsync(root, sessionId),
+  ]);
+  for (const result of [left, right]) {
+    assert.strictEqual(result.exitCode, 0, JSON.stringify(result));
+    assert.strictEqual(result.envelope.status, 'ACTION_REQUIRED', JSON.stringify(result.envelope));
+  }
+  const durableProbes = storedActions(root).filter((action) =>
+    action.kind === 'role-notify' && action.operation === undefined && action.payload &&
+    typeof action.payload.message === 'string' &&
+    action.payload.message.startsWith('RUNTIME_LIVENESS_PROBE/v1\n') &&
+    action.session_generation_id === seeded.generationId);
+  assert.strictEqual(durableProbes.length, ROLES.length, JSON.stringify(durableProbes));
+  for (const role of ROLES) {
+    assert.strictEqual(durableProbes.filter((action) => action.role === role).length, 1,
+      'concurrent ensure minted duplicate probe for ' + role);
+  }
+});
+
+test('active probe input validation: empty sessionId toolUseId and recipient are rejected before reservation', (t) => {
+  const root = makeProject();
+  t.after(() => cleanup(root));
+  const sessionId = 'active-probe-empty-inputs';
+  const seeded = seedFiveReadyActors(root, sessionId);
+  const actions = expectFiveProbeActions(runEnsure(root, sessionId), seeded.actors);
+  const mutations = [
+    ['sessionId', (event) => { event.session_id = ''; }],
+    ['toolUseId', (event) => { event.tool_use_id = ''; }],
+    ['recipient', (event) => { event.tool_input.recipient = ''; }],
+  ];
+  for (let index = 0; index < mutations.length; index += 1) {
+    const [label, mutate] = mutations[index];
+    const action = actions[index];
+    const event = preEvent(root, sessionId, action, 'probe-empty-' + label);
+    mutate(event);
+    const result = runtimeHostBoundary.admitNativeActionEvent(event);
+    assert.strictEqual(result.admitted, false, label + ': ' + JSON.stringify(result));
+    assert.strictEqual(result.owning, true, label + ': ' + JSON.stringify(result));
+    assert.strictEqual(fs.existsSync(probeRecordPath(root, action.action_id, '.pending.json')), false);
+  }
+});
+
+test('active probe action discovery rejects a malformed canonical action entry below the scan cap', (t) => {
+  const root = makeProject();
+  t.after(() => cleanup(root));
+  const sessionId = 'active-probe-malformed-action';
+  const seeded = seedFiveReadyActors(root, sessionId);
+  const probes = expectFiveProbeActions(runEnsure(root, sessionId), seeded.actors);
+  for (let index = 0; index < probes.length; index += 1) {
+    settleExactProbe(root, sessionId, seeded, probes[index], 'probe-malformed-control-' + index);
+  }
+  assert.strictEqual(runEnsure(root, sessionId).envelope.status, 'READY');
+
+  const malformedId = 'f'.repeat(32);
+  assert.strictEqual(probes.some((action) => action.action_id === malformedId), false);
+  fs.writeFileSync(rll.actionPathFor(root, malformedId), '{}');
+  const rejected = runEnsure(root, sessionId);
+  assert.notStrictEqual(rejected.envelope.status, 'READY', JSON.stringify(rejected.envelope));
+  for (const role of ROLES) assert.strictEqual(roleState(root, seeded, role).state, 'READY');
+});
+
+test('active probe physical absence: exact unreachable Post retires unchanged READY once and stale replay cannot kill its replacement', (t) => {
+  const root = makeProject();
+  t.after(() => cleanup(root));
+  const sessionId = 'active-probe-exact-unreachable';
+  const seeded = seedFiveReadyActors(root, sessionId);
+  const action = expectFiveProbeActions(runEnsure(root, sessionId), seeded.actors)[0];
+  const pre = preEvent(root, sessionId, action, 'probe-exact-unreachable');
+  runBoundary(pre);
+  const absentPost = Object.assign({}, pre, {
+    hook_event_name: 'PostToolUse',
+    tool_response: {
+      success: false,
+      message: unreachableMessage(action.payload.teammate_name),
+    },
+  });
+  const absent = runtimeHostBoundary.settleNativeLivenessProbe(absentPost);
+  assert.strictEqual(absent.ok, true, JSON.stringify(absent));
+  assert.strictEqual(absent.status, 'ABSENT', JSON.stringify(absent));
+  assert.strictEqual(roleState(root, seeded, action.role).state, 'DEAD');
+
+  const replacement = runEnsure(root, sessionId);
+  assert.notStrictEqual(replacement.envelope.status, 'READY');
+  const targetAgents = replacement.envelope.actions.filter((candidate) =>
+    candidate.operation === 'Agent' && candidate.role === action.role);
+  assert.strictEqual(targetAgents.length, 1, JSON.stringify(replacement.envelope.actions));
+  assert.strictEqual(replacement.envelope.actions.filter((candidate) =>
+    candidate.operation === 'Agent' && candidate.role !== action.role).length, 0,
+  'one exact absence must replace only its own role');
+  assert.notStrictEqual(roleState(root, seeded, action.role).state, 'DEAD');
+
+  const replay = runtimeHostBoundary.settleNativeLivenessProbe(absentPost);
+  assert.strictEqual(replay.ok, false, JSON.stringify(replay));
+  assert.notStrictEqual(roleState(root, seeded, action.role).state, 'DEAD',
+    'a stale terminal replay must never kill the replacement state');
+  const durableReplacements = storedActions(root).filter((candidate) =>
+    candidate.kind === 'role-spawn' && candidate.role === action.role &&
+    candidate.action_id !== seeded.actors.get(action.role).action.action_id);
+  assert.strictEqual(durableReplacements.length, 1, JSON.stringify(durableReplacements));
+  assert.strictEqual(durableReplacements[0].action_id, targetAgents[0].action_id,
+    'a stale replay must preserve the existing replacement and never mint a duplicate');
+});
+
+test('active probe physical absence negatives: message drift remains UNVERIFIED and never respawns READY actors', (t) => {
+  const root = makeProject();
+  t.after(() => cleanup(root));
+  const sessionId = 'active-probe-unreachable-negatives';
+  const seeded = seedFiveReadyActors(root, sessionId);
+  const actions = expectFiveProbeActions(runEnsure(root, sessionId), seeded.actors);
+  const variants = [
+    {
+      label: 'wrong recipient text',
+      message(action) {
+        const other = ROLES.find((role) => role !== action.payload.teammate_name);
+        return unreachableMessage(other);
+      },
+    },
+    {
+      label: 'suffix/newline drift',
+      message(action) { return unreachableMessage(action.payload.teammate_name) + '\n'; },
+    },
+    {
+      label: 'missing message',
+      message() { return undefined; },
+    },
+    {
+      label: 'different failure message',
+      message() { return 'Recipient is temporarily unavailable.'; },
+    },
+  ];
+  for (let index = 0; index < variants.length; index += 1) {
+    const action = actions[index];
+    deliverProbe(root, sessionId, action, 'probe-unreachable-negative-' + index, {
+      kind: 'success', responseSuccess: false,
+      responseMessage: variants[index].message(action),
+    });
+    assert.strictEqual(roleState(root, seeded, action.role).state, 'READY', variants[index].label);
+  }
+  const next = runEnsure(root, sessionId);
+  assert.notStrictEqual(next.envelope.status, 'READY');
+  for (let index = 0; index < variants.length; index += 1) {
+    const role = actions[index].role;
+    assert.strictEqual(next.envelope.actions.some((candidate) =>
+      candidate.operation === 'Agent' && candidate.role === role), false,
+    variants[index].label + ' must not create an Agent replacement');
+  }
 });
 
 test('active probe generation isolation: a new generation still emits exactly five Agent actions', (t) => {
