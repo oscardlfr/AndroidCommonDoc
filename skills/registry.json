@@ -1475,7 +1475,7 @@
       "description": "Synchronize L0 assets and atomically refresh an already-enabled source-referenced collaboration runtime in an L1/L2 consumer.",
       "category": "guides",
       "tier": "extended",
-      "hash": "sha256:ca68cf34b7bc177cda9759f31e1942983556256321988b6398e901bbe63dad59",
+      "hash": "sha256:4f4635ebcd43c9fc531b2f63bcad2de590d8f34b8c257c095b43267bbb6450f6",
       "dependencies": [],
       "frontmatter": {
         "name": "sync-l0",
