@@ -22,7 +22,8 @@ test('consumer operations document required launch, recovery, and host-family co
   assert.match(text, /does not require editing,\s+deleting, regenerating, or committing a certificate/);
   assert.match(text, /Developer ID on macOS or Authenticode on Windows/);
   assert.match(text, /Versions outside `2\.1\.x`.*fail closed/s);
-  assert.match(text, /An L1 must own `skills\/registry\.json`/);
+  assert.match(text, /does not require an L1 to publish `skills\/registry\.json`/);
+  assert.match(text, /Registry ownership is a distribution capability, not layer identity/);
   assert.match(text, /effective` remains\s+null/);
   assert.match(text, /It disables plugins and MCP/);
   assert.match(text, /bounded research profile/);
