@@ -2,13 +2,13 @@
 
 function createClaudeResumeLifecycle(deps) {
   const {
-    actionPathFor,
     CLAUDE_RESUME_HANDLE_SCAN_CAP,
     CLAUDE_RESUME_HANDLE_SCHEMA,
     canonicalJSONStringify,
     claudeResumeHandleConsumedMarkerPathFor,
     claudeResumeHandlePathFor,
     computeClaudeAuthorityIdentityId,
+    consumeNativeResumeNotificationBeforeDelivery,
     currentClockMsForRegistry,
     ensureSecureRegistryDir,
     findClaudeResumeHandlesForActor,
@@ -17,7 +17,6 @@ function createClaudeResumeLifecycle(deps) {
     hasExactKeys,
     isCanonicalIsoUtc,
     isClaudeResumeHandleConsumed,
-    isHexActionId,
     isHexCsprng32,
     isoPlusSecondsForRegistry,
     isoToMsForRegistry,
@@ -26,7 +25,6 @@ function createClaudeResumeLifecycle(deps) {
     publishNoClobber,
     readClaudeAuthorityFence,
     readClaudeResumeHandle,
-    readLiveSessionGenerationById,
     readRegistryRecord,
     readRoleBindingState,
     registryRepoDir,
@@ -41,396 +39,7 @@ function createClaudeResumeLifecycle(deps) {
     withRegistryLock,
   } = deps;
 
-const CLAUDE_RESUME_HANDLE_TTL_SECONDS = 3600;
-const CLAUDE_LIVENESS_PROBE_SCHEMA = 'runtime/claude-liveness-probe/v1';
-const CLAUDE_LIVENESS_OUTCOME_SCHEMA = 'runtime/claude-liveness-outcome/v1';
-const CLAUDE_LIVENESS_OUTCOME_TTL_SECONDS = 60;
-const CLAUDE_LIVENESS_MESSAGE_RE = /^RUNTIME_LIVENESS_PROBE\/v1\nactor-binding:([0-9a-f]{32})\nactor-digest:([0-9a-f]{64})\nruntime-action:([0-9a-f]{32})\nexpected-response:resumed-agent-id\nactor-action:none\nreply:none\nnext:wait$/;
-
-function claudeLivenessProbeMessage(actionId, actorBindingId, actorDigest) {
-  if (!isHexActionId(actionId) || !isHexActionId(actorBindingId) || !/^[0-9a-f]{64}$/.test(actorDigest || '')) {
-    throw new TypeError('invalid-liveness-probe');
-  }
-  return `RUNTIME_LIVENESS_PROBE/v1\nactor-binding:${actorBindingId}\nactor-digest:${actorDigest}\nruntime-action:${actionId}\nexpected-response:resumed-agent-id\nactor-action:none\nreply:none\nnext:wait`;
-}
-
-function claudeLivenessRecipientAbsentMessage(recipient) {
-  return `No agent named '${recipient}' is reachable.\nUse ListAgents to see everyone you can message.`;
-}
-
-function livenessProbePath(projectRoot, actionId, suffix) {
-  return path.join(registryRepoDir(projectRoot), 'claude-liveness-probes', actionId + suffix);
-}
-
-function reserveClaudeLivenessProbeBeforeDelivery(projectRoot, event) {
-  try {
-    const match = CLAUDE_LIVENESS_MESSAGE_RE.exec(event && event.message);
-    if (!match || match[3] !== event.actionId || typeof event.sessionId !== 'string' || event.sessionId.length === 0
-        || typeof event.toolUseId !== 'string' || event.toolUseId.length === 0
-        || typeof event.recipient !== 'string' || event.recipient.length === 0) {
-      return { ok: false, reason: 'liveness-probe-invalid' };
-    }
-    const read = readRegistryRecord(actionPathFor(projectRoot, event.actionId));
-    if (!read.ok || read.absent || !read.obj) return { ok: false, reason: 'liveness-action-absent' };
-    const action = read.obj;
-    const generation = readLiveSessionGenerationById(projectRoot, action.session_generation_id);
-    if (action.kind !== 'role-notify' || action.runtime !== 'claude-native'
-        || action.role !== event.recipient || !action.payload
-        || action.payload.teammate_name !== event.recipient || action.payload.message !== event.message
-        || action.payload.artifact_kind !== 'session-control'
-        || action.payload.artifact_ref !== `liveness:${match[1]}:${match[2]}`
-        || currentClockMsForRegistry() >= isoToMsForRegistry(action.expires_at)
-        || !generation.ok || generation.record.provider !== 'claude-hook'
-        || generation.record.runtime_session_key !== event.sessionId) {
-      return { ok: false, reason: 'liveness-action-mismatch' };
-    }
-    const actor = validateRoleActorBindingFor(projectRoot, match[1], action.role, action.worktree_id, action.plan_digest);
-    const state = readRoleBindingState(projectRoot, action.worktree_id, action.plan_digest,
-      roleProfileDigestFor(action.role), action.session_generation_id, action.role);
-    if (!actor.ok || actor.binding.session_generation_id !== action.session_generation_id
-        || !state.ok || state.state !== 'READY' || state.record.driver !== 'claude-sendmessage') {
-      return { ok: false, reason: 'liveness-actor-not-ready' };
-    }
-    const record = {
-      schema: CLAUDE_LIVENESS_PROBE_SCHEMA, action_id: action.action_id,
-      action_digest: sha256String(canonicalJSONStringify(action)),
-      actor_binding_id: match[1], actor_digest: match[2], role: action.role,
-      recipient: event.recipient,
-      input_digest: sha256String(canonicalJSONStringify({ recipient: event.recipient, message: event.message })),
-      session_digest: sha256String(event.sessionId), tool_use_digest: sha256String(event.toolUseId),
-      worktree_id: action.worktree_id, plan_digest: action.plan_digest,
-      session_generation_id: action.session_generation_id, reserved_at: nowIsoForRegistry(),
-      role_state_digest: sha256String(canonicalJSONStringify(state.record)),
-      role_state_updated_at: state.record.updated_at,
-    };
-    const destination = livenessProbePath(projectRoot, action.action_id, '.pending.json');
-    const secured = ensureSecureRegistryDir(path.dirname(destination));
-    if (!secured.ok) return { ok: false, reason: 'liveness-probe-dir-invalid' };
-    const lockDir = path.join(registryRepoDir(projectRoot), 'locks', 'claude-liveness-probe-' + action.action_id + '.lock');
-    const locked = withRegistryLock(lockDir, () => {
-      try { publishNoClobber(destination, Buffer.from(canonicalJSONStringify(record), 'utf8'), {}); }
-      catch {
-        const existing = readRegistryRecord(destination);
-        const comparableExisting = existing.ok && !existing.absent && existing.obj
-          ? Object.assign({}, existing.obj, { reserved_at: record.reserved_at }) : null;
-        if (!comparableExisting || canonicalJSONStringify(comparableExisting) !== canonicalJSONStringify(record)) {
-          return { ok: false, reason: 'liveness-probe-conflict' };
-        }
-        return { ok: true, actionId: action.action_id, idempotent: true };
-      }
-      return { ok: true, actionId: action.action_id, idempotent: false };
-    }, { maxWaitMs: 5000 });
-    return locked.ok && locked.value ? locked.value : { ok: false, reason: 'liveness-probe-lock-failed' };
-  } catch { return { ok: false, reason: 'liveness-probe-internal' }; }
-}
-
-function settleClaudeLivenessProbeOutcome(projectRoot, event) {
-  try {
-    const match = CLAUDE_LIVENESS_MESSAGE_RE.exec(event && event.message);
-    if (!match || match[3] !== event.actionId) return { ok: false, ignored: true };
-    const pendingRead = readRegistryRecord(livenessProbePath(projectRoot, event.actionId, '.pending.json'));
-    if (!pendingRead.ok || pendingRead.absent || !pendingRead.obj) return { ok: false, reason: 'liveness-probe-unreserved' };
-    const pending = pendingRead.obj;
-    const pendingKeys = ['action_digest','action_id','actor_binding_id','actor_digest','input_digest','plan_digest','recipient','reserved_at','role','role_state_digest','role_state_updated_at','schema','session_digest','session_generation_id','tool_use_digest','worktree_id'];
-    if (!hasExactKeys(pending, pendingKeys) || pending.schema !== CLAUDE_LIVENESS_PROBE_SCHEMA
-        || pending.action_id !== event.actionId || pending.actor_binding_id !== match[1]
-        || pending.actor_digest !== match[2] || pending.session_digest !== sha256String(event.sessionId)
-        || pending.tool_use_digest !== sha256String(event.toolUseId)
-        || pending.recipient !== event.recipient || pending.role !== event.recipient
-        || pending.input_digest !== sha256String(canonicalJSONStringify({ recipient: event.recipient, message: event.message }))) {
-      return { ok: false, reason: 'liveness-probe-correlation-mismatch' };
-    }
-    const actionRead = readRegistryRecord(actionPathFor(projectRoot, event.actionId));
-    const action = actionRead.ok && !actionRead.absent ? actionRead.obj : null;
-    const generation = action && readLiveSessionGenerationById(projectRoot, action.session_generation_id);
-    const reservedAtMs = isoToMsForRegistry(pending.reserved_at);
-    const nowMs = currentClockMsForRegistry();
-    if (!action || pending.action_digest !== sha256String(canonicalJSONStringify(action))
-        || action.kind !== 'role-notify' || action.runtime !== 'claude-native'
-        || action.role !== pending.role || action.worktree_id !== pending.worktree_id
-        || action.plan_digest !== pending.plan_digest
-        || action.session_generation_id !== pending.session_generation_id
-        || !action.payload || action.payload.teammate_name !== pending.recipient
-        || action.payload.message !== event.message
-        || !Number.isFinite(reservedAtMs) || reservedAtMs > nowMs
-        || !generation.ok || generation.record.provider !== 'claude-hook'
-        || generation.record.runtime_session_key !== event.sessionId) {
-      return { ok: false, reason: 'liveness-action-stale' };
-    }
-    const actionExpired = nowMs >= isoToMsForRegistry(action.expires_at);
-    const destination = livenessProbePath(projectRoot, event.actionId, '.outcome.json');
-    const lockDir = path.join(registryRepoDir(projectRoot), 'locks', 'claude-liveness-outcome-' + event.actionId + '.lock');
-    const locked = withRegistryLock(lockDir, () => {
-      const currentState = readRoleBindingState(projectRoot, pending.worktree_id, pending.plan_digest,
-        roleProfileDigestFor(pending.role), pending.session_generation_id, pending.role);
-      const currentActor = validateRoleActorBindingFor(
-        projectRoot, pending.actor_binding_id, pending.role, pending.worktree_id, pending.plan_digest,
-      );
-      if (!currentState.ok || !currentState.record || !['READY', 'WAITING', 'DEAD'].includes(currentState.state)
-          || !currentActor.ok || currentActor.binding.session_generation_id !== pending.session_generation_id) {
-        return { ok: false, reason: 'liveness-probe-stale' };
-      }
-      const stateUnchanged = sha256String(canonicalJSONStringify(currentState.record)) === pending.role_state_digest
-        && currentState.record.updated_at === pending.role_state_updated_at;
-      const resumedAgentId = event.response && event.response.resumedAgentId;
-      const exactRecipientAbsent = !actionExpired && event.success === true
-        && hasExactKeys(event.response, ['message', 'success'])
-        && event.response.success === false
-        && event.response.message === claudeLivenessRecipientAbsentMessage(pending.recipient);
-      const status = currentState.state === 'READY' && stateUnchanged && exactRecipientAbsent
-        ? 'ABSENT'
-        : (!actionExpired && currentState.state === 'READY' && stateUnchanged
-          && event.success === true && event.response && event.response.success === true
-          && typeof resumedAgentId === 'string' && sha256String(resumedAgentId) === pending.actor_digest
-          ? 'LIVE' : 'UNVERIFIED');
-      const observedAt = nowIsoForRegistry();
-      const outcome = {
-        schema: CLAUDE_LIVENESS_OUTCOME_SCHEMA, action_id: event.actionId,
-        actor_binding_id: pending.actor_binding_id, actor_digest: pending.actor_digest,
-        role: pending.role, worktree_id: pending.worktree_id, plan_digest: pending.plan_digest,
-        session_generation_id: pending.session_generation_id, status,
-        observed_at: observedAt,
-        expires_at: isoPlusSecondsForRegistry(observedAt, CLAUDE_LIVENESS_OUTCOME_TTL_SECONDS),
-      };
-      const existing = readRegistryRecord(destination);
-      let idempotent = false;
-      if (!existing.ok) return { ok: false, reason: 'liveness-outcome-read-failed' };
-      if (!existing.absent) {
-        const comparableExisting = existing.obj
-          ? Object.assign({}, existing.obj, { observed_at: outcome.observed_at, expires_at: outcome.expires_at }) : null;
-        const repairableAbsent = existing.obj && existing.obj.status === 'ABSENT' && exactRecipientAbsent
-          && currentState.state === 'DEAD';
-        if (!repairableAbsent
-            && (!comparableExisting || canonicalJSONStringify(comparableExisting) !== canonicalJSONStringify(outcome))) {
-          return { ok: false, reason: 'liveness-outcome-conflict' };
-        }
-        if (repairableAbsent) outcome.status = 'ABSENT';
-        idempotent = true;
-      } else {
-        try { publishNoClobber(destination, Buffer.from(canonicalJSONStringify(outcome), 'utf8'), {}); }
-        catch { return { ok: false, reason: 'liveness-outcome-publish-failed' }; }
-      }
-      if (outcome.status === 'ABSENT') {
-        if (currentState.state === 'READY' && stateUnchanged) {
-          const dead = transitionRoleBinding(
-            projectRoot, pending.worktree_id, pending.plan_digest, roleProfileDigestFor(pending.role),
-            pending.session_generation_id, pending.role, 'READY', 'DEAD', currentState.record, {},
-          );
-          if (!dead.ok) return { ok: false, reason: 'liveness-absent-transition-failed' };
-        } else if (currentState.state !== 'DEAD' || !idempotent) {
-          return { ok: false, reason: 'liveness-absent-stale' };
-        }
-      }
-      return { ok: true, status: outcome.status, idempotent };
-    }, { maxWaitMs: 5000 });
-    return locked.ok && locked.value ? locked.value : { ok: false, reason: 'liveness-outcome-lock-failed' };
-  } catch { return { ok: false, reason: 'liveness-outcome-internal' }; }
-}
-
-function findClaudeLivenessProbeState(projectRoot, expected) {
-  try {
-    const dir = path.join(registryRepoDir(projectRoot), 'actions');
-    let entries;
-    try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch (error) {
-      return error && error.code === 'ENOENT' ? { ok: true, status: 'NONE' } : { ok: false, reason: 'liveness-action-scan-failed' };
-    }
-    if (entries.length > CLAUDE_RESUME_HANDLE_SCAN_CAP) return { ok: false, reason: 'liveness-action-scan-cap' };
-    const active = [];
-    for (const entry of entries) {
-      if (entry.name.startsWith('.')) continue;
-      if (!entry.isFile() || !/^[0-9a-f]{32}\.json$/.test(entry.name)) {
-        return { ok: false, reason: 'liveness-action-entry-invalid' };
-      }
-      const read = readRegistryRecord(path.join(dir, entry.name));
-      if (!read.ok || read.absent || !read.obj) return { ok: false, reason: 'liveness-action-read-failed' };
-      const action = read.obj;
-      if (action.kind !== 'role-notify' || action.runtime !== 'claude-native' || action.role !== expected.role
-          || action.worktree_id !== expected.worktreeId || action.plan_digest !== expected.planDigest
-          || action.session_generation_id !== expected.generationId || !action.payload) continue;
-      const parsed = CLAUDE_LIVENESS_MESSAGE_RE.exec(action.payload.message);
-      if (!parsed || parsed[1] !== expected.actorBindingId || parsed[2] !== expected.actorDigest || parsed[3] !== action.action_id) continue;
-      const outcomeRead = readRegistryRecord(livenessProbePath(projectRoot, action.action_id, '.outcome.json'));
-      if (!outcomeRead.ok) return { ok: false, reason: 'liveness-outcome-read-failed' };
-      if (outcomeRead.absent) {
-        if (currentClockMsForRegistry() < isoToMsForRegistry(action.expires_at)) active.push({ status: 'PENDING', action });
-        continue;
-      }
-      const outcome = outcomeRead.obj;
-      const outcomeKeys = ['action_id','actor_binding_id','actor_digest','expires_at','observed_at','plan_digest','role','schema','session_generation_id','status','worktree_id'];
-      if (!outcome || !hasExactKeys(outcome, outcomeKeys)
-          || outcome.schema !== CLAUDE_LIVENESS_OUTCOME_SCHEMA || outcome.action_id !== action.action_id
-          || outcome.actor_binding_id !== expected.actorBindingId || outcome.actor_digest !== expected.actorDigest
-          || outcome.role !== expected.role || outcome.worktree_id !== expected.worktreeId
-          || outcome.plan_digest !== expected.planDigest || outcome.session_generation_id !== expected.generationId
-          || !['ABSENT','LIVE','UNVERIFIED'].includes(outcome.status)
-          || !isCanonicalIsoUtc(outcome.observed_at) || !isCanonicalIsoUtc(outcome.expires_at)) {
-        return { ok: false, reason: 'liveness-outcome-invalid' };
-      }
-      const observedAtMs = isoToMsForRegistry(outcome.observed_at);
-      const expiresAtMs = isoToMsForRegistry(outcome.expires_at);
-      const nowMs = currentClockMsForRegistry();
-      if (!Number.isFinite(observedAtMs) || !Number.isFinite(expiresAtMs)
-          || observedAtMs > nowMs || expiresAtMs - observedAtMs !== CLAUDE_LIVENESS_OUTCOME_TTL_SECONDS * 1000) {
-        return { ok: false, reason: 'liveness-outcome-chronology-invalid' };
-      }
-      if (outcome.status === 'LIVE' && nowMs < expiresAtMs) {
-        active.push({ status: 'LIVE', action });
-      }
-      // UNVERIFIED and expired LIVE are settled history, so a new bounded
-      // probe may be minted; neither is proof of absence.
-    }
-    if (active.length > 1) return { ok: false, reason: 'liveness-action-ambiguous' };
-    return active.length === 1 ? { ok: true, ...active[0] } : { ok: true, status: 'NONE' };
-  } catch { return { ok: false, reason: 'liveness-action-internal' }; }
-}
-
-function consumeNativeResumeNotificationBeforeDelivery(projectRoot, event) {
-  const actionId = event && event.actionId;
-  if (typeof projectRoot !== 'string' || !isHexActionId(actionId) || !event ||
-      typeof event.sessionId !== 'string' || typeof event.recipient !== 'string' ||
-      typeof event.message !== 'string' || typeof event.toolUseId !== 'string' || event.toolUseId.length === 0) {
-    return { ok: false, reason: 'invalid-arguments' };
-  }
-  const match = /^RUNTIME_RESUME\/v1\ncheckpoint:[0-9a-f]{64}\nresume-handle:([0-9a-f]{32})\nruntime-action:([0-9a-f]{32})\nhost-status:validated-and-consumed-before-delivery\nactor-action:none\nreply:none\nnext:wait-for-correlated-task$/.exec(event.message);
-  if (!match || match[2] !== actionId) return { ok: false, reason: 'resume-message-invalid' };
-  const handleId = match[1];
-  const lockKey = sha256String(canonicalJSONStringify(['native-resume-delivery', actionId, handleId]));
-  const lockDir = path.join(registryRepoDir(projectRoot), 'locks', 'native-resume-delivery-' + lockKey + '.lock');
-  const locked = withRegistryLock(lockDir, () => {
-    const actionRead = readRegistryRecord(actionPathFor(projectRoot, actionId));
-    if (!actionRead.ok || actionRead.absent || !actionRead.obj) return { ok: false, reason: 'action-unavailable' };
-    const action = actionRead.obj;
-    if (action.kind !== 'role-notify' || action.runtime !== 'claude-native' || !action.payload ||
-        action.payload.artifact_kind !== 'session-control' || action.payload.message !== event.message ||
-        action.payload.teammate_name !== event.recipient || action.role !== event.recipient) {
-      return { ok: false, reason: 'action-input-mismatch' };
-    }
-    if (currentClockMsForRegistry() >= isoToMsForRegistry(action.expires_at) ||
-        !readLiveSessionGenerationById(projectRoot, action.session_generation_id).ok) {
-      return { ok: false, reason: 'action-expired-or-generation-closed' };
-    }
-    const handleRead = readClaudeResumeHandle(projectRoot, handleId);
-    if (!handleRead.ok) return { ok: false, reason: 'resume-handle-unavailable' };
-    const handle = handleRead.record;
-    if (handle.role !== action.role || handle.worktree_id !== action.worktree_id ||
-        handle.plan_digest !== action.plan_digest || handle.session_generation_id !== action.session_generation_id ||
-        handle.session !== event.sessionId) return { ok: false, reason: 'resume-handle-scope-mismatch' };
-    if (isClaudeResumeHandleConsumed(projectRoot, handleId)) return { ok: false, reason: 'resume-delivery-replay' };
-    const actor = validateRoleActorBindingFor(
-      projectRoot, handle.actor_binding_id, handle.role, handle.worktree_id, handle.plan_digest,
-    );
-    const fence = readClaudeAuthorityFence(
-      projectRoot, computeClaudeAuthorityIdentityId(projectRoot, 'claude-hook', handle.session, handle.agent_id),
-    );
-    if (!actor.ok || actor.binding.session_generation_id !== action.session_generation_id ||
-        !fence.ok || !fence.absent) return { ok: false, reason: 'resume-actor-authority-invalid' };
-    const profileDigest = roleProfileDigestFor(action.role);
-    const state = readRoleBindingState(
-      projectRoot, action.worktree_id, action.plan_digest, profileDigest,
-      action.session_generation_id, action.role,
-    );
-    if (!state.ok || state.state !== 'WAITING' || !state.record || state.record.driver !== 'claude-sendmessage') {
-      return { ok: false, reason: 'resume-role-not-waiting' };
-    }
-    const consumedAt = nowIsoForRegistry();
-    try {
-      publishNoClobber(claudeResumeHandleConsumedMarkerPathFor(projectRoot, handleId), Buffer.from(canonicalJSONStringify({
-        schema: 'runtime/native-resume-delivery/v1', action_id: actionId, handle_id: handleId,
-        session_digest: sha256String(event.sessionId), tool_use_digest: sha256String(event.toolUseId),
-        consumed_at: consumedAt,
-      }), 'utf8'), {});
-    } catch {
-      return { ok: false, reason: 'resume-delivery-replay' };
-    }
-    const busy = transitionRoleBinding(
-      projectRoot, action.worktree_id, action.plan_digest, profileDigest,
-      action.session_generation_id, action.role, 'WAITING', 'BUSY', state.record, {},
-    );
-    if (!busy.ok) {
-      const reread = readRoleBindingState(
-        projectRoot, action.worktree_id, action.plan_digest, profileDigest,
-        action.session_generation_id, action.role,
-      );
-      if (!reread.ok || reread.state !== 'BUSY') return { ok: false, reason: 'resume-role-transition-failed' };
-    }
-    return { ok: true, actionId, handleId };
-  }, { maxWaitMs: 5000 });
-  return locked.ok && locked.value ? locked.value : { ok: false, reason: 'resume-delivery-lock-failed' };
-}
-
-/**
- * Settles a host-reported failure for an exact resume notification that was
- * already admitted by consumeNativeResumeNotificationBeforeDelivery(). The
- * immutable consumed marker is the correlation receipt: its action, session,
- * and tool-use digests must all match this failure observation before the
- * parked binding can move BUSY -> DEAD. A later ordinary ensure owns the
- * existing DEAD -> REHYDRATING recovery path.
- *
- * Re-delivery of the same failure after the binding is already DEAD is an
- * idempotent observation. Once another recovery transition has begun, the old
- * failure is stale and cannot mutate the replacement actor.
- */
-function settleNativeResumeNotificationFailure(projectRoot, event) {
-  const actionId = event && event.actionId;
-  if (typeof projectRoot !== 'string' || !isHexActionId(actionId) || !event ||
-      typeof event.sessionId !== 'string' || event.sessionId.length === 0 ||
-      typeof event.toolUseId !== 'string' || event.toolUseId.length === 0 ||
-      typeof event.recipient !== 'string' || typeof event.message !== 'string') {
-    return { ok: false, reason: 'invalid-arguments' };
-  }
-  const match = /^RUNTIME_RESUME\/v1\ncheckpoint:[0-9a-f]{64}\nresume-handle:([0-9a-f]{32})\nruntime-action:([0-9a-f]{32})\nhost-status:validated-and-consumed-before-delivery\nactor-action:none\nreply:none\nnext:wait-for-correlated-task$/.exec(event.message);
-  if (!match || match[2] !== actionId) return { ok: false, reason: 'resume-message-invalid' };
-  const handleId = match[1];
-  const lockKey = sha256String(canonicalJSONStringify(['native-resume-failure', actionId, handleId]));
-  const lockDir = path.join(registryRepoDir(projectRoot), 'locks', 'native-resume-failure-' + lockKey + '.lock');
-  const locked = withRegistryLock(lockDir, () => {
-    const actionRead = readRegistryRecord(actionPathFor(projectRoot, actionId));
-    if (!actionRead.ok || actionRead.absent || !actionRead.obj) return { ok: false, reason: 'action-unavailable' };
-    const action = actionRead.obj;
-    if (action.kind !== 'role-notify' || action.runtime !== 'claude-native' || !action.payload ||
-        action.payload.artifact_kind !== 'session-control' || action.payload.message !== event.message ||
-        action.payload.teammate_name !== event.recipient || action.role !== event.recipient) {
-      return { ok: false, reason: 'action-input-mismatch' };
-    }
-
-    const markerRead = readRegistryRecord(claudeResumeHandleConsumedMarkerPathFor(projectRoot, handleId));
-    if (!markerRead.ok || markerRead.absent || !markerRead.obj) {
-      return { ok: false, reason: 'resume-delivery-unconsumed' };
-    }
-    const marker = markerRead.obj;
-    if (!hasExactKeys(marker, ['action_id', 'consumed_at', 'handle_id', 'schema', 'session_digest', 'tool_use_digest']) ||
-        marker.schema !== 'runtime/native-resume-delivery/v1' || marker.action_id !== actionId ||
-        marker.handle_id !== handleId || marker.session_digest !== sha256String(event.sessionId) ||
-        marker.tool_use_digest !== sha256String(event.toolUseId) || !isCanonicalIsoUtc(marker.consumed_at)) {
-      return { ok: false, reason: 'resume-delivery-correlation-mismatch' };
-    }
-
-    const handleRead = readClaudeResumeHandle(projectRoot, handleId);
-    if (!handleRead.ok) return { ok: false, reason: 'resume-handle-unavailable' };
-    const handle = handleRead.record;
-    if (handle.role !== action.role || handle.worktree_id !== action.worktree_id ||
-        handle.plan_digest !== action.plan_digest || handle.session_generation_id !== action.session_generation_id ||
-        handle.session !== event.sessionId) return { ok: false, reason: 'resume-handle-scope-mismatch' };
-
-    const profileDigest = roleProfileDigestFor(action.role);
-    const state = readRoleBindingState(
-      projectRoot, action.worktree_id, action.plan_digest, profileDigest,
-      action.session_generation_id, action.role,
-    );
-    if (!state.ok || !state.record || state.record.driver !== 'claude-sendmessage') {
-      return { ok: false, reason: 'resume-role-state-invalid' };
-    }
-    if (state.state === 'DEAD') return { ok: true, actionId, handleId, idempotent: true };
-    if (state.state !== 'BUSY') return { ok: false, reason: 'resume-failure-stale' };
-    const dead = transitionRoleBinding(
-      projectRoot, action.worktree_id, action.plan_digest, profileDigest,
-      action.session_generation_id, action.role, 'BUSY', 'DEAD', state.record, {},
-    );
-    if (!dead.ok) return { ok: false, reason: 'resume-failure-transition-failed' };
-    return { ok: true, actionId, handleId, idempotent: false };
-  }, { maxWaitMs: 5000 });
-  return locked.ok && locked.value ? locked.value : { ok: false, reason: 'resume-failure-lock-failed' };
-}
+  const CLAUDE_RESUME_HANDLE_TTL_SECONDS = 3600;
 
 /**
  * Parks the exact correlated persistent claude-sendmessage role actor as
@@ -773,17 +382,11 @@ function findUniqueConsumedClaudeResumeHandleForBusyTarget(projectRoot, expected
   }
 }
 
+
   return Object.freeze({
     CLAUDE_RESUME_HANDLE_TTL_SECONDS,
-    CLAUDE_LIVENESS_PROBE_SCHEMA,
-    CLAUDE_LIVENESS_OUTCOME_SCHEMA,
-    claudeLivenessProbeMessage,
-    reserveClaudeLivenessProbeBeforeDelivery,
-    settleClaudeLivenessProbeOutcome,
-    findClaudeLivenessProbeState,
     parkClaudeResumeHandleForRoleActor,
     consumeClaudeResumeHandleForObservedActor,
-    settleNativeResumeNotificationFailure,
     findUniqueClaudeResumeHandleForTarget,
     findUniqueConsumedClaudeResumeHandleForBusyTarget,
   });

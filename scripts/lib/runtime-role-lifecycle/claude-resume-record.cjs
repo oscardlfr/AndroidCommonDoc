@@ -1,5 +1,4 @@
 'use strict';
-
 function createClaudeResumeRecord(deps) {
   const {
     CANONICAL_ROLES,
@@ -30,7 +29,6 @@ function createClaudeResumeRecord(deps) {
     sha256String,
     validateRoleActorBindingFor,
   } = deps;
-
 const CLAUDE_RESUME_HANDLE_SCHEMA = 'runtime/claude-resume-handle/v1';
 const CLAUDE_RESUME_HANDLE_KEYS = Object.freeze([
   'actor_binding_id', 'agent_id', 'binding_id', 'created_at', 'expiry',
@@ -44,7 +42,6 @@ const CLAUDE_SUPPORT_ROLE_TERMINAL_KEYS = Object.freeze([
   'plan_digest', 'role', 'schema', 'session_digest', 'session_generation_id',
   'worktree_id',
 ]);
-
 function claudeSupportRoleTerminalPathFor(projectRootOrRepoDescriptor, expected) {
   const key = sha256String(canonicalJSONStringify([
     expected.sessionGenerationId, expected.worktreeId, expected.planDigest, expected.role,
@@ -52,7 +49,6 @@ function claudeSupportRoleTerminalPathFor(projectRootOrRepoDescriptor, expected)
   ]));
   return path.join(registryRepoDir(projectRootOrRepoDescriptor), 'claude-support-role-terminals', key + '.json');
 }
-
 function readClaudeSupportRoleTerminal(projectRoot, expected) {
   const read = readRegistryRecord(claudeSupportRoleTerminalPathFor(projectRoot, expected));
   if (!read.ok) return { ok: false, reason: 'terminal-read-failed' };
@@ -75,7 +71,6 @@ function readClaudeSupportRoleTerminal(projectRoot, expected) {
   }
   return { ok: true, absent: false, record };
 }
-
 /** Persist the scope-to-fence join before best-effort raw trace cleanup. */
 function publishClaudeSupportRoleTerminal(projectRoot, event) {
   try {
@@ -161,7 +156,6 @@ function publishClaudeSupportRoleTerminal(projectRoot, event) {
     return { ok: false, reason: 'terminal-publish-failed' };
   }
 }
-
 /**
  * Reconciles the durable READY/WAITING/BUSY projection with the exact
  * hook-observed Claude actor identity.  RoleBinding is intentionally not an
@@ -202,7 +196,6 @@ function classifyClaudeSupportRoleLiveness(projectRoot, expected) {
     if (!terminal.absent) {
       return { ok: true, status: 'ABSENT', actorBindingId: terminal.record.actor_binding_id };
     }
-
     const traceDir = path.join(registryRepoDir(projectRoot), 'claude-id01-traces');
     let entries;
     try { entries = fs.readdirSync(traceDir, { withFileTypes: true }); }
@@ -283,15 +276,12 @@ function classifyClaudeSupportRoleLiveness(projectRoot, expected) {
     return { ok: false, status: 'INVALID', reason: 'actor-liveness-internal' };
   }
 }
-
 function claudeResumeHandlePathFor(projectRootOrRepoDescriptor, handleId) {
   return path.join(registryRepoDir(projectRootOrRepoDescriptor), 'claude-resume-handles', handleId + '.json');
 }
-
 function claudeResumeHandleConsumedMarkerPathFor(projectRootOrRepoDescriptor, handleId) {
   return claudeResumeHandlePathFor(projectRootOrRepoDescriptor, handleId) + '.consumed';
 }
-
 function validateClaudeResumeHandleRecordShape(record, handleId) {
   if (!isHexActionId(handleId)) return { ok: false, reason: 'INVALID' };
   if (!record || !hasExactKeys(record, CLAUDE_RESUME_HANDLE_KEYS)) return { ok: false, reason: 'INVALID' };
@@ -312,7 +302,6 @@ function validateClaudeResumeHandleRecordShape(record, handleId) {
   }
   return { ok: true, record };
 }
-
 function validateClaudeResumeHandleRecord(record, handleId) {
   const shaped = validateClaudeResumeHandleRecordShape(record, handleId);
   if (!shaped.ok) return shaped;
@@ -323,7 +312,6 @@ function validateClaudeResumeHandleRecord(record, handleId) {
   if (nowMs >= expiryMs) return { ok: false, reason: 'INVALID' };
   return { ok: true, record };
 }
-
 function readClaudeResumeHandle(projectRootOrRepoDescriptor, handleId) {
   if (!isHexActionId(handleId)) return { ok: false, reason: 'INVALID' };
   let read;

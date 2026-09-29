@@ -1,6 +1,5 @@
 #!/usr/bin/env node
 'use strict';
-
 /**
  * runtime-role-lifecycle.cjs -- stable lifecycle compatibility facade and composition
  * root. It owns the frozen CLI/CommonJS ABI while cohesive factories under
@@ -11,7 +10,6 @@
  * host-action renderer/parser frozen at PLAN.md ~L578, for direct import by
  * `context-provider-gate.js` (no model reimplements quoting).
  */
-
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
@@ -25,6 +23,8 @@ const { createClaudeId01Startup } = require('./runtime-role-lifecycle/claude-id0
 const { createClaudeId01Observations } = require('./runtime-role-lifecycle/claude-id01-observations.cjs');
 const { createClaudePeerBinding } = require('./runtime-role-lifecycle/claude-peer-binding.cjs');
 const { createClaudeResumeRecord } = require('./runtime-role-lifecycle/claude-resume-record.cjs');
+const { createClaudeLivenessProbe } = require('./runtime-role-lifecycle/claude-liveness-probe.cjs');
+const { createClaudeResumeDelivery } = require('./runtime-role-lifecycle/claude-resume-delivery.cjs');
 const { createClaudeResumeLifecycle } = require('./runtime-role-lifecycle/claude-resume-lifecycle.cjs');
 const { createClaudeOneShotRecord } = require('./runtime-role-lifecycle/claude-one-shot-record.cjs');
 const { createClaudeOneShotOperations } = require('./runtime-role-lifecycle/claude-one-shot-operations.cjs');
@@ -61,6 +61,7 @@ const { createSupervisorLifecycleOwner } = require('./runtime-role-lifecycle/sup
 const { createSupervisorBatchMint } = require('./runtime-role-lifecycle/supervisor-batch-mint.cjs');
 const { createTeamEnsure } = require('./runtime-role-lifecycle/team-ensure.cjs');
 const { createResumeCheckpoint } = require('./runtime-role-lifecycle/resume-checkpoint.cjs');
+const { createEnsureActiveRouting } = require('./runtime-role-lifecycle/ensure-active-routing.cjs');
 const { createEnsureHandler } = require('./runtime-role-lifecycle/ensure-handler.cjs');
 const { createCliNotifyHandler } = require('./runtime-role-lifecycle/cli-notify-handler.cjs');
 const { createCliTerminalize } = require('./runtime-role-lifecycle/cli-terminalize.cjs');
@@ -79,7 +80,6 @@ const { createStructuralValidators } = require('./runtime-role-lifecycle/structu
 const { createM7Rendezvous } = require('./runtime-role-lifecycle/m7-rendezvous.cjs');
 const { createRetainedSupervisorReconciliation } = require('./runtime-role-lifecycle/retained-supervisor-reconciliation.cjs');
 const { createManagedLifecycleGrant } = require('./runtime-role-lifecycle/managed-lifecycle-grant.cjs');
-
 // WP3: reuse the sibling module's proven fd-bound durability primitives (no-clobber
 // publish, fd-bound classify-read, digest helpers, git identity) rather than a second
 // hand-written reimplementation of this exact security-critical logic.
@@ -90,7 +90,6 @@ const {
   windowsPrivateDirectoryAcl,
   DURABLE_ABSENT, DURABLE_PENDING, DURABLE_PRESENT,
 } = rc;
-
 // Canonical role registry: union of the default policy's support_plane +
 // phase_scoped_roles and the default routing registry's routes keys
 // (PLAN.md ~L95-97, ~L1099-1108).
@@ -106,13 +105,10 @@ const CANONICAL_ROLES = Object.freeze([
   'quality-gater',
   'planner',
 ]);
-
 // Bounded scan cap shared by every MainOrchestratorBinding/v1 hook-directory scan
 // (orchestrator-role-bindings.cjs and execution-claim.cjs both scan the SAME
 // orchestrator-bindings/ directory) -- owned here so neither carries its own copy.
 const MAIN_ORCHESTRATOR_BINDING_HOOK_SCAN_CAP = 1024;
-
-
 // Production argv never accepts a caller-supplied session generation, binding/teammate/agent
 // ID, PID, team name, policy/registry/bootstrap path, prompt, or runtime handle (PLAN.md
 // ~L150). `--lifecycle-binding` is deliberately NOT forbidden (SUBCOMMAND_SPEC recognizes it
@@ -133,7 +129,6 @@ const FORBIDDEN_FLAGS = Object.freeze([
   '--prompt',
   '--runtime-handle',
 ]);
-
 // WP3 runtime identity, host-private registry, and session-generation
 // implementations live in bounded factories. The facade remains the sole
 // composition root so mutable authority state is created exactly once.
@@ -158,7 +153,6 @@ const {
 } = policySchema;
 const posixDirect = createPosixDirect({});
 const { renderPosixDirect, parsePosixDirect } = posixDirect;
-
 const runtimeIdentity = createRuntimeIdentityModule({
   sha256String, sha256File, gitRevParse, realpathOrSelf, isTestCapability, CANONICAL_ROLES,
   // __dirname is intentionally the facade's own dir; computed inside the module it
@@ -178,11 +172,9 @@ const {
   roleProfileDigestFor,
   resolveCanonicalRoleProfile,
 } = runtimeIdentity;
-
 function s16ConsultationApi() {
   return require('./runtime-consultation.cjs');
 }
-
 let sessionGeneration;
 const privateRegistry = createPrivateRegistryModule({
   computePrincipalId,
@@ -209,8 +201,6 @@ const m7Rendezvous = createM7Rendezvous({
   fs, path, os, realpathOrSelf, registryBaseDir, coordinationRootPathFor, isTestCapability,
 });
 const { m7SleepSync, resolveSafeM7RendezvousDir, testM7Rendezvous } = m7Rendezvous;
-
-
 sessionGeneration = createSessionGenerationModule({
   canonicalJSONStringify,
   hasExactKeys,
@@ -254,7 +244,6 @@ const REQUESTER_BINDING_KEYS_V2 = Object.freeze(
   REQUESTER_BINDING_KEYS.concat(['session_generation_id']).sort()
 );
 const REQUESTER_BINDING_SCAN_CAP = 1024;
-
 const orchestratorRoleBindings = createOrchestratorRoleBindings({
   path, fs, crypto, registryRepoDir, readRegistryRecord, writeRegistryRecordReplace,
   publishNoClobber, canonicalJSONStringify, resolveSessionGeneration, peekSessionGeneration,
@@ -273,14 +262,12 @@ const {
   CLAUDE_AUTHORITY_FENCE_REASON_ENUM, resolveM7RepoId, computeClaudeAuthorityIdentityId,
   claudeAuthorityFencePathFor, readClaudeAuthorityFence, publishClaudeAuthorityFence,
 } = orchestratorRoleBindings;
-
 function retainedSupervisorBridgeApi() {
   // Lazy by construction: runtime-bridge-codex.cjs imports this module at
   // top level. Requiring it only after this module has fully initialized
   // avoids a circular partial-export authority path.
   return require('./runtime-bridge-codex.cjs');
 }
-
 /**
  * CLI entry point. Never throws: any unexpected internal error is caught and
  * reported as one valid rc7 envelope rather than an uncaught-exception stack trace,
@@ -328,7 +315,6 @@ const {
   ROLE_LIFECYCLE_ACTION_KEYS_SORTED, SUPERVISOR_START_PAYLOAD_KEYS_SORTED,
   validateSupervisorStartAction, buildSupervisorStopOwnedPayload,
 } = lifecycleActionPayloads;
-
 // SupervisorExecutionClaim/v1, RoleSpawnExecutionClaim/v2, ClaudeAgentSpawnReservation/v1,
 // and direct-role-host admission -- see each module's own header comment.
 const executionClaim = createExecutionClaimModule({
@@ -350,7 +336,6 @@ const {
   findLiveMainOrchestratorBindingForSession, getOrCreateMainOrchestratorBindingForSession,
   mintSupervisorExecutionClaimForSession, validateAndConsumeExecutionClaim,
 } = executionClaim;
-
 const claudeAgentSpawnReservation = createClaudeAgentSpawnReservation({
   path, crypto, registryRepoDir, readRegistryRecord, ensureSecureRegistryDir, publishNoClobber,
   canonicalJSONStringify, isHexActionId, isHexDigest64, isoToMsForRegistry, currentClockMsForRegistry,
@@ -363,7 +348,6 @@ const {
   validateAndConsumeClaudeAgentSpawnReservation, peekValidateClaudeAgentSpawnReservation,
   consumeClaudeAgentSpawnReservationMarker,
 } = claudeAgentSpawnReservation;
-
 const roleSpawnExecutionClaim = createRoleSpawnExecutionClaim({
   path, crypto, registryRepoDir, readRegistryRecord, ensureSecureRegistryDir, publishNoClobber,
   canonicalJSONStringify, sha256String, isHexDigest64, isoToMsForRegistry, currentClockMsForRegistry,
@@ -376,7 +360,6 @@ const {
   roleSpawnExecutionClaimPathFor, roleSpawnExecutionClaimConsumedMarkerPathFor,
   mintRoleSpawnExecutionClaim, validateAndConsumeRoleSpawnExecutionClaim,
 } = roleSpawnExecutionClaim;
-
 const lifecycleArgv = createLifecycleArgv({
   Buffer, CANONICAL_ROLES, FORBIDDEN_FLAGS, hasExactKeys,
 });
@@ -386,7 +369,6 @@ const {
   decodeMixedReviewIntent, OPERATION_KEYS, decodeBase64urlClosedJson,
   decodeRootConsultIntent, decodeRootSourceIntent,
 } = lifecycleArgv;
-
 // s16ContextResolution composes further below (needs retainedSupervisorBridgeApi/
 // readRoleBindingState, produced later); its pure s16CoordinationRelativeRef is
 // needed here first, via a forward-declared thunk, never a require() cycle.
@@ -425,7 +407,6 @@ const {
   decodeRootSourceBootstrapIntentForBinding, validateRootSourceActionEnvelope,
   validateRootSourceAction,
 } = rootSourceContract;
-
 const rootSourceReservation = createRootSourceReservation({
   ...rootSourceContract,
   Buffer, actionPathFor, canonicalJSONStringify, currentClockMsForRegistry,
@@ -437,7 +418,6 @@ const {
   mintRootSourceReservation, validateRootSourceReservationRecord,
   validateAndConsumeRootSourceReservation,
 } = rootSourceReservation;
-
 const rootSourceBindingRecords = createRootSourceBindingRecords({
   ...rootSourceContract,
   path, actionPathFor, computeClaudeAuthorityIdentityId, currentClockMsForRegistry,
@@ -451,7 +431,6 @@ const {
   validateRootSourceBindingFor, validateRootSourceIngressRecord,
   validateRootSourceRetirementRecord,
 } = rootSourceBindingRecords;
-
 const rootSourceLiveIndex = createRootSourceLiveIndex({
   ...rootSourceContract,
   ...rootSourceReservation,
@@ -469,7 +448,6 @@ const {
   findLiveRootSourceActionsForRole, findLiveRootSourceReservationsForRole,
   publishRootIngress,
 } = rootSourceLiveIndex;
-
 const lifecycleCommandGrant = createLifecycleCommandGrant({
   path, Buffer, CANONICAL_ROLES, MAIN_BINDING_KEYS, ROLE_ACTOR_BINDING_KEYS,
   ROLE_ACTOR_BINDING_SCHEMA, canonicalJSONStringify, crypto,
@@ -486,7 +464,6 @@ const {
   grantArraysEqual, isWellFormedGrantRole, grantRoleMatchesExpectation,
   mintLifecycleCommandGrant, validateAndConsumeLifecycleCommandGrant,
 } = lifecycleCommandGrant;
-
 const claudeOneShotOperations = createClaudeOneShotOperations({
   fs, path, registryRepoDir,
 });
@@ -495,7 +472,6 @@ const {
   CLAUDE_ONE_SHOT_BINDING_RETIREMENT_REASON_ENUM,
   checkClaudeAgentCapabilityAvailable,
 } = claudeOneShotOperations;
-
 const claudeOneShotRecord = createClaudeOneShotRecord({
   CANONICAL_ROLES, CLAUDE_AUTHORITY_IDENTITY_SCHEMA,
   admitClaudeAuthorityOperation: (...args) => admitClaudeAuthorityOperation(...args),
@@ -521,7 +497,6 @@ const {
   consumeClaudeAgentSpawnReservationAndCreateOneShotBinding,
   validateClaudeOneShotBindingFor,
 } = claudeOneShotRecord;
-
 // requesterBinding is composed further below (it needs classifyClaudeAuthorityForIdentity,
 // produced BY this classifier, and checkClaudeId01ProofComplete, produced after it) --
 // broken via a forward-declared thunk, never a runtime require() cycle.
@@ -549,7 +524,6 @@ const {
   CLAUDE_AUTHORITY_ONE_SHOT_SIDECAR_RE, isWellFormedClaudeAuthorityIdentity,
   scanClaudeAuthorityFamily, classifyClaudeAuthorityForIdentity,
 } = claudeAuthorityClassifier;
-
 const authorityTransactions = createAuthorityTransactions({
   fs, path, CLAUDE_ONE_SHOT_BINDING_SCHEMA_V2, REQUESTER_BINDING_SCHEMA_V2,
   ROOT_SOURCE_BINDING_SCHEMA_V2, computeRepoId, coordinationRootPathFor,
@@ -562,7 +536,6 @@ const {
   checkRootSourceTransactionTerminalAbsent, checkOneShotTransactionTerminalAbsentAtTxnDir,
   checkOneShotTransactionTerminalAbsent, checkAuthorityOperationTransactionTerminal,
 } = authorityTransactions;
-
 const claudeAuthorityAdmission = createClaudeAuthorityAdmission({
   canonicalJSONStringify, checkAuthorityOperationTransactionTerminal,
   checkOneShotTransactionTerminalAbsent, classifyClaudeAuthorityForIdentity,
@@ -573,7 +546,6 @@ const {
   checkClaudeAuthorityClassificationAgainstExpected, admitClaudeAuthorityOperation,
   isValidClaudeAuthorityAdmissionCapability, writeGuardedByClaudeAuthorityAdmission,
 } = claudeAuthorityAdmission;
-
 const rootSourceBindingAdmission = createRootSourceBindingAdmission({
   ...rootSourceContract,
   ...rootSourceReservation,
@@ -587,7 +559,6 @@ const rootSourceBindingAdmission = createRootSourceBindingAdmission({
   writeGuardedByClaudeAuthorityAdmission,
 });
 const { createRootSourceBinding, admitAndCreateRootSourceBinding } = rootSourceBindingAdmission;
-
 const roleCommandGrant = createRoleCommandGrant({
   path, Buffer, CLAUDE_AUTHORITY_IDENTITY_SCHEMA,
   CLAUDE_ONE_SHOT_BINDING_KEYS, CLAUDE_ONE_SHOT_BINDING_KEYS_V2,
@@ -706,7 +677,6 @@ const {
   resolveClaudeId01Scope,
   resolveClaudeId01ScopeReadOnly,
 } = claudeId01Scope;
-
 const claudeId01Trace = createClaudeId01Trace({
   ...claudeId01Scope,
   fs, path, crypto, CANONICAL_ROLES, SESSION_GENERATION_KEYS,
@@ -736,7 +706,6 @@ const {
   maybePromoteClaudeId01Capability,
   writeClaudeId01SummaryFromEvents,
 } = claudeId01Trace;
-
 const claudeId01Startup = createClaudeId01Startup({
   ...claudeId01Scope,
   fs, path, CANONICAL_ROLES, GRANT_KEYS, LIFECYCLE_GRANT_SCHEMA,
@@ -792,7 +761,6 @@ const {
   requesterBindingPathFor, requesterBindingLookupLockDirFor, requesterBindingContentionBudgetMs,
   createRequesterBinding, validateRequesterBindingFor,
 } = requesterBinding;
-
 const claudeId01Observations = createClaudeId01Observations({
   ...claudeId01Scope,
   ...claudeId01Trace,
@@ -808,7 +776,6 @@ const {
   preflightClaudeId01TraceForSession,
   deleteClaudeId01TraceForSession,
 } = claudeId01Observations;
-
 const claudePeerBinding = createClaudePeerBinding({
   ACTION_KIND_ENUM, ACTION_RUNTIME_ENUM, CANONICAL_ROLES, ROLE_ACTOR_BINDING_KEYS,
   ROLE_ACTOR_BINDING_SCHEMA, actionPathFor, canonicalJSONStringify,
@@ -840,7 +807,6 @@ const {
   findUniqueClaudePeerBindingForTarget,
   ensureClaudePeerBindingForObservedActor,
 } = claudePeerBinding;
-
 const claudeResumeRecord = createClaudeResumeRecord({
   CANONICAL_ROLES, canonicalJSONStringify, CLAUDE_STARTUP_ACTOR_KEYS, CLAUDE_STARTUP_ACTOR_SCHEMA,
   claudeStartupActorPathFor, computeClaudeAuthorityIdentityId, computeWorktreeId,
@@ -865,29 +831,39 @@ const {
   classifyClaudeSupportRoleLiveness,
   publishClaudeSupportRoleTerminal,
 } = claudeResumeRecord;
-
-const claudeResumeLifecycle = createClaudeResumeLifecycle({
+const claudeLivenessProbe = createClaudeLivenessProbe({
+  actionPathFor, CLAUDE_RESUME_HANDLE_SCAN_CAP, canonicalJSONStringify, currentClockMsForRegistry,
+  ensureSecureRegistryDir, fs, hasExactKeys, isCanonicalIsoUtc, isHexActionId,
+  isoPlusSecondsForRegistry, isoToMsForRegistry, nowIsoForRegistry, path, publishNoClobber,
+  readLiveSessionGenerationById, readRegistryRecord, readRoleBindingState, registryRepoDir,
+  roleProfileDigestFor, sha256String, transitionRoleBinding, validateRoleActorBindingFor, withRegistryLock,
+});
+const {
+  CLAUDE_LIVENESS_PROBE_SCHEMA, CLAUDE_LIVENESS_OUTCOME_SCHEMA, claudeLivenessProbeMessage,
+  reserveClaudeLivenessProbeBeforeDelivery, settleClaudeLivenessProbeOutcome, findClaudeLivenessProbeState,
+} = claudeLivenessProbe;
+const claudeResumeDelivery = createClaudeResumeDelivery({
   ...claudeResumeRecord,
   actionPathFor, canonicalJSONStringify, computeClaudeAuthorityIdentityId, currentClockMsForRegistry,
-  ensureSecureRegistryDir, findClaudeResumeHandlesForActor, fs, generateActionId,
-  hasExactKeys, isCanonicalIsoUtc, isHexActionId, isHexCsprng32, isoPlusSecondsForRegistry,
-  isoToMsForRegistry, nowIsoForRegistry, path, publishNoClobber,
-  readClaudeAuthorityFence, readLiveSessionGenerationById, readRegistryRecord, readRoleBindingState,
-  registryRepoDir, resolveClaudeResumeRoleActorScope, roleProfileDigestFor,
-  sha256String, transitionRoleBinding, validateClaudePeerExpected,
+  hasExactKeys, isCanonicalIsoUtc, isHexActionId, isoToMsForRegistry, nowIsoForRegistry, path,
+  publishNoClobber, readClaudeAuthorityFence, readLiveSessionGenerationById, readRegistryRecord,
+  readRoleBindingState, registryRepoDir, roleProfileDigestFor, sha256String, transitionRoleBinding,
+  validateRoleActorBindingFor, withRegistryLock,
+});
+const { consumeNativeResumeNotificationBeforeDelivery, settleNativeResumeNotificationFailure } = claudeResumeDelivery;
+const claudeResumeLifecycle = createClaudeResumeLifecycle({
+  ...claudeResumeRecord,
+  canonicalJSONStringify, computeClaudeAuthorityIdentityId, consumeNativeResumeNotificationBeforeDelivery,
+  currentClockMsForRegistry, ensureSecureRegistryDir, fs, generateActionId, hasExactKeys,
+  isCanonicalIsoUtc, isHexCsprng32, isoPlusSecondsForRegistry, isoToMsForRegistry, nowIsoForRegistry,
+  path, publishNoClobber, readClaudeAuthorityFence, readRegistryRecord, readRoleBindingState,
+  registryRepoDir, roleProfileDigestFor, sha256String, transitionRoleBinding, validateClaudePeerExpected,
   validateRoleActorBindingFor, withRegistryLock,
 });
 const {
   CLAUDE_RESUME_HANDLE_TTL_SECONDS,
-  CLAUDE_LIVENESS_PROBE_SCHEMA,
-  CLAUDE_LIVENESS_OUTCOME_SCHEMA,
-  claudeLivenessProbeMessage,
-  reserveClaudeLivenessProbeBeforeDelivery,
-  settleClaudeLivenessProbeOutcome,
-  findClaudeLivenessProbeState,
   parkClaudeResumeHandleForRoleActor,
   consumeClaudeResumeHandleForObservedActor,
-  settleNativeResumeNotificationFailure,
   findUniqueClaudeResumeHandleForTarget,
   findUniqueConsumedClaudeResumeHandleForBusyTarget,
 } = claudeResumeLifecycle;
@@ -901,7 +877,6 @@ const directRoleHostAdmission = createDirectRoleHostAdmission({
   ROLE_ACTOR_BINDING_TTL_CEILING_SECONDS, validateAndConsumeRoleSpawnExecutionClaim,
 });
 const { admitDirectRoleHostStartup, directRoleHostAdmissionPathFor } = directRoleHostAdmission;
-
 // mixedReviewVerdictPathFor is a genuine mutual need between root-consult-records.cjs
 // and prep-publication-records.cjs -- broken via a forward-declared thunk, never a
 // require() cycle (the former's own body never calls back into the latter).
@@ -923,7 +898,6 @@ const {
   listPendingMixedReviewIntentsForRole, findRootConsultIntentByRequestId,
   MIXED_REVIEW_SUBJECT_MAX_BYTES,
 } = rootConsultRecords;
-
 const p2SubjectBundle = createP2SubjectBundle({
   path, rc, hasExactKeys, isHexCsprng32, isHexDigest64, isCanonicalIsoUtc, canonicalJSONStringify,
   discoverPlan, computeRepoId, computeWorktreeId, gitRevParse, findLiveMainOrchestratorBindingForScope,
@@ -935,7 +909,6 @@ const {
   P2_SUBJECT_BUNDLE_SEED_KEYS, P2_SEAL_REQUIRED_ROLES, isSafeP2SubjectPath,
   validateP2SubjectBundleSeedRecord, sealP2SubjectBundleInput,
 } = p2SubjectBundle;
-
 prepPublicationRecords = createPrepPublicationRecords({
   path, registryRepoDir, isHexCsprng32, isHexDigest64, isCanonicalIsoUtc,
   P2_SUBJECT_BUNDLE_SEED_ROLES, isSafeP2SubjectPath,
@@ -948,7 +921,6 @@ const {
   prepPublicationIntentPathFor, prepPublicationReceiptPathFor, rootConsultReviewPathFor,
   mixedReviewVerdictPathFor, mixedReviewSubjectPathFor, prepPublicationPredecessorRole,
 } = prepPublicationRecords;
-
 const mixedReviewRecords = createMixedReviewRecords({
   Buffer, isHexCsprng32, isHexDigest64, isCanonicalIsoUtc, isSafeP2SubjectPath, hasExactKeys,
   sha256String, canonicalJSONStringify, validateRootConsultIntentRecord, readRootConsultIntent,
@@ -964,7 +936,6 @@ const {
   MIXED_REVIEW_READBACK_SCHEMA, MIXED_REVIEW_READBACK_KEYS, buildMixedReviewReadbackReceipt,
   readMixedReviewReadback,
 } = mixedReviewRecords;
-
 s16ContextResolution = createS16ContextResolution({
   path, OPERATION_KEYS, validateAndConsumeLifecycleCommandGrant, attachDerivedSessionGenerationId,
   discoverPlan, resolvePolicyPair, computeWorktreeId, peekSessionGeneration,
@@ -975,7 +946,6 @@ const {
   makeOperation, s16CoordinationRelativeRef, s16ResolveMainContext,
   s16ResolveRetainedPair, s16ResolveMixedReviewPair,
 } = s16ContextResolution;
-
 // Ordered so every module composes strictly after the sibling exports its own
 // deps require (no thunks needed here -- that pair lives further up).
 const teamEnsure = createTeamEnsure({
@@ -1023,7 +993,6 @@ const {
   findLiveResumeHandlesForLifecycleRole, findResumeCheckpointActionForRole,
   executeResumeCheckpointEnsure, quarantineViaRehydrating, RESUME_CHECKPOINT_REF_RE,
 } = resumeCheckpoint;
-
 const supervisorBatchMint = createSupervisorBatchMint({
   path, fs, crypto, registryRepoDir, canonicalJSONStringify, sha256String, currentClockMsForRegistry,
   isoToMsForRegistry, nowIsoForRegistry, futureIsoForRegistry, computeCoordinationRootIdFromPath,
@@ -1146,7 +1115,15 @@ const retainedSupervisorReconciliation = createRetainedSupervisorReconciliation(
   readRegistryRecord, actionPathFor, terminalizeSupervisorStartAction,
 });
 const { codexAppServerStartupEligible, reconcileRetainedSupervisorForEnsure } = retainedSupervisorReconciliation;
-
+const ensureActiveRouting = createEnsureActiveRouting({
+  actionForEnvelope, buildRoleNotifyPayload, canonicalJSONStringify, claudeLivenessProbeMessage,
+  codexAppServerStartupEligible, computeRepoId, effectiveActionTtlSeconds, findClaudeLivenessProbeState,
+  futureIsoForRegistry, generateActionId, hasRegisteredValidatedDiskConsumer, isTestCapability,
+  mintRoleLifecycleAction, path, registryRepoDir, resolveHostOperationForAction,
+  resolveSupervisorStartability, roleBindingForEnvelope, selectLifecycleEligibleDriverForRole,
+  sha256String, transitionRoleBindingAtomicViaWaypoint, withRegistryLock,
+});
+const { groupEnsurePendingSpawns, resolveOrMintLivenessProbe } = ensureActiveRouting;
 const ensureHandler = createEnsureHandler({
   path, SUBCOMMAND_SPEC, parseSubcommandArgv, usageError, invalidError, unavailableError, emitAndExit,
   makeResult, RC, hasUniqueValues, CANONICAL_ROLES, resolvePolicyPair, RESUME_CHECKPOINT_REF_RE,
@@ -1162,11 +1139,10 @@ const ensureHandler = createEnsureHandler({
   roleBindingForEnvelope, mintSupervisorBatchUnderTransaction, computeRepoId, generateActionId,
   buildRoleSpawnPayload, buildRoleNotifyPayload, claudeReadyBootstrapMessageFor, effectiveActionTtlSeconds, futureIsoForRegistry,
   mintRoleLifecycleAction, canonicalJSONStringify, registryRepoDir, withRegistryLock,
+  groupEnsurePendingSpawns, resolveOrMintLivenessProbe,
 });
 const { handleEnsure } = ensureHandler;
-
 // ── CLI entry point ──────────────────────────────────────────────────────────────
-
 const cliDispatch = createCliDispatch({
   usageError, makeResult, RC, emitAndExit,
   handleProbe, handleEnsure, handleNotify, handleActionFailed, handleReady, handleWaitReady,
@@ -1181,8 +1157,6 @@ const managedLifecycleGrant = createManagedLifecycleGrant({
   canonicalJSONStringify,
 });
 const { resolveOrMintManagedLifecycleGrant } = managedLifecycleGrant;
-
-
 module.exports = {
   renderPosixDirect,
   parsePosixDirect,
@@ -1348,17 +1322,8 @@ admitAndCreateRootSourceBinding,
   claudeResumeHandlePathFor,
   parkClaudeResumeHandleForRoleActor,
   consumeClaudeResumeHandleForObservedActor,
-  settleNativeResumeNotificationFailure,
   findUniqueClaudeResumeHandleForTarget,
   findUniqueConsumedClaudeResumeHandleForBusyTarget,
-  classifyClaudeSupportRoleLiveness,
-  publishClaudeSupportRoleTerminal,
-  CLAUDE_LIVENESS_PROBE_SCHEMA,
-  CLAUDE_LIVENESS_OUTCOME_SCHEMA,
-  claudeLivenessProbeMessage,
-  reserveClaudeLivenessProbeBeforeDelivery,
-  settleClaudeLivenessProbeOutcome,
-  findClaudeLivenessProbeState,
   // Section C parity (item 4): the one closed-shape/range/chronology validator for a completed attestation, lazily required by runtime-consultation.cjs's isClaudeId01AttestationWellFormedLocal instead of a second, drifting copy.
   isClaudeId01AttestationWellFormed,
   ROLE_COMMAND_GRANT_SCHEMA,
@@ -1495,7 +1460,20 @@ ROLE_BINDING_ALLOWED_KEYS,
   readClaudeAuthorityFence,
   publishClaudeAuthorityFence,
 };
-
+// Private in-process seams for host hooks. These are deliberately excluded
+// from the stable enumerable CommonJS ABI; configurability preserves existing
+// hook tests that temporarily replace a seam and then restore it.
+Object.defineProperties(module.exports, {
+  settleNativeResumeNotificationFailure: { value: settleNativeResumeNotificationFailure, enumerable: false, writable: true, configurable: true },
+  classifyClaudeSupportRoleLiveness: { value: classifyClaudeSupportRoleLiveness, enumerable: false, writable: true, configurable: true },
+  publishClaudeSupportRoleTerminal: { value: publishClaudeSupportRoleTerminal, enumerable: false, writable: true, configurable: true },
+  CLAUDE_LIVENESS_PROBE_SCHEMA: { value: CLAUDE_LIVENESS_PROBE_SCHEMA, enumerable: false, writable: true, configurable: true },
+  CLAUDE_LIVENESS_OUTCOME_SCHEMA: { value: CLAUDE_LIVENESS_OUTCOME_SCHEMA, enumerable: false, writable: true, configurable: true },
+  claudeLivenessProbeMessage: { value: claudeLivenessProbeMessage, enumerable: false, writable: true, configurable: true },
+  reserveClaudeLivenessProbeBeforeDelivery: { value: reserveClaudeLivenessProbeBeforeDelivery, enumerable: false, writable: true, configurable: true },
+  settleClaudeLivenessProbeOutcome: { value: settleClaudeLivenessProbeOutcome, enumerable: false, writable: true, configurable: true },
+  findClaudeLivenessProbeState: { value: findClaudeLivenessProbeState, enumerable: false, writable: true, configurable: true },
+});
 // M7 §10.1: test-only rendezvous surface (mirrors runtime-consultation.cjs's own
 // isTestCapability()-gated export; production never observes these names).
 if (isTestCapability()) {
@@ -1513,7 +1491,6 @@ if (isTestCapability()) {
     __testOnlyS16ResolveMixedReviewPair: s16ResolveMixedReviewPair,
   });
 }
-
 if (require.main === module) {
   main(process.argv.slice(2));
 }

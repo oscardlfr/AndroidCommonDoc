@@ -13,7 +13,7 @@ const moduleDir = path.join(repoRoot, 'scripts', 'lib', 'runtime-role-lifecycle'
 // keep their own pre-existing (looser) line-length profile -- this suite
 // never retroactively reformats code outside the current sequence's scope.
 const seq12Modules = Object.freeze([
-  'supervisorLifecycleOwner', 'supervisorBatchMint', 'teamEnsure', 'resumeCheckpoint',
+  'supervisorLifecycleOwner', 'supervisorBatchMint', 'teamEnsure', 'resumeCheckpoint', 'ensureActiveRouting',
   'ensureHandler', 'cliNotifyHandler', 'cliTerminalize', 'cliActionReadyHandlers',
   'cliRotateStopHandlers', 'cliConsultHandlers', 'cliRootSourceHandlers',
   'prepPublicationReserve', 'prepPublicationGrammar', 'p2Materialization', 'cliDispatch',
@@ -34,6 +34,8 @@ const modulePaths = Object.freeze({
   observations: path.join(moduleDir, 'claude-id01-observations.cjs'),
   peer: path.join(moduleDir, 'claude-peer-binding.cjs'),
   resumeRecord: path.join(moduleDir, 'claude-resume-record.cjs'),
+  livenessProbe: path.join(moduleDir, 'claude-liveness-probe.cjs'),
+  resumeDelivery: path.join(moduleDir, 'claude-resume-delivery.cjs'),
   resumeLifecycle: path.join(moduleDir, 'claude-resume-lifecycle.cjs'),
   oneShotRecord: path.join(moduleDir, 'claude-one-shot-record.cjs'),
   oneShotOperations: path.join(moduleDir, 'claude-one-shot-operations.cjs'),
@@ -70,6 +72,7 @@ const modulePaths = Object.freeze({
   supervisorBatchMint: path.join(moduleDir, 'supervisor-batch-mint.cjs'),
   teamEnsure: path.join(moduleDir, 'team-ensure.cjs'),
   resumeCheckpoint: path.join(moduleDir, 'resume-checkpoint.cjs'),
+  ensureActiveRouting: path.join(moduleDir, 'ensure-active-routing.cjs'),
   ensureHandler: path.join(moduleDir, 'ensure-handler.cjs'),
   cliNotifyHandler: path.join(moduleDir, 'cli-notify-handler.cjs'),
   cliTerminalize: path.join(moduleDir, 'cli-terminalize.cjs'),
@@ -100,6 +103,8 @@ const factories = Object.freeze({
   observations: require(modulePaths.observations).createClaudeId01Observations,
   peer: require(modulePaths.peer).createClaudePeerBinding,
   resumeRecord: require(modulePaths.resumeRecord).createClaudeResumeRecord,
+  livenessProbe: require(modulePaths.livenessProbe).createClaudeLivenessProbe,
+  resumeDelivery: require(modulePaths.resumeDelivery).createClaudeResumeDelivery,
   resumeLifecycle: require(modulePaths.resumeLifecycle).createClaudeResumeLifecycle,
   oneShotRecord: require(modulePaths.oneShotRecord).createClaudeOneShotRecord,
   oneShotOperations: require(modulePaths.oneShotOperations).createClaudeOneShotOperations,
@@ -136,6 +141,7 @@ const factories = Object.freeze({
   supervisorBatchMint: require(modulePaths.supervisorBatchMint).createSupervisorBatchMint,
   teamEnsure: require(modulePaths.teamEnsure).createTeamEnsure,
   resumeCheckpoint: require(modulePaths.resumeCheckpoint).createResumeCheckpoint,
+  ensureActiveRouting: require(modulePaths.ensureActiveRouting).createEnsureActiveRouting,
   ensureHandler: require(modulePaths.ensureHandler).createEnsureHandler,
   cliNotifyHandler: require(modulePaths.cliNotifyHandler).createCliNotifyHandler,
   cliTerminalize: require(modulePaths.cliTerminalize).createCliTerminalize,

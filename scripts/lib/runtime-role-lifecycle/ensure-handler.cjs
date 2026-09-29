@@ -23,6 +23,7 @@ path, SUBCOMMAND_SPEC, parseSubcommandArgv, usageError, invalidError, unavailabl
   buildRoleSpawnPayload, buildRoleNotifyPayload, claudeReadyBootstrapMessageFor, effectiveActionTtlSeconds, futureIsoForRegistry,
   mintRoleLifecycleAction, canonicalJSONStringify,
   registryRepoDir, withRegistryLock,
+  groupEnsurePendingSpawns, resolveOrMintLivenessProbe,
 }) {
 
 /**
@@ -172,45 +173,6 @@ function handleEnsure(rawArgv) {
     sawUnavailable = true;
     unavailableReasons.push(String(role) + ':' + String(reason));
   };
-  const resolveOrMintLivenessProbe = (role, stateRecord, liveness) => {
-    const lockKey = sha256String(canonicalJSONStringify([
-      binding.session_generation_id, binding.worktree_id, binding.plan_digest,
-      role, liveness.actorBindingId, liveness.actorDigest,
-    ]));
-    const lockDir = path.join(registryRepoDir(projectRoot), 'locks', 'claude-liveness-scope-' + lockKey + '.lock');
-    const locked = withRegistryLock(lockDir, () => {
-      const probe = findClaudeLivenessProbeState(projectRoot, {
-        generationId: binding.session_generation_id, planDigest: binding.plan_digest,
-        role, worktreeId: binding.worktree_id,
-        actorBindingId: liveness.actorBindingId, actorDigest: liveness.actorDigest,
-      });
-      if (!probe.ok || probe.status !== 'NONE') return probe;
-      const actionId = generateActionId();
-      const message = claudeLivenessProbeMessage(
-        actionId, liveness.actorBindingId, liveness.actorDigest,
-      );
-      const payload = buildRoleNotifyPayload(
-        stateRecord.binding_id, role,
-        `liveness:${liveness.actorBindingId}:${liveness.actorDigest}`,
-        'session-control', message,
-      );
-      const ttl = effectiveActionTtlSeconds(pair.policy, binding.expiry, {
-        kind: 'role-notify', runtime: 'claude-native',
-      });
-      if (!ttl.ok) return { ok: false, reason: 'liveness-action-ttl-invalid' };
-      const minted = mintRoleLifecycleAction(
-        projectRoot, actionId, 'role-notify', 'claude-native', computeRepoId(projectRoot),
-        binding.worktree_id, binding.plan_digest,
-        sha256String(canonicalJSONStringify(pair.routing)), binding.session_generation_id,
-        role, payload, futureIsoForRegistry(ttl.ttlSeconds),
-      );
-      return minted.ok
-        ? { ok: true, status: 'PENDING', action: minted.action }
-        : { ok: false, reason: 'liveness-action-mint-failed' };
-    }, { maxWaitMs: 5000 });
-    return locked.ok && locked.value
-      ? locked.value : { ok: false, reason: 'liveness-scope-lock-failed' };
-  };
   let hardError = false;
 
   // Pass 1: classify each role's current state; collect ABSENT/DEAD roles
@@ -265,7 +227,7 @@ function handleEnsure(rawArgv) {
           });
         }
         if (stateResult.state === 'READY' && liveness.ok && liveness.status === 'UNVERIFIED') {
-          const probe = resolveOrMintLivenessProbe(role, stateResult.record, liveness);
+          const probe = resolveOrMintLivenessProbe(projectRoot, binding, pair, role, stateResult.record, liveness);
           if (!probe.ok) {
             noteUnavailable(role, 'claude-liveness-probe-' + (probe.reason || 'invalid'));
             continue;
@@ -427,113 +389,18 @@ function handleEnsure(rawArgv) {
     return;
   }
 
-  // TeamCreate is obsolete for the accepted Claude profile. Historical
-  // team-ensure records remain readable for registry compatibility but no
-  // longer exclude the direct Agent+SendMessage driver.
-  const driverExclusions = undefined;
-
-  // Pass 2: resolve a driver for each pending spawn (pure lookup, no
-  // mutation). The six routing drivers are NOT interchangeable -- only
-  // `claude-sendmessage` (role-spawn) and `codex-app-server`
-  // (supervisor-start) have an ensure()-mintable action at all (the closed
-  // action kind/runtime union, PLAN.md ~L154-163, has no member for the
-  // other three: `claude-agent` is a one-shot per-CONSULTATION-REQUEST
-  // accelerator selected later by `dispatch`; `codex-mcp` is a per-request
-  // MCP frontend activated via `claude-mcp-launch`, never `session-run`;
-  // `runtime-spawn` wakes an already-registered externally-supervised disk
-  // consumer). Each of the six gets its OWN explicit branch -- never a
-  // shared catch-all that could mint a fabricated action with a dishonest
-  // driver literal for a role that actually resolved to codex-mcp/runtime-spawn.
-  const codexAppServerGroup = [];
-  const claudeSendmessageGroup = [];
-  const deterministicAppServerTestBackend = (
-    isTestCapability()
-    && process.env.RUNTIME_ROLE_LIFECYCLE_TEST_BACKEND === 'deterministic-app-server-v1'
+  const groupedSpawns = groupEnsurePendingSpawns(
+    projectRoot, binding, pair, capabilityManifest, pendingSpawns,
   );
-  const policySelectedLifecycleDriverBase = (!deterministicAppServerTestBackend &&
-    pair.policy.schema === 'runtime-collaboration-policy/v2'
-    && pair.policy.selection.requested_host === 'claude'
-    && pair.policy.selection.requested_role_engine === 'claude'
-    && pair.policy.selection.fallback.mode === 'deny'
-    && pair.policy.selection.fallback.allowed.length === 0
-  ) ? 'claude-sendmessage' : null;
-  const codexWorkerOptInRolesForEnsure = (pair.policy.schema === 'runtime-collaboration-policy/v2' && Array.isArray(pair.policy.selection.codex_worker_opt_in_roles))
-    ? pair.policy.selection.codex_worker_opt_in_roles : [];
-  // Lazily-memoized first-start check -- computed at most once per
-  // ensure() call (a project-wide pin/credential probe, not role-scoped),
-  // only if pass 2 actually needs it. `null` means "not yet checked".
-  let supervisorStartabilityResult = null;
-  function ensureSupervisorStartabilityChecked() {
-    if (supervisorStartabilityResult === null) {
-      supervisorStartabilityResult = resolveSupervisorStartability(projectRoot, 'codex-app-server');
-    }
-    return supervisorStartabilityResult;
-  }
-  for (const spawn of pendingSpawns) {
-    // A role re-entering from UNAVAILABLE excludes exactly the one driver
-    // that just failed, on top of the batch-wide `driverExclusions` and the
-    // noop-consumer-gate exclusion below.
-    const perRoleExclusions = (driverExclusions || [])
-      .concat(spawn.excludeDriver ? [spawn.excludeDriver] : [])
-      .concat(hasRegisteredValidatedDiskConsumer(projectRoot, spawn.role, binding.worktree_id, binding.plan_digest, binding.session_generation_id) ? [] : ['noop']);
-    let policySelectedLifecycleDriver = policySelectedLifecycleDriverBase;
-    if (codexWorkerOptInRolesForEnsure.includes(spawn.role)) {
-      policySelectedLifecycleDriver = null;
-    }
-    let driver = null;
-    if (policySelectedLifecycleDriver) {
-      if (
-        !perRoleExclusions.includes(policySelectedLifecycleDriver)
-        && capabilityManifest.availableDrivers.includes(policySelectedLifecycleDriver)
-      ) driver = policySelectedLifecycleDriver;
-    } else if (spawn.requiredDriver === 'claude-sendmessage') {
-      if (!perRoleExclusions.includes('claude-sendmessage')
-          && capabilityManifest.availableDrivers.includes('claude-sendmessage')) driver = 'claude-sendmessage';
-    } else if (spawn.requiredDriver === 'codex-app-server' || codexWorkerOptInRolesForEnsure.includes(spawn.role)) {
-      if (
-        codexAppServerStartupEligible(pair.routing, spawn.role, perRoleExclusions)
-        && ensureSupervisorStartabilityChecked().ok
-      ) driver = 'codex-app-server';
-    } else {
-      driver = selectLifecycleEligibleDriverForRole(
-        pair.routing, spawn.role, capabilityManifest, perRoleExclusions,
-      );
-    }
-    // `getCapabilityManifest`'s real branch only reports `codex-app-server`
-    // available once a registry entry is already READY -- a first-ever
-    // `ensure()` call can never have one. LAST-RESORT ONLY (never overrides
-    // an already-viable selection -- `driver` is non-null then and this is
-    // unreached): when no driver was selectable, ask whether a first
-    // codex-app-server supervisor CAN be started and, if routing permits it
-    // for this role, route it into the same codex-app-server batch below.
-    if (
-      !policySelectedLifecycleDriver && !spawn.requiredDriver && !driver
-      && codexAppServerStartupEligible(pair.routing, spawn.role, perRoleExclusions)
-      && ensureSupervisorStartabilityChecked().ok
-    ) {
-      driver = 'codex-app-server';
-    }
-    if (!driver) { noteUnavailable(spawn.role, 'no-eligible-driver'); continue; }
-    if (driver === 'noop') {
-      // Single atomic fromState->READY write via the toState waypoint
-      // (validated but never persisted) -- never a durable, pending_action_id-less
-      // waypoint record on disk.
-      const t = transitionRoleBindingAtomicViaWaypoint(projectRoot, binding.worktree_id, binding.plan_digest, spawn.profileDigest, binding.session_generation_id, spawn.role, spawn.fromState, spawn.toState, 'READY', spawn.fromRecord, { driver, respawn_count: spawn.respawnCount });
-      if (!t.ok) { hardError = true; break; }
-      collectedBindings.push(roleBindingForEnvelope(t.record));
-      continue;
-    }
-    if (driver === 'codex-app-server') { codexAppServerGroup.push(Object.assign({ driver }, spawn)); continue; }
-    if (driver === 'claude-sendmessage') { claudeSendmessageGroup.push(Object.assign({ driver }, spawn)); continue; }
-    // Closed routing-driver enum makes this structurally unreachable --
-    // fail closed rather than silently drop an unrecognized driver.
-    hardError = true;
-    break;
-  }
-  if (hardError) {
+  if (!groupedSpawns.ok) {
     invalidError('ensure', 'INTERNAL_ERROR');
     return;
   }
+  collectedBindings.push(...groupedSpawns.collectedBindings);
+  for (const unavailable of groupedSpawns.unavailable) {
+    noteUnavailable(unavailable.role, unavailable.reason);
+  }
+  const { codexAppServerGroup, claudeSendmessageGroup } = groupedSpawns;
 
   // codex-app-server: at most ONE retained supervisor per (worktree, plan,
   // session). classify+mint+transition+publish-owner all happen atomically
