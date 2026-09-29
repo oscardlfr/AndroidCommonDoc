@@ -414,7 +414,7 @@ test('resume lookup selects only the current generation when one Claude session 
       dir, identityFor(sessionKey), { invocationDigest: '7'.repeat(64), forceRotation: true },
     );
     assert.strictEqual(rotated.ok, true, JSON.stringify(rotated));
-    ensureLiveRoleSpawnAction(dir, sessionKey, role);
+    const action = ensureLiveRoleSpawnAction(dir, sessionKey, role);
     assert.strictEqual(action.session_generation_id, rotated.generationId);
     const profileDigest = rll.roleProfileDigestFor(role);
     const starting = rll.readRoleBindingState(
