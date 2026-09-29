@@ -690,12 +690,17 @@ test('ensure(live driver, valid grant): a SINGLE call mints the direct role-spaw
     assert.strictEqual(seeded.ok, true, JSON.stringify(seeded));
     const bindingId = seeded.record.binding_id;
 
-    // Idempotent re-ensure: SAME role, fresh grant, no second action minted.
+    // A directly seeded state-machine READY without correlated actor evidence
+    // is no longer liveness authority. Re-ensure fails closed and preserves
+    // the record for the explicit notify/rotate tests below.
     const g3 = mintGrant(dir, sessionKey, LIVE_ROLE, 'ensure', ensureDigest([LIVE_ROLE]));
     const r3 = runCli(['ensure', '--project-root', dir, '--role', LIVE_ROLE, '--lifecycle-binding', g3.grantId], { RUNTIME_ROLE_LIFECYCLE_FAKE_CAPABILITIES: LIVE_CAPS });
-    assert.strictEqual(r3.result.status, 'READY');
+    assert.strictEqual(r3.result.status, 'UNAVAILABLE');
     assert.strictEqual(r3.result.actions.length, 0);
-    assert.strictEqual(r3.result.bindings[0].binding_id, bindingId);
+    assert.strictEqual(r3.result.bindings.length, 0);
+    assert.strictEqual(rll.readRoleBindingState(
+      dir, worktreeId, planDigest, profileDigest, generationId, LIVE_ROLE,
+    ).record.binding_id, bindingId);
 
     // notify against the READY binding mints exactly one role-notify action.
     const artifact = path.join(dir, 'artifact.json');
@@ -2326,6 +2331,77 @@ function ensureWithRoles(dir, roles, sessionKey, caps, grantOpts) {
   return runCli(args, { RUNTIME_ROLE_LIFECYCLE_FAKE_CAPABILITIES: caps || CODEX_CAPS });
 }
 
+test('stale READY fenced actor is rehydrated once and repeated ensure never duplicates its role-spawn', () => {
+  const dir = makeGitProject();
+  try {
+    writePlanFixture(dir, 'stale-ready-fenced');
+    const sessionKey = 'stale-ready-fenced-session';
+    const action = ensureLiveRoleSpawnAction(dir, sessionKey, LIVE_ROLE);
+    const runEnsure = () => {
+      const grant = mintGrant(dir, sessionKey, LIVE_ROLE, 'ensure', ensureDigest([LIVE_ROLE]));
+      return runCli([
+        'ensure', '--project-root', dir, '--role', LIVE_ROLE, '--lifecycle-binding', grant.grantId,
+      ], { RUNTIME_ROLE_LIFECYCLE_FAKE_CAPABILITIES: LIVE_CAPS });
+    };
+    const agentId = 'stale-ready-fenced-agent';
+    const actorBinding = rll.createRoleActorBinding(
+      dir, LIVE_ROLE, action.worktree_id, action.plan_digest, action.session_generation_id, 600,
+    );
+    assert.strictEqual(actorBinding.ok, true, JSON.stringify(actorBinding));
+    const profileDigest = rll.roleProfileDigestFor(LIVE_ROLE);
+    const starting = rll.readRoleBindingState(
+      dir, action.worktree_id, action.plan_digest, profileDigest,
+      action.session_generation_id, LIVE_ROLE,
+    );
+    assert.strictEqual(rll.transitionRoleBinding(
+      dir, action.worktree_id, action.plan_digest, profileDigest,
+      action.session_generation_id, LIVE_ROLE, 'STARTING', 'READY', starting.record, {},
+    ).ok, true);
+    rll.recordClaudeId01SubagentStartObservation(dir, {
+      sessionId: sessionKey, agentId, agentType: LIVE_ROLE, actionId: action.action_id,
+    });
+    const now = new Date();
+    const expiry = new Date(now.getTime() + 300000);
+    const digest = (value) => crypto.createHash('sha256').update(value).digest('hex');
+    const startup = {
+      schema: 'runtime/claude-startup-actor/v1', session_digest: digest(sessionKey),
+      agent_digest: digest(agentId), role: LIVE_ROLE, action_id: action.action_id,
+      action_digest: digest(rc.canonicalJSONStringify(action)), claim_digest: '4'.repeat(64),
+      actor_binding_id: actorBinding.binding.binding_id, worktree_id: action.worktree_id,
+      plan_digest: action.plan_digest, session_generation_digest: digest(action.session_generation_id),
+      host_contract_digest: '5'.repeat(64), created_at: now.toISOString().replace(/\.\d{3}Z$/, 'Z'),
+      expiry: expiry.toISOString().replace(/\.\d{3}Z$/, 'Z'),
+    };
+    const startupKey = digest('claude-startup-v2:' + action.session_generation_id + ':' + digest(agentId));
+    const startupPath = path.join(rll.registryRepoDir(dir), 'claude-id01-traces', 'startup-v2-' + startupKey + '.json');
+    assert.strictEqual(rll.writeRegistryRecordReplace(
+      startupPath, Buffer.from(rc.canonicalJSONStringify(startup), 'utf8'),
+    ).ok, true);
+    const fenceId = rll.computeClaudeAuthorityIdentityId(
+      dir, 'claude-hook', sessionKey, agentId,
+    );
+    assert.strictEqual(rll.publishClaudeAuthorityFence(dir, fenceId).ok, true);
+
+    const recovered = runEnsure();
+    assert.strictEqual(recovered.result.status, 'ACTION_REQUIRED', JSON.stringify(recovered.result));
+    assert.strictEqual(recovered.result.actions.length, 1, JSON.stringify(recovered.result));
+    assert.strictEqual(recovered.result.actions[0].kind, 'role-spawn');
+    assert.notStrictEqual(recovered.result.actions[0].action_id, action.action_id);
+
+    const repeated = runEnsure();
+    const actionsDir = path.join(rll.registryRepoDir(dir), 'actions');
+    const roleSpawns = fs.readdirSync(actionsDir)
+      .filter((name) => name.endsWith('.json'))
+      .map((name) => JSON.parse(fs.readFileSync(path.join(actionsDir, name), 'utf8')))
+      .filter((candidate) => candidate.kind === 'role-spawn' && candidate.role === LIVE_ROLE);
+    assert.strictEqual(roleSpawns.length, 2,
+      'one original plus one recovery action; repeated ensure must mint no third action: '
+      + JSON.stringify(repeated.result));
+  } finally {
+    cleanup(dir);
+  }
+});
+
 // A pid identity whose owning process cannot be alive: the pid is this process, but the birth token
 // is not this process's, so the observer PROVES the claimed process is gone rather than guessing.
 function provenAbsentPidIdentity() {
@@ -2333,7 +2409,7 @@ function provenAbsentPidIdentity() {
   return Object.assign({}, live, { birth_observed_at: '1999-01-01T00:00:00.0000000Z' });
 }
 
-test('P5SP-REPRO host-admitted support roles are read back READY under the action\'s own scope', () => {
+test('P5SP-REPRO directly seeded READY roles without host admission evidence fail closed', () => {
   const dir = makeGitProject();
   try {
     writePlanFixture(dir, 'p5sp-repro');
@@ -2349,10 +2425,9 @@ test('P5SP-REPRO host-admitted support roles are read back READY under the actio
     assert.ok(agentActions.length > 0,
       'the five-role ensure must mint at least one native role-spawn: ' + JSON.stringify(actions));
 
-    // Host-admission's own registry effect, applied through the same production transition it
-    // uses: STARTING -> READY under the ACTION's own scope. The admission plumbing itself is
-    // already proven by N10's artifacts (accepted:true for all three), so what matters here is
-    // what a later ensure reads back once those three roles are READY.
+    // Seed only the state-machine effect, deliberately omitting the host
+    // admission/actor identity evidence. This was previously accepted as if
+    // it proved liveness and reproduced the false READY defect.
     const nativeReady = [];
     for (const action of agentActions) {
       const profileDigest = rll.roleProfileDigestFor(action.role);
@@ -2387,13 +2462,12 @@ test('P5SP-REPRO host-admitted support roles are read back READY under the actio
     // therefore the same generation. This is what the init-session projector reads.
     const second = ensureWithRoles(dir, P5_SUPPORT_ROLES, sessionKey, bothDrivers);
     const states = Object.fromEntries((second.result.bindings || []).map((b) => [b.role, b.state]));
-    assert.deepStrictEqual(states, Object.fromEntries(P5_SUPPORT_ROLES.map((r) => [r, 'READY'])),
-      'every support role admitted under the action\'s own scope must read back READY: '
+    assert.deepStrictEqual(states, {}, 'state-only READY must never be projected as live: '
       + JSON.stringify(second.result));
     assert.deepStrictEqual(second.result.actions, [],
       'nothing may be re-minted once all five roles are READY: ' + JSON.stringify(second.result.actions));
-    assert.strictEqual(second.result.status, 'READY',
-      'the projector reports READY, not support-plane-action-required: ' + JSON.stringify(second.result));
+    assert.strictEqual(second.result.status, 'UNAVAILABLE',
+      'missing actor liveness must fail closed: ' + JSON.stringify(second.result));
   } finally {
     cleanup(dir);
   }

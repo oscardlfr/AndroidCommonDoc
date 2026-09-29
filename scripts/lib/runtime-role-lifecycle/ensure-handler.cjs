@@ -13,6 +13,8 @@ path, SUBCOMMAND_SPEC, parseSubcommandArgv, usageError, invalidError, unavailabl
   computeWorktreeId, executeResumeCheckpointEnsure, reconcileRetainedSupervisorForEnsure,
   getCapabilityManifest, roleProfileDigestFor, readRoleBindingState, retainedSupervisorBridgeApi,
   readRegistryRecord, actionPathFor, isoToMsForRegistry, currentClockMsForRegistry, transitionRoleBinding,
+  classifyClaudeSupportRoleLiveness,
+  findUniqueClaudeResumeHandleForTarget, findUniqueConsumedClaudeResumeHandleForBusyTarget,
   resolveHostOperationForAction, actionForEnvelope, respawnBudgetExceeded, quarantineViaRehydrating,
   isTestCapability, hasRegisteredValidatedDiskConsumer, codexAppServerStartupEligible,
   resolveSupervisorStartability, selectLifecycleEligibleDriverForRole, transitionRoleBindingAtomicViaWaypoint,
@@ -183,6 +185,69 @@ function handleEnsure(rawArgv) {
     }
 
     if (stateResult.state === 'READY' || stateResult.state === 'WAITING' || stateResult.state === 'BUSY') {
+      if (stateResult.record.driver === 'claude-sendmessage') {
+        const target = {
+          planDigest: binding.plan_digest,
+          sessionDigest: sha256String(binding.runtime_session_key),
+          targetRole: role,
+          worktreeId: binding.worktree_id,
+        };
+        let liveness;
+        if (stateResult.state === 'WAITING') {
+          const handle = findUniqueClaudeResumeHandleForTarget(projectRoot, target);
+          liveness = handle.ok ? { ok: true, status: 'LIVE' }
+            : classifyClaudeSupportRoleLiveness(projectRoot, {
+              generationId: binding.session_generation_id, planDigest: binding.plan_digest,
+              role, runtimeSessionKey: binding.runtime_session_key, worktreeId: binding.worktree_id,
+            });
+          if (!handle.ok && liveness.ok && liveness.status === 'LIVE') {
+            liveness = { ok: false, status: 'INVALID', reason: 'waiting-resume-handle-absent' };
+          }
+        } else if (stateResult.state === 'BUSY') {
+          const handle = findUniqueConsumedClaudeResumeHandleForBusyTarget(projectRoot, {
+            generationId: binding.session_generation_id, ...target,
+          }, stateResult.record);
+          liveness = handle.ok ? { ok: true, status: 'LIVE' }
+            : classifyClaudeSupportRoleLiveness(projectRoot, {
+              generationId: binding.session_generation_id, planDigest: binding.plan_digest,
+              role, runtimeSessionKey: binding.runtime_session_key, worktreeId: binding.worktree_id,
+            });
+          if (!handle.ok && liveness.ok && liveness.status === 'LIVE') {
+            liveness = { ok: false, status: 'INVALID', reason: 'busy-resume-receipt-absent' };
+          }
+        } else {
+          liveness = classifyClaudeSupportRoleLiveness(projectRoot, {
+            generationId: binding.session_generation_id, planDigest: binding.plan_digest,
+            role, runtimeSessionKey: binding.runtime_session_key, worktreeId: binding.worktree_id,
+          });
+        }
+        if (!liveness.ok) {
+          noteUnavailable(role, 'claude-actor-' + (liveness.reason || 'invalid'));
+          continue;
+        }
+        if (liveness.status === 'ABSENT') {
+          const dead = transitionRoleBinding(
+            projectRoot, binding.worktree_id, binding.plan_digest, profileDigest,
+            binding.session_generation_id, role, stateResult.state, 'DEAD', stateResult.record, {},
+          );
+          if (!dead.ok) { hardError = true; break; }
+          if (respawnBudgetExceeded(dead.record, pair.policy)) {
+            const quarantine = quarantineViaRehydrating(
+              projectRoot, binding.worktree_id, binding.plan_digest, profileDigest,
+              binding.session_generation_id, role, 'DEAD', dead.record, 'respawn-budget-exceeded',
+            );
+            if (!quarantine.ok) { hardError = true; break; }
+            noteUnavailable(role, 'respawn-budget-exceeded');
+            continue;
+          }
+          pendingSpawns.push({
+            role, profileDigest, fromState: 'DEAD', toState: 'REHYDRATING',
+            fromRecord: dead.record, respawnCount: (dead.record.respawn_count || 0) + 1,
+            excludeDriver: null, requiredDriver: 'claude-sendmessage',
+          });
+          continue;
+        }
+      }
       if (stateResult.record.driver === 'codex-app-server') {
         let liveWorker;
         try {
@@ -286,9 +351,9 @@ function handleEnsure(rawArgv) {
     const fromRecord = fromState === 'ABSENT' ? null : stateResult.record;
     const respawnCount = fromState === 'DEAD' ? ((stateResult.record.respawn_count || 0) + 1) : (fromState === 'UNAVAILABLE' ? (stateResult.record.respawn_count || 0) : 0);
     const excludeDriver = fromState === 'UNAVAILABLE' ? stateResult.record.driver : null;
-    const requiredDriver = (
-      fromState === 'DEAD' && stateResult.record.driver === 'codex-app-server'
-    ) ? 'codex-app-server' : null;
+    const requiredDriver = fromState === 'DEAD'
+      && ['codex-app-server', 'claude-sendmessage'].includes(stateResult.record.driver)
+      ? stateResult.record.driver : null;
     pendingSpawns.push({
       role, profileDigest, fromState, toState, fromRecord, respawnCount,
       excludeDriver, requiredDriver,
@@ -359,6 +424,9 @@ function handleEnsure(rawArgv) {
         !perRoleExclusions.includes(policySelectedLifecycleDriver)
         && capabilityManifest.availableDrivers.includes(policySelectedLifecycleDriver)
       ) driver = policySelectedLifecycleDriver;
+    } else if (spawn.requiredDriver === 'claude-sendmessage') {
+      if (!perRoleExclusions.includes('claude-sendmessage')
+          && capabilityManifest.availableDrivers.includes('claude-sendmessage')) driver = 'claude-sendmessage';
     } else if (spawn.requiredDriver === 'codex-app-server' || codexWorkerOptInRolesForEnsure.includes(spawn.role)) {
       if (
         codexAppServerStartupEligible(pair.routing, spawn.role, perRoleExclusions)

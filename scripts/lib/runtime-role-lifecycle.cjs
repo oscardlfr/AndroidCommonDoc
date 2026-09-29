@@ -846,7 +846,7 @@ const claudeResumeRecord = createClaudeResumeRecord({
   claudeStartupActorPathFor, computeClaudeAuthorityIdentityId, computeWorktreeId,
   currentClockMsForRegistry, discoverPlan, findUniqueClaudePeerRoleActorBinding,
   fs, hasExactKeys, isCanonicalIsoUtc, isHexActionId, isHexCsprng32,
-  isHexDigest64, isoToMsForRegistry, path, peekSessionGeneration,
+  isHexDigest64, isClaudeId01RawTraceWellFormed, isoToMsForRegistry, path, peekSessionGeneration,
   readClaudeAuthorityFence, readRegistryRecord, registryRepoDir,
   sha256String, validateRoleActorBindingFor,
 });
@@ -862,6 +862,7 @@ const {
   isClaudeResumeHandleConsumed,
   findClaudeResumeHandlesForActor,
   resolveClaudeResumeRoleActorScope,
+  classifyClaudeSupportRoleLiveness,
 } = claudeResumeRecord;
 
 const claudeResumeLifecycle = createClaudeResumeLifecycle({
@@ -1145,6 +1146,8 @@ const ensureHandler = createEnsureHandler({
   computeWorktreeId, executeResumeCheckpointEnsure, reconcileRetainedSupervisorForEnsure,
   getCapabilityManifest, roleProfileDigestFor, readRoleBindingState, retainedSupervisorBridgeApi,
   readRegistryRecord, actionPathFor, isoToMsForRegistry, currentClockMsForRegistry, transitionRoleBinding,
+  classifyClaudeSupportRoleLiveness,
+  findUniqueClaudeResumeHandleForTarget, findUniqueConsumedClaudeResumeHandleForBusyTarget,
   resolveHostOperationForAction, actionForEnvelope, respawnBudgetExceeded, quarantineViaRehydrating,
   isTestCapability, hasRegisteredValidatedDiskConsumer, codexAppServerStartupEligible,
   resolveSupervisorStartability, selectLifecycleEligibleDriverForRole, transitionRoleBindingAtomicViaWaypoint,
@@ -1339,6 +1342,7 @@ admitAndCreateRootSourceBinding,
   consumeClaudeResumeHandleForObservedActor,
   findUniqueClaudeResumeHandleForTarget,
   findUniqueConsumedClaudeResumeHandleForBusyTarget,
+  classifyClaudeSupportRoleLiveness,
   // Section C parity (item 4): the one closed-shape/range/chronology validator for a completed attestation, lazily required by runtime-consultation.cjs's isClaudeId01AttestationWellFormedLocal instead of a second, drifting copy.
   isClaudeId01AttestationWellFormed,
   ROLE_COMMAND_GRANT_SCHEMA,
