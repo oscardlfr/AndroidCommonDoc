@@ -220,13 +220,14 @@ function classifyClaudeSupportRoleLiveness(projectRoot, expected) {
       }
       const record = read.obj;
       if (record.schema === CLAUDE_STARTUP_ACTOR_SCHEMA) {
+        // Scope append-only history before enforcing the current exact shape.
+        const potentiallyCorrelated = record.session_generation_digest === sha256String(expected.generationId)
+          && record.worktree_id === expected.worktreeId && record.plan_digest === expected.planDigest && record.role === expected.role;
+        if (!potentiallyCorrelated) continue;
         if (!hasExactKeys(record, CLAUDE_STARTUP_ACTOR_KEYS)) {
           return { ok: false, status: 'INVALID', reason: 'startup-trace-shape-invalid' };
         }
-        if (record.session_generation_digest === sha256String(expected.generationId)
-            && record.worktree_id === expected.worktreeId
-            && record.plan_digest === expected.planDigest
-            && record.role === expected.role) startup.push(record);
+        startup.push(record);
       } else if (record.schema === 'runtime/claude-id01-trace/v1') {
         const potentiallyCorrelated = record.agent_type === expected.role
           && record.worktree_id === expected.worktreeId

@@ -160,7 +160,32 @@ function createClaudeLivenessProbe(deps) {
         }
         const stateUnchanged = sha256String(canonicalJSONStringify(currentState.record)) === pending.role_state_digest
           && currentState.record.updated_at === pending.role_state_updated_at;
-        const resumedAgentId = event.response && event.response.resumedAgentId;
+        const response = event.response && typeof event.response === 'object' ? event.response : null;
+        // Claude Code has exposed the resumed identity in two compatible
+        // host-owned response shapes across 2.1 patch releases:
+        // `resumedAgentId` and, newer, `pin.id`.  Bind either one to the
+        // startup actor digest instead of pinning the runtime to one patch.
+        const observedAgentId = response && typeof response.resumedAgentId === 'string'
+          ? response.resumedAgentId
+          : (response && response.pin && typeof response.pin.id === 'string'
+            ? response.pin.id : null);
+        const legacyResumeShape = response && hasExactKeys(response, ['resumedAgentId', 'success']);
+        const pinnedResumeShape = response && hasExactKeys(response, ['message', 'pin', 'success'])
+          && response.pin && hasExactKeys(response.pin, ['id', 'name', 'ref']);
+        const identityReceipt = response && response.success === true
+          && (legacyResumeShape || pinnedResumeShape) && typeof observedAgentId === 'string'
+          && sha256String(observedAgentId) === pending.actor_digest
+          && (!response.pin || response.pin.name === pending.recipient);
+        // An already-running teammate is not resumed.  Claude instead returns
+        // a host-generated inbox receipt.  The correlated PostToolUse plus the
+        // exact routed recipient proves that the registered role is reachable.
+        const inboxReceipt = response && hasExactKeys(response, ['message', 'msg_id', 'routing', 'success'])
+          && response.routing && hasExactKeys(response.routing,
+            ['content', 'sender', 'summary', 'target', 'targetColor'])
+          && response.success === true
+          && response.message === `Message sent to ${pending.recipient}'s inbox`
+          && typeof response.msg_id === 'string' && response.msg_id.length > 0
+          && response.routing.target === '@' + pending.recipient;
         const exactRecipientAbsent = !actionExpired && event.success === true
           && hasExactKeys(event.response, ['message', 'success'])
           && event.response.success === false
@@ -172,8 +197,7 @@ function createClaudeLivenessProbe(deps) {
         const status = healthyState && sameSnapshot && exactRecipientAbsent
           ? 'ABSENT'
           : (!actionExpired && healthyState && liveStateCompatible
-            && event.success === true && event.response && event.response.success === true
-            && typeof resumedAgentId === 'string' && sha256String(resumedAgentId) === pending.actor_digest
+            && event.success === true && stateUnchanged && (identityReceipt || inboxReceipt)
             ? 'LIVE' : 'UNVERIFIED');
         const observedAt = nowIsoForRegistry();
         const outcome = {
