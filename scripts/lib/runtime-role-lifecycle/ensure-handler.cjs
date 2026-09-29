@@ -196,37 +196,25 @@ function handleEnsure(rawArgv) {
           worktreeId: binding.worktree_id,
         };
         let liveness;
-        if (stateResult.state === 'WAITING') {
-          const handle = findUniqueClaudeResumeHandleForTarget(projectRoot, target);
-          const classified = handle.ok || handle.reason !== 'UNAVAILABLE'
-            ? null : classifyClaudeSupportRoleLiveness(projectRoot, {
-              generationId: binding.session_generation_id, planDigest: binding.plan_digest,
-              role, runtimeSessionKey: binding.runtime_session_key, worktreeId: binding.worktree_id,
+        const expectedLiveness = {
+          generationId: binding.session_generation_id, planDigest: binding.plan_digest,
+          role, runtimeSessionKey: binding.runtime_session_key, worktreeId: binding.worktree_id,
+        };
+        if (stateResult.state === 'WAITING' || stateResult.state === 'BUSY') {
+          const handle = stateResult.state === 'WAITING'
+            ? findUniqueClaudeResumeHandleForTarget(projectRoot, target)
+            : findUniqueConsumedClaudeResumeHandleForBusyTarget(projectRoot, {
+              generationId: binding.session_generation_id, ...target,
+            }, stateResult.record);
+          const classified = handle.ok || handle.reason === 'UNAVAILABLE'
+            ? classifyClaudeSupportRoleLiveness(projectRoot, expectedLiveness) : null;
+          liveness = handle.ok ? classified
+            : (classified && classified.ok && classified.status === 'ABSENT' ? classified : {
+              ok: false, status: 'INVALID', reason: stateResult.state === 'WAITING'
+                ? 'waiting-resume-handle-absent' : 'busy-resume-receipt-absent',
             });
-          liveness = handle.ok ? { ok: true, status: 'LIVE' }
-            : (classified && classified.ok && classified.status === 'ABSENT'
-              ? classified
-              : { ok: false, status: 'INVALID', reason: 'waiting-resume-handle-absent' });
-        } else if (stateResult.state === 'BUSY') {
-          const handle = findUniqueConsumedClaudeResumeHandleForBusyTarget(projectRoot, {
-            generationId: binding.session_generation_id, ...target,
-          }, stateResult.record);
-          const classified = handle.ok || handle.reason !== 'UNAVAILABLE'
-            ? null : classifyClaudeSupportRoleLiveness(projectRoot, {
-              generationId: binding.session_generation_id, planDigest: binding.plan_digest,
-              role, runtimeSessionKey: binding.runtime_session_key, worktreeId: binding.worktree_id,
-            });
-          liveness = handle.ok ? { ok: true, status: 'LIVE' }
-            : (classified && classified.ok && classified.status === 'ABSENT'
-              ? classified
-              : { ok: false, status: 'INVALID', reason: 'busy-resume-receipt-absent' });
-        } else {
-          liveness = classifyClaudeSupportRoleLiveness(projectRoot, {
-            generationId: binding.session_generation_id, planDigest: binding.plan_digest,
-            role, runtimeSessionKey: binding.runtime_session_key, worktreeId: binding.worktree_id,
-          });
-        }
-        if (stateResult.state === 'READY' && liveness.ok && liveness.status === 'UNVERIFIED') {
+        } else liveness = classifyClaudeSupportRoleLiveness(projectRoot, expectedLiveness);
+        if (liveness && liveness.ok && liveness.status === 'UNVERIFIED') {
           const probe = resolveOrMintLivenessProbe(projectRoot, binding, pair, role, stateResult.record, liveness);
           if (!probe.ok) {
             noteUnavailable(role, 'claude-liveness-probe-' + (probe.reason || 'invalid'));

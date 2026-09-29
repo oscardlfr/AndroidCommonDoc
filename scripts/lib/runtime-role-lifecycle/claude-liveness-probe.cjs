@@ -73,7 +73,8 @@ function createClaudeLivenessProbe(deps) {
       const state = readRoleBindingState(projectRoot, action.worktree_id, action.plan_digest,
         roleProfileDigestFor(action.role), action.session_generation_id, action.role);
       if (!actor.ok || actor.binding.session_generation_id !== action.session_generation_id
-          || !state.ok || state.state !== 'READY' || state.record.driver !== 'claude-sendmessage') {
+          || !state.ok || !['READY', 'WAITING', 'BUSY'].includes(state.state)
+          || state.record.driver !== 'claude-sendmessage') {
         return { ok: false, reason: 'liveness-actor-not-ready' };
       }
       const record = {
@@ -85,6 +86,7 @@ function createClaudeLivenessProbe(deps) {
         session_digest: sha256String(event.sessionId), tool_use_digest: sha256String(event.toolUseId),
         worktree_id: action.worktree_id, plan_digest: action.plan_digest,
         session_generation_id: action.session_generation_id, reserved_at: nowIsoForRegistry(),
+        role_state: state.state,
         role_state_digest: sha256String(canonicalJSONStringify(state.record)),
         role_state_updated_at: state.record.updated_at,
       };
@@ -116,12 +118,13 @@ function createClaudeLivenessProbe(deps) {
       const pendingRead = readRegistryRecord(livenessProbePath(projectRoot, event.actionId, '.pending.json'));
       if (!pendingRead.ok || pendingRead.absent || !pendingRead.obj) return { ok: false, reason: 'liveness-probe-unreserved' };
       const pending = pendingRead.obj;
-      const pendingKeys = ['action_digest','action_id','actor_binding_id','actor_digest','input_digest','plan_digest','recipient','reserved_at','role','role_state_digest','role_state_updated_at','schema','session_digest','session_generation_id','tool_use_digest','worktree_id'];
+      const pendingKeys = ['action_digest','action_id','actor_binding_id','actor_digest','input_digest','plan_digest','recipient','reserved_at','role','role_state','role_state_digest','role_state_updated_at','schema','session_digest','session_generation_id','tool_use_digest','worktree_id'];
       if (!hasExactKeys(pending, pendingKeys) || pending.schema !== CLAUDE_LIVENESS_PROBE_SCHEMA
           || pending.action_id !== event.actionId || pending.actor_binding_id !== match[1]
           || pending.actor_digest !== match[2] || pending.session_digest !== sha256String(event.sessionId)
           || pending.tool_use_digest !== sha256String(event.toolUseId)
           || pending.recipient !== event.recipient || pending.role !== event.recipient
+          || !['READY', 'WAITING', 'BUSY'].includes(pending.role_state)
           || pending.input_digest !== sha256String(canonicalJSONStringify({ recipient: event.recipient, message: event.message }))) {
         return { ok: false, reason: 'liveness-probe-correlation-mismatch' };
       }
@@ -151,7 +154,7 @@ function createClaudeLivenessProbe(deps) {
         const currentActor = validateRoleActorBindingFor(
           projectRoot, pending.actor_binding_id, pending.role, pending.worktree_id, pending.plan_digest,
         );
-        if (!currentState.ok || !currentState.record || !['READY', 'WAITING', 'DEAD'].includes(currentState.state)
+        if (!currentState.ok || !currentState.record || !['READY', 'WAITING', 'BUSY', 'DEAD'].includes(currentState.state)
             || !currentActor.ok || currentActor.binding.session_generation_id !== pending.session_generation_id) {
           return { ok: false, reason: 'liveness-probe-stale' };
         }
@@ -162,9 +165,13 @@ function createClaudeLivenessProbe(deps) {
           && hasExactKeys(event.response, ['message', 'success'])
           && event.response.success === false
           && event.response.message === claudeLivenessRecipientAbsentMessage(pending.recipient);
-        const status = currentState.state === 'READY' && stateUnchanged && exactRecipientAbsent
+        const healthyState = ['READY', 'WAITING', 'BUSY'].includes(currentState.state);
+        const sameSnapshot = currentState.state === pending.role_state && stateUnchanged;
+        const liveStateCompatible = currentState.state === pending.role_state
+          || (pending.role_state === 'WAITING' && currentState.state === 'BUSY');
+        const status = healthyState && sameSnapshot && exactRecipientAbsent
           ? 'ABSENT'
-          : (!actionExpired && currentState.state === 'READY' && stateUnchanged
+          : (!actionExpired && healthyState && liveStateCompatible
             && event.success === true && event.response && event.response.success === true
             && typeof resumedAgentId === 'string' && sha256String(resumedAgentId) === pending.actor_digest
             ? 'LIVE' : 'UNVERIFIED');
@@ -196,10 +203,10 @@ function createClaudeLivenessProbe(deps) {
           catch { return { ok: false, reason: 'liveness-outcome-publish-failed' }; }
         }
         if (outcome.status === 'ABSENT') {
-          if (currentState.state === 'READY' && stateUnchanged) {
+          if (healthyState && sameSnapshot) {
             const dead = transitionRoleBinding(
               projectRoot, pending.worktree_id, pending.plan_digest, roleProfileDigestFor(pending.role),
-              pending.session_generation_id, pending.role, 'READY', 'DEAD', currentState.record, {},
+              pending.session_generation_id, pending.role, currentState.state, 'DEAD', currentState.record, {},
             );
             if (!dead.ok) return { ok: false, reason: 'liveness-absent-transition-failed' };
           } else if (currentState.state !== 'DEAD' || !idempotent) {
