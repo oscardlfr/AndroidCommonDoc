@@ -35,6 +35,7 @@ const IMPL = path.resolve(__dirname, '../lib/runtime-role-lifecycle.cjs');
 const rll = require(IMPL);
 const rc = require(path.resolve(__dirname, '../lib/runtime-consultation.cjs'));
 const rbc = require(path.resolve(__dirname, '../lib/runtime-bridge-codex.cjs'));
+const runtimeHostBoundary = require(path.resolve(__dirname, '../../.claude/hooks/runtime-host-boundary.js'));
 const { capSupervisorActionExpiry } = require(path.resolve(__dirname, '../lib/runtime-role-lifecycle/supervisor-batch-mint.cjs'));
 
 const TEST_CAPABILITY = 'handlers-fixture-capability';
@@ -2285,6 +2286,243 @@ function admitSupportPlaneAction(dir, sessionKey, action) {
   );
   return { role: action.role, reserved, admitted, readBack, actor };
 }
+
+function ensureResumeMatrixRoles(dir, sessionKey, roles, checkpointRef) {
+  const digest = checkpointRef
+    ? ensureResumeDigest(roles, checkpointRef)
+    : ensureDigest(roles);
+  const grant = mintGrant(dir, sessionKey, roles, 'ensure', digest);
+  const args = ['ensure', '--project-root', dir];
+  for (const role of roles) args.push('--role', role);
+  if (checkpointRef) args.push('--resume-checkpoint', checkpointRef);
+  args.push('--lifecycle-binding', grant.grantId);
+  return runCli(args, { RUNTIME_ROLE_LIFECYCLE_FAKE_CAPABILITIES: LIVE_CAPS });
+}
+
+function admitSendMessageThroughRealBoundary(dir, sessionKey, action, ordinal) {
+  return runtimeHostBoundary.admitNativeActionEvent({
+    hook_event_name: 'PreToolUse',
+    tool_name: 'SendMessage',
+    cwd: dir,
+    session_id: sessionKey,
+    tool_use_id: `resume-matrix-message-${ordinal}`,
+    tool_input: {
+      recipient: action.payload.teammate_name,
+      message: action.payload.message,
+    },
+  });
+}
+
+function createReadyAndParkedSupportPlane(dir, sessionKey, roles) {
+  const initial = ensureResumeMatrixRoles(dir, sessionKey, roles);
+  assert.strictEqual(initial.status, 0, JSON.stringify(initial.result));
+  assert.strictEqual(initial.result.status, 'ACTION_REQUIRED', JSON.stringify(initial.result));
+  assert.strictEqual(initial.result.actions.length, roles.length, JSON.stringify(initial.result.actions));
+  const byRole = new Map(initial.result.actions.map((action) => [action.role, action]));
+  const handles = new Map();
+  for (const role of roles) {
+    const action = byRole.get(role);
+    assert.ok(action, `missing role-spawn action for ${role}`);
+    assert.strictEqual(action.kind, 'role-spawn');
+    assert.strictEqual(action.operation, 'Agent');
+    const profileDigest = rll.roleProfileDigestFor(role);
+    const before = rll.readRoleBindingState(
+      dir, action.worktree_id, action.plan_digest, profileDigest,
+      action.session_generation_id, role,
+    );
+    const ready = rll.transitionRoleBinding(
+      dir, action.worktree_id, action.plan_digest, profileDigest,
+      action.session_generation_id, role, before.state, 'READY', before.record, {},
+    );
+    assert.strictEqual(ready.ok, true, JSON.stringify(ready));
+    const actorBinding = rll.createRoleActorBinding(
+      dir, role, action.worktree_id, action.plan_digest, action.session_generation_id, 120,
+    );
+    assert.strictEqual(actorBinding.ok, true, JSON.stringify(actorBinding));
+    const agentId = 'resume-matrix-' + role + '-' + action.session_generation_id;
+    const parked = rll.parkClaudeResumeHandleForRoleActor(dir, {
+      sessionId: sessionKey,
+      agentId,
+      agentType: role,
+    });
+    assert.strictEqual(parked.ok, true, JSON.stringify(parked));
+    handles.set(role, parked.record);
+  }
+  return { initial, handles };
+}
+
+test('L1-RESUME-MATRIX A: five same-generation actors resume through the real SendMessage boundary and become READY only after 5/5 delivery', () => {
+  const dir = makeGitProject('l1-resume-matrix-a-');
+  const roles = P5_SUPPORT_ROLES.slice().sort();
+  const sessionKey = 'l1-resume-matrix-same-process';
+  const checkpointRef = 'checkpoint:' + 'a'.repeat(64);
+  try {
+    writePlanFixture(dir, 'l1-resume-matrix-a');
+    const fixture = createReadyAndParkedSupportPlane(dir, sessionKey, roles);
+    const first = ensureResumeMatrixRoles(dir, sessionKey, roles, checkpointRef);
+    assert.strictEqual(first.status, 0, JSON.stringify(first.result));
+    assert.strictEqual(first.result.status, 'ACTION_REQUIRED', JSON.stringify(first.result));
+    assert.strictEqual(first.result.actions.length, roles.length, JSON.stringify(first.result.actions));
+    assert.ok(first.result.actions.every((action) => action.kind === 'role-notify' && action.operation === 'SendMessage'));
+
+    for (let index = 0; index < first.result.actions.length - 1; index += 1) {
+      const action = first.result.actions[index];
+      assert.deepStrictEqual(admitSendMessageThroughRealBoundary(dir, sessionKey, action, index), {
+        admitted: true,
+        owning: true,
+        actionId: action.action_id,
+        operation: 'SendMessage',
+        consumed: true,
+      });
+    }
+    const partial = ensureResumeMatrixRoles(dir, sessionKey, roles, checkpointRef);
+    assert.strictEqual(partial.result.status, 'ACTION_REQUIRED', JSON.stringify(partial.result));
+    assert.strictEqual(partial.result.actions.length, 1, '4/5 delivery must never report READY');
+
+    const finalAction = partial.result.actions[0];
+    assert.deepStrictEqual(admitSendMessageThroughRealBoundary(dir, sessionKey, finalAction, roles.length - 1), {
+      admitted: true,
+      owning: true,
+      actionId: finalAction.action_id,
+      operation: 'SendMessage',
+      consumed: true,
+    });
+    for (const role of roles) {
+      const handle = fixture.handles.get(role);
+      assert.strictEqual(fs.existsSync(path.join(
+        rll.registryRepoDir(dir), 'claude-resume-handles', handle.binding_id + '.json.consumed',
+      )), true, `resume handle for ${role} must be consumed exactly once`);
+      const state = rll.readRoleBindingState(
+        dir,
+        rll.computeWorktreeId(dir),
+        rll.discoverPlan(dir).planDigest,
+        rll.roleProfileDigestFor(role),
+        handle.session_generation_id,
+        role,
+      );
+      assert.strictEqual(state.state, 'BUSY', JSON.stringify(state));
+    }
+
+    for (let pass = 0; pass < 2; pass += 1) {
+      const completed = ensureResumeMatrixRoles(dir, sessionKey, roles, checkpointRef);
+      assert.strictEqual(completed.result.status, 'READY', JSON.stringify(completed.result));
+      assert.deepStrictEqual(completed.result.actions, []);
+      assert.deepStrictEqual(completed.result.operation.resumed_roles, roles);
+    }
+  } finally {
+    cleanup(dir);
+  }
+});
+
+test('L1-RESUME-MATRIX B/D: a new process with the same raw session id rotates G1 to G2, emits five Agent actions, preserves old handles, and keeps init idempotent', () => {
+  const dir = makeGitProject('l1-resume-matrix-bd-');
+  const roles = P5_SUPPORT_ROLES.slice().sort();
+  const sessionKey = 'l1-resume-matrix-same-session-new-process';
+  const checkpointRef = 'checkpoint:' + 'b'.repeat(64);
+  try {
+    writePlanFixture(dir, 'l1-resume-matrix-bd');
+    const fixture = createReadyAndParkedSupportPlane(dir, sessionKey, roles);
+    const oldGenerationIds = new Set(Array.from(fixture.handles.values(), (handle) => handle.session_generation_id));
+    assert.strictEqual(oldGenerationIds.size, 1);
+    const oldGenerationId = Array.from(oldGenerationIds)[0];
+    const rotated = rll.resolveSessionGeneration(
+      dir,
+      identityFor(sessionKey),
+      { invocationDigest: '2'.repeat(64), forceRotation: true },
+    );
+    assert.strictEqual(rotated.ok, true, JSON.stringify(rotated));
+    assert.strictEqual(rotated.rotated, true, JSON.stringify(rotated));
+    assert.notStrictEqual(rotated.generationId, oldGenerationId);
+
+    const resumed = ensureResumeMatrixRoles(dir, sessionKey, roles, checkpointRef);
+    assert.strictEqual(resumed.result.status, 'ACTION_REQUIRED', JSON.stringify(resumed.result));
+    assert.strictEqual(resumed.result.actions.length, roles.length, JSON.stringify(resumed.result.actions));
+    assert.ok(resumed.result.actions.every((action) =>
+      action.kind === 'role-spawn' && action.operation === 'Agent' &&
+      action.session_generation_id === rotated.generationId));
+    assert.strictEqual(resumed.result.actions.some((action) => action.operation === 'SendMessage'), false);
+
+    for (const action of resumed.result.actions) {
+      const profileDigest = rll.roleProfileDigestFor(action.role);
+      const before = rll.readRoleBindingState(
+        dir, action.worktree_id, action.plan_digest, profileDigest,
+        action.session_generation_id, action.role,
+      );
+      const ready = rll.transitionRoleBinding(
+        dir, action.worktree_id, action.plan_digest, profileDigest,
+        action.session_generation_id, action.role, before.state, 'READY', before.record, {},
+      );
+      assert.strictEqual(ready.ok, true, JSON.stringify(ready));
+    }
+    for (const [role, handle] of fixture.handles) {
+      assert.strictEqual(fs.existsSync(path.join(
+        rll.registryRepoDir(dir), 'claude-resume-handles', handle.binding_id + '.json.consumed',
+      )), false, `historical G1 handle for ${role} must remain unconsumed`);
+      const oldState = rll.readRoleBindingState(
+        dir,
+        rll.computeWorktreeId(dir),
+        rll.discoverPlan(dir).planDigest,
+        rll.roleProfileDigestFor(role),
+        oldGenerationId,
+        role,
+      );
+      assert.strictEqual(oldState.state, 'DEAD', JSON.stringify(oldState));
+    }
+
+    const completed = ensureResumeMatrixRoles(dir, sessionKey, roles, checkpointRef);
+    assert.strictEqual(completed.result.status, 'READY', JSON.stringify(completed.result));
+    assert.deepStrictEqual(completed.result.actions, []);
+    assert.deepStrictEqual(completed.result.operation.resumed_roles, roles);
+    for (let pass = 0; pass < 2; pass += 1) {
+      const init = ensureResumeMatrixRoles(dir, sessionKey, roles);
+      assert.strictEqual(init.result.status, 'READY', JSON.stringify(init.result));
+      assert.deepStrictEqual(init.result.actions, [], 'idempotent init must never mint a sixth Agent');
+    }
+  } finally {
+    cleanup(dir);
+  }
+});
+
+test('L1-RESUME-MATRIX C: a G1 SendMessage delivered from the wrong session fails closed without consuming its handle or changing WAITING state', () => {
+  const dir = makeGitProject('l1-resume-matrix-c-');
+  const roles = P5_SUPPORT_ROLES.slice().sort();
+  const sessionKey = 'l1-resume-matrix-stale-message';
+  const checkpointRef = 'checkpoint:' + 'c'.repeat(64);
+  try {
+    writePlanFixture(dir, 'l1-resume-matrix-c');
+    const fixture = createReadyAndParkedSupportPlane(dir, sessionKey, roles);
+    const pending = ensureResumeMatrixRoles(dir, sessionKey, roles, checkpointRef);
+    assert.strictEqual(pending.result.status, 'ACTION_REQUIRED', JSON.stringify(pending.result));
+    assert.strictEqual(pending.result.actions.length, roles.length);
+    const staleAction = pending.result.actions[0];
+    const handle = fixture.handles.get(staleAction.role);
+    const rejected = admitSendMessageThroughRealBoundary(
+      dir,
+      'l1-resume-matrix-different-host-session',
+      staleAction,
+      0,
+    );
+    assert.deepStrictEqual(rejected, {
+      admitted: false,
+      owning: true,
+      reason: 'native-resume-consumption-failed:resume-handle-scope-mismatch',
+    });
+    assert.strictEqual(fs.existsSync(path.join(
+      rll.registryRepoDir(dir), 'claude-resume-handles', handle.binding_id + '.json.consumed',
+    )), false);
+    const state = rll.readRoleBindingState(
+      dir,
+      rll.computeWorktreeId(dir),
+      rll.discoverPlan(dir).planDigest,
+      rll.roleProfileDigestFor(staleAction.role),
+      handle.session_generation_id,
+      staleAction.role,
+    );
+    assert.strictEqual(state.state, 'WAITING', JSON.stringify(state));
+  } finally {
+    cleanup(dir);
+  }
+});
 
 // Shared by the P5SP-* and RSR-RECOVERY cases below. A dead retained owner must never outrank a
 // later generation on a technicality of which roles were asked for; a LIVE one must keep every
