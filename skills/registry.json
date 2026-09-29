@@ -783,7 +783,7 @@
       "description": "Show the canonical runtime readiness dashboard. Optionally ensures the persistent support plane with --orchestrate <slug>.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:1a22779cc8685ac782c1619037736a9b72675124d4f5465d646e1e95a1f74887",
+      "hash": "sha256:281ebdcbbe315d40bdbd16e5ffa077238243976bcf2cd8d6c133fbd0a470d596",
       "dependencies": [],
       "frontmatter": {
         "name": "init-session",
@@ -1376,7 +1376,7 @@
       "description": "Interactive wizard to fully configure a new or existing project to consume AndroidCommonDoc (L0). Covers skills, agents, Detekt rules, Konsist guards, CI workflow, PR template, and MCP server wiring. Creates l0-manifest.json, syncs selected assets, and verifies the result. Bilingual output (EN + ES).",
       "category": "guides",
       "tier": "extended",
-      "hash": "sha256:a552705916657b93ecef7eb9f0cebabfda5ec7a76e743a92911aa928038a68c8",
+      "hash": "sha256:006be6dfcddf040e91af6759a9ad5293a30f21eaa501c50f7aa0cd0b5c74caaf",
       "dependencies": [
         "scripts/sh/check-agent-parity.sh",
         "scripts/sh/rehash-registry.sh"
@@ -1475,7 +1475,7 @@
       "description": "Synchronize L0 assets and atomically refresh an already-enabled source-referenced collaboration runtime in an L1/L2 consumer.",
       "category": "guides",
       "tier": "extended",
-      "hash": "sha256:4f4635ebcd43c9fc531b2f63bcad2de590d8f34b8c257c095b43267bbb6450f6",
+      "hash": "sha256:d594c9420aa980cf3c516873e893b76dfada814202ce638a1ad0f758772a76b1",
       "dependencies": [],
       "frontmatter": {
         "name": "sync-l0",

@@ -6,20 +6,19 @@ const root = join(import.meta.dirname, "..", "..", "..");
 const skill = readFileSync(join(root, "skills", "init-session", "SKILL.md"), "utf8");
 
 describe("init-session layer classification contract", () => {
-  it("does not invent the removed top-level manifest layer field", () => {
+  it("uses the explicit consumer layer without inventing a generic layer field", () => {
     expect(skill).not.toContain("Extract `layer`, `topology`, and `selection`");
-    expect(skill).toContain("manifest v2 has none");
+    expect(skill).toContain("`l0-manifest.json.consumer_layer` is the L1/L2 architectural");
   });
 
-  it("documents marker-based L0, L1, and L2 classification", () => {
-    expect(skill).toContain("registry + manifest = L1");
-    expect(skill).toContain("manifest without registry = L2");
-    expect(skill).toContain("no manifest = L0");
+  it("keeps registry markers as legacy compatibility rather than architectural identity", () => {
+    expect(skill).toContain("publishing a skills registry is an independent capability");
+    expect(skill).toMatch(/Legacy\s+manifests without that field may use the old registry marker/);
   });
 
   it("keeps certified runtime role distinct and fails visibly on disagreement", () => {
     expect(skill).toContain("runtime-consumer/v1");
     expect(skill).toContain("consumer_layer");
-    expect(skill).toContain("flag any disagreement");
+    expect(skill).toContain("flag disagreement");
   });
 });

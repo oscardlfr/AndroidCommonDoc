@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
+import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync } from "node:fs";
 import { join, relative } from "node:path";
 import { tmpdir } from "node:os";
 
@@ -79,6 +79,17 @@ describe("classifyRepo", () => {
     const l1 = join(tempDir, "L1");
     mkdirSync(l1);
     makeL1(l1);
+    expect(classifyRepo(l1)).toBe("L1");
+  });
+
+  it("classifies an explicitly declared L1 without requiring a skills registry", () => {
+    const l1 = join(tempDir, "L1-explicit");
+    mkdirSync(l1);
+    makeL2(l1, [{ layer: "L0", path: "../L0", role: "tooling" }]);
+    const manifestPath = join(l1, "l0-manifest.json");
+    const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
+    manifest.consumer_layer = "L1";
+    writeFileSync(manifestPath, JSON.stringify(manifest));
     expect(classifyRepo(l1)).toBe("L1");
   });
 

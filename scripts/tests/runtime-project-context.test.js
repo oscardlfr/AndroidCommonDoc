@@ -109,6 +109,18 @@ test('P3-RUNTIME-CONTEXT L0 self-use and explicit L1/L2 source references resolv
   }
 });
 
+test('P3-RUNTIME-CONTEXT explicit manifest layer qualifies L1 without a skills registry', () => {
+  const f = fixture('L1');
+  try {
+    fs.rmSync(path.join(f.root, 'skills'), { recursive: true, force: true });
+    f.manifest.consumer_layer = 'L1';
+    fs.writeFileSync(path.join(f.root, 'l0-manifest.json'), JSON.stringify(f.manifest));
+    const result = resolveRuntimeProjectContext(f.root);
+    assert.strictEqual(result.ok, true, JSON.stringify(result));
+    assert.strictEqual(result.consumerLayer, 'L1');
+  } finally { fs.rmSync(f.root, { recursive: true, force: true }); }
+});
+
 test('P3-RUNTIME-INVENTORY includes every modular runtime dependency tree', () => {
   const inventory = computeRuntimeToolkitInventory(TOOLKIT_ROOT);
   assert.strictEqual(inventory.ok, true, JSON.stringify(inventory));

@@ -20,9 +20,11 @@ Build the toolkit first, then use one runtime adoption workflow. `/sync-l0` is t
 ```bash
 cd /absolute/path/to/AndroidCommonDoc/mcp-server
 npm ci && npm run build
-node build/sync/sync-l0-cli.js --project-root /absolute/path/to/consumer --runtime --dry-run
-node build/sync/sync-l0-cli.js --project-root /absolute/path/to/consumer --runtime
+node build/sync/sync-l0-cli.js --project-root /absolute/path/to/consumer --runtime --consumer-layer L1 --dry-run
+node build/sync/sync-l0-cli.js --project-root /absolute/path/to/consumer --runtime --consumer-layer L1
 ```
+
+Use `L2` instead for an application consumer. This declaration is the architectural identity; it does not require an L1 to publish `skills/registry.json`. Dry-run performs zero writes, while apply records the declaration and matching runtime certificate atomically. An existing contradictory declaration fails closed rather than being rewritten.
 
 After that first adoption, every normal upgrade is one command. The manifest's `runtime.enabled` flag makes plain sync refresh assets and runtime together:
 
@@ -33,7 +35,7 @@ node build/sync/sync-l0-cli.js --project-root /absolute/path/to/consumer
 
 `--assets-only` is an explicit maintenance opt-out; it is not the normal upgrade path. No ordinary-sync-then-runtime-sync sequence is required.
 
-An L1 must own `skills/registry.json`; generate it with `npm run generate-registry -- /absolute/path/to/L1` from the toolkit `mcp-server`. Without that marker the portable layer contract intentionally classifies it as L2.
+An L1 needs `skills/registry.json` only when it publishes its own downstream skills, agents, or commands. Registry ownership is a distribution capability, not layer identity.
 
 `--runtime` installs the consumer-owned wave topology, the standalone `.claude/runtime/l0-entrypoint-launcher.cjs`, and a toolkit runtime-closure digest. Every runtime skill invokes that local launcher; L0 self-hosts the same path. Hooks that import L0 modules are not copied partially. Instead, the consumer also receives `.claude/hooks/l0-source-hook-launcher.js`; registrations call that stable local hook launcher. Materialized skill, agent, and command metadata records `l0_source: manifest:L0/tooling`; it never serializes the checkout path or username, and ordinary sync repairs legacy generated provenance without overwriting consumer edits.
 

@@ -87,6 +87,8 @@ export type ManifestV1 = z.infer<typeof ManifestSchemaV1>;
 
 export const ManifestSchemaV2 = z.object({
   version: z.literal(2),
+  /** Architectural identity of this consumer. Independent of optional registry capabilities. */
+  consumer_layer: z.enum(["L1", "L2"]).optional(),
   /** Ordered list of source layers (L0 first, then L1, etc.) */
   sources: z.array(LayerSourceSchema).min(1),
   /** "flat" = direct L0 consumption. "chain" = L0 → L1 → L2 cascade */
@@ -120,6 +122,7 @@ export const ManifestSchema = ManifestSchemaV2;
 export function migrateV1toV2(v1: ManifestV1): ManifestV2 {
   return {
     version: 2,
+    consumer_layer: undefined,
     sources: [{ layer: "L0", path: v1.l0_source, role: "tooling" }],
     topology: "flat",
     last_synced: v1.last_synced,
@@ -153,6 +156,7 @@ export function validateManifest(data: unknown): Manifest {
 export function createDefaultManifest(l0Source: string): Manifest {
   return {
     version: 2,
+    consumer_layer: undefined,
     sources: [{ layer: "L0", path: l0Source, role: "tooling" }],
     topology: "flat",
     last_synced: new Date().toISOString(),
@@ -174,6 +178,7 @@ export function createDefaultManifest(l0Source: string): Manifest {
 export function createChainManifest(sources: LayerSource[]): Manifest {
   return {
     version: 2,
+    consumer_layer: undefined,
     sources,
     topology: "chain",
     last_synced: new Date().toISOString(),

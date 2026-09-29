@@ -12,7 +12,7 @@
  * If no manifest exists, auto-discovers L0/L1 sources nearby and creates one.
  *
  * Usage:
- *   node build/sync/sync-l0-cli.js [--project-root <path>] [--l0-root <path>] [--prune] [--force] [--dry-run] [--runtime] [--assets-only]
+ *   node build/sync/sync-l0-cli.js [--project-root <path>] [--l0-root <path>] [--prune] [--force] [--dry-run] [--runtime] [--consumer-layer <L1|L2>] [--assets-only]
  *
  * Options:
  *   --project-root  Path to the downstream project (default: cwd)
@@ -21,6 +21,7 @@
  *   --force         Allow removing >5 files (requires --prune)
  *   --dry-run       Preview changes without writing
  *   --runtime       Install the source-referenced L1/L2 collaboration runtime
+ *   --consumer-layer Explicit architectural identity for runtime adoption
  *   --assets-only   Do not refresh an already-enabled runtime
  *
  * Exit codes:
@@ -69,12 +70,14 @@ interface CliArgs {
   autoMigrate: boolean;
   forceL0Managed: boolean;
   runtime: boolean;
+  consumerLayer?: "L1" | "L2";
   assetsOnly: boolean;
 }
 
 const USAGE = `Usage:
   sync-l0 [--project-root <path>] [--l0-root <path>] [--prune] [--force]
-          [--dry-run] [--auto-migrate] [--force-l0-managed] [--runtime] [--assets-only]
+          [--dry-run] [--auto-migrate] [--force-l0-managed] [--runtime]
+          [--consumer-layer <L1|L2>] [--assets-only]
 
 Options:
   --project-root PATH   Downstream project root (default: current directory)
@@ -85,6 +88,7 @@ Options:
   --auto-migrate        Apply eligible manifest migrations
   --force-l0-managed    Replace locally drifted L0-owned templates
   --runtime             Install or refresh the source-referenced runtime
+  --consumer-layer L1|L2  Declare this project's architectural consumer layer
   --assets-only         Sync registry assets only, even when runtime is already enabled
   -h, --help            Show this help and exit without reading or writing a project
 `;
@@ -98,6 +102,7 @@ function parseArgs(argv: string[]): CliArgs {
   let autoMigrate = false;
   let forceL0Managed = false;
   let runtime = false;
+  let consumerLayer: "L1" | "L2" | undefined;
   let assetsOnly = false;
 
   for (let i = 2; i < argv.length; i++) {
@@ -121,6 +126,11 @@ function parseArgs(argv: string[]): CliArgs {
       forceL0Managed = true;
     } else if (argv[i] === "--runtime") {
       runtime = true;
+    } else if (argv[i] === "--consumer-layer") {
+      const value = argv[i + 1];
+      if (value !== "L1" && value !== "L2") throw new Error("--consumer-layer requires L1 or L2");
+      consumerLayer = value;
+      i++;
     } else if (argv[i] === "--assets-only") {
       assetsOnly = true;
     } else {
@@ -129,7 +139,7 @@ function parseArgs(argv: string[]): CliArgs {
   }
 
   if (runtime && assetsOnly) throw new Error("--runtime and --assets-only are mutually exclusive");
-  return { projectRoot, l0Root, prune, force, dryRun, autoMigrate, forceL0Managed, runtime, assetsOnly };
+  return { projectRoot, l0Root, prune, force, dryRun, autoMigrate, forceL0Managed, runtime, consumerLayer, assetsOnly };
 }
 
 // ---------------------------------------------------------------------------
@@ -272,7 +282,7 @@ async function main(): Promise<void> {
   }
   const {
     projectRoot, l0Root: l0RootArg, prune, force, dryRun, autoMigrate,
-    forceL0Managed, runtime: requestedRuntime, assetsOnly,
+    forceL0Managed, runtime: requestedRuntime, consumerLayer, assetsOnly,
   } = parseArgs(process.argv);
 
   const manifestPath = path.join(projectRoot, "l0-manifest.json");
@@ -294,13 +304,18 @@ async function main(): Promise<void> {
       throw new Error("--runtime cannot be combined with --prune, --force, --force-l0-managed, or --auto-migrate");
     }
   }
+  if (consumerLayer && !runtime) {
+    throw new Error("--consumer-layer requires --runtime or an already-enabled runtime");
+  }
 
   const { l0Root, isMultiSource, clonedDirs } = await ensureManifest(projectRoot, l0RootArg, runtime, dryRun);
 
   try {
 
   if (runtime) {
-    const preflight = await installRuntimeConsumer(projectRoot, l0Root, { dryRun: true });
+    const preflight = await installRuntimeConsumer(projectRoot, l0Root, {
+      dryRun: true, consumerLayer,
+    });
     if (!preflight.ok) throw new Error(`Runtime install preflight failed: ${preflight.reason}`);
   }
 
@@ -436,7 +451,9 @@ async function main(): Promise<void> {
 
   let runtimeManifestChanged = false;
   if (runtime) {
-    const runtimeResult = await installRuntimeConsumer(projectRoot, l0Root, { dryRun });
+    const runtimeResult = await installRuntimeConsumer(projectRoot, l0Root, {
+      dryRun, consumerLayer,
+    });
     if (!runtimeResult.ok) throw new Error(`Runtime install failed: ${runtimeResult.reason}`);
     runtimeManifestChanged = runtimeResult.manifestChanged === true;
     console.log(`Runtime consumer: ${runtimeResult.consumerLayer} (${runtimeResult.toolkitContentDigest})`);

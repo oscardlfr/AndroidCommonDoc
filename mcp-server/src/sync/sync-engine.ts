@@ -132,6 +132,45 @@ function isKnownLegacyRuntimeFile(relativePath: string, content: string | Buffer
   return expected !== undefined && createHash("sha256").update(content).digest("hex") === expected;
 }
 
+/**
+ * Accept an exact previous revision of the same toolkit-owned path only when
+ * that revision is reachable from the qualified toolkit HEAD. A shallow or
+ * history-less source simply cannot prove ownership and therefore stays
+ * fail-closed; the bounded legacy digest table remains the compatibility
+ * fallback for those installations.
+ */
+export function isHistoricalToolkitFile(
+  toolkitRoot: string,
+  relativePath: string,
+  content: string | Buffer,
+): boolean {
+  if (path.isAbsolute(relativePath) || relativePath.split(/[\\/]/).includes("..")) return false;
+  const normalizedPath = relativePath.replace(/\\/g, "/");
+  const observed = createHash("sha256").update(content).digest("hex");
+  try {
+    const revisions = execFileSync("git", ["rev-list", "HEAD", "--", normalizedPath], {
+      cwd: toolkitRoot,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+    }).trim().split("\n").filter(Boolean);
+    return revisions.some((revision) => {
+      try {
+        const historical = execFileSync("git", ["show", `${revision}:${normalizedPath}`], {
+          cwd: toolkitRoot,
+          encoding: "buffer",
+          stdio: ["ignore", "pipe", "ignore"],
+          maxBuffer: 10 * 1024 * 1024,
+        });
+        return createHash("sha256").update(historical).digest("hex") === observed;
+      } catch {
+        return false;
+      }
+    });
+  } catch {
+    return false;
+  }
+}
+
 const L0_SOURCE_HOOK_LAUNCHER = "l0-source-hook-launcher.js";
 
 function portableSourceHookCommand(file: string): string {
@@ -330,6 +369,22 @@ function hashContent(content: string): string {
   const stripped = stripL0Metadata(content);
   const hash = createHash("sha256").update(stripped).digest("hex");
   return `sha256:${hash}`;
+}
+
+/**
+ * Recognize an older ordinary-sync materialization without trusting generated
+ * provenance by itself. The recorded manifest checksum, embedded l0_hash and
+ * metadata-free body must all agree. This lets the runtime installer replace a
+ * legitimately managed historical role while keeping locally edited bodies
+ * fail-closed.
+ */
+function isRecordedOrdinarySyncCopy(content: string, recorded: string | undefined): boolean {
+  if (!recorded) return false;
+  const lines = content.replace(/\r\n/g, "\n").split("\n").map((line) => line.trim());
+  return lines.some((line) => /^l0_source:\s*\S+/.test(line)) &&
+    lines.includes(`l0_hash: ${recorded}`) &&
+    lines.some((line) => /^l0_synced:\s*\S+/.test(line)) &&
+    hashContent(content) === recorded;
 }
 
 /**
@@ -1521,7 +1576,7 @@ async function l0SourceResolvesToToolkit(
 export async function installRuntimeConsumer(
   projectRoot: string,
   toolkitRoot: string,
-  options: { dryRun?: boolean } = {},
+  options: { dryRun?: boolean; consumerLayer?: "L1" | "L2" } = {},
 ): Promise<RuntimeConsumerInstallResult> {
   const dryRun = options.dryRun === true;
   try {
@@ -1538,8 +1593,17 @@ export async function installRuntimeConsumer(
     }
     const retiredArtifactPlan = await planRetiredArtifactReconciliation(consumer, toolkit, manifest);
     prepareRetiredArtifactChecksums(manifest, retiredArtifactPlan);
-    const consumerLayer: "L1" | "L2" = await access(path.join(consumer, "skills", "registry.json"))
+    const requestedLayer = options.consumerLayer;
+    const declaredLayer = manifest.consumer_layer;
+    const installedLayer = manifest.runtime?.consumer_layer;
+    if ((requestedLayer && declaredLayer && requestedLayer !== declaredLayer) ||
+        (requestedLayer && installedLayer && requestedLayer !== installedLayer) ||
+        (declaredLayer && installedLayer && declaredLayer !== installedLayer)) {
+      return { ok: false, reason: "runtime-consumer-layer-conflict", dryRun };
+    }
+    const legacyObservedLayer: "L1" | "L2" = await access(path.join(consumer, "skills", "registry.json"))
       .then(() => "L1" as const).catch(() => "L2" as const);
+    const consumerLayer = requestedLayer ?? declaredLayer ?? installedLayer ?? legacyObservedLayer;
     const toolkitCommit = execFileSync("git", ["rev-parse", "HEAD"], { cwd: toolkit, encoding: "utf8" }).trim();
     if (!/^[0-9a-f]{40}$/.test(toolkitCommit)) return { ok: false, reason: "runtime-toolkit-commit-invalid", dryRun };
     const inventory = await computeRuntimeToolkitInventory(toolkit);
@@ -1611,7 +1675,10 @@ export async function installRuntimeConsumer(
         const existing = await readFile(destination, "utf8");
         if (existing === content) continue;
         const existingDigest = `sha256:${createHash("sha256").update(existing).digest("hex")}`;
-        const isPreviouslyManaged = manifest.checksums[relative] === existingDigest;
+        const recorded = manifest.checksums[relative];
+        const isPreviouslyManaged = recorded === existingDigest ||
+          isRecordedOrdinarySyncCopy(existing, recorded) ||
+          isHistoricalToolkitFile(toolkit, relative, existing);
         const isCurrentOrdinarySyncCopy = stripL0Metadata(existing) === content;
         if (!isPreviouslyManaged && !isCurrentOrdinarySyncCopy) {
           return { ok: false, reason: `runtime-role-conflict:${role}`, dryRun };
@@ -1644,7 +1711,9 @@ export async function installRuntimeConsumer(
         }
         const recorded = manifest.checksums[relative];
         const existingDigest = `sha256:${createHash("sha256").update(existing).digest("hex")}`;
-        if (recorded !== existingDigest && !isKnownLegacyRuntimeFile(relative, existing)) {
+        if (recorded !== existingDigest &&
+            !isKnownLegacyRuntimeFile(relative, existing) &&
+            !isHistoricalToolkitFile(toolkit, relative, existing)) {
           return { ok: false, reason: `runtime-consumer-file-conflict:${relative}`, dryRun };
         }
       } catch (err) {
@@ -1671,6 +1740,7 @@ export async function installRuntimeConsumer(
       if (JSON.stringify(nextSettings) !== JSON.stringify(settings)) {
         await writeSettingsAtomically(settingsPath, nextSettings);
       }
+      manifest.consumer_layer = consumerLayer;
       manifest.runtime = {
         schema: "runtime-consumer/v1", enabled: true, consumer_layer: consumerLayer,
         toolkit_commit: toolkitCommit, toolkit_content_sha256: inventory.digest,
