@@ -53,12 +53,17 @@ targets: [all]
 
 - Keep generated fixtures deterministic.
 EOF
-    cat > "$FIXTURE_ROOT/CLAUDE.md" <<'EOF'
+    cat > "$FIXTURE_ROOT/AGENTS.md" <<'EOF'
 # Fixture
 
 ## Rules
 
 - Preserve generated output parity.
+EOF
+    cat > "$FIXTURE_ROOT/CLAUDE.md" <<'EOF'
+# Fixture
+
+@AGENTS.md
 EOF
 
     HOME="$FIXTURE_HOME" bash "$FIXTURE_ROOT/adapters/generate-all.sh" \
@@ -72,6 +77,12 @@ teardown() {
 fixture_output_fingerprint() {
     find "$FIXTURE_ROOT/setup/copilot-templates" \
         "$FIXTURE_ROOT/setup/copilot-agent-templates" -type f -exec cksum {} \; | sort
+}
+
+@test "portable AGENTS rule reaches generated Copilot instructions exactly once" {
+    instructions="$FIXTURE_ROOT/setup/copilot-templates/copilot-instructions-from-claude-md.md"
+    [ -f "$instructions" ]
+    [ "$(grep -Fxc -- '- Preserve generated output parity.' "$instructions")" -eq 1 ]
 }
 
 @test "copilot agent adapter parses quoted frontmatter portably without corrupting YAML" {

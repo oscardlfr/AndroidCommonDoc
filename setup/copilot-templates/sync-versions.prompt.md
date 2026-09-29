@@ -11,14 +11,10 @@ Check version catalog alignment between KMP projects. Use when asked to verify d
 
 ### macOS / Linux
 ```bash
-COMMON_DOC="${ANDROID_COMMON_DOC:?ANDROID_COMMON_DOC is not set. See README.md}"
-
-"$COMMON_DOC/scripts/sh/check-version-sync.sh" --project-root "$(pwd)" $ARGUMENTS
+node .claude/runtime/l0-toolkit-launcher.cjs run version-sync --project-root "$PWD" -- $ARGUMENTS
 ```
 
 ### Windows (PowerShell)
 ```powershell
-$commonDoc = if ($env:ANDROID_COMMON_DOC) { $env:ANDROID_COMMON_DOC } else { throw "ANDROID_COMMON_DOC is not set. See README.md" }
-
-& "$commonDoc\scripts\ps1\check-version-sync.ps1" -ProjectRoot (Get-Location).Path -SourceOfTruth "$SOURCE" -Projects @($PROJECTS) -OutputFormat $FORMAT
+node .claude/runtime/l0-toolkit-launcher.cjs run version-sync --project-root (Get-Location).Path -- $ARGUMENTS
 ```

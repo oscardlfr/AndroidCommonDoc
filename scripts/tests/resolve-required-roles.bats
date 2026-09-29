@@ -79,6 +79,20 @@ teardown() {
   [ "$output" = "FALLBACK" ]
 }
 
+@test "clean consumer resolves topology without a consumer mcp-server dependency" {
+  local consumer
+  consumer="$(mktemp -d "${TMPDIR:-/tmp}/resolve-roles-consumer.XXXXXX")"
+  mkdir -p "$consumer/.claude/registry" "$consumer/.planning/wave-runtime"
+  cp "$PROJECT_ROOT/.claude/registry/wave-topology.yaml" "$consumer/.claude/registry/wave-topology.yaml"
+  printf 'HARNESS' > "$consumer/.planning/wave-runtime/CLASS"
+
+  run node "$RESOLVER" "$consumer" runtime
+  rm -rf "$consumer"
+
+  [ "$status" -eq 0 ]
+  [ "$output" = '["arch-platform","arch-testing","arch-integration"]' ]
+}
+
 @test "missing arguments is a usage error (exit 3)" {
   run node "$RESOLVER"
   [ "$status" -eq 3 ]

@@ -969,6 +969,43 @@ _assert_pretooluse_deny() {
   [ "$status" -eq 0 ]
 }
 
+@test "TG-READY-LIVE-PRETOOLUSE PASS: ready accepts Claude's canonical main transcript and resolves one authenticated startup trace" {
+  local out action_id worktree_id plan_digest gen_id
+  out="$(_mint_pending_role_spawn_full arch-testing tg-ready-live-payload-session)"
+  read -r action_id worktree_id plan_digest gen_id <<< "$out"
+  [ -n "$action_id" ]
+
+  local cmd; cmd="$(_render_posix_direct node "$RLL_IMPL" ready --action "$action_id")"
+  _make_input "$cmd" arch-testing tg-ready-live-payload-session
+  local transcript_path="$PROJ/tg-ready-live-payload-session.jsonl"
+  printf '{}\n' > "$transcript_path"
+  node -e '
+    const fs = require("fs");
+    const file = process.argv[1];
+    const event = JSON.parse(fs.readFileSync(file, "utf8"));
+    event.agent_id = "non-authoritative-hook-alias";
+    event.agent_type = "planner";
+    event.transcript_path = fs.realpathSync(process.argv[2]);
+    fs.writeFileSync(file, JSON.stringify(event));
+  ' "$INPUT_FILE" "$transcript_path"
+  _run_hook
+  [ "$status" -eq 0 ]
+  [ -n "$output" ]
+  local grant_id; grant_id="$(_extract_injected lifecycle-binding)"
+  [ -n "$grant_id" ] || { printf '# live-shaped ready hook output: %s\n' "$output" >&3; false; }
+
+  run node -e '
+    const rll = require(process.argv[1]);
+    const crypto = require("crypto");
+    const argvDigest = crypto.createHash("sha256").update("ready:" + process.argv[3]).digest("hex");
+    const result = rll.validateAndConsumeLifecycleCommandGrant(
+      process.argv[2], process.argv[4], argvDigest, "arch-testing", "ready", process.argv[3],
+    );
+    if (!result.ok) { process.stderr.write(JSON.stringify(result)); process.exit(1); }
+  ' "$RLL_IMPL" "$PROJ" "$action_id" "$grant_id"
+  [ "$status" -eq 0 ]
+}
+
 @test "TG-READY-ABSOLUTE-NODE PASS: accepted resolved-Node bootstrap command mints+injects --lifecycle-binding" {
   local out action_id worktree_id plan_digest gen_id
   out="$(_mint_pending_role_spawn_full arch-testing tg-ready-absolute-node-session)"

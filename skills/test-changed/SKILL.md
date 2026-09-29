@@ -3,7 +3,6 @@ name: test-changed
 description: "Run tests only on modules with uncommitted changes. Use when asked to test changed files or run a quick pre-commit check."
 intent: [test, changed, uncommitted, pre-commit, fast]
 allowed-tools: [Bash, Read, Grep, Glob]
-l0_requires: ANDROID_COMMON_DOC
 copilot: true
 ---
 
@@ -54,58 +53,12 @@ Uses parameters from `params.json`:
 
 ### macOS / Linux
 ```bash
-COMMON_DOC="${ANDROID_COMMON_DOC:?ANDROID_COMMON_DOC is not set. See README.md}"
-
-"$COMMON_DOC/scripts/sh/run-changed-modules-tests.sh" --project-root "$(pwd)" $ARGUMENTS
+node .claude/runtime/l0-toolkit-launcher.cjs run test-changed --project-root "$(pwd)" -- $ARGUMENTS
 ```
 
 ### Windows
-```powershell
-$commonDoc = if ($env:ANDROID_COMMON_DOC) { $env:ANDROID_COMMON_DOC } else { throw "ANDROID_COMMON_DOC is not set. See README.md" }
 
-$argList = "$ARGUMENTS" -split '\s+' | Where-Object { $_ }
-$includeShared = $false
-$testType = ""
-$stagedOnly = $false
-$showModulesOnly = $false
-$maxFailures = 0
-$minLines = 0
-$coverageTool = ""
-
-for ($i = 0; $i -lt $argList.Count; $i++) {
-    $arg = $argList[$i]
-    if ($arg -eq "--include-shared") {
-        $includeShared = $true
-    } elseif ($arg -eq "--test-type" -and $i + 1 -lt $argList.Count) {
-        $testType = $argList[$i + 1]; $i++
-    } elseif ($arg -eq "--staged-only") {
-        $stagedOnly = $true
-    } elseif ($arg -eq "--show-modules") {
-        $showModulesOnly = $true
-    } elseif ($arg -eq "--max-failures" -and $i + 1 -lt $argList.Count) {
-        $maxFailures = [int]$argList[$i + 1]; $i++
-    } elseif ($arg -eq "--min-lines" -and $i + 1 -lt $argList.Count) {
-        $minLines = [int]$argList[$i + 1]; $i++
-    } elseif ($arg -eq "--coverage-tool" -and $i + 1 -lt $argList.Count) {
-        $coverageTool = $argList[$i + 1]; $i++
-    }
-}
-
-$params = @{
-    ProjectRoot = (Get-Location).Path
-    MaxFailures = $maxFailures
-    MinMissedLines = $minLines
-}
-
-if ($testType -ne "") { $params.TestType = $testType }
-if ($includeShared) { $params.IncludeShared = $true }
-if ($stagedOnly) { $params.StagedOnly = $true }
-if ($showModulesOnly) { $params.ShowModulesOnly = $true }
-if ($coverageTool -ne "") { $params.CoverageTool = $coverageTool }
-
-& "$commonDoc\scripts\ps1\run-changed-modules-tests.ps1" @params
-```
-
+Claude Code runs the POSIX command above from Bash on Windows as well. Do not resolve the toolkit through `ANDROID_COMMON_DOC` or call its PowerShell scripts directly; the consumer-local launcher resolves and verifies the pinned L0 source from `l0-manifest.json`.
 ## Expected Output
 
 **On success:**

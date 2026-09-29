@@ -3,7 +3,6 @@ name: verify-kmp
 description: "Validate KMP source set organization and forbidden imports. Use when asked to check architecture or source set correctness."
 intent: [kmp, source-sets, imports, architecture, validate]
 allowed-tools: [Bash, Read, Grep, Glob]
-l0_requires: ANDROID_COMMON_DOC
 copilot: true
 ---
 
@@ -46,18 +45,12 @@ Uses parameters from `params.json`:
 
 ### macOS / Linux
 ```bash
-COMMON_DOC="${ANDROID_COMMON_DOC:?ANDROID_COMMON_DOC is not set. See README.md}"
-
-"$COMMON_DOC/scripts/sh/verify-kmp-packages.sh" --project-root "$(pwd)" $ARGUMENTS
+node .claude/runtime/l0-toolkit-launcher.cjs run verify-kmp --project-root "$(pwd)" -- $ARGUMENTS
 ```
 
 ### Windows
-```powershell
-$commonDoc = if ($env:ANDROID_COMMON_DOC) { $env:ANDROID_COMMON_DOC } else { throw "ANDROID_COMMON_DOC is not set. See README.md" }
 
-& "$commonDoc\scripts\ps1\verify-kmp-packages.ps1" -ProjectRoot (Get-Location).Path -ModulePath "$MODULE" -ShowDetails:$VERBOSE -StrictMode:$STRICT
-```
-
+Claude Code runs the POSIX command above from Bash on Windows as well. Do not resolve the toolkit through `ANDROID_COMMON_DOC` or call its PowerShell scripts directly; the consumer-local launcher resolves and verifies the pinned L0 source from `l0-manifest.json`.
 ## Expected Output
 
 **On success (exit code 0):**

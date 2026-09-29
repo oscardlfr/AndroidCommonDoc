@@ -3,7 +3,6 @@ name: extract-errors
 description: "Extract structured build and test errors from Gradle output. Use when a build or test fails and you need actionable error details."
 intent: [errors, build, gradle, extract, failures, actionable]
 allowed-tools: [Bash, Read, Grep, Glob]
-l0_requires: ANDROID_COMMON_DOC
 copilot: true
 ---
 
@@ -50,18 +49,12 @@ Uses parameters from `params.json`:
 
 ### macOS / Linux
 ```bash
-COMMON_DOC="${ANDROID_COMMON_DOC:?ANDROID_COMMON_DOC is not set. See README.md}"
-
-"$COMMON_DOC/scripts/sh/ai-error-extractor.sh" --project-root "$(pwd)" --module "$MODULE" $ARGUMENTS
+node .claude/runtime/l0-toolkit-launcher.cjs run extract-errors --project-root "$(pwd)" -- --module "$MODULE" $ARGUMENTS
 ```
 
 ### Windows
-```powershell
-$commonDoc = if ($env:ANDROID_COMMON_DOC) { $env:ANDROID_COMMON_DOC } else { throw "ANDROID_COMMON_DOC is not set. See README.md" }
 
-& "$commonDoc\scripts\ps1\ai-error-extractor.ps1" -ProjectRoot (Get-Location).Path -Module "$MODULE" -Platform $PLATFORM -JsonOutput:$JSON -IncludeStackTrace:$INCLUDE_STACK
-```
-
+Claude Code runs the POSIX command above from Bash on Windows as well. Do not resolve the toolkit through `ANDROID_COMMON_DOC` or call its PowerShell scripts directly; the consumer-local launcher resolves and verifies the pinned L0 source from `l0-manifest.json`.
 ## Expected Output
 
 **Structured actionable items:**

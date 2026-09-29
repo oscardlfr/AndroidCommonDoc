@@ -23,6 +23,7 @@ Setup, configuration, and authoring guides for the L0/L1/L2 ecosystem.
 |----------|-------------|
 | [getting-started](getting-started.md) | **Full L0/L1/L2 setup from scratch** — manifest, Detekt, MCP, CI (EN + ES) |
 | [runtime-consumer-operations](runtime-consumer-operations.md) | Exact L1/L2 runtime install, launch, worktree, recovery, and Claude recertification procedure |
+| [runtime-consumer-research-mode](runtime-consumer-research-mode.md) | Bounded authenticated Context7 profile; distinct from safe-mode recovery |
 | [detekt-config](detekt-config.md) | Detekt L0/L1 config hierarchy, rule catalog, and how to add rules |
 | [detekt-migration-v2](detekt-migration-v2.md) | Migrating from Detekt 1.x to 2.0: plugin renames, config.validation, KMP baselines |
 | [baseline-reduction](baseline-reduction.md) | Playbook for progressively eliminating Detekt baseline suppressions (EN + ES) |

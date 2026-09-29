@@ -4,7 +4,6 @@ description: "Interactive wizard to fully configure a new or existing project to
 intent: [setup, configure, wizard, l0, manifest, onboard]
 user-invocable: true
 allowed-tools: [Bash, Read, Write, Edit, Glob]
-l0_requires: ANDROID_COMMON_DOC
 category: guides
 copilot: true
 copilot-template-type: behavioral
@@ -32,7 +31,7 @@ copilot-template-type: behavioral
 > AndroidCommonDoc directory** pointing at your project — no prior installation needed:
 >
 > ```bash
-> cd "$ANDROID_COMMON_DOC"
+> cd /absolute/path/to/AndroidCommonDoc
 > /setup --project-root /path/to/my-project
 > ```
 
@@ -62,7 +61,7 @@ copilot-template-type: behavioral
 
 ### Step 0 — Validate, detect, run wizards, print plan
 
-1. Check `ANDROID_COMMON_DOC` is set. Detect project type and AGP version:
+1. Confirm the current checkout is AndroidCommonDoc. Detect project type and AGP version:
 
 ```bash
 # Gradle project?
@@ -130,8 +129,8 @@ Proceed? [Y/n]
 
 ### Wizard W0 — Layer topology (always shown first)
 
-Auto-discovers L0/L1 sources by scanning sibling directories (`../`, `../../`),
-`$ANDROID_COMMON_DOC` env var, and any existing `l0-manifest.json`.
+Auto-discovers L0/L1 sources from the current L0 checkout, explicit paths,
+sibling directories (`../`, `../../`), and any existing `l0-manifest.json`.
 
 **Discovery markers:**
 - **L0**: has `skills/registry.json` + `mcp-server/` (no `l0-manifest.json`)
@@ -142,7 +141,7 @@ Auto-discovers L0/L1 sources by scanning sibling directories (`../`, `../../`),
 Scanning for L0/L1 sources...
 
 Discovered sources:
-  ✅ L0: AndroidCommonDoc → ../AndroidCommonDoc (from $ANDROID_COMMON_DOC)
+  ✅ L0: AndroidCommonDoc → ../AndroidCommonDoc (current L0 checkout)
   ✅ L1: {l1-project}   → ../{l1-project}  (found nearby)
 
 Suggested topology: chain
@@ -497,12 +496,11 @@ This makes all AndroidCommonDoc skills and agents discoverable by GSD-2:
 If confirmed:
 ```bash
 # Sync skills to GSD
-bash "$L0_ROOT/scripts/sh/sync-gsd-skills.sh" --source all \
+node .claude/runtime/l0-toolkit-launcher.cjs run sync-gsd-skills --project-root "$PWD" -- --source all \
   ${DRY_RUN:+--dry-run} ${VERBOSE:+--verbose}
 
 # Sync agents to GSD (so subagent can invoke them)
-bash "$L0_ROOT/scripts/sh/sync-gsd-agents.sh" --target user \
-  --project-root "$L0_ROOT" \
+node .claude/runtime/l0-toolkit-launcher.cjs run sync-gsd-agents --project-root "$PWD" -- --target user \
   ${DRY_RUN:+--dry-run} ${VERBOSE:+--verbose}
 ```
 
@@ -516,7 +514,7 @@ You can disable it later with: /sync-gsd-skills --disable-hook
 
 If auto-sync confirmed:
 ```bash
-bash "$L0_ROOT/scripts/sh/sync-gsd-skills.sh" --enable-hook
+node .claude/runtime/l0-toolkit-launcher.cjs run sync-gsd-skills --project-root "$PWD" -- --enable-hook
 ```
 
 > See: `skills/sync-gsd-skills/SKILL.md` and `skills/sync-gsd-agents/SKILL.md` for full details.
@@ -603,7 +601,7 @@ The detection is also surfaced by `/setup --verify-only`:
 ```
 Android CLI:
   binary:       0.7.15222914 [ok]
-  ANDROID_HOME: C:/Users/.../Sdk [ok]
+  ANDROID_HOME: C:/path/to/Android/Sdk [ok]
   adb devices:  1 authorized [ok]
 ```
 
@@ -667,7 +665,7 @@ Omite para saltar.
 
 ```bash
 # Core
-ANDROID_COMMON_DOC is set and points to valid L0 root
+Current checkout is a valid L0 root
 l0-manifest.json exists and has checksums
 Skills count matches selection (ls .claude/skills/ vs manifest)
 Agents synced (.claude/agents/ count matches manifest)
@@ -746,7 +744,7 @@ If JAR missing: `⚠ Detekt rules JAR not built. Run: cd $L0_ROOT/detekt-rules &
 
 **3. GSD agent parity (if W7 confirmed):**
 ```bash
-bash "$L0_ROOT/scripts/sh/check-agent-parity.sh" --project-root "$L0_ROOT" --target user
+node .claude/runtime/l0-toolkit-launcher.cjs run check-agent-parity --project-root "$PWD" -- --target user
 ```
 
 **4. Registry hash freshness:**

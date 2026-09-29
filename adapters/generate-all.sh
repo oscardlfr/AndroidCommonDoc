@@ -31,7 +31,8 @@ if [[ "$CHECK" == true ]]; then
   CHECK_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/androidcommondoc-adapter-check.XXXXXX")"
   trap 'rm -rf -- "$CHECK_ROOT"' EXIT HUP INT TERM
   STAGED_ROOT="$CHECK_ROOT/repo"
-  mkdir -p "$STAGED_ROOT/setup"
+  EXPECTED_ROOT="$CHECK_ROOT/expected"
+  mkdir -p "$STAGED_ROOT/setup" "$EXPECTED_ROOT/setup"
 
   # Copy only canonical inputs, adapter programs, and the two generated trees.
   # The real checkout is never an output target in check mode.
@@ -41,22 +42,23 @@ if [[ "$CHECK" == true ]]; then
   cp -R "$REPO_ROOT/setup/agent-templates" "$STAGED_ROOT/setup/agent-templates"
   cp -R "$REPO_ROOT/setup/copilot-templates" "$STAGED_ROOT/setup/copilot-templates"
   cp -R "$REPO_ROOT/setup/copilot-agent-templates" "$STAGED_ROOT/setup/copilot-agent-templates"
+  cp -R "$REPO_ROOT/setup/copilot-templates" "$EXPECTED_ROOT/setup/copilot-templates"
+  cp -R "$REPO_ROOT/setup/copilot-agent-templates" "$EXPECTED_ROOT/setup/copilot-agent-templates"
+  cp "$REPO_ROOT/AGENTS.md" "$STAGED_ROOT/AGENTS.md"
   cp "$REPO_ROOT/CLAUDE.md" "$STAGED_ROOT/CLAUDE.md"
 
   CHECK_LOG="$CHECK_ROOT/generate.log"
-  # Regenerate every repository-deterministic adapter output. The legacy
-  # CLAUDE.md adapter intentionally merges a user-global ~/.claude/CLAUDE.md.
-  # Check it when that declared input exists; in a clean CI checkout, preserve
-  # the copied output rather than inventing different host-global rules.
+  # Regenerate every repository-deterministic adapter output. Generated files
+  # must depend only on checked-in inputs, never on a maintainer's home folder.
   if ! {
     bash "$STAGED_ROOT/adapters/copilot-adapter.sh" --project-root "$STAGED_ROOT" --clean
     bash "$STAGED_ROOT/adapters/copilot-instructions-adapter.sh"
-    if [[ -f "${HOME}/.claude/CLAUDE.md" ]]; then
-      bash "$STAGED_ROOT/adapters/claude-md-copilot-adapter.sh"
-    else
-      echo "Skipping host-derived CLAUDE.md adapter check: ~/.claude/CLAUDE.md is absent."
-    fi
+    bash "$STAGED_ROOT/adapters/claude-md-copilot-adapter.sh"
     bash "$STAGED_ROOT/adapters/copilot-agent-adapter.sh" --l0-root "$STAGED_ROOT"
+    python3 "$STAGED_ROOT/adapters/normalize-line-endings.py" "$STAGED_ROOT/setup/copilot-templates"
+    python3 "$STAGED_ROOT/adapters/normalize-line-endings.py" "$STAGED_ROOT/setup/copilot-agent-templates"
+    python3 "$STAGED_ROOT/adapters/normalize-line-endings.py" "$EXPECTED_ROOT/setup/copilot-templates"
+    python3 "$STAGED_ROOT/adapters/normalize-line-endings.py" "$EXPECTED_ROOT/setup/copilot-agent-templates"
   } >"$CHECK_LOG" 2>&1; then
     cat "$CHECK_LOG" >&2
     echo "Adapter check failed: staged generation did not complete." >&2
@@ -64,10 +66,10 @@ if [[ "$CHECK" == true ]]; then
   fi
 
   drift=0
-  if ! diff -qr "$REPO_ROOT/setup/copilot-templates" "$STAGED_ROOT/setup/copilot-templates"; then
+  if ! diff -qr "$EXPECTED_ROOT/setup/copilot-templates" "$STAGED_ROOT/setup/copilot-templates" >&2; then
     drift=1
   fi
-  if ! diff -qr "$REPO_ROOT/setup/copilot-agent-templates" "$STAGED_ROOT/setup/copilot-agent-templates"; then
+  if ! diff -qr "$EXPECTED_ROOT/setup/copilot-agent-templates" "$STAGED_ROOT/setup/copilot-agent-templates" >&2; then
     drift=1
   fi
   if [[ "$drift" -ne 0 ]]; then
@@ -93,12 +95,16 @@ echo "Generating Copilot instructions..."
 bash "$SCRIPT_DIR/copilot-instructions-adapter.sh"
 echo ""
 
-echo "Generating Copilot instructions from CLAUDE.md..."
+echo "Generating Copilot instructions from portable agent contract..."
 bash "$SCRIPT_DIR/claude-md-copilot-adapter.sh"
 echo ""
 
 echo "Generating Copilot agent templates..."
 bash "$SCRIPT_DIR/copilot-agent-adapter.sh"
+echo ""
+
+python3 "$SCRIPT_DIR/normalize-line-endings.py" "$REPO_ROOT/setup/copilot-templates"
+python3 "$SCRIPT_DIR/normalize-line-endings.py" "$REPO_ROOT/setup/copilot-agent-templates"
 echo ""
 
 echo "Done. Generated files are in setup/copilot-templates/ and setup/copilot-agent-templates/"

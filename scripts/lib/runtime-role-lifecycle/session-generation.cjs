@@ -24,6 +24,9 @@ function createSessionGenerationModule({
   const CANONICAL_ISO_UTC_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/;
   const SESSION_GENERATION_SCAN_CAP = 1024;
   const EXPIRY_UNDERSHOOT_SAFETY_MARGIN_MS = 200;
+  const SESSION_INVOCATION_KEYS = Object.freeze([
+    'generation_id', 'invocation_digest', 'provider', 'runtime_session_digest', 'schema', 'updated_at',
+  ]);
 
   function getRuntimeIdentity() {
     if (!isTestCapability()) return { ok: false };
@@ -53,6 +56,10 @@ function createSessionGenerationModule({
 
   function sessionGenerationPathFor(projectRoot, identity) {
     return path.join(registryRepoDir(projectRoot), 'sessions', sessionLookupKey(identity) + '.json');
+  }
+
+  function sessionInvocationPathFor(projectRoot, identity) {
+    return path.join(registryRepoDir(projectRoot), 'session-invocations', sessionLookupKey(identity) + '.json');
   }
 
   function isCanonicalIsoUtc(value) {
@@ -174,7 +181,10 @@ function createSessionGenerationModule({
     return { ok: true, record: matches[0], expiresAt: matches[0].expires_at };
   }
 
-  function resolveSessionGeneration(projectRoot, identity) {
+  function resolveSessionGeneration(projectRoot, identity, options) {
+    if (options && typeof options.invocationDigest === 'string') {
+      return ensureSessionGenerationInvocation(projectRoot, identity, options.invocationDigest, options);
+    }
     const recordPath = sessionGenerationPathFor(projectRoot, identity);
     const lockDir = recordPath + '.lock';
     const result = withRegistryLock(lockDir, () => {
@@ -212,6 +222,73 @@ function createSessionGenerationModule({
       );
       if (!writeResult.ok) return { ok: false, reason: writeResult.reason };
       return { ok: true, generationId, expiresAt: record.expires_at };
+    });
+    if (!result.ok) return { ok: false, reason: result.reason };
+    return result.value;
+  }
+
+  function ensureSessionGenerationInvocation(projectRoot, identity, invocationDigest, options) {
+    if (!identity || !IDENTITY_PROVIDER_ENUM.includes(identity.provider) ||
+        typeof identity.runtime_session_key !== 'string' || identity.runtime_session_key.length === 0 ||
+        Buffer.byteLength(identity.runtime_session_key, 'utf8') > MAX_RUNTIME_SESSION_KEY_BYTES ||
+        !/^[0-9a-f]{64}$/.test(invocationDigest || '')) {
+      return { ok: false, reason: 'session-invocation-invalid' };
+    }
+    const recordPath = sessionGenerationPathFor(projectRoot, identity);
+    const markerPath = sessionInvocationPathFor(projectRoot, identity);
+    const result = withRegistryLock(recordPath + '.lock', () => {
+      const existing = readRegistryRecord(recordPath);
+      if (!existing.ok) return { ok: false, reason: existing.reason };
+      const markerRead = readRegistryRecord(markerPath);
+      if (!markerRead.ok) return { ok: false, reason: markerRead.reason };
+      const marker = markerRead.absent ? null : markerRead.obj;
+      const markerValid = marker && hasExactKeys(marker, SESSION_INVOCATION_KEYS) &&
+        marker.schema === 'runtime/session-invocation/v1' && marker.provider === identity.provider &&
+        marker.runtime_session_digest === sha256String(identity.runtime_session_key) &&
+        /^[0-9a-f]{64}$/.test(marker.invocation_digest || '') && isHexCsprng32(marker.generation_id) &&
+        isCanonicalIsoUtc(marker.updated_at);
+      if (marker && !markerValid) return { ok: false, reason: 'session-invocation-shape-invalid' };
+      const nowMs = currentClockMsForRegistry();
+      const current = existing.absent ? null : existing.obj;
+      const currentShapeValid = current && hasExactKeys(current, SESSION_GENERATION_KEYS) &&
+        current.schema === 'runtime/session-generation/v1' && current.provider === identity.provider &&
+        current.runtime_session_key === identity.runtime_session_key && isHexCsprng32(current.generation_id) &&
+        isCanonicalIsoUtc(current.created_at) && isCanonicalIsoUtc(current.expires_at);
+      if (current && !currentShapeValid) return { ok: false, reason: 'session-generation-shape-invalid' };
+      const currentValid = currentShapeValid && nowMs < isoToMsForRegistry(current.expires_at);
+      if (markerValid && marker.invocation_digest === invocationDigest && currentValid &&
+          marker.generation_id === current.generation_id) {
+        return { ok: true, generationId: current.generation_id, expiresAt: current.expires_at, rotated: false };
+      }
+      const keepCurrent = !marker && currentValid && !(options && options.forceRotation === true);
+      const nowStr = nowIsoForRegistry();
+      const generation = keepCurrent ? current : {
+        schema: 'runtime/session-generation/v1',
+        provider: identity.provider,
+        runtime_session_key: identity.runtime_session_key,
+        generation_id: crypto.randomBytes(16).toString('hex'),
+        created_at: nowStr,
+        expires_at: isoPlusSecondsForRegistry(nowStr, SESSION_GENERATION_TTL_SECONDS),
+      };
+      if (!keepCurrent) {
+        const generationWrite = writeRegistryRecordReplace(
+          recordPath, Buffer.from(canonicalJSONStringify(generation), 'utf8'),
+        );
+        if (!generationWrite.ok) return { ok: false, reason: generationWrite.reason };
+      }
+      const markerWrite = writeRegistryRecordReplace(markerPath, Buffer.from(canonicalJSONStringify({
+        schema: 'runtime/session-invocation/v1',
+        provider: identity.provider,
+        runtime_session_digest: sha256String(identity.runtime_session_key),
+        invocation_digest: invocationDigest,
+        generation_id: generation.generation_id,
+        updated_at: nowStr,
+      }), 'utf8'));
+      if (!markerWrite.ok) return { ok: false, reason: markerWrite.reason };
+      return {
+        ok: true, generationId: generation.generation_id, expiresAt: generation.expires_at,
+        rotated: Boolean(!keepCurrent && (markerValid || (options && options.forceRotation === true))),
+      };
     });
     if (!result.ok) return { ok: false, reason: result.reason };
     return result.value;

@@ -672,6 +672,37 @@ PYEOF
   [ "$status" -eq 0 ]
 }
 
+@test "R131-MULTI-PLAN-WORKTREE: exact action PLAN creates actor binding despite retained waves and branch suffix" {
+  run _mint_reserved_role_spawn "arch-platform" "r131-multi-plan-session" "arch-platform" "arch-platform"
+  [ "$status" -eq 0 ]
+  local action_id; action_id="$(printf '%s\n' "$output" | tail -n 1 | awk '{print $1}')"
+  [ -n "$action_id" ]
+
+  write_bundle "arch-platform" "bl-w47-test"
+  mkdir -p "$PROJECT_ROOT/.planning/wave-historical-retained"
+  printf '# retained historical PLAN\n' > "$PROJECT_ROOT/.planning/wave-historical-retained/PLAN.md"
+  git -C "$PROJECT_ROOT" branch -m "codex/bl-w47-test-c1"
+  run node -e '
+    const rll = require(process.argv[1]);
+    if (rll.discoverPlan(process.argv[2]).ok) process.exit(1);
+  ' "$RLL_IMPL" "$PROJECT_ROOT"
+  [ "$status" -eq 0 ]
+
+  _make_subagent_start_input_full "arch-platform" "r131-multi-plan-session" "r131-multi-plan-agent"
+  run bash -c "cat '$INPUT_FILE' | CLAUDE_PROJECT_DIR='$PROJECT_ROOT' node '$HOOK'"
+  [ "$status" -eq 0 ]
+  if [[ "$output" != *'AUTHENTICATED_ROLE_LIFECYCLE_BOOTSTRAP/v1'* ]]; then
+    printf '# hook output: %s\n' "$output" >&3
+  fi
+  [[ "$output" == *'AUTHENTICATED_ROLE_LIFECYCLE_BOOTSTRAP/v1'* ]]
+  [[ "$output" == *"action_id=$action_id"* ]]
+  [[ "$output" == *'wave-bl-w47-test/PLAN.md'* ]]
+  [[ "$output" == *'Key patterns here'* ]]
+  run _registry_record_count_for_role "role-actor-bindings" "arch-platform"
+  [ "$status" -eq 0 ]
+  [ "$output" = "1" ]
+}
+
 @test "M7-RB3-ABSENT: SubagentStart for a role with NO live B1 reservation (no claim minted at all) quarantines the role binding, injects no bundle, and logs a distinguishable 'absent' reason" {
   _mint_pending_role_spawn "arch-platform" "rb3a-session"
   write_bundle "arch-platform" "bl-w47-test"

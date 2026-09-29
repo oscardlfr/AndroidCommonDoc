@@ -1176,10 +1176,11 @@ assert d['profiles']['advanced']['overrides'].get('debugger') == 'opus', 'debugg
 
 @test "templates: main agent is the orchestrator and retired team-lead is not spawned" {
     grep -q "main agent IS the team lead" "$L0_ROOT/docs/agents/main-agent-orchestration-guide.md"
-    grep -q "retired template is not spawned" "$L0_ROOT/docs/agents/claude-code-workflow.md"
+    grep -Fq "The main conversation owns orchestration." "$L0_ROOT/docs/agents/claude-code-workflow.md"
+    grep -Fq '`team-lead` is a historical name for that logical responsibility, not an installable agent profile.' "$L0_ROOT/docs/agents/claude-code-workflow.md"
 }
 
-@test "templates: team-lead has agent roster with team roles" {
+@test "templates: main orchestrator exposes the dynamic role catalog" {
     # BL-W45 hub-split: content may be in tl-* sub-docs
     orchestration_guide_grep -q "Agent Roster"
     orchestration_guide_grep -q "arch-testing"
@@ -1187,7 +1188,7 @@ assert d['profiles']['advanced']['overrides'].get('debugger') == 'opus', 'debugg
     orchestration_guide_grep -q "planner"
 }
 
-@test "templates: team-lead delegates testing to skills" {
+@test "templates: main orchestrator delegates testing through skills" {
     # BL-W45 hub-split: content may be in tl-* sub-docs
     orchestration_guide_grep -q "/test"
     orchestration_guide_grep -q "/test-full-parallel"
@@ -1419,25 +1420,29 @@ assert d['profiles']['advanced']['overrides'].get('debugger') == 'opus', 'debugg
     done
 }
 
-@test "arch: agents-hub references team-lead not dev-lead as orchestrator" {
-    grep -q "team-lead" "$L0_ROOT/docs/agents/agents-hub.md"
+@test "arch: agents-hub defines historical team-lead as the main orchestrator only" {
+    grep -Fq "Historical \`team-lead\` wording denotes that logical role; there is no installable \`team-lead\` agent template." "$L0_ROOT/docs/agents/agents-hub.md"
+    grep -Fq "Agent availability comes from the synchronized registry and runtime discovery; never duplicate a static roster in \`CLAUDE.md\`." "$L0_ROOT/docs/agents/agents-hub.md"
 }
 
 @test "arch: claude-code-workflow uses the main conversation as orchestrator" {
-    grep -q "main conversation as the primary workflow coordinator" "$L0_ROOT/docs/agents/claude-code-workflow.md"
-    grep -q "Delegate to specialists with Write" "$L0_ROOT/docs/agents/claude-code-workflow.md"
+    grep -Fq "The main conversation owns orchestration." "$L0_ROOT/docs/agents/claude-code-workflow.md"
+    grep -Fq "dispatch only the specialists required by the plan" "$L0_ROOT/docs/agents/claude-code-workflow.md"
 }
 
 @test "arch: spec-driven-workflow shows orchestrator dispatching architects" {
     grep -q "Architects detect → orchestrator dispatches specialists" "$L0_ROOT/docs/agents/spec-driven-workflow.md"
 }
 
-@test "arch: claude-md-template examples use team-lead" {
-    grep -q "team-lead" "$L0_ROOT/docs/agents/claude-md-template.md"
+@test "arch: claude-md-template forbids separate team-lead and static rosters" {
+    grep -Fq 'Do not launch a separate `team-lead` or `project-manager` agent.' "$L0_ROOT/docs/agents/claude-md-template.md"
+    grep -Fq "Do not embed a static agent roster" "$L0_ROOT/docs/agents/claude-md-template.md"
 }
 
-@test "arch: multi-agent-patterns mentions PM in architect gate" {
-    grep -q "team-lead" "$L0_ROOT/docs/agents/multi-agent-patterns.md"
+@test "arch: multi-agent-patterns uses main-conversation orchestration and registry discovery" {
+    grep -Fq "The **main conversation owns orchestration**." "$L0_ROOT/docs/agents/multi-agent-patterns.md"
+    grep -Fq "Agent availability comes from the synchronized registry and runtime discovery." "$L0_ROOT/docs/agents/multi-agent-patterns.md"
+    grep -Fq "the main orchestrator re-plans and dispatches the owning specialist" "$L0_ROOT/docs/agents/multi-agent-patterns.md"
 }
 
 @test "arch: public entrypoints forbid shell-launching runtime CLIs" {
@@ -1452,13 +1457,14 @@ assert d['profiles']['advanced']['overrides'].get('debugger') == 'opus', 'debugg
     done
 }
 
-@test "arch: claude-code-workflow forbids Bash spawning" {
-    grep -q "never shell-launch a retired.*team-lead.*template" "$L0_ROOT/docs/agents/claude-code-workflow.md"
-    grep -q 'WRONG: `Bash' "$L0_ROOT/docs/agents/claude-code-workflow.md"
+@test "arch: claude-code-workflow forbids legacy team-lead launch and fixed rosters" {
+    grep -Fq 'Do not combine this path with `--agent team-lead`' "$L0_ROOT/docs/agents/claude-code-workflow.md"
+    grep -Fq "create a manual fixed roster" "$L0_ROOT/docs/agents/claude-code-workflow.md"
 }
 
-@test "arch: /work skill routes to team-lead" {
-    grep -q "team-lead" "$L0_ROOT/skills/work/SKILL.md"
+@test "arch: /work treats team-lead as a non-persistent responsibility" {
+    grep -Fq "the main conversation acts as \`team-lead\`" "$L0_ROOT/skills/work/SKILL.md"
+    grep -Fq "not a persistent role" "$L0_ROOT/skills/work/SKILL.md"
 }
 
 @test "arch: spec-driven-workflow has How to Start Work section" {

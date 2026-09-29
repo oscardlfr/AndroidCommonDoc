@@ -8,7 +8,7 @@ layer: L0
 category: agents
 description: "Agent workflow hub: CLAUDE.md template, main-orchestrator role, agent delegation, multi-agent patterns, agent consumption"
 version: 2
-last_updated: "2026-09-22"
+last_updated: "2026-09-28"
 monitor_urls:
   - url: "https://docs.anthropic.com/en/docs/claude-code/overview"
     type: doc-page
@@ -18,14 +18,15 @@ monitor_urls:
 
 How AI agents operate in the L0/L1/L2 ecosystem: CLAUDE.md structure, main-orchestrator behavior, specialist delegation, multi-agent patterns, and agent consumption. Historical `team-lead` wording denotes that logical role; there is no installable `team-lead` agent template.
 
-> All L1/L2 projects follow the Boris Cherny CLAUDE.md style with Agent Strategy.
+All layers use a portable `AGENTS.md`, a thin Claude adapter, path-scoped rules, task skills, enforceable hooks, and durable-only memory.
 
 ## Documents
 
 | Document | Description |
 |----------|-------------|
-| [claude-md-template](claude-md-template.md) | Boris Cherny-style CLAUDE.md template — the 4-pillar structure for all projects |
-| [claude-code-workflow](claude-code-workflow.md) | Team Lead adaptive model, skill usage, verification, release workflow |
+| [instruction-memory-contract](instruction-memory-contract.md) | Canonical ownership and layering for AGENTS.md, Claude/Codex adapters, rules, skills, hooks, and durable memory |
+| [claude-md-template](claude-md-template.md) | Portable AGENTS.md authority with a thin Claude Code adapter and path-scoped rules |
+| [claude-code-workflow](claude-code-workflow.md) | Main-conversation orchestration, dynamic topology, skill usage, verification, release workflow |
 | [multi-agent-patterns](multi-agent-patterns.md) | Topology (chain/fan-out/orchestrator), agent design rules, failure handling, cost control |
 | [arch-topology-protocols](arch-topology-protocols.md) | Architect topology: concern-ownership map (§4), cross-architect coordination, tiebreaker chain (BL-W32-02) |
 | [team-topology](team-topology.md) | 3-phase model on a portable disk-artifact contract: orchestrator + single-use subagents (optional background peers when the runtime supports them) — Planning → Execution → Quality Gate |
@@ -83,17 +84,16 @@ How AI agents operate in the L0/L1/L2 ecosystem: CLAUDE.md structure, main-orche
 ## Key Concepts
 
 - **3-Phase Model** = Planning → Execution → Quality Gate. Load-bearing context lives in disk artifacts (PLAN, verdicts, QG proof); the orchestrator dispatches single-use subagents that may optionally persist as background peers (reachable via `SendMessage`) when the runtime supports them — selected per the wave's CLASS floor at session start and Phase 2. Planner is temporary.
-- **Core roles** = available roster, dispatched selectively per CLASS floor: context-provider, doc-updater, arch-testing, arch-platform, arch-integration, quality-gater (session start) + test-specialist, ui-specialist, domain-model-specialist, data-layer-specialist, toolkit-specialist (Phase 2). Dispatched as single-use subagents; optionally live as background peers for the session when the runtime supports them.
-- **CLAUDE.md / `.claude/agents/`** = concise workflow instructions plus canonical agent definitions, synchronized through `/sync-l0`.
+- **Core roles** = available roster, dispatched selectively per CLASS floor: context-provider and doc-updater form the support plane when required; arch-testing, arch-platform and arch-integration are verification roles; test-specialist, ui-specialist, domain-model-specialist, data-layer-specialist and toolkit-specialist serve Phase 2. `quality-gater` is dispatched only for Phase 3 and never joins the persistent support plane.
+- **`AGENTS.md` / `CLAUDE.md` / `.claude/rules/` / `.claude/agents/`** = portable repository authority, thin Claude adapter, path-scoped guidance and canonical agent definitions, synchronized through `/sync-l0`.
 - **main orchestrator** (historically `team-lead`) = the coordination role in the active conversation, not a separately spawned agent template. It routes class-aware lifecycle actions through the shared control plane.
-- **quality-gater** = dynamic rule discovery. Reads CLAUDE.md for project rules, runs `/pre-pr`, cross-checks every rule.
+- **quality-gater** = phase-scoped dynamic rule discovery. Reads the portable instruction bundle, runs `/pre-pr`, cross-checks every rule.
 - **planner** = temporary planner `Agent`/subagent; consults context-provider via `SendMessage` when available; writes `PLAN.md`.
 - **Doc Integrity** = `/doc-integrity` pipeline: kdoc-coverage → check-doc-patterns → docs/api freshness → audit-docs. State in `kdoc-state.json`.
 - **Spec-driven agents and skills** = bounded autonomous roles plus token-efficient script wrappers.
 ## Rules
 
 See agent-core-rules.md for universal behavioral rules. Key constraints:
-- Agent Roster in CLAUDE.md is mandatory — without it, Claude Code uses generic agents
-- Script-first: if a regex can do it, don't make an agent for it
+- Agent availability comes from the synchronized registry and runtime discovery; never duplicate a static roster in `CLAUDE.md`.
 - The main orchestrator coordinates specialists and launches the class-required architect gates through the shared control plane.
 - **MCP tools must be declared in `tools:` frontmatter** to be callable (Wave 25 fix). 20 core agents wired; see agent-core-rules.md §8.

@@ -1,13 +1,13 @@
 ---
 name: init-session
-description: "Show project context dashboard. Optionally ensures the persistent support plane with --orchestrate <slug> flag."
+description: "Show the canonical runtime readiness dashboard. Optionally ensures the persistent support plane with --orchestrate <slug>."
 intent: [session, init, context, agents, skills, modules]
 copilot: false
 ---
 
 # Init-Session Skill
 
-Show project context — available agents, skills, modules, and business docs.
+Show canonical runtime readiness and, when requested, ensure the support plane.
 
 ## Usage
 
@@ -38,9 +38,12 @@ operators, a foreign cwd, or an invalid runtime installation. If rejected, use
 the documented ordinary sync plus runtime refresh; never guess a toolkit path.
 
 The shared entrypoint initializes/validates the control-plane state and derives
-the lifecycle role set itself. Treat `READY` as a proven dashboard result,
-execute only returned `ACTION_REQUIRED` actions through the runtime adapter, and
-report `BLOCKED|UNAVAILABLE|FAILED` without inventing readiness.
+the lifecycle role set itself. Treat `READY` as a proven runtime dashboard
+result, execute only returned `ACTION_REQUIRED` actions through the runtime
+adapter, and report `BLOCKED|UNAVAILABLE|FAILED` or a non-zero exit without
+inventing readiness. A failed or non-ready launcher result is terminal for this
+invocation: do not continue with manual context gathering; run
+ad-hoc discovery, or ask approval for a replacement command.
 
 ## Step 0 — Core Support-Plane Dispatch (when --orchestrate <slug> is passed)
 
@@ -54,51 +57,33 @@ When `--orchestrate <slug>` is passed:
    - Execute each returned `ensure` action through the existing Wave-1 role-lifecycle manager. HARNESS, DOC and FAST-PATH role floors come only from `wave-topology.yaml` plus the active PLAN; `quality-gater` stays phase-scoped and is never parked in the persistent plane.
    - `waitReady` for the resulting bindings, bounded by the policy's `ready_timeout_seconds`.
    - This is idempotent: a second `--orchestrate` call in the same session reuses the existing healthy bindings instead of respawning. `auto|persistent` launches at most one retained connector (Claude Agent Teams peer or Codex supervisor) per role; `ephemeral`/`disk-only` fall back per policy without a false READY claim.
-3. Once the support plane is READY, context-provider is addressable for the rest of the session — no separate mandatory "consult and wait" step is required here. An optional light consult may accelerate loading current project state before the dashboard, but rendering never blocks on it.
-4. Continue to Step 1 (dashboard render)
+3. Once the support plane is READY, context-provider is addressable for the rest of the session — no separate mandatory "consult and wait" step is required here.
+4. Summarize only the canonical envelope returned by the entrypoint.
 
 > **Note**: The `<slug>` determines the wave artifact directory and its persisted phase state. The load-bearing contract is validated disk artifacts and legal control-plane transitions — not named-team membership or a live message.
 
-## Steps
+## Result handling
 
-1. **Read project manifest and classify the layer**: Load `l0-manifest.json` if it exists and extract only fields that actually exist in manifest v2 (`topology`, `selection`, and optional `runtime`). Never read a top-level `layer` field; manifest v2 has none. Derive the project layer with the canonical `classifyRepo` markers: `skills/registry.json` + `mcp-server/` and no manifest = L0; registry + manifest = L1; manifest without registry = L2. When a valid `runtime-consumer/v1` block is present, report its `consumer_layer` separately as the certified runtime role and flag any disagreement with marker-based classification instead of silently choosing one.
-2. **Read module map**: Load `MODULE_MAP.md` if it exists. Count modules and list key ones.
-3. **Scan agents**: Read all `.claude/agents/*.md` files. Count agents and group them by `domain:` frontmatter field.
-4. **Scan skills**: Read all `.claude/commands/*.md` files. Count available skills.
-5. **Check business docs**: List all files in `docs/business/` if the directory exists.
-6. **Output dashboard**:
+- `READY`: summarize the returned status, selection, actions, and role state.
+- `ACTION_REQUIRED`: execute only the exact runtime-adapter actions in the
+  envelope, then report the resulting canonical status.
+- `BLOCKED`, `UNAVAILABLE`, `FAILED`, non-zero exit, or approval prompt: report
+  it and stop.
+- Never issue `ls`, `find`, `git`, Python, Read, Glob, Grep, or a hand-built
+  dashboard as a fallback. Missing presentation data is a runtime-contract gap,
+  not permission to inspect the checkout ad hoc.
 
-```
-## Project: {name} ({layer})
-
-### Agents ({count})
-  Development: debugger, verifier, advisor, researcher, codebase-mapper
-  Testing: test-specialist
-  Business: product-strategist, content-creator
-  Audit: full-audit-orchestrator, quality-gate-orchestrator
-  ...
-
-### Skills ({count})
-  /work /debug /verify /pre-pr /test /research /decide /note /review-pr ...
-
-### Modules (from MODULE_MAP.md)
-  {count} modules — run /map-codebase to refresh
-
-### Business Docs
-  {list of docs/business/*.md if any}
-
-### Quick Start
-  /work <task>     — smart routing
-  /resume          — load last session context
-  /debug <bug>     — systematic debugging
-  /pre-pr          — validate before merge
-```
+When the canonical envelope reports layer identity, interpret only the fields
+it supplies. Never invent a top-level `layer` field; manifest v2 has none. The
+canonical marker rules are `no manifest = L0`, `registry + manifest = L1`, and
+`manifest without registry = L2`. A `runtime-consumer/v1` block reports its
+certified role separately through `consumer_layer`; flag any disagreement with
+marker-based classification instead of silently choosing one. These are result
+interpretation rules, not permission to read the manifest or scan markers after
+the launcher returns.
 
 ## Notes
 
-- This skill is read-only — it gathers and displays context, it does not modify anything
-- If `l0-manifest.json` is missing, infer the project name from the directory name
-- If `MODULE_MAP.md` is missing, suggest running `/map-codebase` to generate it
-- Agent grouping uses the `domain:` frontmatter field; agents without it go under "Ungrouped"
+- Dashboard mode is read-only; orchestration may perform only the actions admitted by the runtime envelope.
 - Run this at the start of a new session to orient yourself
 - Session naming: the wave slug names the wave artifact directory (`.planning/wave-<slug>/`). Pick descriptive slugs (e.g., `feature-auth`) — they serve as wave identifiers. The load-bearing contract is the disk artifacts in that directory, not named-team membership.

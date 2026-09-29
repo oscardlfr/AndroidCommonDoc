@@ -94,49 +94,63 @@ function createPrivateRegistryModule({
    * Creates `dirPath` (and every missing ancestor under the registry base) 0700,
    * rejecting a pre-existing symlink at the leaf BEFORE any mkdir/chmod. Also
    * verifies stable owner+mode after creation.
-   * @param {string} dirPath
+   * A batch is secured by one Windows ACL transaction so callers that publish
+   * a directory tree do not pay one PowerShell startup per descendant.
+   * @param {string|string[]} dirPath
    * @returns {{ok:true}|{ok:false,reason:string}}
    */
   function ensureSecureRegistryDir(dirPath) {
-    try {
-      const lst = fs.lstatSync(dirPath);
-      if (lst.isSymbolicLink()) return { ok: false, reason: 'symlink' };
-    } catch (err) {
-      // ENOENT (does not exist yet) is the normal, expected case -- proceed.
+    const requested = Array.isArray(dirPath) ? dirPath : [dirPath];
+    if (requested.length === 0 || requested.some((candidate) => typeof candidate !== 'string' || !path.isAbsolute(candidate))) {
+      return { ok: false, reason: 'registry-path-invalid' };
     }
-    try {
-      fs.mkdirSync(dirPath, { recursive: true, mode: 0o700 });
-      if (process.platform !== 'win32') fs.chmodSync(dirPath, 0o700);
-    } catch (err) {
-      return { ok: false, reason: 'mkdir-failed' };
+    const uniquePaths = Array.from(new Set(requested.map((candidate) => path.resolve(candidate))));
+    for (const candidate of uniquePaths) {
+      try {
+        const lst = fs.lstatSync(candidate);
+        if (lst.isSymbolicLink()) return { ok: false, reason: 'symlink' };
+      } catch (err) {
+        // ENOENT (does not exist yet) is the normal, expected case -- proceed.
+      }
+    }
+    for (const candidate of uniquePaths) {
+      try {
+        fs.mkdirSync(candidate, { recursive: true, mode: 0o700 });
+        if (process.platform !== 'win32') fs.chmodSync(candidate, 0o700);
+      } catch (err) {
+        return { ok: false, reason: 'mkdir-failed' };
+      }
     }
     const isPosix = process.platform !== 'win32';
     if (isPosix) {
-      let st;
-      try {
-        st = fs.lstatSync(dirPath, { bigint: true });
-      } catch (err) {
-        return { ok: false, reason: 'stat-failed' };
+      for (const candidate of uniquePaths) {
+        let st;
+        try {
+          st = fs.lstatSync(candidate, { bigint: true });
+        } catch (err) {
+          return { ok: false, reason: 'stat-failed' };
+        }
+        if (st.isSymbolicLink()) return { ok: false, reason: 'symlink' };
+        if (typeof process.getuid === 'function' && st.uid !== BigInt(process.getuid())) {
+          return { ok: false, reason: 'wrong-owner' };
+        }
+        if ((st.mode & 0o777n) !== 0o700n) return { ok: false, reason: 'wrong-mode' };
       }
-      if (st.isSymbolicLink()) return { ok: false, reason: 'symlink' };
-      if (typeof process.getuid === 'function' && st.uid !== BigInt(process.getuid())) {
-        return { ok: false, reason: 'wrong-owner' };
-      }
-      if ((st.mode & 0o777n) !== 0o700n) return { ok: false, reason: 'wrong-mode' };
     } else {
       const registryBase = path.resolve(registryBaseDir());
-      const target = path.resolve(dirPath);
-      const relative = path.relative(registryBase, target);
-      if (relative === '..' || relative.startsWith('..' + path.sep) || path.isAbsolute(relative)) {
-        return { ok: false, reason: 'registry-path-outside-base' };
+      const aclChain = new Set([registryBase]);
+      for (const target of uniquePaths) {
+        const relative = path.relative(registryBase, target);
+        if (relative === '..' || relative.startsWith('..' + path.sep) || path.isAbsolute(relative)) {
+          return { ok: false, reason: 'registry-path-outside-base' };
+        }
+        let cursor = registryBase;
+        for (const segment of relative.split(path.sep).filter(Boolean)) {
+          cursor = path.join(cursor, segment);
+          aclChain.add(cursor);
+        }
       }
-      const aclChain = [registryBase];
-      let cursor = registryBase;
-      for (const segment of relative.split(path.sep).filter(Boolean)) {
-        cursor = path.join(cursor, segment);
-        aclChain.push(cursor);
-      }
-      const acl = windowsPrivateDirectoryAcl(aclChain, { mode: 'ensure' });
+      const acl = windowsPrivateDirectoryAcl([...aclChain], { mode: 'ensure' });
       if (!acl.ok) return { ok: false, reason: acl.status === 'failed' ? 'acl-failed' : 'acl-indeterminate' };
     }
     return { ok: true };

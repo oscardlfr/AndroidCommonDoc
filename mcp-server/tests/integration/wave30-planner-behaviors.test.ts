@@ -52,11 +52,12 @@ describe("planner template enforces T-BUG-015 Search Dispatch Protocol", () => {
       const frontmatter = extractFrontmatter(raw);
       const body = extractBody(raw);
 
-      it('has template_version "1.20.0"', () => {
+      it('has template_version "1.22.1"', () => {
         // BL-W48 team-model migration: bumped 1.17.0 → 1.18.0 (session-team removal),
-        // then 1.18.0 → 1.20.0 (planner reframe as pure single-use subagent).
+        // then 1.18.0 → 1.22.0 (single-use reframe + portable instruction authority).
         expect(frontmatter).not.toBeNull();
-        expect(frontmatter?.template_version).toBe("1.20.0");
+        // Consumer runtime portability adds the launcher boundary.
+        expect(frontmatter?.template_version).toBe("1.22.1");
       });
 
       it("body contains T-BUG-015", () => {

@@ -1525,24 +1525,20 @@ function tryInjectEntrypointComposition(toolInput, event) {
       planDigest: rootScope.planDigest,
       waveSlug: explicitWaveScope ? explicitWaveScope.waveSlug : null,
     };
-  } catch {
+  } catch (error) {
+    // Preserve only stable control-plane diagnostics that tell the operator
+    // how to recover. Everything else remains deliberately generic so an
+    // unexpected parser/runtime exception cannot leak host details.
+    if (error && error.message === 'wave-control-work-outside-execute') {
+      return m7DenyResult('[R131/P3] wave-control-work-outside-execute: /work is available only during EXECUTE.');
+    }
     return m7DenyResult('[R131/P3] collaboration entrypoint intent or scope is invalid.');
   }
-  // SessionStart is the only hook event that can report the active model. The
-  // signed pin must therefore already exist; a PreToolUse payload can prove
-  // effective effort and live process ancestry, but must never self-assert a
-  // model or synthesize a missing session identity.
-  let interactivePin;
-  try {
-    interactivePin = runtimeHostClaude.getProductionSessionIdentity(
-      values['--project-root'], event.session_id,
-    );
-  } catch {
-    interactivePin = null;
-  }
-  if (!interactivePin || !interactivePin.ok) {
-    return m7DenyResult('[R131/P3] genuine claude-sonnet-5 host composition evidence is unavailable.');
-  }
+  // mintProductionHostComposition is the single authority boundary: it
+  // verifies the signed SessionStart pin, effective effort, and live process
+  // ancestry, and it may atomically renew that pin for a genuine --resume
+  // invocation. A read-only identity preflight here would reject the renewed
+  // process before that boundary can observe it.
   let composition;
   try {
     composition = runtimeHostClaude.mintProductionHostComposition({

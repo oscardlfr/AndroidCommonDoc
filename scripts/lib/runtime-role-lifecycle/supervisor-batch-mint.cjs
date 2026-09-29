@@ -1,5 +1,27 @@
 'use strict';
 
+/**
+ * Keep supervisor launch authority strictly inside the independently retained
+ * service authority. TTL calculation and expiry materialization read the clock
+ * separately, so crossing a second boundary between them can otherwise make
+ * two nominally different lifetimes serialize to the same whole second.
+ */
+function capSupervisorActionExpiry(actionExpiryIso, serviceExpiryIso, nowMs) {
+  const actionMs = Date.parse(actionExpiryIso);
+  const serviceMs = Date.parse(serviceExpiryIso);
+  if (!Number.isFinite(actionMs) || !Number.isFinite(serviceMs) || !Number.isFinite(nowMs)) {
+    return { ok: false, reason: 'supervisor-expiry-invalid' };
+  }
+  const cappedMs = Math.min(actionMs, serviceMs - 1000);
+  if (cappedMs <= nowMs) {
+    return { ok: false, reason: 'retained-service-lifetime-insufficient' };
+  }
+  return {
+    ok: true,
+    expiresAtIso: new Date(cappedMs).toISOString().replace(/\.\d{3}Z$/, 'Z'),
+  };
+}
+
 // Extracted behaviorally from runtime-role-lifecycle.cjs: the codex-app-server
 // batch mint under the supervisor lifecycle owner transaction, the
 // underlying supervisor-start action mint, and the single-role
@@ -193,7 +215,7 @@ function mintBatchedSupervisorStartAction(projectRoot, pair, repoId, worktreeId,
     kind: 'supervisor-start', runtime: 'host-process',
   });
   if (!ttlResult.ok) return { ok: false, reason: ttlResult.reason };
-  const expiresAtIso = futureIsoForRegistry(ttlResult.ttlSeconds);
+  const proposedExpiresAtIso = futureIsoForRegistry(ttlResult.ttlSeconds);
   const generation = readLiveSessionGenerationById(projectRoot, generationId);
   if (!generation.ok || !isCanonicalIsoUtc(bindingExpiryIso)) {
     return { ok: false, reason: generation.ok ? 'binding-expiry-invalid' : generation.reason };
@@ -202,9 +224,11 @@ function mintBatchedSupervisorStartAction(projectRoot, pair, repoId, worktreeId,
     isoToMsForRegistry(bindingExpiryIso) <= isoToMsForRegistry(generation.expiresAt)
       ? bindingExpiryIso : generation.expiresAt
   );
-  if (!(isoToMsForRegistry(retainedServiceExpiry) > isoToMsForRegistry(expiresAtIso))) {
-    return { ok: false, reason: 'retained-service-expiry-not-after-action' };
-  }
+  const cappedExpiry = capSupervisorActionExpiry(
+    proposedExpiresAtIso, retainedServiceExpiry, currentClockMsForRegistry(),
+  );
+  if (!cappedExpiry.ok) return cappedExpiry;
+  const expiresAtIso = cappedExpiry.expiresAtIso;
   const payload = buildSupervisorStartPayload(
     resolvedNodePath(), bridgePath, actionId, coordRoot, sortedUniqueRoles, retainedServiceExpiry,
   );
@@ -296,4 +320,4 @@ mintSupervisorBatchUnderTransaction, mintBatchedSupervisorStartAction, spawnOrRe
   });
 }
 
-module.exports = { createSupervisorBatchMint };
+module.exports = { createSupervisorBatchMint, capSupervisorActionExpiry };

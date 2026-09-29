@@ -38,9 +38,12 @@ const repoRoot = path.resolve(repoRootArg);
 // Slug allowlist (defense-in-depth; mirrors the gates).
 if (!/^[A-Za-z0-9._-]+$/.test(slug) || slug === '.' || slug === '..') out('FALLBACK');
 
+// Runtime dependencies belong to the toolkit that owns this helper, never to
+// the consumer repository passed as repoRoot. A clean L1/L2 checkout has no
+// mcp-server/node_modules tree of its own.
 let yaml;
-try { yaml = require(path.join(repoRoot, 'mcp-server', 'node_modules', 'yaml')); }
-catch { out('FALLBACK'); } // no yaml package -> caller uses manifest static value
+try { yaml = require(path.resolve(__dirname, '../../../mcp-server/node_modules/yaml')); }
+catch { out('FALLBACK'); } // toolkit dependency unavailable -> caller uses manifest static value
 
 let topo;
 try { topo = yaml.parse(fs.readFileSync(path.join(repoRoot, '.claude', 'registry', 'wave-topology.yaml'), 'utf8')); }

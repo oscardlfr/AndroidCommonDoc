@@ -16,6 +16,7 @@ path, fs, canonicalJSONStringify, sha256String, isCanonicalIsoUtc, isoToMsForReg
   makeOperation, roleBindingPathFor,
   CLAUDE_RESUME_HANDLE_KEYS, CLAUDE_RESUME_HANDLE_SCAN_CAP, CLAUDE_RESUME_HANDLE_SCHEMA,
   MAX_ACTION_REPO_SCAN_ENTRIES, actionForEnvelope, actionPathFor, buildRoleNotifyPayload,
+  buildRoleSpawnPayload, claudeReadyBootstrapMessageFor,
   claudeResumeHandlePathFor, computeActionTtlSeconds, computeRepoId, futureIsoForRegistry, generateActionId,
   interpretedActionMarkerPathFor, isClaudeResumeHandleConsumed, mintRoleLifecycleAction, readClaudeResumeHandle,
   validateClaudeResumeHandleRecord,
@@ -171,7 +172,146 @@ function findResumeCheckpointActionForRole(projectRoot, expected) {
   };
 }
 
+function generationHasCheckpointRehydration(projectRoot, binding, sortedRoles, checkpointRef) {
+  const dir = path.join(registryRepoDir(projectRoot), 'actions');
+  let entries;
+  try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch { return false; }
+  if (entries.length > MAX_ACTION_REPO_SCAN_ENTRIES) return false;
+  const roles = new Set();
+  for (const entry of entries) {
+    if (!entry.isFile() || !/^[0-9a-f]{32}\.json$/.test(entry.name)) continue;
+    const read = readRegistryRecord(path.join(dir, entry.name));
+    if (!read.ok || read.absent || !read.obj) return false;
+    const action = read.obj;
+    if (action.kind === 'role-spawn' && action.worktree_id === binding.worktree_id &&
+        action.plan_digest === binding.plan_digest && action.session_generation_id === binding.session_generation_id &&
+        action.payload && action.payload.bootstrap_artifact_ref === checkpointRef) roles.add(action.role);
+  }
+  return sortedRoles.every((role) => roles.has(role));
+}
+
+function resolveResumeCheckpointBinding(projectRoot, binding, sortedRoles, checkpointRef) {
+  const current = sortedRoles.map((role) => readRoleBindingState(
+    projectRoot, binding.worktree_id, binding.plan_digest, roleProfileDigestFor(role),
+    binding.session_generation_id, role,
+  ));
+  if (current.every((state) => state.ok && state.record)) return {
+    ok: true, binding, sourceGenerationId: null,
+    crossSession: generationHasCheckpointRehydration(projectRoot, binding, sortedRoles, checkpointRef),
+  };
+
+  const dir = path.join(registryRepoDir(projectRoot), 'role-bindings');
+  let entries;
+  try { entries = fs.readdirSync(dir, { withFileTypes: true }); }
+  catch (err) {
+    if (err && err.code === 'ENOENT') return { ok: false, reason: 'UNAVAILABLE' };
+    return { ok: false, reason: 'INVALID' };
+  }
+  if (entries.length > 4096) return { ok: false, reason: 'INVALID' };
+  const generations = new Set();
+  for (const entry of entries) {
+    if (entry.name.startsWith('.')) continue;
+    if (!entry.isFile() || !/^[0-9a-f]{64}\.json$/.test(entry.name)) return { ok: false, reason: 'INVALID' };
+    const read = readRegistryRecord(path.join(dir, entry.name));
+    if (!read.ok || read.absent || !read.obj) return { ok: false, reason: 'INVALID' };
+    const record = read.obj;
+    if (record.worktree_id === binding.worktree_id && record.plan_digest === binding.plan_digest &&
+        sortedRoles.includes(record.role) && record.session_generation_id !== binding.session_generation_id) {
+      generations.add(record.session_generation_id);
+    }
+  }
+  const candidates = [];
+  for (const generationId of generations) {
+    const states = sortedRoles.map((role) => readRoleBindingState(
+      projectRoot, binding.worktree_id, binding.plan_digest, roleProfileDigestFor(role), generationId, role,
+    ));
+    if (states.every((state) => state.ok && state.record && state.state === 'WAITING' &&
+        state.record.driver === 'claude-sendmessage')) candidates.push(generationId);
+  }
+  if (candidates.length !== 1) return { ok: false, reason: candidates.length === 0 ? 'UNAVAILABLE' : 'INVALID' };
+  return { ok: true, binding, sourceGenerationId: candidates[0], crossSession: true };
+}
+
+function executeCrossSessionResume(projectRoot, binding, pair, sortedRoles, checkpointRef, sourceGenerationId) {
+  const actions = [];
+  const bindings = [];
+  const sourceStates = [];
+  const policyDigest = sha256String(canonicalJSONStringify(pair.routing));
+  for (const role of sortedRoles) {
+    const profileDigest = roleProfileDigestFor(role);
+    const source = sourceGenerationId ? readRoleBindingState(
+      projectRoot, binding.worktree_id, binding.plan_digest, profileDigest, sourceGenerationId, role,
+    ) : null;
+    if (sourceGenerationId && (!source.ok || source.state !== 'WAITING' || !source.record ||
+        source.record.driver !== 'claude-sendmessage')) return { ok: false, reason: 'UNAVAILABLE' };
+    if (source) sourceStates.push({ role, profileDigest, record: source.record });
+    const current = readRoleBindingState(
+      projectRoot, binding.worktree_id, binding.plan_digest, profileDigest,
+      binding.session_generation_id, role,
+    );
+    if (!current.ok) return { ok: false, reason: 'INVALID' };
+    if (['READY', 'WAITING', 'BUSY'].includes(current.state) && current.record) {
+      bindings.push(roleBindingForEnvelope(current.record));
+      continue;
+    }
+    if (current.state === 'STARTING' && current.record && current.record.pending_action_id) {
+      const existing = readRegistryRecord(actionPathFor(projectRoot, current.record.pending_action_id));
+      if (!existing.ok || existing.absent || !existing.obj || existing.obj.kind !== 'role-spawn' ||
+          !existing.obj.payload || existing.obj.payload.bootstrap_artifact_ref !== checkpointRef) {
+        return { ok: false, reason: 'INVALID' };
+      }
+      actions.push(Object.assign(actionForEnvelope(existing.obj), { operation: 'Agent' }));
+      bindings.push(roleBindingForEnvelope(current.record));
+      continue;
+    }
+    if (current.state !== 'ABSENT') return { ok: false, reason: 'UNAVAILABLE' };
+    const actionId = generateActionId();
+    const ttl = computeActionTtlSeconds(pair.policy, binding.expiry);
+    if (!ttl.ok) return { ok: false, reason: 'INVALID' };
+    const payload = buildRoleSpawnPayload(
+      'wp3-support-plane', role, role, checkpointRef,
+      claudeReadyBootstrapMessageFor(actionId, role, projectRoot),
+    );
+    const minted = mintRoleLifecycleAction(
+      projectRoot, actionId, 'role-spawn', 'claude-native', computeRepoId(projectRoot),
+      binding.worktree_id, binding.plan_digest, policyDigest, binding.session_generation_id,
+      role, payload, futureIsoForRegistry(ttl.ttlSeconds),
+    );
+    if (!minted.ok) return { ok: false, reason: 'INVALID' };
+    const started = transitionRoleBinding(
+      projectRoot, binding.worktree_id, binding.plan_digest, profileDigest,
+      binding.session_generation_id, role, 'ABSENT', 'STARTING', null,
+      { driver: 'claude-sendmessage', respawn_count: source ? source.record.respawn_count + 1 : 0, pending_action_id: actionId },
+    );
+    if (!started.ok) return { ok: false, reason: 'INVALID' };
+    actions.push(Object.assign(actionForEnvelope(minted.action), { operation: 'Agent' }));
+    bindings.push(roleBindingForEnvelope(started.record));
+  }
+  if (actions.length > 0) {
+    for (const source of sourceStates) {
+      const dead = transitionRoleBinding(
+        projectRoot, binding.worktree_id, binding.plan_digest, source.profileDigest,
+        sourceGenerationId, source.role, 'WAITING', 'DEAD', source.record, {},
+      );
+      if (!dead.ok) return { ok: false, reason: 'INVALID' };
+    }
+    return { ok: true, status: 'ACTION_REQUIRED', bindings, actions };
+  }
+  return {
+    ok: true, status: 'READY', bindings, actions: [],
+    operation: { schema: RESUME_CHECKPOINT_COMPLETION_SCHEMA, checkpoint_ref: checkpointRef, resumed_roles: [...sortedRoles] },
+  };
+}
+
 function executeResumeCheckpointEnsure(projectRoot, binding, pair, sortedRoles, checkpointRef) {
+  const resolvedBinding = resolveResumeCheckpointBinding(projectRoot, binding, sortedRoles, checkpointRef);
+  if (!resolvedBinding.ok) return resolvedBinding;
+  binding = resolvedBinding.binding;
+  if (resolvedBinding.crossSession) {
+    return executeCrossSessionResume(
+      projectRoot, binding, pair, sortedRoles, checkpointRef, resolvedBinding.sourceGenerationId,
+    );
+  }
   const collectedBindings = [];
   const collectedActions = [];
   const resumedRoles = [];

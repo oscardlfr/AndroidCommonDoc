@@ -88,6 +88,34 @@ run_hook_with_env() {
   run bash -c "cd '$REPO' && printf '%s\n' \"$stdin_line\" | $extra_env SKIP_PUSH_GATE= bash '$HOOK' origin https://example.invalid/repo.git"
 }
 
+enable_runtime_consumer() {
+  mkdir -p "$REPO/.claude/runtime"
+  printf '%s\n' '// launcher fixture; execution is intercepted by the node stub' \
+    > "$REPO/.claude/runtime/l0-toolkit-launcher.cjs"
+  printf '%s\n' '{"version":2,"runtime":{"schema":"runtime-consumer/v1","enabled":true,"consumer_layer":"L2","toolkit_commit":"0000000000000000000000000000000000000000","toolkit_content_sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}}' \
+    > "$REPO/l0-manifest.json"
+  python3 - "$STAMP_DIR/quality-gate.stamp" <<'PYEOF'
+import json, sys
+path = sys.argv[1]
+value = json.load(open(path, encoding="utf-8"))
+value["wave_slug"] = "runtime-test"
+with open(path, "w", encoding="utf-8") as f:
+    json.dump(value, f)
+PYEOF
+}
+
+install_runtime_node_stub() {
+  NODE_BIN="$REPO/node-bin"
+  NODE_LOG="$REPO/node-invocation.log"
+  mkdir -p "$NODE_BIN"
+  cat > "$NODE_BIN/node" <<'SH'
+#!/usr/bin/env bash
+printf '%s\n' "$*" > "${NODE_LOG:?}"
+exit "${NODE_STUB_STATUS:-0}"
+SH
+  chmod +x "$NODE_BIN/node"
+}
+
 # ── ★ Contract-mandated cases ────────────────────────────────────────────────
 
 @test "★1 BLOCK: quality-gate.stamp missing (pre-pr fresh and matching)" {
@@ -160,6 +188,7 @@ report = {
     "discovered_rules": [{"rule": "two-stamp-gate", "verified_by": "pre-push-hook.bats"}],
     "steps": steps,
 }
+
 with open(report_path, "w", encoding="utf-8") as f:
     json.dump(report, f, indent=2); f.write('\n')
 PYEOF
@@ -211,6 +240,36 @@ PYEOF
   write_pp_stamp "PASS" 0 "$HEAD_SHA"
   run_hook "refs/heads/feature/test $HEAD_SHA refs/heads/feature/test $ZERO"
   [ "$status" -eq 0 ]
+}
+
+@test "★2c PASS: active runtime consumer verifies through its launcher without the L0 proof harness" {
+  write_qg_stamp 0 "$HEAD_SHA"
+  write_pp_stamp "PASS" 0 "$HEAD_SHA"
+  enable_runtime_consumer
+  install_runtime_node_stub
+
+  run_hook_with_env \
+    "refs/heads/feature/test $HEAD_SHA refs/heads/feature/test $ZERO" \
+    "PATH='$NODE_BIN:$PATH' NODE_LOG='$NODE_LOG' NODE_STUB_STATUS=0"
+
+  [ "$status" -eq 0 ]
+  [ ! -e "$REPO/scripts/sh/emit-push-proof.sh" ]
+  run grep -F "run runtime-consumer-qg --project-root $REPO -- verify --slug runtime-test --head $HEAD_SHA" "$NODE_LOG"
+  [ "$status" -eq 0 ]
+}
+
+@test "★2d BLOCK: active runtime consumer fails closed when launcher proof verification fails" {
+  write_qg_stamp 0 "$HEAD_SHA"
+  write_pp_stamp "PASS" 0 "$HEAD_SHA"
+  enable_runtime_consumer
+  install_runtime_node_stub
+
+  run_hook_with_env \
+    "refs/heads/feature/test $HEAD_SHA refs/heads/feature/test $ZERO" \
+    "PATH='$NODE_BIN:$PATH' NODE_LOG='$NODE_LOG' NODE_STUB_STATUS=9"
+
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"runtime consumer proof is missing, stale, or invalid"* ]]
 }
 
 # ── Additional BLOCK cases ────────────────────────────────────────────────────

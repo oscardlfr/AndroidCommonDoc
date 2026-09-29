@@ -14,6 +14,7 @@ function fixture({ className = 'FAST-PATH', architects = '[]', lifecycleRoles = 
   fs.mkdirSync(path.join(root, '.planning', 'wave-demo'), { recursive: true });
   fs.mkdirSync(path.join(root, '.claude', 'registry'), { recursive: true });
   fs.writeFileSync(path.join(root, '.planning', 'wave-demo', 'PLAN.md'), `### Wave Class\n\n**Class**: ${className}\n${required}`);
+  fs.writeFileSync(path.join(root, '.planning', 'wave-demo', 'CLASS'), `${className}\n`);
   fs.writeFileSync(path.join(root, '.claude', 'registry', 'wave-topology.yaml'), `default_class: HARNESS\nclass_artifacts:\n  ${className}:\n    architects: ${architects}\n    lifecycle_roles: ${lifecycleRoles}\n    execution_mode: ${executionMode}\n`);
   execFileSync('git', ['init', '-q'], { cwd: root });
   execFileSync('git', ['config', 'user.email', 'test@example.invalid'], { cwd: root });
@@ -21,6 +22,17 @@ function fixture({ className = 'FAST-PATH', architects = '[]', lifecycleRoles = 
   execFileSync('git', ['add', '.'], { cwd: root });
   execFileSync('git', ['commit', '-qm', 'fixture'], { cwd: root });
   return root;
+}
+
+function writeRuntimeManifest(root, layer) {
+  fs.writeFileSync(path.join(root, 'l0-manifest.json'), JSON.stringify({
+    version: 2,
+    sources: [{ layer: 'L0', role: 'tooling', path: path.relative(root, path.resolve(__dirname, '../..')) }],
+    runtime: {
+      schema: 'runtime-consumer/v1', enabled: true, consumer_layer: layer,
+      toolkit_commit: 'a'.repeat(40), toolkit_content_sha256: 'b'.repeat(64),
+    },
+  }));
 }
 
 function publishPrepApproval(root, role = 'arch-platform') {
@@ -55,6 +67,31 @@ test('legal transitions advance exactly one phase and illegal transitions fail c
     assert.strictEqual(control.transition(root, 'demo', 'EXECUTE').phase, 'EXECUTE');
     assert.throws(() => control.transition(root, 'demo', 'QG'), /ILLEGAL_PHASE_TRANSITION/);
   } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
+
+test('an enabled L1 runtime manifest wins over local L0-shaped registry and MCP markers for QG proof routing', () => {
+  const root = fixture();
+  try {
+    fs.mkdirSync(path.join(root, 'skills'), { recursive: true });
+    fs.writeFileSync(path.join(root, 'skills', 'registry.json'), '{}\n');
+    fs.mkdirSync(path.join(root, 'mcp-server'), { recursive: true });
+    fs.writeFileSync(path.join(root, 'mcp-server', 'package.json'), '{}\n');
+    writeRuntimeManifest(root, 'L1');
+
+    const invocation = control.qualityGateProofInvocation(root, 'demo', 'c'.repeat(40));
+    assert.strictEqual(invocation.executable, process.execPath);
+    assert.strictEqual(path.basename(invocation.args[0]), 'runtime-consumer-quality-gate.cjs');
+    assert.deepStrictEqual(invocation.args.slice(1), [root, 'verify', '--slug', 'demo', '--head', 'c'.repeat(40)]);
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
+
+test('L0 QG proof routing selects the native PowerShell verifier on Windows', () => {
+  const toolkitRoot = path.resolve(__dirname, '../..');
+  const invocation = control.qualityGateProofInvocation(toolkitRoot, 'demo', 'd'.repeat(40), 'win32');
+  assert.strictEqual(invocation.executable, 'pwsh.exe');
+  assert.deepStrictEqual(invocation.args.slice(0, 4), ['-NoLogo', '-NoProfile', '-NonInteractive', '-File']);
+  assert.strictEqual(path.basename(invocation.args[4]), 'verify-push-proof.ps1');
+  assert.deepStrictEqual(invocation.args.slice(5), ['-PushedSha', 'd'.repeat(40), '-RepoRoot', toolkitRoot]);
 });
 
 test('a PREP transition with a real authorizing verdict persists a readable approve decision', () => {
@@ -180,12 +217,75 @@ test('wave class grammar normalizes bounded prose punctuation and backticks with
   for (const expected of ['HARNESS', 'DOC', 'FAST-PATH']) {
     for (const rendered of [expected, `${expected}.`, `${expected};`, `\`${expected}\``, `\`${expected}\`.`]) {
       assert.strictEqual(control.parsePlanClass(`### Wave Class\n**Class**: ${rendered}\n`), expected);
+      assert.strictEqual(control.parsePlanClass(`## Wave Class\n- **Class**: ${rendered}\n`), expected);
     }
   }
   for (const invalid of ['HARNESS.foo', 'HARNESS-extra', 'UNKNOWN', '`HARNESS.foo`', 'HARNESS trailing']) {
     assert.throws(() => control.parsePlanClass(`### Wave Class\n**Class**: ${invalid}\n`), /INVALID_WAVE_CLASS/);
   }
-  assert.throws(() => control.parsePlanClass('### Wave Class\n**Class**: HARNESS\n**Class**: DOC\n'), /INVALID_WAVE_CLASS/);
+  assert.throws(() => control.parsePlanClass('### Wave Class\n**Class**: HARNESS\n**Class**: DOC\n'), /PLAN_WAVE_CLASS_AMBIGUOUS/);
+});
+
+test('wave class parsing is section-anchored and ignores markers outside the H2/H3 Wave Class section', () => {
+  const plan = [
+    '### Context',
+    '',
+    '- **Class**: DOC',
+    '',
+    '## Wave Class',
+    '',
+    '- **Class**: HARNESS',
+    '',
+    '### Example',
+    '',
+    '**Class**: FAST-PATH',
+  ].join('\n');
+  assert.strictEqual(control.parsePlanClass(plan), 'HARNESS');
+});
+
+test('wave class parsing rejects missing, duplicate, and unsupported declarations deterministically', () => {
+  assert.throws(() => control.parsePlanClass('### Context\n- **Class**: HARNESS\n'), /WAVE_CLASS_SECTION_MISSING/);
+  assert.throws(() => control.parsePlanClass('### Wave Class\nNo declaration here.\n'), /PLAN_WAVE_CLASS_MISSING/);
+  assert.throws(() => control.parsePlanClass('### Wave Class\n- **Class**: HARNESS\n- **Class**: DOC\n'), /PLAN_WAVE_CLASS_AMBIGUOUS/);
+  assert.throws(() => control.parsePlanClass('## Wave Class\n- **Class**: UNKNOWN\n'), /INVALID_WAVE_CLASS/);
+  assert.throws(() => control.parsePlanClass('## Wave Class\n- **Class**: HARNESS\n\n### Wave Class\n**Class**: HARNESS\n'), /WAVE_CLASS_SECTION_AMBIGUOUS/);
+  assert.throws(() => control.parsePlanClass('#### Wave Class\n- **Class**: HARNESS\n'), /WAVE_CLASS_SECTION_MISSING/);
+  assert.throws(() => control.parsePlanClass('```markdown\n## Wave Class\n- **Class**: HARNESS\n```\n'), /WAVE_CLASS_SECTION_MISSING/);
+  assert.throws(
+    () => control.parsePlanClass('```markdown\n```not-a-closing-fence\n## Wave Class\n- **Class**: HARNESS\n```\n'),
+    /WAVE_CLASS_SECTION_MISSING/,
+  );
+});
+
+test('control-plane initialization binds the PLAN class to the mandatory CLASS sentinel', () => {
+  const root = fixture({ className: 'HARNESS' });
+  const sentinel = path.join(root, '.planning', 'wave-demo', 'CLASS');
+  const statePath = path.join(root, '.androidcommondoc', 'wave-control', 'demo.json');
+  try {
+    fs.writeFileSync(sentinel, 'DOC\n');
+    assert.throws(() => control.initialize(root, 'demo'), /WAVE_CLASS_MISMATCH:sentinel=DOC:plan=HARNESS/);
+    assert.strictEqual(fs.existsSync(statePath), false);
+
+    fs.rmSync(sentinel);
+    assert.throws(() => control.initialize(root, 'demo'), /WAVE_CLASS_SENTINEL_MISSING/);
+    assert.strictEqual(fs.existsSync(statePath), false);
+
+    fs.writeFileSync(sentinel, 'HARNESS\nDOC\n');
+    assert.throws(() => control.initialize(root, 'demo'), /INVALID_WAVE_CLASS_SENTINEL/);
+    assert.strictEqual(fs.existsSync(statePath), false);
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
+
+test('control-plane initialization accepts the planner canonical H2 bullet form', () => {
+  const root = fixture({ className: 'HARNESS' });
+  try {
+    fs.writeFileSync(
+      path.join(root, '.planning', 'wave-demo', 'PLAN.md'),
+      '## Wave Class\n\n- **Class**: HARNESS\n',
+    );
+    const state = control.initialize(root, 'demo');
+    assert.strictEqual(state.wave_class, 'HARNESS');
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
 });
 
 test('canonical runtime entrypoint preflights exact wave without mutating state', () => {

@@ -8,8 +8,8 @@ layer: L0
 parent: agents-hub
 category: agents
 description: "Multi-agent patterns: topology (chain/fan-out/orchestrator), agent design, data handoff, failure handling, cost control"
-version: 2
-last_updated: "2026-03"
+version: 3
+last_updated: "2026-09-28"
 assumes_read: guides-hub, claude-code-workflow, agent-consumption-guide
 token_budget: 3800
 monitor_urls:
@@ -20,7 +20,7 @@ monitor_urls:
 
 # Autonomous Multi-Agent Workflow
 
-How to design agent pipelines where specialized agents collaborate on a task. Covers the team-lead model, agent invocation, orchestration patterns, data handoff, failure handling, and cost control.
+How to design agent pipelines where specialized agents collaborate on a task. Covers main-conversation orchestration, agent invocation, data handoff, failure handling, and cost control.
 
 ---
 
@@ -39,14 +39,14 @@ If one agent can do the job in a single context window, one agent is better. Mul
 
 ---
 
-## The Team Lead Model
+## Main-Conversation Orchestration
 
-See [claude-code-workflow](claude-code-workflow.md) for the full team-lead model. Key points:
+See [claude-code-workflow](claude-code-workflow.md) for the canonical runtime model. Key points:
 
-- **team-lead NEVER codes** — all code is written by specialists, team-lead only orchestrates.
-- **Simple task** → team-lead assigns to a single specialist.
-- **Large task / long session** → team-lead orchestrates waves of specialists plus audits.
-- **CLAUDE.md Agent Roster** is the discovery mechanism. Without it, Claude uses generic agents.
+- The **main conversation owns orchestration**. Historical `team-lead` wording names that logical responsibility, not an installable agent profile.
+- **Simple task** → the orchestrator dispatches one required specialist.
+- **Large task / long session** → the orchestrator coordinates evidence-bound waves of specialists and architects.
+- Agent availability comes from the synchronized registry and runtime discovery. Never duplicate a static roster in `CLAUDE.md`.
 
 ---
 
@@ -139,7 +139,7 @@ Between waves, architects cross-verify via `SendMessage`. Core specialists — w
 
 **Dynamic scaling**: when a core specialist is busy, architects request extra specialists from the orchestrator. Extras are named subagents (`{specialist}-2`) — they are dismissed after architect verification.
 
-Each architect produces APPROVE or ESCALATE. ALL must APPROVE before the next wave. On ESCALATE, the team-lead re-plans (never codes the fix itself).
+Each architect produces APPROVE or ESCALATE. ALL must APPROVE before the next wave. On ESCALATE, the main orchestrator re-plans and dispatches the owning specialist; it never treats its own prose as an approval.
 
 ---
 

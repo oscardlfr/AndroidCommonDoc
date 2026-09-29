@@ -1,15 +1,15 @@
 # AndroidCommonDoc Backlog
 
 > **Last updated**: 2026-09-28
-> **Roadmap baseline**: `develop@59087cb248ea441843a0395f756f249d5d14be3b` (PR #254). **H1, G0, ordered Waves 1–7, first-consumer hardening, consumer-contract convergence, and the first runtime-adoption follow-up are SHIPPED.**
-> **Current delivery**: PR #254 shipped the bounded post-#253 adoption fixes without modifying a product repository. The active finalization below is limited to defects independently reproduced after that merge. There is no numbered wave marked `NEXT`. **R33 remains deferred.**
+> **Roadmap baseline**: `develop@8ee5d831439312504a98e636c071583528824316` (PR #255). **H1, G0, ordered Waves 1–7, first-consumer hardening, consumer-contract convergence, and runtime-adoption finalization are SHIPPED.**
+> **Current delivery**: the active bounded convergence below contains only defects independently reproduced by a live consumer after PR #255 plus the portable agent/memory modernization. There is no numbered wave marked `NEXT`. **R33 remains deferred.**
 > **Source of truth**: this file owns ordering and scope. `git log`, merged PRs, and `project_*shipped.md` memory entries own historical detail.
 
 ## Operating contract
 
 - The load-bearing portability floor is **validated disk artifacts**. Runtime messaging is an optional acceleration layer.
 - Adapter delivery, message text, an MCP return value, or a live peer saying “GO” is never evidence. Only a valid, correlated result artifact counts as a protocol-valid consultation answer; phase and push authorization still require their own contracts.
-- Waves 1–7 were executed in order and shipped through PR #250; consumer hardening and bounded follow-ups shipped through PRs #251–#254.
+- Waves 1–7 were executed in order and shipped through PR #250; consumer hardening and bounded follow-ups shipped through PRs #251–#255.
 - Re-audit observations and file counts at each wave's starting HEAD. Post-G0 counts below were recorded by PR #245 at `619d9a7`; they are a planning baseline, not permanent truth.
 - Each wave must have one frozen scope, explicit no-go boundaries, proportional tests, and a shipped memory entry before the backlog advances.
 - Rich runtimes may add `SendMessage`, persistent peers, MCP invocation, app-server threads, or wakeups; failure or absence of those capabilities must not invalidate the disk floor.
@@ -124,22 +124,33 @@ admission, post-admission PREP creation, ordinary/runtime timeout idempotency,
 planner write confinement, ViewModel-rule precision, recovery guidance, and the
 bounded consumer acceptance that exposed the finalization defects below.
 
-## Active backlog after PR #254
+## PR #255 runtime-adoption finalization — SHIPPED
+
+PR #255 was squash-merged as
+`8ee5d831439312504a98e636c071583528824316`. It shipped the Claude `2.1.x`
+family adapter, native PreToolUse effort proof, exact host composition,
+planless dashboard admission, first-launch transcript handling, and
+checksum-allowlisted legacy Detekt hook migration. The former temporary
+finalization workstream is pruned; its detailed evidence remains in the merged
+PR, changelog, tests, and runtime consumer runbook.
+
+## Active backlog after PR #255
 
 Priority is impact, not implementation size. Every item needs an accepted PLAN,
 negative and positive tests, and a clean-consumer acceptance when it changes a
 consumer-facing contract.
 
-### Runtime adoption finalization — ACTIVE, PRUNEABLE after merge
+### Live-consumer agent/runtime convergence — ACTIVE, PRUNEABLE after merge
 
-This bounded workstream closes defects found only when upgrading and launching
-real consumers: punctuation-safe class parsing, exact multi-wave selection,
-planless read-only dashboard bootstrap, post-admission PREP creation, interactive host-composition production, native
-effective-effort proof, Claude `2.1.x` patch compatibility, and allowlisted
-migration of checksum-less legacy Detekt hooks. It is complete only after the same final commit passes disposable
-`shared-kmp-libs` L1 upgrade, clean L2/worktree launch, one local full aggregate,
-and the existing required GitHub CI. Collapse this paragraph into
-shipped history after the PR merges; do not preserve it as a parallel roadmap.
+This single bounded workstream closes the current compatibility cluster:
+permanent retirement of the legacy `team-lead` artifact; runtime executable
+paths rooted in the qualified toolkit rather than the consumer; exact
+PLAN/class-sentinel parsing; a portable `AGENTS.md`/thin-Claude-adapter/
+path-rules/durable-memory contract; and explicit sync that maps source paths to
+consumer destinations, records a full provenance SHA, and cannot install hooks
+outside its selected set. It requires negative and positive fixtures, clean L1
+and L2/worktree acceptance, one local full aggregate, and required GitHub CI.
+After merge, replace this paragraph with one shipped-history line.
 
 ### P0 — evidence integrity and consumer data safety
 
@@ -803,9 +814,9 @@ For full history use `git log` and the corresponding `project_*shipped.md` memor
 
 ## How to use this document
 
-1. Select from **Active backlog after PR #253**, normally highest priority first; there is no legacy numbered `NEXT` wave.
+1. Select from **Active backlog after PR #255**, normally highest priority first; there is no legacy numbered `NEXT` wave.
 2. Reproduce the selected item independently at current `develop`, accept one bounded PLAN, and freeze its exact path manifest before implementation.
 3. Preserve the item's dependencies and fail-closed acceptance. Do not combine unrelated P0/P1 entries merely to reduce PR count.
-4. Treat Waves 1–7, G0, and PRs #251–#253 as shipped history; do not reopen them implicitly or execute old wave prose literally.
+4. Treat Waves 1–7, G0, and PRs #251–#255 as shipped history; do not reopen them implicitly or execute old wave prose literally.
 5. On completion, record final PR/commit/tests, move only the closed ID to shipped history, and reprioritize remaining evidence.
 6. Trigger-only work enters the active queue only with the stated current evidence and an explicit owner.

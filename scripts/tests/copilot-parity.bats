@@ -67,6 +67,30 @@ HEREDOC
     portable_sed_inplace "s/SKILL_NAME/$name/g" "$WORK_DIR/skills/$name/SKILL.md"
 }
 
+# Helper: write a scripted skill whose Node launcher command is portable.
+write_portable_scripted_skill() {
+    local name="$1"
+    mkdir -p "$WORK_DIR/skills/$name"
+    cat > "$WORK_DIR/skills/$name/SKILL.md" << 'HEREDOC'
+---
+name: SKILL_NAME
+description: "Test portable skill SKILL_NAME"
+copilot: true
+---
+
+## Implementation
+
+```bash
+node .claude/runtime/l0-toolkit-launcher.cjs run SKILL_NAME --project-root "$PWD" -- $ARGUMENTS
+```
+
+### Windows
+
+The launcher selects the platform implementation.
+HEREDOC
+    portable_sed_inplace "s/SKILL_NAME/$name/g" "$WORK_DIR/skills/$name/SKILL.md"
+}
+
 # Helper: write a skill with copilot: true and behavioral type
 write_behavioral_skill() {
     local name="$1"
@@ -370,6 +394,24 @@ EOF
     [ -f "$WORK_DIR/setup/copilot-templates/adapter-scripted.prompt.md" ]
     grep -q "^## Implementation" "$WORK_DIR/setup/copilot-templates/adapter-scripted.prompt.md"
     echo "$output" | grep -q "Generated (scripted)"
+}
+
+@test "adapter: renders one portable launcher command for POSIX and PowerShell" {
+    write_params_file
+    write_portable_scripted_skill "adapter-portable"
+
+    run bash "$ADAPTER_SCRIPT" --project-root "$WORK_DIR"
+    [ "$status" -eq 0 ]
+
+    local template="$WORK_DIR/setup/copilot-templates/adapter-portable.prompt.md"
+    [ -f "$template" ]
+    [ "$(grep -c 'l0-toolkit-launcher.cjs run adapter-portable' "$template")" -eq 2 ]
+    grep -q -- '--project-root "$PWD"' "$template"
+    grep -q -- '--project-root (Get-Location).Path' "$template"
+
+    run bash "$PARITY_SCRIPT" --project-root "$WORK_DIR"
+    [ "$status" -eq 0 ]
+    echo "$output" | grep -q "RESULT: PASS"
 }
 
 @test "adapter: skips copilot:false skills" {

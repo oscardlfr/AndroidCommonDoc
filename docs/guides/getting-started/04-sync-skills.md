@@ -13,7 +13,7 @@ description: >
   into a downstream project with version tracking. / Ejecutar /sync-l0 o el
   CLI para materializar habilidades, agentes y comandos L0 en un proyecto
   descendente con seguimiento de versión.
-last_updated: "2026-09-27"
+last_updated: "2026-09-29"
 ---
 
 # Step 4 — Sync skills
@@ -81,11 +81,13 @@ To enable the Claude/Codex collaboration runtime in an L1 or L2 consumer, first 
 /sync-l0 --runtime
 ```
 
-Runtime mode does not copy source-coupled runtime code. It pins the toolkit commit and executable-content digest, installs ten canonical role definitions, `.claude/runtime/l0-entrypoint-launcher.cjs`, and the standalone source-hook launcher. Runtime skills use the entrypoint launcher; source-coupled hooks use the hook launcher. Both resolve the one local L0 tooling source from `l0-manifest.json`, including from linked worktrees, so consumer settings and skill commands contain no user, Node installation, or toolkit checkout path. L0 self-hosts through the same checked-in entrypoint-launcher path. Neither launcher uses `ANDROID_COMMON_DOC` as an authority fallback. Missing, remote, ambiguous, symlinked, or drifted sources and customized owned runtime files fail closed without overwrite. Do not combine runtime mode with prune, force, or migration flags. An explicit start also requires one unambiguous PLAN in the consumer; the read-only dashboard never creates one.
+Runtime mode does not copy source-coupled runtime code. It pins the toolkit commit and executable-content digest, installs ten canonical role definitions, `.claude/runtime/l0-entrypoint-launcher.cjs`, and the standalone source-hook launcher. Runtime skills use the entrypoint launcher; source-coupled hooks use the hook launcher. Consumer-local hook registrations are installed atomically with their exact hook files and the context-bundle writer closure; a registered command with a missing or customized target is never considered qualified. Both launchers resolve the one local L0 tooling source from `l0-manifest.json`, including from linked worktrees, so consumer settings and skill commands contain no user, Node installation, or toolkit checkout path. L0 self-hosts through the same checked-in entrypoint-launcher path. Neither launcher uses `ANDROID_COMMON_DOC` as an authority fallback. Missing, remote, ambiguous, symlinked, or drifted sources and customized owned runtime files fail closed without overwrite. Do not combine runtime mode with prune, force, or migration flags. An explicit start also requires one unambiguous PLAN in the consumer; the read-only dashboard never creates one.
 
-Run ordinary sync before runtime sync after every deliberate L0 revision change.
-If manifest-tracked state is unchanged and no executable repair is pending, the
-second apply is a true no-op: `l0-manifest.json` and `last_synced` remain unchanged.
+After the first runtime adoption, plain `/sync-l0` refreshes registry assets and
+runtime together after every deliberate L0 revision change. No second command is
+required; `--assets-only` is the explicit maintenance opt-out. If
+manifest-tracked state is unchanged and no executable repair is pending, the
+apply is a true no-op: `l0-manifest.json` and `last_synced` remain unchanged.
 Runtime-owned Detekt hooks are installed as executable; mode-only drift is repaired
 and reported separately without rewriting the manifest, while content conflicts
 fail closed.
@@ -192,9 +194,11 @@ Para habilitar el runtime Claude/Codex en un consumidor L1 o L2, declara una ún
 
 Este modo no copia el código acoplado del runtime. Fija el commit y el digest del contenido ejecutable del toolkit, instala diez roles canónicos, `.claude/runtime/l0-entrypoint-launcher.cjs` y el launcher autónomo de hooks. Las skills usan el primero y los hooks acoplados a la fuente usan el segundo. Ambos resuelven la única fuente local `L0`/`tooling` de `l0-manifest.json`, también desde worktrees enlazados, por lo que `settings.json` y los comandos de skills no contienen rutas del usuario, de Node ni del checkout del toolkit. L0 usa para sí mismo la misma ruta de launcher incluida en el repositorio. Ninguno usa `ANDROID_COMMON_DOC` como autoridad alternativa. Fuentes ausentes, remotas, ambiguas o con deriva y archivos runtime personalizados fallan de forma cerrada sin sobrescritura. No combines este modo con prune, force o migraciones. El inicio explícito requiere además un único PLAN inequívoco en el consumidor; el dashboard de solo lectura nunca fabrica uno.
 
-Tras cambiar deliberadamente la revisión de L0, ejecuta primero el sync ordinario
-y después el sync de runtime. Si no cambia el estado registrado en el manifest ni
-hay una reparación ejecutable pendiente, el segundo apply es un no-op real:
+Tras la primera adopción del runtime, un `/sync-l0` normal actualiza en una sola
+operación los assets del registro y el runtime después de cada cambio deliberado
+de revisión L0. No hace falta un segundo comando; `--assets-only` es el opt-out
+explícito de mantenimiento. Si no cambia el estado registrado en el manifest ni
+hay una reparación ejecutable pendiente, el apply es un no-op real:
 `l0-manifest.json` y `last_synced` permanecen intactos. Los hooks Detekt gestionados
 por runtime se instalan ejecutables; una deriva solo de modo se repara y se reporta
 por separado sin reescribir el manifest, y un conflicto de contenido falla de

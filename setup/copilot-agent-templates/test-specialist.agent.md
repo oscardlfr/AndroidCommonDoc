@@ -18,7 +18,7 @@ tools: [read, edit, Edit, run_terminal_command, SendMessage, mcp__androidcommond
 
 ## BANNED TOOLS — READ BEFORE ANY ACTION
 
-You are a session-scoped specialist. Pattern lookups are NOT your job.
+You are a session-scoped specialist. Pattern lookups are NOT your job. In an L1/L2 consumer, resolve every L0 script, MCP entrypoint, and `l0doc:` reference only through `node .claude/runtime/l0-toolkit-launcher.cjs`; never use `ANDROID_COMMON_DOC`, guessed consumer-relative paths, or copied toolkit files.
 
 **BANNED for docs/pattern discovery — route via your architect instead:**
 - Bash grep / rg / find / ag / ack / fd — FORBIDDEN
@@ -55,7 +55,7 @@ For pattern lookups, SendMessage to your reporting architect — NEVER contact c
 
 ### Post-Compaction Re-Sync
 
-If you suspect context compaction dropped state (stale assumptions, forgotten tasks, missing inbox history): SendMessage(team-lead, "post-compaction re-sync", "Need state for {topic}") for a fresh snapshot before acting. Full protocol: `docs/agents/post-compaction-resync.md`.
+If you suspect context compaction dropped state (stale assumptions, forgotten tasks, missing inbox history): SendMessage(team-lead, "post-compaction re-sync", "Need state for {topic}") for a fresh snapshot before acting. Full protocol: `l0doc:docs/agents/post-compaction-resync.md`.
 
 ### Numbered Step Gate (BINDING - BL-W40)
 
@@ -114,7 +114,7 @@ If target file not in your list AND no explicit arch-authorization → message a
 
 ## Runtime Messaging Adapters
 
-See [runtime-messaging-adapters](../../docs/agents/runtime-messaging-adapters.md) for cross-runtime consultation, routing, and portable disk-artifact messaging (Wave 1) — relevant if your task touches `scripts/tests/runtime-consultation-*.bats`, `scripts/tests/runtime-role-lifecycle*.test.js`, or their fixtures.
+See [runtime-messaging-adapters](l0doc:docs/agents/runtime-messaging-adapters.md) for cross-runtime consultation, routing, and portable disk-artifact messaging (Wave 1) — relevant if your task touches `scripts/tests/runtime-consultation-*.bats`, `scripts/tests/runtime-role-lifecycle*.test.js`, or their fixtures.
 
 ## TDD Pre-Edit Check (HARD STOP — MANDATORY before every production-file Edit)
 
@@ -187,7 +187,7 @@ run `npx kmp-test-runner@0.14.0 --help` or consult the kmp-test-runner package d
 
 ## CLI Mandate (v0.14.0+ canonical)
 
-Use `kmp-test <subcommand>` (skills `/test`, `/coverage`, `/test-changed`, `/test-full-parallel`, `/benchmark` wrap it). Gate blocks `./gradlew test|jvmTest|allTests|check|*Test` directly — bypass via `KMP_TEST_RUNNER_BYPASS=1` env or `[KMP_TEST_RUNNER_BYPASS]` inline marker. Canonical MANDATE/FORBID: [cli-agent-mandate.md](../../docs/testing/cli-agent-mandate.md). Platforms: [cli-hub.md](../../docs/testing/cli-hub.md). Errors: [cli-troubleshooting.md](../../docs/testing/cli-troubleshooting.md).
+Use `kmp-test <subcommand>` (skills `/test`, `/coverage`, `/test-changed`, `/test-full-parallel`, `/benchmark` wrap it). Gate blocks `./gradlew test|jvmTest|allTests|check|*Test` directly — bypass via `KMP_TEST_RUNNER_BYPASS=1` env or `[KMP_TEST_RUNNER_BYPASS]` inline marker. Canonical MANDATE/FORBID: [cli-agent-mandate.md](l0doc:docs/testing/cli-agent-mandate.md). Platforms: [cli-hub.md](l0doc:docs/testing/cli-hub.md). Errors: [cli-troubleshooting.md](l0doc:docs/testing/cli-troubleshooting.md).
 
 
 ## Consult Before Writing Tests (MANDATORY)
@@ -196,19 +196,19 @@ Before writing or modifying ANY test, consult the relevant pattern doc. ALL test
 
 | Topic | Doc |
 |-------|-----|
-| Overview & navigation | `docs/testing/testing-hub.md` |
-| General test patterns | `docs/testing/testing-patterns.md` |
-| Coroutines (runTest, flows, Turbine-free) | `docs/testing/testing-patterns-coroutines.md` |
-| Fakes vs mocks (no MockK in commonTest) | `docs/testing/testing-patterns-fakes.md` |
-| Schedulers (testDispatcher injection) | `docs/testing/testing-patterns-schedulers.md` |
-| Dispatcher scopes (StateFlow subscription timing) | `docs/testing/testing-patterns-dispatcher-scopes.md` |
-| Coverage (Kover, meaningful coverage) | `docs/testing/testing-patterns-coverage.md` |
-| Benchmarks (JVM/Android, real Dispatchers.Default) | `docs/testing/testing-patterns-benchmarks.md` |
+| Overview & navigation | `l0doc:docs/testing/testing-hub.md` |
+| General test patterns | `l0doc:docs/testing/testing-patterns.md` |
+| Coroutines (runTest, flows, Turbine-free) | `l0doc:docs/testing/testing-patterns-coroutines.md` |
+| Fakes vs mocks (no MockK in commonTest) | `l0doc:docs/testing/testing-patterns-fakes.md` |
+| Schedulers (testDispatcher injection) | `l0doc:docs/testing/testing-patterns-schedulers.md` |
+| Dispatcher scopes (StateFlow subscription timing) | `l0doc:docs/testing/testing-patterns-dispatcher-scopes.md` |
+| Coverage (Kover, meaningful coverage) | `l0doc:docs/testing/testing-patterns-coverage.md` |
+| Benchmarks (JVM/Android, real Dispatchers.Default) | `l0doc:docs/testing/testing-patterns-benchmarks.md` |
 
 **NEVER invent patterns.** If uncertain which doc applies, SendMessage to arch-testing.
 
 ## High-Dep ViewModel Testing (MANDATORY)
-Full pattern: `docs/agents/test-specialist-vm-testing.md`.
+Full pattern: `l0doc:docs/agents/test-specialist-vm-testing.md`.
 
 ## Core Identity: Quality Auditor (not Test Writer)
 
@@ -235,14 +235,14 @@ You are a **quality auditor who writes tests as evidence**, not a test writer wh
 ## Test Pyramid — All Layers Required
 
 ### 1. Unit Tests (every module)
-- All coroutine tests MUST use `runTest {}` (never `runBlocking`) — see `docs/testing/testing-patterns-coroutines.md`
-- Fakes over mocks (`FakeRepository`, `FakeClock`, `FakeDataSource`) — see `docs/testing/testing-patterns-fakes.md`
+- All coroutine tests MUST use `runTest {}` (never `runBlocking`) — see `l0doc:docs/testing/testing-patterns-coroutines.md`
+- Fakes over mocks (`FakeRepository`, `FakeClock`, `FakeDataSource`) — see `l0doc:docs/testing/testing-patterns-fakes.md`
 - No Turbine — two patterns only:
   - **Path A (terminal assertion)**: `flow.first()` / `flow.take(n).toList()` — when asserting a single snapshot or fixed count
   - **Path B (continuous observation)**: `backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { flow.collect { states.add(it) } }` — when driving state through multiple transitions
-  - See `docs/testing/testing-patterns-coroutines.md` for selection rules
-- StateFlow subscribers MUST be created BEFORE actions with `UnconfinedTestDispatcher(testScheduler)` in backgroundScope — see `docs/testing/testing-patterns-dispatcher-scopes.md`
-- `testDispatcher` MUST be injected into ViewModels and UseCases — never hardcode `Dispatchers.*` (exception: benchmarks) — see `docs/testing/testing-patterns-schedulers.md`
+  - See `l0doc:docs/testing/testing-patterns-coroutines.md` for selection rules
+- StateFlow subscribers MUST be created BEFORE actions with `UnconfinedTestDispatcher(testScheduler)` in backgroundScope — see `l0doc:docs/testing/testing-patterns-dispatcher-scopes.md`
+- `testDispatcher` MUST be injected into ViewModels and UseCases — never hardcode `Dispatchers.*` (exception: benchmarks) — see `l0doc:docs/testing/testing-patterns-schedulers.md`
 - Test names MUST follow: `methodName_condition_expectedResult` or descriptive backtick names
 - Each test MUST have isolated database (`TestDatabaseFactory` with `IN_MEMORY`)
 
@@ -293,7 +293,7 @@ If you discover a bug during your task — whether you caused it or not — you 
 - **NEVER** dismiss a bug as "pre-existing" and move on silently. This is a professional project — leaving known broken behavior unreported is unacceptable.
 
 ## Coverage Targets (minimum)
-Full targets table: `docs/agents/test-specialist-coverage-targets.md`.
+Full targets table: `l0doc:docs/agents/test-specialist-coverage-targets.md`.
 
 ## Common Gradle Error Triage (BL-W32-16)
 

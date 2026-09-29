@@ -1095,7 +1095,8 @@ test('P1-MODEL-32: observed model must belong to the requested profile family', 
   })).ok, false);
 });
 
-test('interactive SessionStart model plus same live host ancestry mints one exact wave composition', () => {
+test('interactive SessionStart model plus same live host ancestry mints one exact wave composition', (t) => {
+  t.mock.timers.enable({ apis: ['Date'], now: Date.now() });
   const mod = requireHostClaude();
   const fixture = writeHostContractFixture('interactive-session');
   try {
@@ -1134,7 +1135,7 @@ test('interactive SessionStart model plus same live host ancestry mints one exac
       __testObserved: liveObservation,
     };
     assert.strictEqual(withCapabilityEnv(() => mod.mintProductionHostComposition({ ...options,
-      __testObserved: { ...liveObservation, processId: process.pid + 1 } })).ok, false);
+      __testObserved: { ...liveObservation, executableDigest: sha256hex('foreign executable') } })).ok, false);
     assert.strictEqual(withCapabilityEnv(() => mod.mintProductionHostComposition({
       ...options, waveSlug: 'missing-wave',
     })).ok, false);
@@ -1148,10 +1149,136 @@ test('interactive SessionStart model plus same live host ancestry mints one exac
     assert.strictEqual(minted.ok, true, JSON.stringify(minted));
     assert.strictEqual(minted.record.actual_model, 'claude-sonnet-5');
     assert.strictEqual(minted.record.wave_slug, 'host-package');
+    fs.mkdirSync(path.join(fixture.projectRoot, '.planning', 'wave-historical-retained'), { recursive: true });
+    fs.writeFileSync(path.join(fixture.projectRoot, '.planning', 'wave-historical-retained', 'PLAN.md'), '# retained historical PLAN\n');
+    assert.strictEqual(rll.discoverPlan(fixture.projectRoot).ok, false,
+      'fixture must reproduce ambiguous global PLAN discovery');
     const expected = { entrypoint: options.entrypoint, argvDigest: options.argvDigest, roleScope: options.roleScope,
       waveSlug: options.waveSlug, planDigest: options.planDigest, worktreeId: options.worktreeId };
     assert.strictEqual(mod.consumeProductionHostComposition(fixture.projectRoot, minted.compositionId, expected).ok, true);
+    const scopedIdentity = mod.getProductionSessionIdentity(fixture.projectRoot, sessionId, {
+      worktreeId: options.worktreeId,
+      planDigest: options.planDigest,
+    });
+    assert.strictEqual(scopedIdentity.ok, true, JSON.stringify(scopedIdentity));
+    assert.strictEqual(scopedIdentity.record.composition_id, minted.compositionId,
+      'the signed launcher composition must provide the session+PLAN proof when system/init could not select a wave');
+    assert.strictEqual(mod.getProductionSessionIdentity(fixture.projectRoot, sessionId, {
+      worktreeId: options.worktreeId,
+      planDigest: sha256hex('foreign-plan'),
+    }).ok, false, 'a signed composition for another PLAN must never satisfy the requested session scope');
     assert.strictEqual(mod.consumeProductionHostComposition(fixture.projectRoot, minted.compositionId, expected).ok, false);
+
+    const expiredAuthority = withCapabilityEnv(() => mod.mintProductionHostComposition(options));
+    assert.strictEqual(expiredAuthority.ok, true, JSON.stringify(expiredAuthority));
+    t.mock.timers.tick(121000);
+    const delayedScopedIdentity = mod.getProductionSessionIdentity(fixture.projectRoot, sessionId, {
+      worktreeId: options.worktreeId,
+      planDigest: options.planDigest,
+    });
+    assert.strictEqual(delayedScopedIdentity.ok, true,
+      'the live signed session must retain its exact PLAN identity after the one-shot composition expires');
+    assert.ok(Date.parse(delayedScopedIdentity.record.expires_at) > Date.now(),
+      'the derived scoped identity must use the independent session lifetime, not the expired command lifetime');
+    assert.strictEqual(mod.validateProductionHostComposition(
+      fixture.projectRoot, expiredAuthority.compositionId, expected,
+    ).ok, false, 'expired composition must remain unusable as command authority');
+    assert.strictEqual(mod.consumeProductionHostComposition(
+      fixture.projectRoot, expiredAuthority.compositionId, expected,
+    ).ok, false, 'identity fallback must never revive expired one-shot authority');
+  } finally { cleanupHostContractFixture(fixture); }
+});
+
+test('resumed interactive session renews its pin from PreToolUse when Claude emits no new SessionStart', () => {
+  const mod = requireHostClaude();
+  const fixture = writeHostContractFixture('interactive-session-resume-renewal');
+  try {
+    const published = mod.publishClaudeHostContractPackage({
+      projectRoot: fixture.projectRoot, qualificationPath: fixture.qualificationPath,
+      evidenceRoot: fixture.evidenceRoot, observerPath: fixture.observerPath,
+    });
+    assert.strictEqual(published.ok, true, JSON.stringify(published));
+    const sessionId = 'interactive-resumed-session-id';
+    const firstTranscript = path.join(fixture.projectRoot, 'first-session.jsonl');
+    const resumedTranscript = path.join(fixture.projectRoot, 'resumed-session.jsonl');
+    const baseObservation = {
+      ok: true, observationSource: mod.__TEST_ONLY__pinObservationSourceFor(process.platform),
+      processId: process.pid, processBirth: new Date().toISOString(), executablePath: fixture.executablePath,
+      executableDigest: sha256bytes(fs.readFileSync(fixture.executablePath)), cliVersion: '2.1.283', cliFamily: '2.1',
+      pinDigest: published.pinDigest, hostContractDigest: published.hostContractDigest,
+    };
+    const firstEvent = { hook_event_name: 'SessionStart', session_id: sessionId, cwd: fixture.projectRoot,
+      transcript_path: firstTranscript, model: 'claude-sonnet-5' };
+    const first = withCapabilityEnv(() => mod.recordInteractiveSessionPin({
+      projectRoot: fixture.projectRoot, event: firstEvent, __testObserved: baseObservation,
+    }));
+    assert.strictEqual(first.ok, true, JSON.stringify(first));
+    const repeated = withCapabilityEnv(() => mod.recordInteractiveSessionPin({
+      projectRoot: fixture.projectRoot, event: firstEvent,
+      __testObserved: { ...baseObservation, processId: process.pid + 99 },
+    }));
+    assert.strictEqual(repeated.ok, true, JSON.stringify(repeated));
+    assert.strictEqual(repeated.idempotent, true);
+    assert.strictEqual(repeated.record.signature_ed25519_base64, first.record.signature_ed25519_base64);
+
+    const resumedObservation = {
+      ...baseObservation, processId: process.pid + 1,
+      processBirth: new Date(Date.now() + 1000).toISOString(),
+    };
+    fs.writeFileSync(firstTranscript, '');
+    fs.writeFileSync(resumedTranscript, '');
+    const plan = rll.discoverPlan(fixture.projectRoot, { waveSlug: 'host-package', expectedDigest: null });
+    const mint = (transcriptPath, observation, toolUseId) => withCapabilityEnv(() =>
+      mod.mintProductionHostComposition({
+        projectRoot: fixture.projectRoot,
+        event: { hook_event_name: 'PreToolUse', tool_name: 'Bash', session_id: sessionId,
+          tool_use_id: toolUseId, transcript_path: transcriptPath, cwd: fixture.projectRoot,
+          effort: { level: 'high' }, tool_input: { command: 'node launcher init-session' } },
+        entrypoint: 'init-session', argvDigest: sha256hex('resumed interactive argv'),
+        roleScope: ['context-provider'], waveSlug: 'host-package', planDigest: plan.planDigest,
+        worktreeId: rll.computeWorktreeId(fixture.projectRoot), __testObserved: observation,
+      }));
+    const pinPath = path.join(rll.registryRepoDir(fixture.projectRoot), 'host-sessions',
+      'interactive-' + sha256hex(sessionId) + '.json');
+    assert.strictEqual(mint(firstTranscript, baseObservation, 'toolu_initial_process').ok, true,
+      'the initial process must establish the invocation-bound session generation');
+    const firstGeneration = rll.peekSessionGeneration(
+      fixture.projectRoot, { provider: 'claude-hook', runtime_session_key: sessionId },
+    );
+    assert.strictEqual(firstGeneration.ok, true, JSON.stringify(firstGeneration));
+    const initialPinBytes = fs.readFileSync(pinPath, 'utf8');
+    assert.strictEqual(mint(resumedTranscript, {
+      ...resumedObservation, executableDigest: sha256hex('foreign executable'),
+    }, 'toolu_forged_resume').ok, false, 'host drift must fail before renewal');
+    assert.strictEqual(fs.readFileSync(pinPath, 'utf8'), initialPinBytes,
+      'a failed renewal must preserve the signed SessionStart pin');
+    assert.strictEqual(mint(resumedTranscript, resumedObservation, 'toolu_current_resume').ok, true,
+      'the first genuine PreToolUse must renew and mint without another SessionStart');
+    const resumedGeneration = rll.peekSessionGeneration(
+      fixture.projectRoot, { provider: 'claude-hook', runtime_session_key: sessionId },
+    );
+    assert.strictEqual(resumedGeneration.ok, true, JSON.stringify(resumedGeneration));
+    assert.notStrictEqual(resumedGeneration.generationId, firstGeneration.generationId,
+      'a new Claude process must rotate lifecycle reachability even when --resume preserves session_id');
+    const renewed = JSON.parse(fs.readFileSync(pinPath, 'utf8'));
+    assert.strictEqual(renewed.process_id, resumedObservation.processId);
+    assert.strictEqual(renewed.process_birth_digest, sha256hex(resumedObservation.processBirth));
+    assert.strictEqual(renewed.transcript_path_digest, sha256hex(fs.realpathSync(resumedTranscript)));
+    assert.notStrictEqual(renewed.signature_ed25519_base64, first.record.signature_ed25519_base64);
+
+    const tampered = JSON.parse(fs.readFileSync(pinPath, 'utf8'));
+    tampered.signature_ed25519_base64 = Buffer.from('tampered').toString('base64');
+    fs.writeFileSync(pinPath, JSON.stringify(tampered));
+    const tamperedBytes = fs.readFileSync(pinPath, 'utf8');
+    const rejected = withCapabilityEnv(() => mod.recordInteractiveSessionPin({
+      projectRoot: fixture.projectRoot,
+      event: { ...firstEvent, transcript_path: path.join(fixture.projectRoot, 'third-session.jsonl') },
+      __testObserved: { ...resumedObservation, processId: process.pid + 2 },
+    }));
+    assert.strictEqual(rejected.ok, false, JSON.stringify(rejected));
+    assert.strictEqual(rejected.reason, 'HOST_PIN_UNPROVEN');
+    assert.strictEqual(fs.readFileSync(pinPath, 'utf8'), tamperedBytes,
+      'invalid existing evidence must never be replaced during renewal');
   } finally { cleanupHostContractFixture(fixture); }
 });
 
@@ -2051,6 +2178,12 @@ test('CANONROOT-01 a session identity minted through one spelling of the project
       'the minting spelling must still resolve');
     assert.strictEqual(mod.getProductionSessionIdentity(alias, sessionId).ok, true,
       'the SAME directory named differently must resolve the SAME session identity -- otherwise authority depends on path spelling');
+    fs.mkdirSync(path.join(fixture.projectRoot, '.planning', 'wave-canonical-root-history'), { recursive: true });
+    fs.writeFileSync(path.join(fixture.projectRoot, '.planning', 'wave-canonical-root-history', 'PLAN.md'), '# retained PLAN\n');
+    assert.strictEqual(rll.discoverPlan(fixture.projectRoot).ok, false,
+      'fixture must retain more than one PLAN after the signed session evidence was minted');
+    assert.strictEqual(mod.getProductionSessionIdentity(fixture.projectRoot, sessionId).ok, true,
+      'a signed session record must verify against its own exact plan_digest after another wave is retained');
   } finally {
     aliases.forEach((entry) => { try { fs.unlinkSync(entry); } catch { /* best effort */ } });
     cleanupHostContractFixture(fixture);

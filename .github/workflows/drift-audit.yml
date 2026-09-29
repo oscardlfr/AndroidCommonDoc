@@ -68,7 +68,7 @@ jobs:
           retention-days: 14
 
   behavioral-readme-check:
-    name: README behavioral content (Wave History + ingestion-loop + team-lead)
+    name: README behavioral content (ingestion-loop + team-lead)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -88,16 +88,18 @@ jobs:
             fi
           }
 
-          # README must have Wave History section documenting Wave 20+
-          check "README: Recent Changes section"         "^## Recent Changes"             "README.md"
-          check "README: Wave 25 entry"                   "Wave 25"                        "README.md"
+          # README documents durable current behavior, not an embedded change log.
           check "README: Ingestion Loop mentioned"        "ingestion|ingest-content"       "README.md"
           check "README: team-lead (not project-manager)" "team-lead"                      "README.md"
 
-          # CLAUDE.md must have Wave History + ingestion loop + MCP wiring note
-          check "CLAUDE.md: Wave History section"         "^## Wave History"               "CLAUDE.md"
-          check "CLAUDE.md: ingestion loop"               "Ingestion Loop"                 "CLAUDE.md"
-          check "CLAUDE.md: team-lead"                    "team-lead"                      "CLAUDE.md"
+          # CLAUDE.md is intentionally a thin runtime adapter. Durable workflow,
+          # orchestration and memory rules live in the portable AGENTS.md contract.
+          check "CLAUDE.md: imports portable authority"    "^@AGENTS\\.md$"                 "CLAUDE.md"
+          check "CLAUDE.md: path-scoped rules"             "\\.claude/rules/"               "CLAUDE.md"
+          check "CLAUDE.md: canonical launcher"            "/init-session --orchestrate"     "CLAUDE.md"
+          check "AGENTS.md: main orchestrator"             "main conversation is the orchestrator" "AGENTS.md"
+          check "AGENTS.md: no team-lead peer"             "Never spawn a separate.*team-lead"     "AGENTS.md"
+          check "AGENTS.md: durable memory only"           "Auto-memory may record durable"        "AGENTS.md"
 
           # README + CLAUDE.md must not contain active "project-manager" references
           # (historical mentions in .planning/ or MIGRATIONS.json are fine)
@@ -112,7 +114,7 @@ jobs:
 
           if [ $FAIL -ne 0 ]; then
             echo ""
-            echo "Behavioral README content is incomplete or stale. Review docs/agents/ingestion-loop.md + CLAUDE.md + README.md."
+            echo "Behavioral documentation or the portable instruction contract is incomplete or stale."
             exit 1
           fi
 
@@ -129,9 +131,12 @@ jobs:
           # Every /slash command mentioned in README/CLAUDE.md must have a file
           # Exclusions: literal placeholder tokens like /skill-name
           PLACEHOLDERS="skill-name|command-name|slash-name"
+          # Claude Code owns these commands; they are not repository skills and
+          # must not require a skills/<name>/SKILL.md shadow implementation.
+          RUNTIME_NATIVE="context|doctor"
           echo "--- Checking slash commands referenced in README.md / CLAUDE.md ---"
           MENTIONED=$(grep -oE '`/[a-z][a-z-]+`' README.md CLAUDE.md 2>/dev/null | \
-            grep -oE '/[a-z][a-z-]+' | sort -u | grep -vE "^/($PLACEHOLDERS)$")
+            grep -oE '/[a-z][a-z-]+' | sort -u | grep -vE "^/($PLACEHOLDERS|$RUNTIME_NATIVE)$")
           for cmd in $MENTIONED; do
             name=${cmd#/}
             # Check if file exists as skill or slash command

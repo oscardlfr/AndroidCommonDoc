@@ -104,7 +104,13 @@ function smokeEveryEmittedHook(projectRoot: string): void {
         const result = spawnSync("bash", ["-c", command], {
           cwd: projectRoot,
           env: { ...process.env, CLAUDE_PROJECT_DIR: projectRoot, CLAUDE_WAVE_SLUG: "" },
-          input: hookPayload(event, String(block.matcher), projectRoot),
+          // The fixture's consumer-owned `printf` intentionally exits without
+          // reading stdin. Piping a payload to that process races its exit and
+          // produces a platform-dependent spawnSync EPIPE unrelated to hook
+          // launchability. L0 hooks still receive the full synthetic event.
+          input: command === "printf consumer-owned"
+            ? undefined
+            : hookPayload(event, String(block.matcher), projectRoot),
           encoding: "utf8",
           timeout: 30000,
         });

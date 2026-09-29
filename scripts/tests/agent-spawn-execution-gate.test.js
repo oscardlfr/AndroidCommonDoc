@@ -1627,6 +1627,34 @@ runPositiveOwningNameAbsent();
   }
 }
 
+// Consumer worktrees retain completed wave directories and may add a branch
+// uniqueness suffix.  An owning action already carries the exact PLAN digest;
+// it must remain reservable without requiring `.planning` to contain only one
+// PLAN globally.  This is the real L2 failure shape: the old gate returned
+// empty stdout (non-owning pass-through), so Agent spawned without a B1 claim.
+{
+  const proj = makeGitProject();
+  try {
+    writePlanFixture(proj, 'consumer-active');
+    const fixture = mintFullyEligibleRoleSpawnAction(proj, RB_ROLE, 'rb1-multi-plan-session');
+    writePlanFixture(proj, 'historical-retained');
+    spawnSync('git', ['branch', '-m', 'codex/consumer-active-c1'], { cwd: proj, encoding: 'utf8' });
+    assert.strictEqual(rll.discoverPlan(proj).ok, false, 'fixture must reproduce ambiguous global PLAN discovery');
+    assert.strictEqual(rll.discoverPlan(proj, fixture.planDigest).ok, true, 'the action digest must still resolve its exact PLAN');
+
+    const toolInput = { subagent_type: RB_ROLE, name: RB_ROLE, prompt: fixture.bootstrapMessage };
+    const r = runMainOrchestratorAgentCall(toolInput, proj, 'rb1-multi-plan-session');
+    assert.strictEqual(r.exit, 0, 'multi-PLAN owning reservation must exit cleanly: ' + JSON.stringify(r));
+    const body = parseHookJSON(r.stdout, 'RB1-MULTI-PLAN-WORKTREE');
+    assert.strictEqual(body.hookSpecificOutput && body.hookSpecificOutput.permissionDecision, 'allow', 'the exact owning action must select its PLAN independently of branch/global discovery: ' + JSON.stringify(body));
+    const claimRead = rll.readRegistryRecord(rll.roleSpawnExecutionClaimPathFor(fixture.repoDescriptor, fixture.roleSpawnActionId));
+    assert.strictEqual(claimRead.ok && !claimRead.absent, true, 'the real B1 claim must exist after multi-PLAN admission: ' + JSON.stringify(claimRead));
+    console.log('RB1-MULTI-PLAN-WORKTREE exact action scope reserves despite retained PLANs and branch suffix: PASS');
+  } finally {
+    cleanup(proj);
+  }
+}
+
 // RB2: a second, concurrent/replayed reservation attempt for the SAME
 // action must be DENIED -- only one invocation may win the atomic
 // reservation. Mirrors the no-clobber-as-election idiom already
@@ -2519,16 +2547,9 @@ runPositiveOwningNameAbsent();
   }
 }
 
-// RB-AMBIGUOUS (Fix 3, first half): two simultaneously-live candidates for
-// the SAME role (candidate A: role-binding-backed, loop 1; candidate B: an
-// independent role-spawn action with NO role-binding at all, loop 2) must
-// deny as ambiguous, never silently pick one. Deterministic regardless of
-// directory-iteration order: findOwningRoleLifecycleCandidate's loop 1
-// unconditionally takes priority over loop 2 today whenever loop 1 finds
-// ANY match -- candidate A is the ONLY loop-1 entry here, so pre-fix it is
-// always selected first (via runMainOrchestratorAgentCall's own session,
-// which genuinely correlates to A) and B is never even inspected, letting
-// the call succeed despite a genuine second candidate for the role existing.
+// RB-CURRENT-GENERATION: a live historical candidate for the same role but a
+// DIFFERENT session generation must not make the current session ambiguous.
+// The observed session identity selects A; B remains unreserved.
 {
   const proj = makeGitProject();
   try {
@@ -2553,13 +2574,15 @@ runPositiveOwningNameAbsent();
 
     const toolInput = { subagent_type: RB_ROLE, name: RB_ROLE, prompt: fixtureA.bootstrapMessage };
     const r = runMainOrchestratorAgentCall(toolInput, proj, 'rb-ambiguous-session');
-    assertPreToolUseDeny(r, 'RB-AMBIGUOUS: two simultaneously-live candidates for the same role must deny as ambiguous, never silently pick one');
+    assert.strictEqual(r.exit, 0, 'RB-CURRENT-GENERATION: current session must select its own generation: ' + JSON.stringify(r));
+    const body = parseHookJSON(r.stdout, 'RB-CURRENT-GENERATION');
+    assert.strictEqual(body.hookSpecificOutput && body.hookSpecificOutput.permissionDecision, 'allow', 'RB-CURRENT-GENERATION: current session must be allowed: ' + JSON.stringify(body));
 
     const claimPathA = rll.roleSpawnExecutionClaimPathFor(proj, fixtureA.roleSpawnActionId);
     const claimPathB = rll.roleSpawnExecutionClaimPathFor(proj, actionIdB);
-    assert.strictEqual(fs.existsSync(claimPathA), false, 'RB-AMBIGUOUS: no reservation claim may exist for candidate A when ambiguous: ' + claimPathA);
-    assert.strictEqual(fs.existsSync(claimPathB), false, 'RB-AMBIGUOUS: no reservation claim may exist for candidate B when ambiguous: ' + claimPathB);
-    console.log('RB-AMBIGUOUS two simultaneously-live candidates for the same role deny as ambiguous, never silently picking one: PASS');
+    assert.strictEqual(fs.existsSync(claimPathA), true, 'RB-CURRENT-GENERATION: current candidate must be reserved: ' + claimPathA);
+    assert.strictEqual(fs.existsSync(claimPathB), false, 'RB-CURRENT-GENERATION: foreign generation must remain untouched: ' + claimPathB);
+    console.log('RB-CURRENT-GENERATION ignores a live foreign-generation candidate for the same role: PASS');
   } finally {
     cleanup(proj);
   }

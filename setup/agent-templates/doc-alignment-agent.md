@@ -6,7 +6,7 @@ model: sonnet
 domain: quality
 intent: [docs, drift, alignment, stale]
 token_budget: 2000
-template_version: "1.1.0"
+template_version: "1.2.0"
 memory: project
 skills:
   - audit-docs
@@ -39,7 +39,7 @@ When the L0 MCP server is connected, use these tools for deeper validation:
 
 1. Read `git diff HEAD~1 --name-only` context from recent changes (or use the files provided)
 2. For each changed file, determine which module and feature it relates to
-3. Read the relevant docs: feature inventory, product spec, technology cheatsheet, CLAUDE.md
+3. Read the relevant docs: `AGENTS.md`, its `CLAUDE.md` adapter, feature inventory, product spec and technology cheatsheet
 4. Compare code state against doc state
 5. Report drift with severity:
    - **CRITICAL**: SHIPPED feature with broken validation reference

@@ -400,11 +400,15 @@ test('canonicalInternalSearchSummary projects only the disclosed fields and fail
 
 const { createTurnProjectionIo } = require(path.join(moduleDir, 'turn-projection-io.cjs'));
 
-function makeProjectionIoForTest() {
+function makeProjectionIoForTest(secureDirectories) {
   const { execFileSync } = require('node:child_process');
   return createTurnProjectionIo({
     TURN_READ_PROJECTION_ENTRY_CAP: 256,
     TURN_READ_PROJECTION_FILE_CAP: 1024 * 1024,
+    ensureSecureRegistryDir: secureDirectories || ((dirs) => {
+      for (const dir of (Array.isArray(dirs) ? dirs : [dirs])) fs.chmodSync(dir, 0o700);
+      return { ok: true };
+    }),
     execFileSync,
     fs,
     path,
@@ -441,6 +445,33 @@ test('writeProjectionFile refuses a hostile relative path before it ever touches
   } finally {
     fs.chmodSync(stagingRoot, 0o700);
     fs.rmSync(stagingRoot, { recursive: true, force: true });
+  }
+});
+
+test('chmodProjectionDirectories secures the complete tree as one batch and fails closed on a rejected ACL', () => {
+  const root = mkTempDir('bridge-projection-security-');
+  try {
+    const nested = path.join(root, 'a', 'b');
+    fs.mkdirSync(nested, { recursive: true });
+    const observed = [];
+    const accepted = makeProjectionIoForTest((dirs) => {
+      observed.push(...dirs);
+      return { ok: true };
+    });
+    accepted.chmodProjectionDirectories(root, 0o500);
+    assert.deepEqual(new Set(observed), new Set([root, path.join(root, 'a'), nested]));
+    if (process.platform !== 'win32') {
+      for (const dir of observed) assert.equal(fs.lstatSync(dir).mode & 0o777, 0o500);
+    }
+
+    const rejected = makeProjectionIoForTest(() => ({ ok: false, reason: 'acl-failed' }));
+    assert.throws(
+      () => rejected.chmodProjectionDirectories(root, 0o500),
+      /projection-directory-security-failed:acl-failed/,
+    );
+  } finally {
+    makeProjectionIoForTest().chmodProjectionDirectories(root, 0o700);
+    fs.rmSync(root, { recursive: true, force: true });
   }
 });
 

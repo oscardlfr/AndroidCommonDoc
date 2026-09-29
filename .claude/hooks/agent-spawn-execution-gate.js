@@ -118,7 +118,7 @@ function harnessSuffixCandidateRole(name) {
  * (mirrors subagent-start-context-bundle.js's own B3 AMBIGUOUS handling).
  * @returns {{candidate:{record:object|null,action:object}|null,ambiguous:boolean}}
  */
-function findOwningRoleLifecycleCandidate(projectRoot, worktreeId, role) {
+function findOwningRoleLifecycleCandidate(projectRoot, worktreeId, role, sessionGenerationId = null) {
   const foundByActionId = new Map();
   const expiredBindingActionsById = new Map();
 
@@ -141,7 +141,8 @@ function findOwningRoleLifecycleCandidate(projectRoot, worktreeId, role) {
       || typeof rec.role !== 'string'
     ) continue;
     if (rll.roleBindingPathFor(projectRoot, rec.worktree_id, rec.plan_digest, rec.profile_digest, rec.session_generation_id, rec.role) !== candidatePath) continue;
-    if (rec.worktree_id !== worktreeId || rec.role !== role) continue;
+    if (rec.worktree_id !== worktreeId || rec.role !== role ||
+        (sessionGenerationId && rec.session_generation_id !== sessionGenerationId)) continue;
     const stateResult = rll.readRoleBindingState(projectRoot, rec.worktree_id, rec.plan_digest, rec.profile_digest, rec.session_generation_id, rec.role);
     if (!stateResult.ok) continue;
     if ((stateResult.state !== 'STARTING' && stateResult.state !== 'REHYDRATING') || !stateResult.record.pending_action_id) continue;
@@ -185,7 +186,8 @@ function findOwningRoleLifecycleCandidate(projectRoot, worktreeId, role) {
     // from being counted once in each ownership family and falsely reported
     // as cross-family ambiguity.
     if (action.kind === 'root-source-spawn') continue;
-    if (action.role !== role || action.worktree_id !== worktreeId) continue;
+    if (action.role !== role || action.worktree_id !== worktreeId ||
+        (sessionGenerationId && action.session_generation_id !== sessionGenerationId)) continue;
     if (rll.resolveHostOperationForAction(action.kind, action.runtime) !== 'Agent') continue;
     const actionExpiryMs = Date.parse(action.expires_at);
     if (!Number.isFinite(actionExpiryMs) || actionExpiryMs <= Date.now()) continue;
@@ -289,14 +291,50 @@ process.stdin.on('end', () => {
     const projectRoot = process.env.CLAUDE_PROJECT_DIR || process.cwd();
 
     let worktreeId;
-    let planResult;
     try {
       worktreeId = rll.computeWorktreeId(projectRoot);
-      planResult = rll.discoverPlan(projectRoot);
     } catch {
       process.exit(0); // unresolvable scope (e.g. pre-PLAN) -- mechanism inapplicable, mirrors this hook family's own pre-PLAN passthrough convention.
     }
-    if (!planResult.ok) process.exit(0);
+
+    // A consumer worktree may legitimately retain several historical
+    // `.planning/wave-*/PLAN.md` files.  The owning role-binding/action is
+    // already the authenticated scope selector, so resolve its exact digest
+    // before falling back to the legacy single-PLAN discovery used by
+    // genuinely non-owning calls.  Otherwise an owning Agent call silently
+    // bypasses B1 whenever more than one PLAN exists in the checkout.
+    const sessionId = data.session_id;
+    let ownershipGenerationId = null;
+    if (typeof sessionId === 'string' && sessionId.length > 0 && Buffer.byteLength(sessionId, 'utf8') <= MAX_RUNTIME_SESSION_KEY_BYTES) {
+      try {
+        const generation = rll.peekSessionGeneration(projectRoot, {
+          provider: 'claude-hook', runtime_session_key: sessionId,
+        });
+        if (generation.ok) ownershipGenerationId = generation.generationId;
+      } catch { /* missing generation remains fail-closed through the unscoped lookup below */ }
+    }
+    const lifecycleLookup = findOwningRoleLifecycleCandidate(
+      projectRoot, worktreeId, subagentType, ownershipGenerationId,
+    );
+    if (lifecycleLookup.ambiguous) {
+      emit(denyResponse('[agent-spawn-execution-gate] owning role-spawn state is ambiguous for "' + subagentType + '".'));
+      return;
+    }
+    let planResult;
+    try {
+      planResult = lifecycleLookup.candidate
+        ? rll.discoverPlan(projectRoot, lifecycleLookup.candidate.action.plan_digest)
+        : rll.discoverPlan(projectRoot);
+    } catch {
+      planResult = { ok: false };
+    }
+    if (!planResult.ok) {
+      if (lifecycleLookup.candidate) {
+        emit(denyResponse('[agent-spawn-execution-gate] the owning role-spawn action\'s exact PLAN is unavailable.'));
+        return;
+      }
+      process.exit(0);
+    }
 
     // Sixteenth §16b: root-source is a third, disjoint owning action kind.
     // Resolve it before either pre-existing ownership family, but never by
@@ -335,7 +373,6 @@ process.stdin.on('end', () => {
     // them.  This is a union ambiguity check, not priority ordering: a role
     // can never be selected merely because root-source happened to be tested
     // before claude-agent or role-spawn.
-    const lifecycleLookup = findOwningRoleLifecycleCandidate(projectRoot, worktreeId, subagentType);
     let claudeAgentCandidates = [];
     try {
       const coordRoot = rll.coordinationRootPathFor(projectRoot);
@@ -559,7 +596,6 @@ process.stdin.on('end', () => {
     // deny. RB13's own "extra/unrecognized input never flips non-owning"
     // principle still holds for the NON-owning case above (no candidate ->
     // exit 0 regardless of session_id, already handled by the early return).
-    const sessionId = data.session_id;
     if (typeof sessionId !== 'string' || sessionId.length === 0 || Buffer.byteLength(sessionId, 'utf8') > MAX_RUNTIME_SESSION_KEY_BYTES) {
       emit(denyResponse('[agent-spawn-execution-gate] missing or invalid session_id while a genuine owning candidate exists for "' + subagentType + '".'));
       return;

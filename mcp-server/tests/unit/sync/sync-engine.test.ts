@@ -75,6 +75,12 @@ function makeManifest(overrides?: Partial<Manifest>): Manifest {
   };
 }
 
+async function writeEmptyRetiredArtifactRegistry(l0Root: string): Promise<void> {
+  const registry = join(l0Root, "skills", "sync-l0", "retired-artifacts.json");
+  await mkdir(join(l0Root, "skills", "sync-l0"), { recursive: true });
+  await writeFile(registry, JSON.stringify({ format_version: "1.0", artifacts: [] }));
+}
+
 // ---------------------------------------------------------------------------
 // destPath
 // ---------------------------------------------------------------------------
@@ -191,7 +197,7 @@ describe("resolveSyncPlan", () => {
         exclude_categories: [],
       },
       checksums: {
-        "skills/test/SKILL.md": "sha256:testhash",
+        ".claude/skills/test/SKILL.md": "sha256:testhash",
       },
     });
     const resolved = resolveSyncPlan(registry, manifest);
@@ -329,7 +335,8 @@ allowed-tools: [Bash]
     const entry = makeEntry({ name: "test", type: "skill", hash: "sha256:abc123" });
     const result = materializeFile(content, entry, "/path/to/l0");
 
-    expect(result).toContain("l0_source: /path/to/l0");
+    expect(result).toContain("l0_source: manifest:L0/tooling");
+    expect(result).not.toContain("/path/to/l0");
     expect(result).toContain("l0_hash: sha256:abc123");
     expect(result).toContain("l0_synced:");
     // Original content still present
@@ -348,7 +355,8 @@ description: "Testing agent"
     const entry = makeEntry({ name: "test-specialist", type: "agent", hash: "sha256:def456" });
     const result = materializeFile(content, entry, "/path/to/l0");
 
-    expect(result).toContain("l0_source: /path/to/l0");
+    expect(result).toContain("l0_source: manifest:L0/tooling");
+    expect(result).not.toContain("/path/to/l0");
     expect(result).toContain("l0_hash: sha256:def456");
     expect(result).toContain("l0_synced:");
     expect(result).toContain("# Agent body");
@@ -363,7 +371,8 @@ Some instructions here`;
     const result = materializeFile(content, entry, "/path/to/l0");
 
     expect(result).toContain("<!-- L0-SYNC");
-    expect(result).toContain("l0_source: /path/to/l0");
+    expect(result).toContain("l0_source: manifest:L0/tooling");
+    expect(result).not.toContain("/path/to/l0");
     expect(result).toContain("l0_hash: sha256:ghi789");
     expect(result).toContain("l0_synced:");
     expect(result).toContain("# /run - Run the project");
@@ -396,6 +405,7 @@ describe("syncL0", () => {
     // Create temp directories for project and L0 source
     projectRoot = await mkdtemp(join(tmpdir(), "sync-project-"));
     l0Root = await mkdtemp(join(tmpdir(), "sync-l0-"));
+    await writeEmptyRetiredArtifactRegistry(l0Root);
 
     // Create L0 skill directory structure
     await mkdir(join(l0Root, "skills", "test"), { recursive: true });
@@ -505,6 +515,8 @@ Run instructions
     );
     expect(skillContent).toContain("l0_source:");
     expect(skillContent).toContain("l0_hash:");
+    expect(skillContent).toContain("l0_source: manifest:L0/tooling");
+    expect(skillContent).not.toContain(l0Root);
 
     // Agent should have l0_source injected
     const agentContent = await readFile(
@@ -513,6 +525,8 @@ Run instructions
     );
     expect(agentContent).toContain("l0_source:");
     expect(agentContent).toContain("l0_hash:");
+    expect(agentContent).toContain("l0_source: manifest:L0/tooling");
+    expect(agentContent).not.toContain(l0Root);
 
     // Command should have HTML comment header
     const cmdContent = await readFile(
@@ -520,6 +534,44 @@ Run instructions
       "utf-8",
     );
     expect(cmdContent).toContain("<!-- L0-SYNC");
+    expect(cmdContent).toContain("l0_source: manifest:L0/tooling");
+    expect(cmdContent).not.toContain(l0Root);
+  });
+
+  it("repairs legacy absolute provenance on ordinary sync and is then byte-stable", async () => {
+    const manifest = makeManifest({ sources: [{ layer: "L0", path: l0Root, role: "tooling" }] });
+    const manifestPath = join(projectRoot, "l0-manifest.json");
+    await writeFile(manifestPath, JSON.stringify(manifest, null, 2) + "\n");
+    expect((await syncL0(projectRoot, l0Root)).added).toBe(3);
+
+    const managed = [
+      ".claude/skills/test/SKILL.md",
+      ".claude/agents/test-specialist.md",
+      ".claude/commands/run.md",
+    ];
+    for (const relative of managed) {
+      const file = join(projectRoot, relative);
+      const canonical = await readFile(file, "utf8");
+      await writeFile(file, canonical.replace("manifest:L0/tooling", "/Users/private/legacy-l0"));
+    }
+
+    const repaired = await syncL0(projectRoot, l0Root);
+    expect(repaired.updated).toBe(3);
+    expect(repaired.conflicts).toBe(0);
+    const repairedBytes = new Map<string, string>();
+    for (const relative of managed) {
+      const bytes = await readFile(join(projectRoot, relative), "utf8");
+      expect(bytes).toContain("l0_source: manifest:L0/tooling");
+      expect(bytes).not.toContain("/Users/private/legacy-l0");
+      repairedBytes.set(relative, bytes);
+    }
+
+    const noOp = await syncL0(projectRoot, l0Root);
+    expect(noOp.updated).toBe(0);
+    expect(noOp.unchanged).toBe(3);
+    for (const relative of managed) {
+      expect(await readFile(join(projectRoot, relative), "utf8")).toBe(repairedBytes.get(relative));
+    }
   });
 
   it("updates manifest checksums after successful sync", async () => {
@@ -679,6 +731,7 @@ describe("syncL0 safety guardrails", () => {
   beforeEach(async () => {
     projectRoot = await mkdtemp(join(tmpdir(), "sync-safe-project-"));
     l0Root = await mkdtemp(join(tmpdir(), "sync-safe-l0-"));
+    await writeEmptyRetiredArtifactRegistry(l0Root);
 
     // Create minimal L0 with one skill
     await mkdir(join(l0Root, "skills", "test"), { recursive: true });
@@ -696,6 +749,7 @@ describe("syncL0 safety guardrails", () => {
   it("Fix #1: throws on empty registry (0 entries)", async () => {
     // Create empty L0 (no skills, no agents, no commands)
     const emptyL0 = await mkdtemp(join(tmpdir(), "sync-empty-l0-"));
+    await writeEmptyRetiredArtifactRegistry(emptyL0);
 
     const manifest = makeManifest({ sources: [{ layer: "L0", path: emptyL0, role: "tooling" }] });
     await writeFile(
@@ -941,6 +995,7 @@ describe("syncL0 manifest preservation", () => {
   beforeEach(async () => {
     projectRoot = await mkdtemp(join(tmpdir(), "sync-preserve-project-"));
     l0Root = await mkdtemp(join(tmpdir(), "sync-preserve-l0-"));
+    await writeEmptyRetiredArtifactRegistry(l0Root);
 
     // Create minimal L0 with one skill
     await mkdir(join(l0Root, "skills", "test"), { recursive: true });
@@ -974,6 +1029,54 @@ describe("syncL0 manifest preservation", () => {
 
     const updated = JSON.parse(await readFile(join(projectRoot, "l0-manifest.json"), "utf-8"));
     expect(updated.selection.mode).toBe("explicit");
+  });
+
+  it("treats explicit selection as closed without deleting an existing excluded registration", async () => {
+    await mkdir(join(l0Root, ".claude", "hooks"), { recursive: true });
+    await writeFile(
+      join(l0Root, ".claude", "hooks", "premature-execution-gate.js"),
+      "#!/usr/bin/env node\nprocess.exit(0);\n",
+    );
+    const manifest = makeManifest({
+      sources: [{ layer: "L0", path: l0Root, role: "tooling" }],
+      selection: {
+        mode: "explicit",
+        exclude_skills: [],
+        exclude_agents: [],
+        exclude_commands: [],
+        exclude_categories: [],
+        exclude_hooks: [],
+      },
+    });
+    manifest.checksums[".claude/skills/test/SKILL.md"] = "sha256:old";
+    await writeFile(join(projectRoot, "l0-manifest.json"), JSON.stringify(manifest, null, 2));
+    const legacyCommand = `${JSON.stringify(process.execPath)} ${JSON.stringify(
+      join(l0Root, ".claude", "hooks", "premature-execution-gate.js"),
+    )}`;
+    await mkdir(join(projectRoot, ".claude"), { recursive: true });
+    await writeFile(join(projectRoot, ".claude", "settings.json"), JSON.stringify({
+      hooks: {
+        PreToolUse: [{
+          matcher: "Write|Edit|Bash",
+          hooks: [{ type: "command", command: legacyCommand, timeout: 5 }],
+        }],
+      },
+    }, null, 2));
+
+    const report = await syncL0(projectRoot, l0Root);
+
+    expect(report.actions.filter((entry) => entry.action !== "remove")).toHaveLength(1);
+    expect(report.actions[0].registryEntry.name).toBe("test");
+    expect(report.warnings.join("\n")).not.toContain("Hook registrations added");
+    await expect(access(join(projectRoot, ".claude", "hooks", "premature-execution-gate.js")))
+      .rejects.toThrow();
+    const settings = JSON.parse(await readFile(join(projectRoot, ".claude", "settings.json"), "utf8"));
+    expect(settings.hooks).toEqual({
+      PreToolUse: [{
+        matcher: "Write|Edit|Bash",
+        hooks: [{ type: "command", command: legacyCommand, timeout: 5 }],
+      }],
+    });
   });
 
   it("preserves exclude_skills after sync", async () => {
@@ -1189,6 +1292,40 @@ describe("computeSyncActions conflict detection", () => {
     await rm(projectRoot, { recursive: true, force: true });
   });
 
+  it("matching source hash with legacy provenance is a safe metadata update", async () => {
+    const { createHash } = await import("node:crypto");
+    const source = `---\nname: test\n---\n\n# Body\n`;
+    const hash = `sha256:${createHash("sha256").update(source).digest("hex")}`;
+    const entry = makeEntry({ name: "test", type: "skill", hash });
+    const legacy = materializeFile(source, entry, "/unused")
+      .replace("manifest:L0/tooling", "/Users/private/legacy-l0");
+    await mkdir(join(projectRoot, ".claude/skills/test"), { recursive: true });
+    await writeFile(join(projectRoot, ".claude/skills/test/SKILL.md"), legacy);
+
+    const actions = await computeSyncActions([entry], makeManifest({
+      checksums: { ".claude/skills/test/SKILL.md": hash },
+    }), projectRoot);
+
+    expect(actions[0].action).toBe("update");
+  });
+
+  it("matching source hash with legacy provenance still rejects consumer edits", async () => {
+    const { createHash } = await import("node:crypto");
+    const source = `---\nname: test\n---\n\n# Body\n`;
+    const hash = `sha256:${createHash("sha256").update(source).digest("hex")}`;
+    const entry = makeEntry({ name: "test", type: "skill", hash });
+    const edited = materializeFile(`${source}\nconsumer edit\n`, entry, "/unused")
+      .replace("manifest:L0/tooling", "/Users/private/legacy-l0");
+    await mkdir(join(projectRoot, ".claude/skills/test"), { recursive: true });
+    await writeFile(join(projectRoot, ".claude/skills/test/SKILL.md"), edited);
+
+    const actions = await computeSyncActions([entry], makeManifest({
+      checksums: { ".claude/skills/test/SKILL.md": hash },
+    }), projectRoot);
+
+    expect(actions[0].action).toBe("conflict");
+  });
+
   it("local file matches manifest hash → safe 'update'", async () => {
     // Simulate: L0 updated the skill (new registry hash), but local file
     // is untouched since last sync (local content hashes to manifest checksum)
@@ -1343,6 +1480,7 @@ describe("syncL0 conflict integration", () => {
   beforeEach(async () => {
     projectRoot = await mkdtemp(join(tmpdir(), "sync-conflict-int-"));
     l0Root = await mkdtemp(join(tmpdir(), "sync-conflict-l0-"));
+    await writeEmptyRetiredArtifactRegistry(l0Root);
 
     await mkdir(join(l0Root, "skills", "test"), { recursive: true });
     await writeFile(
@@ -1542,11 +1680,11 @@ describe("getGitCommit", () => {
     await rm(tempDir, { recursive: true, force: true });
   });
 
-  it("returns a short hash string for a git repo", () => {
+  it("returns a full immutable hash string for a git repo", () => {
     // Use the actual AndroidCommonDoc repo (we're running tests from it)
     const commit = getGitCommit(process.cwd());
     if (commit) {
-      expect(commit).toMatch(/^[a-f0-9]{7,12}$/);
+      expect(commit).toMatch(/^[a-f0-9]{40}$/);
     }
     // In CI without git, commit might be undefined — both are valid
   });

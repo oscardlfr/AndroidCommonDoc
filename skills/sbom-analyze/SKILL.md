@@ -3,7 +3,6 @@ name: sbom-analyze
 description: "Analyze SBOM for dependency statistics, licenses, and concerns. Use when asked to review dependency licenses or SBOM contents."
 intent: [sbom, analyze, licenses, dependencies, statistics]
 allowed-tools: [Bash, Read, Grep, Glob]
-l0_requires: ANDROID_COMMON_DOC
 disable-model-invocation: true
 copilot: true
 ---
@@ -38,27 +37,13 @@ Uses parameters from `params.json`:
 
 ## Implementation
 
-### macOS / Linux
 ```bash
-COMMON_DOC="${ANDROID_COMMON_DOC:?ANDROID_COMMON_DOC is not set. See README.md}"
-
-"$COMMON_DOC/scripts/sh/analyze-sbom.sh" --project-root "$(pwd)" $ARGUMENTS
+node .claude/runtime/l0-toolkit-launcher.cjs run sbom-analyze --project-root "$PWD" -- $ARGUMENTS
 ```
 
 ### Windows
-```powershell
-$commonDoc = if ($env:ANDROID_COMMON_DOC) { $env:ANDROID_COMMON_DOC } else { throw "ANDROID_COMMON_DOC is not set. See README.md" }
-
-$argList = "$ARGUMENTS" -split '\s+' | Where-Object { $_ }
-$module = ""
-
-for ($i = 0; $i -lt $argList.Count; $i++) {
-    $arg = $argList[$i]
-    if (-not $arg.StartsWith("-") -and -not $module) { $module = $arg }
-}
-
-& "$commonDoc\scripts\ps1\analyze-sbom.ps1" -ProjectRoot (Get-Location).Path -Module $module
-```
+Claude Code runs the POSIX command above from Bash on Windows as well. The
+launcher selects the platform implementation and injects the project root.
 
 ## Expected Output
 

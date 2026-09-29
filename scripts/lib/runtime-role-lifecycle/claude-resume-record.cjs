@@ -3,6 +3,9 @@
 function createClaudeResumeRecord(deps) {
   const {
     CANONICAL_ROLES,
+    CLAUDE_STARTUP_ACTOR_KEYS,
+    CLAUDE_STARTUP_ACTOR_SCHEMA,
+    claudeStartupActorPathFor,
     computeClaudeAuthorityIdentityId,
     computeWorktreeId,
     currentClockMsForRegistry,
@@ -20,6 +23,8 @@ function createClaudeResumeRecord(deps) {
     readClaudeAuthorityFence,
     readRegistryRecord,
     registryRepoDir,
+    sha256String,
+    validateRoleActorBindingFor,
   } = deps;
 
 const CLAUDE_RESUME_HANDLE_SCHEMA = 'runtime/claude-resume-handle/v1';
@@ -163,10 +168,6 @@ function resolveClaudeResumeRoleActorScope(projectRoot, event) {
     }
 
     const worktreeId = computeWorktreeId(projectRoot);
-    const planResult = discoverPlan(projectRoot);
-    if (!planResult.ok) return { ok: false, reason: 'INVALID' };
-    const planDigest = planResult.planDigest;
-
     const generation = peekSessionGeneration(projectRoot, { provider: 'claude-hook', runtime_session_key: event.sessionId });
     if (!generation.ok) {
       if (generation.reason === 'session-generation-absent' || generation.reason === 'session-generation-expired') {
@@ -176,22 +177,59 @@ function resolveClaudeResumeRoleActorScope(projectRoot, event) {
     }
     const generationId = generation.generationId;
 
+    const traceRead = readRegistryRecord(
+      claudeStartupActorPathFor(projectRoot, generationId, event.agentId),
+    );
+    let planDigest;
+    let actorBinding;
+    if (traceRead.ok && !traceRead.absent && traceRead.obj) {
+      if (!hasExactKeys(traceRead.obj, CLAUDE_STARTUP_ACTOR_KEYS)) return { ok: false, reason: 'INVALID' };
+      const trace = traceRead.obj;
+      if (trace.schema !== CLAUDE_STARTUP_ACTOR_SCHEMA ||
+          trace.session_digest !== sha256String(event.sessionId) ||
+          trace.agent_digest !== sha256String(event.agentId) ||
+          trace.role !== event.agentType || trace.worktree_id !== worktreeId ||
+          trace.session_generation_digest !== sha256String(generationId) ||
+          currentClockMsForRegistry() >= isoToMsForRegistry(trace.expiry)) {
+        return { ok: false, reason: 'INVALID' };
+      }
+      planDigest = trace.plan_digest;
+      actorBinding = validateRoleActorBindingFor(
+        projectRoot, trace.actor_binding_id, trace.role, trace.worktree_id, trace.plan_digest,
+      );
+      if (!actorBinding.ok || actorBinding.binding.session_generation_id !== generationId) {
+        return { ok: false, reason: 'INVALID' };
+      }
+      const uniqueActorBinding = findUniqueClaudePeerRoleActorBinding(projectRoot, {
+        role: trace.role, worktreeId, planDigest, generationId,
+      });
+      if (!uniqueActorBinding.ok ||
+          uniqueActorBinding.binding.binding_id !== actorBinding.binding.binding_id) {
+        return { ok: false, reason: 'INVALID' };
+      }
+    } else if (traceRead.ok && traceRead.absent) {
+      const planResult = discoverPlan(projectRoot);
+      if (!planResult.ok) return { ok: false, reason: 'UNAVAILABLE' };
+      planDigest = planResult.planDigest;
+      actorBinding = findUniqueClaudePeerRoleActorBinding(projectRoot, {
+        role: event.agentType, worktreeId, planDigest, generationId,
+      });
+      if (!actorBinding.ok) return actorBinding;
+    } else {
+      return { ok: false, reason: 'INVALID' };
+    }
+
     const fenceRead = readClaudeAuthorityFence(
       projectRoot, computeClaudeAuthorityIdentityId(projectRoot, 'claude-hook', event.sessionId, event.agentId),
     );
     if (!fenceRead.ok || !fenceRead.absent) return { ok: false, reason: 'INVALID' };
-
-    const found = findUniqueClaudePeerRoleActorBinding(projectRoot, {
-      role: event.agentType, worktreeId, planDigest, generationId,
-    });
-    if (!found.ok) return found;
 
     return {
       ok: true,
       scope: {
         sessionId: event.sessionId, agentId: event.agentId, role: event.agentType,
         worktreeId, planDigest, generationId, generationExpiresAt: generation.expiresAt,
-        actorBinding: found.binding,
+        actorBinding: actorBinding.binding,
       },
     };
   } catch (err) {
@@ -216,4 +254,3 @@ function resolveClaudeResumeRoleActorScope(projectRoot, event) {
 }
 
 module.exports = Object.freeze({ createClaudeResumeRecord });
-

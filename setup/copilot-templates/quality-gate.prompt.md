@@ -13,11 +13,11 @@ Run the canonical quality-gate protocol for the active wave with one full local 
 
 Use this entrypoint only after implementation and VERIFY-FINAL review are complete.
 
-1. Resolve the active wave slug and call `scripts/tools/wave-control-plane.cjs status`. The state must be `VERIFY_FINAL`, current for the exact PLAN digest and HEAD.
+1. Resolve the active wave slug and call `node .claude/runtime/l0-toolkit-launcher.cjs run wave-control --project-root "$PWD" -- status --slug <slug>`. The state must be `VERIFY_FINAL`, current for the exact PLAN digest and HEAD.
 2. Validate all class-required `verdict/v1` records through `verdict-evidence-contract-cli.cjs`; prose tokens and legacy Markdown are not authority.
-3. Transition to `QG` through `wave-control-plane.cjs transition`, passing each required `role=verdict-path` binding.
-4. Execute the canonical quality-gater procedure and `scripts/sh/emit-push-proof.sh run-qg`. Local test evidence is one canonical full aggregate produced by `run-bats-sharded.cjs` with 6 shards at max parallelism 6 and explicit `--wave-slug` plus `--plan`; it must bind the same HEAD, PLAN/wave, full target, environment, tool versions, and complete zero-failure counts.
-5. Verify the emitted proof with `emit-push-proof.sh verify-proof`, then transition `QG → COMPLETE`. That transition independently requires current `quality-gate.stamp`, `pre-pr.stamp`, and `push-proof.json` artifacts and reruns the proof verifier.
+3. Transition to `QG` through the same `wave-control` launcher operation, passing each required `--verdict role=verdict-path` binding.
+4. Execute the canonical quality-gater procedure. In L0, this runs one canonical six-shard Bats aggregate and the L0 proof mint. In L1/L2, it runs the consumer project's `/pre-pr` exactly once and calls the allowlisted `runtime-consumer-qg` operation; the L0 harness is never copied or executed downstream.
+5. Verify the emitted proof through the layer-aware launcher, then transition `QG → COMPLETE` with `wave-control`. That transition independently requires current `quality-gate.stamp`, `pre-pr.stamp`, and `push-proof.json` artifacts and reruns the correct verifier for the active layer.
 
 The local full run validates the exact branch HEAD and authorizes publishing it.
 The required GitHub `CI Gate` is the independent merge authority: strict branch

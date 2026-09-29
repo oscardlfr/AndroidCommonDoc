@@ -91,6 +91,7 @@ function baseEnv(extra) {
   const env = Object.assign({}, process.env, {
     NODE_ENV: 'test',
     RUNTIME_ROLE_LIFECYCLE_TEST_CAPABILITY: TEST_CAPABILITY,
+    RUNTIME_ROLE_LIFECYCLE_TEST_DIAGNOSTICS: '1',
     HOME: NEUTRAL_HOME,
     USERPROFILE: NEUTRAL_HOME,
     CODEX_CLI_PATH: '',
@@ -103,16 +104,19 @@ function baseEnv(extra) {
 
 function runCli(args, envExtra) {
   let stdout;
+  let stderr = '';
   let status = 0;
   try {
     stdout = execFileSync('node', ['--require', path.resolve(__dirname, 'lib/private-registry-tmpdir-preload.cjs'), IMPL].concat(args), { encoding: 'utf8', env: baseEnv(envExtra) });
   } catch (err) {
     stdout = err.stdout;
+    stderr = err.stderr || '';
     status = err.status;
   }
   const lines = stdout.trim().split('\n');
   const result = JSON.parse(lines[lines.length - 1]);
-  return { status: status, result: result };
+  if (result.detail_code === 'INTERNAL_ERROR' && stderr) process.stderr.write(stderr);
+  return { status: status, result: result, stderr: stderr };
 }
 
 function identityFor(sessionKey) {

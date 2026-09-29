@@ -31,33 +31,33 @@ teardown() {
 # --- Human format ---
 
 @test "--format human outputs 'Valid commit TYPES' header" {
-    run bash "$SCRIPT" --project-root "$WORK_DIR" --format human
+    run bash "$SCRIPT" --project-root "$WORK_DIR" --toolkit-root "$WORK_DIR" --format human
     [ "$status" -eq 0 ]
     echo "$output" | grep -q "Valid commit TYPES"
 }
 
 @test "--format human outputs 'Valid commit SCOPES' header" {
-    run bash "$SCRIPT" --project-root "$WORK_DIR" --format human
+    run bash "$SCRIPT" --project-root "$WORK_DIR" --toolkit-root "$WORK_DIR" --format human
     [ "$status" -eq 0 ]
     echo "$output" | grep -q "Valid commit SCOPES"
 }
 
 @test "--format human includes 'feat' and 'fix' in TYPES list" {
-    run bash "$SCRIPT" --project-root "$WORK_DIR" --format human
+    run bash "$SCRIPT" --project-root "$WORK_DIR" --toolkit-root "$WORK_DIR" --format human
     [ "$status" -eq 0 ]
     echo "$output" | grep -q "feat"
     echo "$output" | grep -q "fix"
 }
 
 @test "--format human includes 'core' and 'data' in SCOPES list" {
-    run bash "$SCRIPT" --project-root "$WORK_DIR" --format human
+    run bash "$SCRIPT" --project-root "$WORK_DIR" --toolkit-root "$WORK_DIR" --format human
     [ "$status" -eq 0 ]
     echo "$output" | grep -q "core"
     echo "$output" | grep -q "data"
 }
 
 @test "--format human includes explanatory NOTE about types vs scopes" {
-    run bash "$SCRIPT" --project-root "$WORK_DIR" --format human
+    run bash "$SCRIPT" --project-root "$WORK_DIR" --toolkit-root "$WORK_DIR" --format human
     [ "$status" -eq 0 ]
     echo "$output" | grep -q "NOTE"
     echo "$output" | grep -q "TYPEs and SCOPEs are validated separately"
@@ -66,13 +66,13 @@ teardown() {
 # --- JSON format ---
 
 @test "--format json outputs valid JSON parseable by jq" {
-    run bash "$SCRIPT" --project-root "$WORK_DIR" --format json
+    run bash "$SCRIPT" --project-root "$WORK_DIR" --toolkit-root "$WORK_DIR" --format json
     [ "$status" -eq 0 ]
     echo "$output" | node -e 'JSON.parse(require("fs").readFileSync(0, "utf8"))'
 }
 
 @test "--format json includes valid_types array with 'feat' element" {
-    run bash "$SCRIPT" --project-root "$WORK_DIR" --format json
+    run bash "$SCRIPT" --project-root "$WORK_DIR" --toolkit-root "$WORK_DIR" --format json
     [ "$status" -eq 0 ]
     result=$(echo "$output" | node -e '
       const value=JSON.parse(require("fs").readFileSync(0,"utf8"));
@@ -82,7 +82,7 @@ teardown() {
 }
 
 @test "--format json includes valid_scopes array with 'core' element" {
-    run bash "$SCRIPT" --project-root "$WORK_DIR" --format json
+    run bash "$SCRIPT" --project-root "$WORK_DIR" --toolkit-root "$WORK_DIR" --format json
     [ "$status" -eq 0 ]
     result=$(echo "$output" | node -e '
       const value=JSON.parse(require("fs").readFileSync(0,"utf8"));
@@ -92,7 +92,7 @@ teardown() {
 }
 
 @test "--format json includes types_source and scopes_source fields" {
-    run bash "$SCRIPT" --project-root "$WORK_DIR" --format json
+    run bash "$SCRIPT" --project-root "$WORK_DIR" --toolkit-root "$WORK_DIR" --format json
     [ "$status" -eq 0 ]
     echo "$output" | node -e '
       const value=JSON.parse(require("fs").readFileSync(0,"utf8"));
@@ -104,14 +104,14 @@ teardown() {
 
 @test "missing reusable-commit-lint.yml exits 1 with error" {
     rm "$WORK_DIR/.github/workflows/reusable-commit-lint.yml"
-    run bash "$SCRIPT" --project-root "$WORK_DIR" --format human
+    run bash "$SCRIPT" --project-root "$WORK_DIR" --toolkit-root "$WORK_DIR" --format human
     [ "$status" -eq 1 ]
     echo "$output" | grep -qi "error"
 }
 
 @test "missing .commitlintrc.json exits 1 with error" {
     rm "$WORK_DIR/.commitlintrc.json"
-    run bash "$SCRIPT" --project-root "$WORK_DIR" --format human
+    run bash "$SCRIPT" --project-root "$WORK_DIR" --toolkit-root "$WORK_DIR" --format human
     [ "$status" -eq 1 ]
     echo "$output" | grep -qi "error"
 }

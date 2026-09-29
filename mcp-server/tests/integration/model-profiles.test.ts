@@ -433,25 +433,27 @@ describe("model-profiles.json L0 sync contract", () => {
     ).toBeUndefined();
   });
 
-  it("set-model-profile skill documents bootstrap behavior", async () => {
+  it("set-model-profile skill fails closed for runtime-managed consumers", async () => {
     const skillContent = await readFile(
       path.join(ROOT, "skills", "set-model-profile", "SKILL.md"),
       "utf-8",
     );
-    expect(skillContent).toContain("Bootstrap");
-    expect(skillContent).toContain("l0-manifest.json");
-    expect(skillContent).toContain("ANDROID_COMMON_DOC");
+    expect(skillContent).toContain("describe layer");
+    expect(skillContent).toContain("runtime-enabled L1/L2 consumer");
+    expect(skillContent).toContain("content pin");
+    expect(skillContent).not.toMatch(/\$\{?ANDROID_COMMON_DOC|\$env:ANDROID_COMMON_DOC/i);
+    expect(skillContent).toContain("L0-maintainer operation");
+    expect(skillContent).toContain("L0-only custom overrides");
     expect(skillContent).toContain("--update");
   });
 
-  it("set-model-profile skill documents --update for refreshing L0 definitions", async () => {
+  it("set-model-profile skill keeps --update confined to checked-in L0 definitions", async () => {
     const skillContent = await readFile(
       path.join(ROOT, "skills", "set-model-profile", "SKILL.md"),
       "utf-8",
     );
     expect(skillContent).toContain("--update");
-    expect(skillContent).toContain("Re-import profile definitions from L0");
+    expect(skillContent).toContain("Validate the checked-in L0 definitions");
     expect(skillContent).toContain("current");
   });
 });
-

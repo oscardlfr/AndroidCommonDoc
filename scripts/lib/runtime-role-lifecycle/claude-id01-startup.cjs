@@ -86,6 +86,24 @@ function createClaudeId01Startup(deps) {
     return path.join(registryRepoDir(projectRootOrRepoDescriptor), 'claude-id01-capabilities',
       'v2-' + claudeStartupLookupKeyByDigest(sessionGenerationId, agentDigest) + '.json');
   }
+  function startupTranscriptIdentity(sessionId, transcriptPath) {
+    if (!isNonEmptyBoundedString(sessionId, 4096) || !isNonEmptyBoundedString(transcriptPath, 4096) ||
+        !path.isAbsolute(transcriptPath)) return { ok: false };
+    try {
+      const absolute = path.resolve(transcriptPath);
+      const stat = fs.lstatSync(absolute);
+      if (!stat.isFile() || stat.isSymbolicLink() || fs.realpathSync(absolute) !== absolute) return { ok: false };
+      if (path.basename(absolute) === sessionId + '.jsonl') return { ok: true, agentId: null };
+      if (path.basename(path.dirname(absolute)) !== 'subagents' ||
+          path.basename(path.dirname(path.dirname(absolute))) !== sessionId) return { ok: false };
+      const match = /^agent-(.+)\.jsonl$/.exec(path.basename(absolute));
+      return match && isNonEmptyBoundedString(match[1], 4096)
+        ? { ok: true, agentId: match[1] }
+        : { ok: false };
+    } catch {
+      return { ok: false };
+    }
+  }
   function isConsumedRoleSpawnClaim(repoDescriptor, action, claim) {
     if (!claim || !hasExactKeys(claim, ROLE_SPAWN_EXECUTION_CLAIM_KEYS) ||
         claim.schema !== ROLE_SPAWN_EXECUTION_CLAIM_SCHEMA || claim.action_id !== action.action_id ||
@@ -115,8 +133,26 @@ function createClaudeId01Startup(deps) {
       if (!binding.ok || binding.binding.session_generation_id !== action.session_generation_id) {
         return { ok: false, reason: 'startup-actor-binding-invalid' };
       }
-      const session = readCurrentClaudeSessionEvidence(projectRoot, sessionId);
+      const session = (() => {
+        try {
+          return loadClaudeHost().getProductionSessionIdentity(projectRoot, sessionId, {
+            worktreeId: action.worktree_id,
+            planDigest: action.plan_digest,
+          });
+        } catch {
+          return { ok: false };
+        }
+      })();
       if (!session.ok || session.record.worktree_id !== action.worktree_id || session.record.plan_digest !== action.plan_digest) {
+        return { ok: false, reason: 'startup-actor-session-unproven' };
+      }
+      const currentSession = readCurrentClaudeSessionEvidence(projectRoot, sessionId);
+      const hostContractDigest = session.record.host_contract_digest ||
+        (currentSession.ok && currentSession.record.host_contract_digest);
+      if (!currentSession.ok || currentSession.record.worktree_id !== action.worktree_id ||
+          !isHexDigest64(hostContractDigest) ||
+          (session.record.host_contract_digest !== undefined &&
+            session.record.host_contract_digest !== currentSession.record.host_contract_digest)) {
         return { ok: false, reason: 'startup-actor-session-unproven' };
       }
       const generation = peekSessionGeneration(projectRoot, { provider: 'claude-hook', runtime_session_key: sessionId });
@@ -138,7 +174,7 @@ function createClaudeId01Startup(deps) {
         worktree_id: action.worktree_id,
         plan_digest: action.plan_digest,
         session_generation_digest: sha256String(action.session_generation_id),
-        host_contract_digest: session.record.host_contract_digest,
+        host_contract_digest: hostContractDigest,
         created_at: nowIsoForRegistry(),
         expiry: new Date(expiryMs).toISOString().replace(/\.\d{3}Z$/, 'Z'),
       };
@@ -159,19 +195,70 @@ function createClaudeId01Startup(deps) {
   }
   function recordClaudeStartupReadyPreObservation(projectRoot, observed) {
     try {
-      const { sessionId, agentId, agentType, toolUseId, action, actorBinding, grantId } = observed || {};
-      if (!isNonEmptyBoundedString(sessionId, 4096) || !isNonEmptyBoundedString(agentId, 4096) || !isNonEmptyBoundedString(toolUseId, 4096) ||
-          !CANONICAL_ROLES.includes(agentType) || !action || action.role !== agentType || !actorBinding ||
+      const { sessionId, agentId, agentType, transcriptPath, toolUseId, action, actorBinding, grantId } = observed || {};
+      const transcriptIdentity = transcriptPath === undefined
+        ? null
+        : startupTranscriptIdentity(sessionId, transcriptPath);
+      if (!isNonEmptyBoundedString(sessionId, 4096) || !isNonEmptyBoundedString(toolUseId, 4096) ||
+          (transcriptPath !== undefined && !transcriptIdentity.ok) ||
+          (transcriptPath === undefined && agentId !== undefined && !isNonEmptyBoundedString(agentId, 4096)) ||
+          (transcriptPath === undefined && agentType !== undefined &&
+            (!CANONICAL_ROLES.includes(agentType) || !action || action.role !== agentType)) ||
+          !action || !CANONICAL_ROLES.includes(action.role) || !actorBinding ||
           !isHexActionId(actorBinding.binding_id) || !isHexActionId(grantId)) {
         return { ok: false, reason: 'startup-ready-pre-input-invalid' };
       }
-      const traceRead = readRegistryRecord(claudeStartupActorPathFor(projectRoot, action.session_generation_id, agentId));
+      const findUniqueCorrelatedTrace = () => {
+        const tracesDir = path.join(registryRepoDir(projectRoot), 'claude-id01-traces');
+        let entries;
+        try { entries = fs.readdirSync(tracesDir, { withFileTypes: true }); } catch { entries = []; }
+        if (entries.length > CLAUDE_ID01_EVENTS_SCAN_CAP) {
+          return { ok: false, reason: 'startup-ready-actor-trace-ambiguous' };
+        }
+        const candidates = [];
+        for (const entry of entries) {
+          if (!entry.isFile() || !entry.name.startsWith('startup-v2-') || !entry.name.endsWith('.json')) continue;
+          const read = readRegistryRecord(path.join(tracesDir, entry.name));
+          if (!read.ok || read.absent || !hasExactKeys(read.obj, CLAUDE_STARTUP_ACTOR_KEYS)) continue;
+          if (read.obj.schema === CLAUDE_STARTUP_ACTOR_SCHEMA &&
+              read.obj.session_digest === sha256String(sessionId) &&
+              read.obj.action_id === action.action_id && read.obj.role === action.role &&
+              read.obj.actor_binding_id === actorBinding.binding_id) candidates.push(read);
+        }
+        if (candidates.length !== 1) {
+          return { ok: false, reason: candidates.length === 0
+            ? 'startup-ready-actor-trace-absent'
+            : 'startup-ready-actor-trace-ambiguous' };
+        }
+        return { ok: true, traceRead: candidates[0] };
+      };
+      let traceRead;
+      let requireAgentDigestMatch = true;
+      const resolvedAgentId = transcriptPath === undefined ? agentId : transcriptIdentity.agentId;
+      if (resolvedAgentId !== undefined && resolvedAgentId !== null) {
+        traceRead = readRegistryRecord(claudeStartupActorPathFor(projectRoot, action.session_generation_id, resolvedAgentId));
+        const authenticatedTeamAlias = action.role + '@session-' + sessionId.slice(0, 8);
+        if ((!traceRead.ok || traceRead.absent) && transcriptPath === undefined &&
+            resolvedAgentId === authenticatedTeamAlias) {
+          const correlated = findUniqueCorrelatedTrace();
+          if (!correlated.ok) return correlated;
+          traceRead = correlated.traceRead;
+          requireAgentDigestMatch = false;
+        }
+      } else {
+        const correlated = findUniqueCorrelatedTrace();
+        if (!correlated.ok) return correlated;
+        traceRead = correlated.traceRead;
+        requireAgentDigestMatch = false;
+      }
       if (!traceRead.ok || traceRead.absent || !hasExactKeys(traceRead.obj, CLAUDE_STARTUP_ACTOR_KEYS)) {
         return { ok: false, reason: 'startup-ready-actor-trace-absent' };
       }
       const trace = traceRead.obj;
       if (trace.schema !== CLAUDE_STARTUP_ACTOR_SCHEMA || trace.session_digest !== sha256String(sessionId) ||
-          trace.agent_digest !== sha256String(agentId) || trace.role !== agentType || trace.action_id !== action.action_id ||
+          (requireAgentDigestMatch && resolvedAgentId !== undefined && resolvedAgentId !== null &&
+            trace.agent_digest !== sha256String(resolvedAgentId)) ||
+          trace.role !== action.role || trace.action_id !== action.action_id ||
           trace.actor_binding_id !== actorBinding.binding_id || currentClockMsForRegistry() >= isoToMsForRegistry(trace.expiry)) {
         return { ok: false, reason: 'startup-ready-actor-trace-mismatch' };
       }
@@ -190,7 +277,7 @@ function createClaudeId01Startup(deps) {
       const record = {
         schema: CLAUDE_STARTUP_READY_PRE_SCHEMA,
         session_digest: sha256String(sessionId), tool_use_digest: sha256String(toolUseId),
-        agent_digest: sha256String(agentId), role: agentType,
+        agent_digest: trace.agent_digest, role: action.role,
         action_id: action.action_id, action_digest: trace.action_digest, claim_digest: trace.claim_digest,
         actor_binding_id: actorBinding.binding_id, grant_id: grantId,
         grant_digest: sha256String(canonicalJSONStringify(grantRead.obj)),
@@ -234,7 +321,9 @@ function createClaudeId01Startup(deps) {
         return { ok: false, reason: 'startup-ready-pre-invalid' };
       }
       const pre = preRead.obj;
-      if ((event.agent_id !== undefined && sha256String(event.agent_id) !== pre.agent_digest) ||
+      const authenticatedTeamAlias = pre.role + '@session-' + event.session_id.slice(0, 8);
+      if ((event.agent_id !== undefined && sha256String(event.agent_id) !== pre.agent_digest &&
+            event.agent_id !== authenticatedTeamAlias) ||
           (event.agent_type !== undefined && event.agent_type !== pre.role)) {
         return { ok: false, reason: 'startup-ready-outcome-actor-mismatch' };
       }

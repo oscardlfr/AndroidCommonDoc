@@ -107,6 +107,7 @@ function p1NativeRoleAction() {
     runtime: 'claude-native',
     payload: {
       agent_type: 'arch-platform',
+      team_name: 'session-fixture',
       teammate_name: 'arch-platform',
       bootstrap_message: 'bootstrap-Ã±\r\nsecond-line',
     },
@@ -120,6 +121,7 @@ test('P1-A01-A06 canonical renderer repairs presentation bytes and emits the clo
     { subagent_type: 'arch-platform', prompt: `${action.payload.bootstrap_message}:suffix`, name: 'model-name', run_in_background: true },
     { subagent_type: 'arch-platform', prompt: action.payload.bootstrap_message.replaceAll('\r\n', '\n') },
     { subagent_type: 'arch-platform', prompt: `Explanation\n${action.payload.bootstrap_message}`, model: 'sonnet' },
+    { subagent_type: 'arch-platform', prompt: action.payload.bootstrap_message, team_name: action.payload.team_name },
   ]) {
     const rendered = rll.renderCanonicalNativeAgentInput(action, proposed, 'sonnet');
     assert.strictEqual(rendered.ok, true, JSON.stringify(rendered));
@@ -146,7 +148,7 @@ test('P1-A07-A10/A27-A30 canonical renderer denies authority and execution-chang
     [{ ...base, model: 'opus' }, 'native-agent-input-model-mismatch'],
     [{ ...base, resume: 'actor-id' }, 'native-agent-input-unknown-field'],
     [{ ...base, isolation: 'worktree' }, 'native-agent-input-unknown-field'],
-    [{ ...base, team_name: 'team' }, 'native-agent-input-unknown-field'],
+    [{ ...base, team_name: 'foreign-team' }, 'native-agent-input-team-mismatch'],
     [{ ...base, invented: true }, 'native-agent-input-unknown-field'],
   ];
   for (const [proposed, reason] of cases) {
@@ -352,6 +354,34 @@ test('ensureSecureRegistryDir: creates a fresh directory at exactly mode 0700', 
   }
 });
 
+test('ensureSecureRegistryDir: secures a directory batch and preflights every leaf before mutation', () => {
+  const dir = makeGitProject();
+  try {
+    const registry = rll.registryRepoDir(dir);
+    const first = path.join(registry, 'batch', 'first');
+    const second = path.join(registry, 'batch', 'second');
+    const result = rll.ensureSecureRegistryDir([first, second]);
+    assert.strictEqual(result.ok, true);
+    for (const target of [first, second]) {
+      const st = fs.lstatSync(target);
+      assert.ok(st.isDirectory());
+      if (process.platform !== 'win32') assert.strictEqual(st.mode & 0o777, 0o700);
+    }
+
+    fs.rmSync(path.join(registry, 'batch'), { recursive: true, force: true });
+    const realTarget = path.join(registry, 'real-target');
+    fs.mkdirSync(realTarget, { recursive: true });
+    fs.mkdirSync(path.dirname(second), { recursive: true });
+    fs.symlinkSync(realTarget, second);
+    const rejected = rll.ensureSecureRegistryDir([first, second]);
+    assert.deepStrictEqual(rejected, { ok: false, reason: 'symlink' });
+    assert.strictEqual(fs.existsSync(first), false, 'batch preflight must reject before creating an earlier sibling');
+  } finally {
+    fs.rmSync(rll.registryRepoDir(dir), { recursive: true, force: true });
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test('ensureSecureRegistryDir: rejects a pre-existing symlink at the leaf BEFORE any mkdir/chmod, zero mutation of the real target', () => {
   const dir = makeGitProject();
   try {
@@ -547,6 +577,59 @@ test('resolveSessionGeneration: an EXPIRED session record is treated as absent a
     const second = rll.resolveSessionGeneration(dir, identity);
     assert.strictEqual(second.ok, true);
     assert.notStrictEqual(second.generationId, first.generationId, 'an expired session tuple must mint a fresh generation_id, never reuse the stale one');
+  } finally {
+    fs.rmSync(rll.registryRepoDir(dir), { recursive: true, force: true });
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('resolveSessionGeneration: an expired invocation-bound generation rotates instead of being misclassified as malformed', () => {
+  const dir = makeGitProject();
+  try {
+    const identity = { ok: true, provider: 'claude-hook', runtime_session_key: 'expired-invocation-session' };
+    const first = rll.resolveSessionGeneration(dir, identity, {
+      invocationDigest: '1'.repeat(64), forceRotation: true,
+    });
+    assert.strictEqual(first.ok, true, JSON.stringify(first));
+    const recPath = rll.sessionGenerationPathFor(dir, identity);
+    const rec = JSON.parse(fs.readFileSync(recPath, 'utf8'));
+    rec.created_at = '1999-12-31T23:59:00Z';
+    rec.expires_at = '2000-01-01T00:00:00Z';
+    fs.writeFileSync(recPath, JSON.stringify(rec), { mode: 0o600 });
+
+    const resumed = rll.resolveSessionGeneration(dir, identity, {
+      invocationDigest: '2'.repeat(64), forceRotation: true,
+    });
+    assert.strictEqual(resumed.ok, true, JSON.stringify(resumed));
+    assert.strictEqual(resumed.rotated, true, JSON.stringify(resumed));
+    assert.notStrictEqual(resumed.generationId, first.generationId,
+      'a new invocation must replace a well-formed expired generation');
+  } finally {
+    fs.rmSync(rll.registryRepoDir(dir), { recursive: true, force: true });
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('resolveSessionGeneration: a malformed invocation-bound generation still fails closed without rotation', () => {
+  const dir = makeGitProject();
+  try {
+    const identity = { ok: true, provider: 'claude-hook', runtime_session_key: 'malformed-invocation-session' };
+    const first = rll.resolveSessionGeneration(dir, identity, {
+      invocationDigest: '3'.repeat(64), forceRotation: true,
+    });
+    assert.strictEqual(first.ok, true, JSON.stringify(first));
+    const recPath = rll.sessionGenerationPathFor(dir, identity);
+    const rec = JSON.parse(fs.readFileSync(recPath, 'utf8'));
+    rec.expires_at = 'not-a-canonical-timestamp';
+    fs.writeFileSync(recPath, JSON.stringify(rec), { mode: 0o600 });
+    const before = fs.readFileSync(recPath, 'utf8');
+
+    const resumed = rll.resolveSessionGeneration(dir, identity, {
+      invocationDigest: '4'.repeat(64), forceRotation: true,
+    });
+    assert.deepStrictEqual(resumed, { ok: false, reason: 'session-generation-shape-invalid' });
+    assert.strictEqual(fs.readFileSync(recPath, 'utf8'), before,
+      'malformed state must remain fail-closed and must not be overwritten by rotation');
   } finally {
     fs.rmSync(rll.registryRepoDir(dir), { recursive: true, force: true });
     fs.rmSync(dir, { recursive: true, force: true });

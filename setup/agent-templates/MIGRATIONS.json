@@ -120,10 +120,29 @@
         "date": "2026-04-25",
         "breaking": true,
         "note": "Template retired W31.6 -- replaced by docs/agents/main-agent-orchestration-guide.md (canonical pattern: main IS team lead, not subagent)",
-        "migration_hint": "The main agent reads docs/agents/main-agent-orchestration-guide.md directly. No team-lead subagent should be spawned. Agent(name='team-lead', team_name=...) is FORBIDDEN per T-BUG-010."
+        "migration_hint": "The main agent reads docs/agents/main-agent-orchestration-guide.md directly. No team-lead subagent should be spawned. Agent(name='team-lead', team_name=...) is FORBIDDEN per T-BUG-010.",
+        "retired_artifact_registry": "skills/sync-l0/retired-artifacts.json",
+        "retired_paths": [
+          ".claude/agents/team-lead.md"
+        ],
+        "known_l0_sha256": [
+          "01c2f6e75d4e441bae0975ab459afda8501e0dbe57a2d60cf1827cd42ed969ba"
+        ]
       }
     },
     "planner": {
+      "1.22.1": {
+        "date": "2026-09-29",
+        "breaking": false,
+        "summary": "Route toolkit-owned documentation through the qualified consumer launcher and remove consumer-relative L0 paths.",
+        "migration_hint": "Run plain /sync-l0; runtime-enabled consumers refresh managed agents and the launcher atomically."
+      },
+      "1.22.0": {
+        "date": "2026-09-28",
+        "breaking": false,
+        "summary": "Use the repository-owned AGENTS.md instruction authority, its thin CLAUDE.md adapter, and applicable path-scoped rules during architecture discovery.",
+        "migration_hint": "Re-sync the deployed template; planning behavior and artifact interfaces are unchanged."
+      },
       "1.21.0": {
         "date": "2026-09-22",
         "breaking": false,
@@ -233,6 +252,18 @@
       }
     },
     "quality-gater": {
+      "2.28.1": {
+        "date": "2026-09-29",
+        "breaking": false,
+        "summary": "Make Phase 3 layer-aware: L0 retains its full Bats proof, while L1/L2 bind one project-owned pre-PR receipt through the qualified runtime adapter.",
+        "migration_hint": "Run plain /sync-l0. Consumers no longer copy or execute the L0 Bats/proof harness."
+      },
+      "2.28.0": {
+        "date": "2026-09-28",
+        "breaking": false,
+        "summary": "Keep quality-gater phase-scoped and discover rules from AGENTS.md, the thin CLAUDE.md adapter, and applicable path-scoped rules without grepping the adapter.",
+        "migration_hint": "Re-sync the deployed template; dispatch quality-gater only for Phase 3 after the final implementation commit."
+      },
       "2.27.0": {
         "date": "2026-09-27",
         "breaking": true,
@@ -403,6 +434,12 @@
       }
     },
     "arch-testing": {
+      "1.41.1": {
+        "date": "2026-09-29",
+        "breaking": false,
+        "summary": "Use the qualified L0 launcher for toolkit operations and documentation from runtime consumers.",
+        "migration_hint": "Run plain /sync-l0 to refresh the managed template."
+      },
       "1.41.0": {
         "date": "2026-09-22",
         "breaking": false,
@@ -583,6 +620,12 @@
       }
     },
     "arch-platform": {
+      "1.36.1": {
+        "date": "2026-09-29",
+        "breaking": false,
+        "summary": "Use the qualified L0 launcher for toolkit operations and documentation from runtime consumers.",
+        "migration_hint": "Run plain /sync-l0 to refresh the managed template."
+      },
       "1.36.0": {
         "date": "2026-09-22",
         "breaking": false,
@@ -743,6 +786,12 @@
       }
     },
     "arch-integration": {
+      "1.32.1": {
+        "date": "2026-09-29",
+        "breaking": false,
+        "summary": "Use the qualified L0 launcher for toolkit operations and documentation from runtime consumers.",
+        "migration_hint": "Run plain /sync-l0 to refresh the managed template."
+      },
       "1.32.0": {
         "date": "2026-09-22",
         "breaking": false,
@@ -888,6 +937,18 @@
       }
     },
     "context-provider": {
+      "3.9.1": {
+        "date": "2026-09-29",
+        "breaking": false,
+        "summary": "Resolve toolkit documentation through the qualified consumer launcher while preserving the consumer-local bundle writer.",
+        "migration_hint": "Run plain /sync-l0 to refresh the managed template."
+      },
+      "3.9.0": {
+        "date": "2026-09-28",
+        "breaking": false,
+        "summary": "Read the portable repository instruction bundle and treat personal/project memory as durable advisory context rather than live authority.",
+        "migration_hint": "Re-sync the deployed template; the read-only tool boundary is unchanged."
+      },
       "3.8.0": {
         "date": "2026-08-22",
         "breaking": false,
@@ -973,6 +1034,18 @@
       }
     },
     "doc-updater": {
+      "2.13.1": {
+        "date": "2026-09-29",
+        "breaking": false,
+        "summary": "Separate L0-source maintenance from portable consumer documentation access through the qualified launcher.",
+        "migration_hint": "Run plain /sync-l0 to refresh the managed template."
+      },
+      "2.13.0": {
+        "date": "2026-09-28",
+        "breaking": false,
+        "summary": "Keep CLAUDE.md as a thin adapter, route scoped guidance to .claude/rules, and prohibit volatile runtime state in durable memory.",
+        "migration_hint": "Re-sync the deployed template; existing documentation ownership is unchanged."
+      },
       "2.12.0": {
         "date": "2026-08-22",
         "breaking": false,
@@ -1193,6 +1266,12 @@
       }
     },
     "test-specialist": {
+      "1.32.1": {
+        "date": "2026-09-29",
+        "breaking": false,
+        "summary": "Remove ambient and consumer-relative toolkit resolution from the testing role.",
+        "migration_hint": "Run plain /sync-l0 to refresh the managed template."
+      },
       "1.32.0": {
         "date": "2026-08-22",
         "breaking": false,
@@ -1696,6 +1775,12 @@
       }
     },
     "doc-alignment-agent": {
+      "1.2.0": {
+        "date": "2026-09-28",
+        "breaking": false,
+        "summary": "Audit repository instructions from AGENTS.md plus its thin CLAUDE.md adapter instead of treating CLAUDE.md as the standalone authority.",
+        "migration_hint": "Re-sync the deployed template; the agent remains read-only."
+      },
       "1.0.0": {
         "date": "2026-04-20",
         "breaking": false,
@@ -1819,6 +1904,12 @@
       }
     },
     "verifier": {
+      "1.2.1": {
+        "date": "2026-09-29",
+        "breaking": false,
+        "summary": "Resolve toolkit-owned documentation only through the qualified consumer launcher.",
+        "migration_hint": "Run plain /sync-l0 to refresh the managed template."
+      },
       "1.2.0": {
         "date": "2026-08-22",
         "breaking": false,
@@ -1837,6 +1928,12 @@
       }
     },
     "toolkit-specialist": {
+      "1.10.1": {
+        "date": "2026-09-29",
+        "breaking": false,
+        "summary": "Declare the specialist L0-source-only and forbid execution from L1/L2 consumers.",
+        "migration_hint": "Run plain /sync-l0; consumers receive the guardrail but must not dispatch this role."
+      },
       "1.10.0": {
         "date": "2026-09-13",
         "breaking": false,

@@ -25,10 +25,15 @@ const SOURCE_REFERENCED_HOOK_FILES = new Set([
 ]);
 const CONSUMER_FILES = [
   '.claude/runtime/l0-entrypoint-launcher.cjs',
+  '.claude/runtime/l0-toolkit-launcher.cjs',
   '.claude/hooks/l0-source-hook-launcher.js',
+  '.claude/hooks/context-provider-write-gate.js',
   '.claude/hooks/detekt-post-write.sh',
   '.claude/hooks/detekt-pre-commit.sh',
+  '.claude/hooks/tool-use-logger.js',
   '.claude/registry/wave-topology.yaml',
+  'scripts/sh/write-bundle.sh',
+  'scripts/sh/lib/wave-slug.sh',
 ];
 
 function fixture(layer = 'L2') {
@@ -235,6 +240,10 @@ test('P3-RUNTIME-INSTALL exact source hooks, role bytes, commit and content pin 
     installFixture(f);
     fs.appendFileSync(path.join(f.root, '.claude', 'hooks', 'l0-source-hook-launcher.js'), '\nchanged\n');
     assert.strictEqual(verifyRuntimeConsumerInstallation(f.root).reason, 'runtime-consumer-file-mismatch');
+
+    installFixture(f);
+    fs.unlinkSync(path.join(f.root, '.claude', 'hooks', 'tool-use-logger.js'));
+    assert.strictEqual(verifyRuntimeConsumerInstallation(f.root).reason, 'runtime-consumer-file-missing');
 
     if (process.platform !== 'win32') {
       installFixture(f);

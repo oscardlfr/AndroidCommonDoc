@@ -10,6 +10,7 @@ const root = path.resolve(__dirname, '..', '..');
 
 test('consumer operations document required launch, recovery, and host-family compatibility contracts', () => {
   const text = fs.readFileSync(path.join(root, 'docs', 'guides', 'runtime-consumer-operations.md'), 'utf8');
+  const research = fs.readFileSync(path.join(root, 'docs', 'guides', 'runtime-consumer-research-mode.md'), 'utf8');
   assert.match(text, /claude --add-dir "\$ANDROID_COMMON_DOC" --effort high/);
   assert.match(text, /--safe-mode/);
   assert.match(text, /--bare/);
@@ -23,6 +24,14 @@ test('consumer operations document required launch, recovery, and host-family co
   assert.match(text, /Versions outside `2\.1\.x`.*fail closed/s);
   assert.match(text, /An L1 must own `skills\/registry\.json`/);
   assert.match(text, /effective` remains\s+null/);
+  assert.match(text, /It disables plugins and MCP/);
+  assert.match(text, /bounded research profile/);
+  assert.match(research, /claude --restricted --setting-sources user/);
+  assert.match(research, /mcp__plugin_context7_context7__resolve-library-id/);
+  assert.match(research, /mcp__plugin_context7_context7__query-docs/);
+  assert.match(research, /--disallowedTools "Bash,PowerShell,Edit,Write,NotebookEdit,WebFetch,WebSearch"/);
+  assert.match(research, /`--allowedTools` preauthorizes names; it does\s+not by itself hide every other tool/);
+  assert.match(research, /Inspect `system\/init` and stop if either required Context7 tool is absent/);
 });
 
 test('consumer operations document distinguishes interactive input and permission modes', () => {
@@ -31,6 +40,20 @@ test('consumer operations document distinguishes interactive input and permissio
   assert.match(text, /`-p` \/ `--print`.*one-turn invocation/s);
   assert.match(text, /`--permission-mode acceptEdits`.*initial permission mode/s);
   assert.match(text, /Bash.*still require explicit approval/s);
+});
+
+test('resume-work documentation distinguishes same-process notification from cross-process rehydration', () => {
+  const operations = fs.readFileSync(path.join(root, 'docs', 'guides', 'runtime-consumer-operations.md'), 'utf8');
+  const skill = fs.readFileSync(path.join(root, 'skills', 'resume-work', 'SKILL.md'), 'utf8');
+
+  for (const text of [operations, skill]) {
+    assert.match(text, /same host process and session generation/i);
+    assert.match(text, /`role-notify`\s*\/\s*`SendMessage`/);
+    assert.match(text, /new host process/i);
+    assert.match(text, /`role-spawn`\s*\/\s*`Agent`/);
+    assert.match(text, /must not.*consume.*older.*handles/is);
+    assert.match(text, /cross-generation `SendMessage`/i);
+  }
 });
 
 test('provenance and wave docs reject prose-only authority claims', () => {
@@ -49,9 +72,14 @@ test('provenance and wave docs reject prose-only authority claims', () => {
 
 test('canonical entrypoint docs use the consumer launcher without model-owned path discovery', () => {
   const init = fs.readFileSync(path.join(root, 'skills', 'init-session', 'SKILL.md'), 'utf8');
+  const command = fs.readFileSync(path.join(root, '.claude', 'commands', 'init-session.md'), 'utf8');
   assert.match(init, /node \.claude\/runtime\/l0-entrypoint-launcher\.cjs init-session/);
   assert.match(init, /Do not run `ls`, `find`, `which`, `pwd`, `node -e`/);
   assert.doesNotMatch(init, /<base64url canonical JSON>/);
+  assert.match(command, /node \.claude\/runtime\/l0-entrypoint-launcher\.cjs init-session/);
+  assert.match(command, /never construct a replacement dashboard/);
+  assert.doesNotMatch(command, /\$SKILL_DIR\/init-session\/SKILL\.md/);
+  assert.doesNotMatch(command, /Read the skill file/);
   for (const name of ['resume-work', 'work', 'ingest-content', 'monitor-docs']) {
     const text = fs.readFileSync(path.join(root, 'skills', name, 'SKILL.md'), 'utf8');
     const line = text.split(/\r?\n/).find((candidate) => candidate.includes('l0-entrypoint-launcher.cjs'));

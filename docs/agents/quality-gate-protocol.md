@@ -55,10 +55,10 @@ Deliberation with every required architect is **mandatory**. A class with no arc
 
 ## Gate Steps (dynamic -- quality-gater discovers rules at runtime)
 
-The quality-gater does NOT use a hardcoded checklist. It discovers each project's rules by reading CLAUDE.md, asking context-provider, and running `/pre-pr` (the project's own validation pipeline). Architect deliberation from Step 0 informs which areas need extra attention.
+The quality-gater does NOT use a hardcoded checklist. It discovers each project's rules from `AGENTS.md`, its thin `CLAUDE.md` adapter, applicable path-scoped rules, context-provider, and `/pre-pr` (the project's own validation pipeline). Architect deliberation from Step 0 informs which areas need extra attention.
 
 ### Step 1: Project Rule Discovery
-- Read CLAUDE.md -- extract hard rules, constraints, patterns
+- Read `AGENTS.md`, its thin `CLAUDE.md` adapter, and applicable path-scoped rules
 - Ask context-provider for active Detekt rules and enforcement patterns
 - Cross-reference with architect deliberation findings from Step 0
 - Build project-specific verification checklist

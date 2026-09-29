@@ -66,7 +66,7 @@ actual_skills=$(find skills -name "SKILL.md" -exec dirname {} \; | xargs -I {} b
 actual_skill_count=$(echo "$actual_skills" | wc -l | tr -d ' \r')
 
 # Skills in AGENTS.md
-if [ -f AGENTS.md ]; then
+if [ -f AGENTS.md ] && grep -qE '^## Available Skills \([0-9]+\)' AGENTS.md; then
   agents_md_header=$(grep -oE 'Available Skills \([0-9]+\)' AGENTS.md | grep -oE '[0-9]+' || echo "0")
   agents_md_skills=$(sed -n '/## Available Skills/,/## MCP Tools/p' AGENTS.md | grep "^| \`" | sed 's/| `\([^`]*\)`.*/\1/' | sort || true)
   agents_md_skill_count=$(echo "$agents_md_skills" | grep -c "." || echo "0")
@@ -103,9 +103,9 @@ if [ -d mcp-server/src/tools ]; then
   actual_mcp=$(node -e "const {mcpToolNames}=require('./scripts/tools/generate-operational-catalog.cjs'); process.stdout.write(mcpToolNames(process.cwd()).join('\\n'))")
   actual_mcp_count=$(echo "$actual_mcp" | grep -c "." || echo "0")
   
-  if [ -f AGENTS.md ]; then
+  if [ -f AGENTS.md ] && grep -qE '^## MCP Tools \([0-9]+\)' AGENTS.md; then
     agents_mcp_header=$(grep -oE 'MCP Tools \([0-9]+\)' AGENTS.md | grep -oE '[0-9]+' || echo "0")
-    agents_mcp_tools=$(sed -n '/## MCP Tools/,/## Quality Gate/p' AGENTS.md | grep "^| \`" | sed 's/| `\([^`]*\)`.*/\1/' | sort)
+    agents_mcp_tools=$(sed -n '/## MCP Tools/,/## Quality Gate/p' AGENTS.md | grep "^| \`" | sed 's/| `\([^`]*\)`.*/\1/' | sort || true)
     
     if [ "$agents_mcp_header" != "$actual_mcp_count" ]; then
       add_finding "HIGH" "count" "AGENTS.md 'MCP Tools ($agents_mcp_header)' but actual: $actual_mcp_count" "true"

@@ -1,179 +1,65 @@
 ---
-scope: [workflow, claude-code, agents, skills]
-sources: [anthropic-claude-code]
+scope: [agents, workflow, claude-code, orchestration]
+sources: [androidcommondoc, anthropic-claude-code]
 targets: [all]
 slug: claude-code-workflow
 status: active
 layer: L0
-parent: agents-hub
 category: agents
-description: "How to work with Claude Code in the L0/L1/L2 ecosystem: main-orchestrator workflow, agent delegation, skills, verification"
-version: "2.0.0"
-last_updated: "2026-09-22"
-monitor_urls:
-  - url: "https://docs.anthropic.com/en/docs/claude-code/overview"
-    type: doc-page
-    tier: 3
-assumes_read: guides-hub
-token_budget: 2500
+description: "Claude Code workflow using the main conversation, dynamic topology and evidence-bound quality gates"
+version: 3
+last_updated: "2026-09-28"
 ---
+# Claude Code workflow
 
-# Claude Code Workflow
+The main conversation owns orchestration. `team-lead` is a historical name for that logical responsibility, not an installable agent profile.
 
-How development works across the L0/L1/L2 ecosystem with Claude Code, specialized agents, and L0 skills.
+## Canonical launch
 
-## The Main-Orchestrator Model
+1. Start Claude Code with access to both the consumer and qualified toolkit roots (`--add-dir <L0-root>` when they are siblings).
+2. Invoke `/init-session --orchestrate`.
+3. Let the launcher discover the consumer layer, qualified L0 commit, wave class and available registry.
+4. Follow the emitted lifecycle actions. Do not combine this path with `--agent team-lead` or create a manual fixed roster.
 
-Every L1/L2 project uses the main conversation as the primary workflow coordinator. Historical references to `team-lead` name this logical role; the retired template is not spawned or invoked directly.
+The persistent support plane is exactly `arch-platform`, `arch-testing`, `arch-integration`, `context-provider` and `doc-updater`. Planner, `quality-gater` and implementation specialists are phase-scoped and must not be parked as permanent peers.
 
-| Task size | Main-orchestrator behavior |
-|-----------|--------------------------|
-| **Simple** (bug fix, 1 file) | Assigns to specialist, reviews result, runs tests |
-| **Medium** (feature, 1-3 files) | Assigns code to specialist, delegates audits to domain specialists |
-| **Large** (5+ files, multi-step) | Orchestrates waves — assigns code to dev specialists, audits to domain specialists |
-| **Long session** (3+ features) | Always orchestrates — delegates everything, manages flow only |
+## Work phases
 
-### Escalation Rules
+1. **Plan:** reproduce the request, bind a written plan and consult the context provider where required.
+2. **Execute:** dispatch only the specialists required by the plan, with explicit file ownership.
+3. **Verify:** architects inspect their owned concerns and emit evidence-bound verdicts.
+4. **Quality gate:** launch `quality-gater` for the final phase; run focused tests during iteration and one complete local gate before publication.
+5. **Publish:** open a PR against the repository integration branch and use independent GitHub CI as the second evidence source. Do not merge without user authority.
 
-The main orchestrator is autonomous on technical decisions. It escalates to the user for:
-- **Business decisions** — feature scope, tier assignment, pricing
-- **API contract changes** — breaking changes to shared libraries
-- **Architectural shifts** — new modules, new patterns, dependency additions
+The control plane remains disk-backed so recovery does not depend on a live mailbox. Optional agent-team messaging accelerates coordination but does not replace persisted plans, verdicts or proof artifacts.
 
-## Agent Delegation
+## Recovery modes
 
-Agents live in `.claude/agents/` (canonical). Claude Code invokes them natively via the `Agent` tool. GSD/pi users also need `.gsd/agents/` mirrors (synced via `/sync-gsd-agents`).
+| Mode | Purpose | Authentication/session behavior |
+|---|---|---|
+| normal interactive | Persistent development session | Normal authentication, hooks and memory |
+| `--safe-mode` | Diagnose startup or hook/memory interference | Preserves normal authentication while disabling optional project automation as documented by the launcher |
+| `--bare` | Minimal host diagnosis | Does not use normal OAuth/keychain state; requires an explicit API key |
+| `-p` / `--print` | Deterministic single-turn probe | Non-persistent; emits initialization/tool evidence suitable for certification |
 
-### Invocation
+If interactive startup stalls or reads unrelated memory before the requested entrypoint, stop that session and use the documented safe-mode or print probe. Never present an old idle session or a manifest bound to a previous L0 commit as current evidence.
 
-```
-delegate to <feature-guardian>: "Audit changed files in core/data/ for domain violations"
-```
+## Instruction and agent surfaces
 
-### When to Delegate vs Inline
+- `AGENTS.md` is the portable repository authority.
+- `CLAUDE.md` imports it and carries only Claude-specific launch notes.
+- `.claude/rules/` provides path-scoped detail.
+- `.claude/agents/` contains selectable specialist profiles synchronized from the registry.
+- `skills/` contains procedures loaded on demand.
+- Memory is advisory and durable-only.
 
-| Signal | Action |
-|--------|--------|
-| Domain-specific audit (DAW safety, API purity, feature gates) | **Always delegate** — specialist knows the rules |
-| Code review after implementation | **Delegate** to test-specialist or relevant domain agent |
-| Parallel implementation (a11y across modules, test generation) | **Delegate to specialists with Write** — never duplicate the orchestrator |
-| Writing code for any change | **Delegate to a scoped specialist** when the active runtime supports delegation |
-| Running tests, linting, coverage | **Use L0 skills** (`/test`, `/pre-pr`) — not agents |
-| Cross-cutting concern (privacy, release readiness) | **Delegate** — specialist scans holistically |
-| After any wave of specialist work | **Architect gate** — arch-testing + arch-platform + arch-integration detect, fix, and cross-verify before proceeding |
-| Official skill available for the task | **Use skill** — battle-tested and maintained upstream |
+Agent availability is discovered from the current synchronized registry. Do not maintain a duplicate roster in startup instructions.
 
-### Runtime Connector Only (non-negotiable)
+## Verification discipline
 
-Public entrypoints route through the shared lifecycle/control plane. A rich runtime connector may use its native agent tool internally; never shell-launch a retired `team-lead` template:
-- CORRECT: invoke `/work` (or the equivalent adapter command) in the main conversation.
-- WRONG: `Bash("claude --print 'You are team-lead...'")`.
+- Reproduce each defect independently and test both rejection and success paths.
+- Keep toolkit executable roots distinct from consumer coordination roots, including linked worktrees.
+- Run the expensive full local batch once on the final candidate; use GitHub CI rather than repeating it locally.
+- Treat skipped platform coverage as an explicit residual risk. Do not enable new macOS CI against `develop` without authorization.
 
-### Token Economics
-
-Every agent pays a startup tax (~3-5K tokens for instructions + file reading). Delegation saves tokens only when:
-1. It **prevents context growth** in the main window (long sessions)
-2. It **runs in parallel** (fan-out to multiple specialists)
-3. The specialist **has domain-specific rules or patterns** the main context should not reload
-
-Rule of thumb: if the task is < 5K tokens of work, do it inline.
-
-## L0 Skills — Token-Efficient Operations
-
-Skills wrap cross-platform scripts. They save 10-50x tokens vs having the agent do the same work manually.
-
-| Instead of... | Use |
-|--------------|-----|
-| Agent reads 200 lines of Gradle output | `/test <module>` — structured summary |
-| Agent greps for anti-patterns | `/validate-patterns` — script checks 8 patterns for free |
-| Agent manually checks coverage XML | `/coverage` — markdown report |
-| Agent runs commit-lint + resources + konsist manually | `/pre-pr` — one command, all gates |
-
-### Core Skills
-
-| Skill | What | When |
-|-------|------|------|
-| `/test <module>` | Single module test with retry | After code changes |
-| `/test-changed` | Only modules with uncommitted changes | Quick pre-commit check |
-| `/test-full-parallel` | All modules parallel + coverage | Full validation |
-| `/pre-pr` | commit-lint + resources + konsist + tests | Before every PR |
-| `/coverage` | Gap analysis from existing data | Find untested code |
-| `/auto-cover` | Generate tests for gaps | Increase coverage |
-| `/extract-errors` | Structured errors from Gradle output | When builds fail |
-| `/verify-kmp` | Source set and import validation | KMP architecture check |
-| `/validate-patterns` | ViewModel/UI pattern compliance | Code quality |
-| `/bump-version` | Semver bump + CHANGELOG update | Release prep |
-| `/changelog` | Generate release notes from git log | Release documentation |
-| `/git-flow` | Branch management (start/finish/release) | Git workflow |
-| `/readme-audit` | Audit README against filesystem reality | Before milestone close |
-
-## CLAUDE.md — The Entry Point
-
-CLAUDE.md drives the entire workflow. It follows the [Boris Cherny template](claude-md-template.md):
-
-```
-## Workflow Orchestration
-  ### 1. Plan Mode Default      ← when to stop and think
-  ### 2. Agent Delegation       ← agent roster + invocation examples
-  ### 3. Verification Before Done ← project-specific verification rules
-  ### 4. Autonomous Execution    ← just fix it, use skills
-
-## Project Constraints           ← hard rules (3-5 one-liners)
-## Commands                      ← skill shortcuts
-## Doc Consultation              ← what to read before touching each area
-```
-
-Without the Agent Roster in CLAUDE.md, Claude Code uses generic agents (`Explore`, `Plan`, `Code`) instead of your domain specialists.
-
-## Verification Before Done
-
-Every task type has a verification pattern:
-
-| Task type | Verification |
-|-----------|-------------|
-| Bug fix | Failing test first → fix → test passes → architect gate → `/pre-pr` |
-| Feature | Code → `/test <module>` → delegate audit to specialist → architect gate → `/pre-pr` |
-| Refactor | `/test-full-parallel` → no regressions |
-| Release | `/pre-release --quick` → `/bump-version` → `/git-flow release` |
-| UI change | Verify in browser/app → delegate to `ui-specialist` |
-| Domain-specific | Test domain invariant → delegate to `<feature-guardian>` |
-
-Work is done when verification passes, not when code compiles.
-
-## The Three Layers
-
-```
-L0 (AndroidCommonDoc)          L1 (project)                  L2 (consumer)
-┌─────────────────────┐        ┌─────────────────────┐       ┌──────────────────────┐
-│ skills/             │──sync─▶│ .claude/skills/      │       │ .claude/skills/      │
-│ .claude/agents/     │──sync─▶│ .claude/agents/      │       │ .claude/agents/      │
-│ .claude/commands/   │──sync─▶│ .claude/commands/    │       │ .claude/commands/    │
-│ scripts/sh/         │        │ (L1-specific agents) │       │ (L2-specific agents) │
-│ detekt-rules/       │──JAR──▶│ detektPlugins()      │──JAR─▶│ detektPlugins()      │
-│ docs/               │  ref   │                      │       │                      │
-└─────────────────────┘        └─────────────────────┘       └──────────────────────┘
-
-L0 defines.  L1/L2 consume.  L2 extends with domain-specific agents.
-```
-
-- **L0**: Generic toolkit — skills, agents, scripts, docs, Detekt rules
-- **L1**: Ecosystem library — version authority, shared modules, API contracts
-- **L2**: Application — domain logic, features, platform apps
-
-Each layer has its own CLAUDE.md, a main-orchestrator conversation, architect reviewers (arch-testing, arch-platform, arch-integration), and project-specific specialists.
-
-## Release Workflow
-
-Standard across all layers:
-
-1. `/bump-version --minor` — updates `version.properties` + `CHANGELOG.md`
-2. `/changelog` — generates release notes from git history
-3. `/git-flow release v{X.Y.Z}` — creates release branch, merges to master, tags, back-merges
-4. `/readme-audit --fix` — ensure docs are current
-
-## Related Docs
-
-- [claude-md-template](claude-md-template.md) — Boris Cherny CLAUDE.md structure (main orchestrator plus class-aware roster)
-- [autonomous-multi-agent-workflow](multi-agent-patterns.md) — Multi-agent patterns and cost control
-- [agent-consumption-guide](agent-consumption-guide.md) — How agents load and use pattern docs
-- [getting-started](../guides/getting-started.md) — Full L0/L1/L2 setup from scratch
+See [main-agent-orchestration-guide](main-agent-orchestration-guide.md), [wave-control-plane](wave-control-plane.md), and [instruction-memory-contract](instruction-memory-contract.md).

@@ -842,11 +842,13 @@ const {
 } = claudePeerBinding;
 
 const claudeResumeRecord = createClaudeResumeRecord({
-  CANONICAL_ROLES, computeClaudeAuthorityIdentityId, computeWorktreeId,
+  CANONICAL_ROLES, CLAUDE_STARTUP_ACTOR_KEYS, CLAUDE_STARTUP_ACTOR_SCHEMA,
+  claudeStartupActorPathFor, computeClaudeAuthorityIdentityId, computeWorktreeId,
   currentClockMsForRegistry, discoverPlan, findUniqueClaudePeerRoleActorBinding,
   fs, hasExactKeys, isCanonicalIsoUtc, isHexActionId, isHexCsprng32,
   isHexDigest64, isoToMsForRegistry, path, peekSessionGeneration,
   readClaudeAuthorityFence, readRegistryRecord, registryRepoDir,
+  sha256String, validateRoleActorBindingFor,
 });
 const {
   CLAUDE_RESUME_HANDLE_SCHEMA,
@@ -864,11 +866,11 @@ const {
 
 const claudeResumeLifecycle = createClaudeResumeLifecycle({
   ...claudeResumeRecord,
-  canonicalJSONStringify, computeClaudeAuthorityIdentityId, currentClockMsForRegistry,
+  actionPathFor, canonicalJSONStringify, computeClaudeAuthorityIdentityId, currentClockMsForRegistry,
   ensureSecureRegistryDir, findClaudeResumeHandlesForActor, fs, generateActionId,
-  hasExactKeys, isCanonicalIsoUtc, isHexCsprng32, isoPlusSecondsForRegistry,
+  hasExactKeys, isCanonicalIsoUtc, isHexActionId, isHexCsprng32, isoPlusSecondsForRegistry,
   isoToMsForRegistry, nowIsoForRegistry, path, publishNoClobber,
-  readClaudeAuthorityFence, readRegistryRecord, readRoleBindingState,
+  readClaudeAuthorityFence, readLiveSessionGenerationById, readRegistryRecord, readRoleBindingState,
   registryRepoDir, resolveClaudeResumeRoleActorScope, roleProfileDigestFor,
   sha256String, transitionRoleBinding, validateClaudePeerExpected,
   validateRoleActorBindingFor, withRegistryLock,
@@ -880,10 +882,6 @@ const {
   findUniqueClaudeResumeHandleForTarget,
   findUniqueConsumedClaudeResumeHandleForBusyTarget,
 } = claudeResumeLifecycle;
-
-
-
-
 const directRoleHostAdmission = createDirectRoleHostAdmission({
   path, registryRepoDir, readRegistryRecord, ensureSecureRegistryDir, publishNoClobber,
   canonicalJSONStringify, sha256String, isHexActionId, nowIsoForRegistry, withRegistryLock,
@@ -1006,6 +1004,7 @@ const resumeCheckpoint = createResumeCheckpoint({
   makeOperation, roleBindingPathFor,
   CLAUDE_RESUME_HANDLE_KEYS, CLAUDE_RESUME_HANDLE_SCAN_CAP, CLAUDE_RESUME_HANDLE_SCHEMA,
   MAX_ACTION_REPO_SCAN_ENTRIES, actionForEnvelope, actionPathFor, buildRoleNotifyPayload,
+  buildRoleSpawnPayload, claudeReadyBootstrapMessageFor,
   claudeResumeHandlePathFor, computeActionTtlSeconds, computeRepoId, futureIsoForRegistry, generateActionId,
   interpretedActionMarkerPathFor, isClaudeResumeHandleConsumed, mintRoleLifecycleAction, readClaudeResumeHandle,
   validateClaudeResumeHandleRecord,
@@ -1015,6 +1014,7 @@ const {
   findLiveResumeHandlesForLifecycleRole, findResumeCheckpointActionForRole,
   executeResumeCheckpointEnsure, quarantineViaRehydrating, RESUME_CHECKPOINT_REF_RE,
 } = resumeCheckpoint;
+
 const supervisorBatchMint = createSupervisorBatchMint({
   path, fs, crypto, registryRepoDir, canonicalJSONStringify, sha256String, currentClockMsForRegistry,
   isoToMsForRegistry, nowIsoForRegistry, futureIsoForRegistry, computeCoordinationRootIdFromPath,

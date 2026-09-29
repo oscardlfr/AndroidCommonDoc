@@ -464,7 +464,7 @@ const {
 
 const { createTurnProjectionIo } = require('./runtime-bridge-codex/turn-projection-io.cjs');
 const turnProjectionIoModule = createTurnProjectionIo({
-  TURN_READ_PROJECTION_ENTRY_CAP, TURN_READ_PROJECTION_FILE_CAP, execFileSync, fs, path, rc,
+  TURN_READ_PROJECTION_ENTRY_CAP, TURN_READ_PROJECTION_FILE_CAP, ensureSecureRegistryDir, execFileSync, fs, path, rc,
 });
 fsyncProjectionPath = turnProjectionIoModule.fsyncProjectionPath;
 const {

@@ -47,6 +47,18 @@ function main(argv) {
     }
     handler(argv.slice(1));
   } catch (err) {
+    // Preserve the frozen stdout envelope while giving the harness enough
+    // evidence to diagnose an otherwise opaque INTERNAL_ERROR. This seam is
+    // inert outside an explicitly enabled test process.
+    if (
+      process.env.NODE_ENV === 'test'
+      && process.env.RUNTIME_ROLE_LIFECYCLE_TEST_DIAGNOSTICS === '1'
+    ) {
+      try {
+        process.stderr.write('[runtime-role-lifecycle cli] uncaught: '
+          + String(err && err.stack ? err.stack : err) + '\n');
+      } catch (diagnosticError) { /* diagnostics must never change the ABI */ }
+    }
     const knownCommand = typeof argv[0] === 'string' && HANDLERS[argv[0]] ? argv[0] : '';
     emitAndExit(makeResult(knownCommand, RC.INTERNAL, 'INVALID', 'INTERNAL_ERROR', [], []));
   }

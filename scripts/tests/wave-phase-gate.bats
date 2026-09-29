@@ -9,8 +9,9 @@ setup() {
   cat > "$ROOT/.planning/wave-demo/PLAN.md" <<'EOF'
 ### Wave Class
 
-**Class**: FAST-PATH
+- **Class**: FAST-PATH
 EOF
+  printf '%s\n' 'FAST-PATH' > "$ROOT/.planning/wave-demo/CLASS"
   cat > "$ROOT/.claude/registry/wave-topology.yaml" <<'EOF'
 default_class: HARNESS
 class_artifacts:

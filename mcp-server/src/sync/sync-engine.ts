@@ -17,7 +17,7 @@
  * - Registry existence is validated before any sync operations
  */
 
-import { readFile, writeFile, mkdir, unlink, access, lstat, readdir, rename, copyFile, realpath, chmod } from "node:fs/promises";
+import { readFile, writeFile, mkdir, unlink, access, lstat, readdir, rename, copyFile, realpath, chmod, open } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import path from "node:path";
@@ -94,10 +94,15 @@ export interface SyncOptions {
 /** Files owned by the runtime installation, not by the ordinary registry sync. */
 const RUNTIME_CONSUMER_FILES = [
   ".claude/runtime/l0-entrypoint-launcher.cjs",
+  ".claude/runtime/l0-toolkit-launcher.cjs",
   ".claude/hooks/l0-source-hook-launcher.js",
+  ".claude/hooks/context-provider-write-gate.js",
   ".claude/hooks/detekt-post-write.sh",
   ".claude/hooks/detekt-pre-commit.sh",
+  ".claude/hooks/tool-use-logger.js",
   ".claude/registry/wave-topology.yaml",
+  "scripts/sh/write-bundle.sh",
+  "scripts/sh/lib/wave-slug.sh",
 ] as const;
 
 const EXECUTABLE_CONSUMER_FILES = new Set<string>([
@@ -106,20 +111,24 @@ const EXECUTABLE_CONSUMER_FILES = new Set<string>([
 ]);
 
 /**
- * Exact checksum-less Detekt hook revisions distributed by the legacy L0
- * installer. Ownership is deliberately scoped by destination path as well as
- * content digest: a digest copied to the other hook path, or any locally
- * edited bytes, remains consumer-owned and must fail closed.
+ * Exact checksum-less runtime revisions distributed by legacy L0 installers.
+ * Ownership is deliberately scoped by destination path as well as content
+ * digest: a digest copied to another path, or any locally edited bytes,
+ * remains consumer-owned and must fail closed.
  */
-const LEGACY_DETEKT_HOOK_SHA256_BY_PATH: Readonly<Record<string, string>> = Object.freeze({
+const LEGACY_RUNTIME_FILE_SHA256_BY_PATH: Readonly<Record<string, string>> = Object.freeze({
   ".claude/hooks/detekt-pre-commit.sh":
     "fd79f0f45adf279d9b0cd41240cb89e96786b3e1c994f68b138781d3e0d22312",
   ".claude/hooks/detekt-post-write.sh":
     "a263152549291c949e77a9f76dfdbeedcabec50c07a5f1cc3e5305ed331cc8d4",
+  ".claude/hooks/context-provider-write-gate.js":
+    "792de9ffd1be16dfbd7125b33daaf8dc95e1a881f73c825232a83ff9ac8653fd",
+  ".claude/hooks/tool-use-logger.js":
+    "7c39a59ab6da4520006ce3a50f04ca6753004c77651b4782f927bed2d59b280a",
 });
 
-function isKnownLegacyDetektHook(relativePath: string, content: string | Buffer): boolean {
-  const expected = LEGACY_DETEKT_HOOK_SHA256_BY_PATH[relativePath];
+function isKnownLegacyRuntimeFile(relativePath: string, content: string | Buffer): boolean {
+  const expected = LEGACY_RUNTIME_FILE_SHA256_BY_PATH[relativePath];
   return expected !== undefined && createHash("sha256").update(content).digest("hex") === expected;
 }
 
@@ -250,11 +259,12 @@ export function resolveSyncPlan(
   const excludeCategories = new Set(selection.exclude_categories);
 
   if (selection.mode === "explicit") {
-    // Explicit mode: only include entries whose paths are already in checksums
+    // Manifest checksums are keyed by consumer destination paths, while the
+    // registry stores toolkit source paths.
     const checksumPaths = new Set(Object.keys(manifest.checksums));
     return registry.entries.filter((entry) => {
       if (isL2Specific(entry, l2Commands, l2Agents, l2Skills)) return false;
-      return checksumPaths.has(entry.path);
+      return checksumPaths.has(destPath(entry.path));
     });
   }
 
@@ -322,6 +332,33 @@ function hashContent(content: string): string {
   return `sha256:${hash}`;
 }
 
+/**
+ * Metadata is generated output, so it is deliberately excluded from the
+ * content hash. Check it separately to let an ordinary sync migrate an older
+ * materialization contract without treating that migration as a local edit.
+ */
+function hasCanonicalL0Metadata(
+  content: string,
+  entry: SkillRegistryEntry,
+): boolean {
+  const lines = content.replace(/\r\n/g, "\n").split("\n").map((line) => line.trim());
+  return lines.includes("l0_source: manifest:L0/tooling") &&
+    lines.includes(`l0_hash: ${entry.hash}`) &&
+    lines.some((line) => /^l0_synced:\s*\S+/.test(line));
+}
+
+/** Runtime role templates are owned by the runtime installer and deliberately
+ * published byte-for-byte. Ordinary registry entries use generated provenance,
+ * but applying that requirement to these ten paths makes every later plain
+ * sync rewrite them before the runtime installer restores the same bytes. */
+function expectsGeneratedL0Metadata(entry: SkillRegistryEntry, manifest: Manifest): boolean {
+  if (manifest.runtime?.enabled !== true) return true;
+  const destination = destPath(entry.path);
+  return !RUNTIME_ROLE_TEMPLATES.some(
+    (role) => destination === `.claude/agents/${role}.md`,
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Diff computation
 // ---------------------------------------------------------------------------
@@ -366,8 +403,26 @@ export async function computeSyncActions(
       // No existing checksum - new file
       actions.push({ registryEntry: entry, action: "add" });
     } else if (currentHash === entry.hash) {
-      // Hash matches - unchanged
-      actions.push({ registryEntry: entry, action: "unchanged", currentHash });
+      // The source hash matches, but generated provenance may still belong to
+      // an older sync contract. Verify local content first so metadata repair
+      // can never overwrite a genuine consumer edit.
+      if (!projectRoot) {
+        actions.push({ registryEntry: entry, action: "unchanged", currentHash });
+        continue;
+      }
+      const localAction = await detectLocalEdit(projectRoot, dest, currentHash);
+      if (localAction === "add" || localAction === "conflict") {
+        actions.push({ registryEntry: entry, action: localAction, currentHash });
+        continue;
+      }
+      const localContent = await readFile(path.join(projectRoot, dest), "utf-8");
+      actions.push({
+        registryEntry: entry,
+        action: !expectsGeneratedL0Metadata(entry, manifest) || hasCanonicalL0Metadata(localContent, entry)
+          ? "unchanged"
+          : "update",
+        currentHash,
+      });
     } else {
       // L0 hash differs from manifest — update needed, but check for local edits
       if (!force && projectRoot) {
@@ -504,6 +559,35 @@ export function destPath(sourcePath: string): string {
     return `.claude/${sourcePath}`;
   }
   return sourcePath;
+}
+
+/**
+ * Explicit selection is a closed world for hooks too. An empty hook selection
+ * means zero hook copies and zero new registrations, not "install every hook".
+ */
+async function hookExclusionsForManifest(
+  manifest: Manifest,
+  l0Root: string,
+): Promise<string[]> {
+  const configured = new Set(manifest.selection?.exclude_hooks ?? []);
+  if (manifest.selection?.mode !== "explicit") return [...configured];
+
+  const selected = new Set(
+    Object.keys(manifest.checksums)
+      .filter((relative) => relative.startsWith(".claude/hooks/"))
+      .map((relative) => path.basename(relative)),
+  );
+  try {
+    for (const filename of await readdir(path.join(l0Root, ".claude", "hooks"))) {
+      if (!selected.has(filename)) configured.add(filename);
+    }
+  } catch {
+    // syncHooks handles a missing hook directory as an empty source.
+  }
+  for (const registration of L0_REQUIRED_HOOK_REGISTRATIONS) {
+    if (!selected.has(registration.file)) configured.add(registration.file);
+  }
+  return [...configured];
 }
 
 // ---------------------------------------------------------------------------
@@ -678,7 +762,7 @@ export function cleanupClone(dirPath: string): void {
  */
 export function getGitCommit(dirPath: string): string | undefined {
   try {
-    return execFileSync("git", ["rev-parse", "--short", "HEAD"], {
+    return execFileSync("git", ["rev-parse", "HEAD"], {
       cwd: dirPath,
       encoding: "utf-8",
       stdio: ["pipe", "pipe", "pipe"],
@@ -704,16 +788,17 @@ export function getGitCommit(dirPath: string): string | undefined {
 export function materializeFile(
   content: string,
   entry: SkillRegistryEntry,
-  l0Root: string,
+  _l0Root: string,
 ): string {
   const syncedDate = new Date().toISOString();
+  const portableSource = "manifest:L0/tooling";
 
   if (entry.type === "skill" || entry.type === "agent") {
-    return injectFrontmatterFields(content, l0Root, entry.hash, syncedDate);
+    return injectFrontmatterFields(content, portableSource, entry.hash, syncedDate);
   }
 
   // Command type: HTML comment header
-  return injectCommandHeader(content, l0Root, entry.hash, syncedDate);
+  return injectCommandHeader(content, portableSource, entry.hash, syncedDate);
 }
 
 /**
@@ -821,6 +906,206 @@ function hasL0Header(content: string): boolean {
     content.includes("l0_source:") &&
     content.includes("l0_hash:")
   );
+}
+
+// ---------------------------------------------------------------------------
+// Permanent retired-artifact tombstones
+// ---------------------------------------------------------------------------
+
+const RETIRED_ARTIFACT_REGISTRY = "skills/sync-l0/retired-artifacts.json";
+
+interface RetiredArtifactTombstone {
+  id: string;
+  kind: "agent";
+  path: string;
+  retired_in: string;
+  replacement: string;
+  known_l0_sha256: string[];
+}
+
+interface RetiredArtifactRegistry {
+  format_version: "1.0";
+  artifacts: RetiredArtifactTombstone[];
+}
+
+export interface RetiredArtifactReconciliationPlan {
+  removePaths: string[];
+  removeChecksumPaths: string[];
+  observedSha256: Record<string, string>;
+  tombstonePaths: string[];
+}
+
+function normalizedSha256(content: string): string {
+  return createHash("sha256")
+    .update(stripL0Metadata(content).replace(/\r\n/g, "\n"))
+    .digest("hex");
+}
+
+function validateRetiredArtifactRegistry(value: unknown): RetiredArtifactRegistry {
+  if (!isJsonObject(value) || value.format_version !== "1.0" || !Array.isArray(value.artifacts)) {
+    throw new Error("retired-artifact-registry-malformed");
+  }
+  const ids = new Set<string>();
+  const paths = new Set<string>();
+  for (const raw of value.artifacts) {
+    if (!isJsonObject(raw) || typeof raw.id !== "string" || raw.kind !== "agent" ||
+        typeof raw.path !== "string" || typeof raw.retired_in !== "string" ||
+        typeof raw.replacement !== "string" || !Array.isArray(raw.known_l0_sha256) ||
+        raw.known_l0_sha256.length === 0 ||
+        raw.known_l0_sha256.some((digest) => typeof digest !== "string" || !/^[0-9a-f]{64}$/.test(digest))) {
+      throw new Error("retired-artifact-registry-malformed");
+    }
+    const normalized = path.posix.normalize(raw.path.replace(/\\/g, "/"));
+    if (normalized !== raw.path || normalized.startsWith("../") || path.posix.isAbsolute(normalized) ||
+        !normalized.startsWith(".claude/agents/") || ids.has(raw.id) || paths.has(normalized)) {
+      throw new Error("retired-artifact-registry-malformed");
+    }
+    ids.add(raw.id);
+    paths.add(normalized);
+  }
+  return value as unknown as RetiredArtifactRegistry;
+}
+
+async function readRetiredArtifactRegistry(toolkitRoot: string): Promise<RetiredArtifactRegistry> {
+  const registryPath = path.join(toolkitRoot, RETIRED_ARTIFACT_REGISTRY);
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(await readFile(registryPath, "utf8"));
+  } catch (err) {
+    throw new Error(`retired-artifact-registry-unreadable:${err instanceof Error ? err.message : String(err)}`);
+  }
+  return validateRetiredArtifactRegistry(parsed);
+}
+
+async function caseInsensitiveMatches(root: string, relativePath: string): Promise<string[]> {
+  const parentRelative = path.posix.dirname(relativePath);
+  const basename = path.posix.basename(relativePath);
+  let current = root;
+  for (const segment of parentRelative.split("/")) {
+    current = path.join(current, segment);
+    try {
+      const info = await lstat(current);
+      if (!info.isDirectory() || info.isSymbolicLink()) {
+        throw new Error(`retired-artifact-unsafe-parent:${relativePath}`);
+      }
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code === "ENOENT") return [];
+      throw err;
+    }
+  }
+  try {
+    const entries = await readdir(current);
+    return entries.filter((entry) => entry.toLowerCase() === basename.toLowerCase());
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") return [];
+    throw err;
+  }
+}
+
+/**
+ * Inspect permanent tombstones without mutating the consumer. Exact historical
+ * bytes at the exact retired path are L0-owned provenance and may be removed.
+ * Every ambiguous condition is preserved and fails closed.
+ */
+export async function planRetiredArtifactReconciliation(
+  projectRoot: string,
+  toolkitRoot: string,
+  manifest: Manifest,
+): Promise<RetiredArtifactReconciliationPlan> {
+  const registry = await readRetiredArtifactRegistry(toolkitRoot);
+  const plan: RetiredArtifactReconciliationPlan = {
+    removePaths: [],
+    removeChecksumPaths: [],
+    observedSha256: {},
+    tombstonePaths: registry.artifacts.map((artifact) => artifact.path),
+  };
+
+  for (const artifact of registry.artifacts) {
+    const toolkitMatches = await caseInsensitiveMatches(toolkitRoot, artifact.path);
+    if (toolkitMatches.length > 0) {
+      throw new Error(`retired-artifact-reintroduced-in-toolkit:${artifact.path}`);
+    }
+
+    const artifactName = path.posix.basename(artifact.path, ".md");
+    if (manifest.l2_specific.agents.some((name) => name.toLowerCase() === artifactName.toLowerCase())) {
+      throw new Error(`retired-artifact-declared-l2-specific:${artifact.path}`);
+    }
+
+    const checksumMatches = Object.keys(manifest.checksums)
+      .filter((candidate) => candidate.toLowerCase() === artifact.path.toLowerCase());
+    if (checksumMatches.length > 1 || (checksumMatches.length === 1 && checksumMatches[0] !== artifact.path)) {
+      throw new Error(`retired-artifact-ambiguous-manifest-path:${artifact.path}`);
+    }
+    const recorded = manifest.checksums[artifact.path];
+    if (recorded !== undefined &&
+        !artifact.known_l0_sha256.includes(recorded.replace(/^sha256:/, ""))) {
+      throw new Error(`retired-artifact-unrecognized-manifest-provenance:${artifact.path}`);
+    }
+
+    const consumerMatches = await caseInsensitiveMatches(projectRoot, artifact.path);
+    if (consumerMatches.length > 1 || (consumerMatches.length === 1 && consumerMatches[0] !== path.posix.basename(artifact.path))) {
+      throw new Error(`retired-artifact-ambiguous-consumer-path:${artifact.path}`);
+    }
+    if (consumerMatches.length === 0) {
+      if (recorded !== undefined) plan.removeChecksumPaths.push(artifact.path);
+      continue;
+    }
+
+    const destination = path.join(projectRoot, artifact.path);
+    const info = await lstat(destination);
+    if (!info.isFile() || info.isSymbolicLink() || info.nlink !== 1) {
+      throw new Error(`retired-artifact-not-regular-file:${artifact.path}`);
+    }
+    const observed = normalizedSha256(await readFile(destination, "utf8"));
+    if (!artifact.known_l0_sha256.includes(observed)) {
+      throw new Error(`retired-artifact-local-content-conflict:${artifact.path}`);
+    }
+    plan.removePaths.push(artifact.path);
+    plan.observedSha256[artifact.path] = observed;
+    if (recorded !== undefined) plan.removeChecksumPaths.push(artifact.path);
+  }
+
+  return plan;
+}
+
+function prepareRetiredArtifactChecksums(
+  manifest: Manifest,
+  plan: RetiredArtifactReconciliationPlan,
+): void {
+  for (const relative of plan.removeChecksumPaths) delete manifest.checksums[relative];
+}
+
+function assertRegistryDoesNotReintroduceRetiredArtifacts(
+  entries: SkillRegistryEntry[],
+  plan: RetiredArtifactReconciliationPlan,
+): void {
+  const retired = new Set(plan.tombstonePaths.map((relative) => relative.toLowerCase()));
+  const reintroduced = entries.find((entry) => retired.has(destPath(entry.path).toLowerCase()));
+  if (reintroduced) {
+    throw new Error(`retired-artifact-reintroduced-by-registry:${destPath(reintroduced.path)}`);
+  }
+}
+
+async function applyRetiredArtifactPlan(
+  projectRoot: string,
+  plan: RetiredArtifactReconciliationPlan,
+): Promise<void> {
+  for (const relative of plan.removePaths) {
+    const matches = await caseInsensitiveMatches(projectRoot, relative);
+    if (matches.length !== 1 || matches[0] !== path.posix.basename(relative)) {
+      throw new Error(`retired-artifact-changed-before-removal:${relative}`);
+    }
+    const destination = path.join(projectRoot, relative);
+    const info = await lstat(destination);
+    if (!info.isFile() || info.isSymbolicLink() || info.nlink !== 1) {
+      throw new Error(`retired-artifact-changed-before-removal:${relative}`);
+    }
+    const observed = normalizedSha256(await readFile(destination, "utf8"));
+    if (observed !== plan.observedSha256[relative]) {
+      throw new Error(`retired-artifact-changed-before-removal:${relative}`);
+    }
+    await unlink(destination);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -1012,16 +1297,46 @@ async function readHookSettingsOrThrow(settingsPath: string): Promise<ClaudeSett
 }
 
 async function writeSettingsAtomically(settingsPath: string, settings: ClaudeSettings): Promise<void> {
-  const directory = path.dirname(settingsPath);
+  await writeRuntimeFileAtomically(settingsPath, JSON.stringify(settings, null, 2) + "\n");
+}
+
+/**
+ * Publish one runtime-owned file without ever exposing truncated bytes.
+ *
+ * The temporary file lives beside its destination so rename is constrained to
+ * the same filesystem. Its bytes and mode are flushed before publication, and
+ * the containing directory is flushed after rename on POSIX. If publication is
+ * interrupted, the old destination (or a complete new one) remains usable and
+ * the stale manifest makes the next runtime sync retry the convergence.
+ */
+async function writeRuntimeFileAtomically(
+  destination: string,
+  content: string,
+  mode?: number,
+): Promise<void> {
+  const directory = path.dirname(destination);
   await mkdir(directory, { recursive: true });
   const temporaryPath = path.join(
     directory,
-    `.settings.json.${process.pid}.${Date.now()}.${Math.random().toString(16).slice(2)}.tmp`,
+    `.${path.basename(destination)}.${process.pid}.${Date.now()}.${Math.random().toString(16).slice(2)}.tmp`,
   );
+  let handle: Awaited<ReturnType<typeof open>> | undefined;
   try {
-    await writeFile(temporaryPath, JSON.stringify(settings, null, 2) + "\n", "utf-8");
-    await rename(temporaryPath, settingsPath);
+    handle = await open(temporaryPath, "wx", mode ?? 0o666);
+    await handle.writeFile(content, "utf8");
+    if (mode !== undefined) await handle.chmod(mode);
+    await handle.sync();
+    await handle.close();
+    handle = undefined;
+    await rename(temporaryPath, destination);
+    if (process.platform !== "win32") {
+      const directoryHandle = await open(directory, "r");
+      try { await directoryHandle.sync(); } finally { await directoryHandle.close(); }
+    }
   } catch (err) {
+    if (handle) {
+      try { await handle.close(); } catch { /* best-effort close before cleanup */ }
+    }
     try {
       await unlink(temporaryPath);
     } catch {
@@ -1112,6 +1427,8 @@ export async function computeRuntimeToolkitInventory(toolkitRoot: string): Promi
   const files = [
     "scripts/lib/runtime-role-lifecycle.cjs", "scripts/lib/runtime-host-claude.cjs",
     "scripts/lib/runtime-consultation.cjs", "scripts/lib/runtime-collaboration-entrypoints.cjs",
+    "scripts/lib/runtime-consumer-quality-gate.cjs",
+    "scripts/tools/wave-control-plane.cjs",
     "scripts/lib/wave-control-plane.cjs",
     "scripts/lib/verdict-evidence-contract-cli.cjs",
     "scripts/lib/verdict-evidence-contract.cjs", "scripts/lib/verdict-artifact-confinement.cjs",
@@ -1119,7 +1436,7 @@ export async function computeRuntimeToolkitInventory(toolkitRoot: string): Promi
     "scripts/lib/runtime-collaboration-policy.json", "scripts/lib/runtime-routing.json",
     "scripts/lib/runtime-bridge-codex.cjs", "scripts/lib/runtime-project-context.cjs",
     ".claude/settings.json", ".claude/model-profiles.json", "setup/claude-host-contract.json",
-    "mcp-server/package-lock.json",
+    "mcp-server/package-lock.json", RETIRED_ARTIFACT_REGISTRY,
     ...RUNTIME_CORE_HOOK_FILES.map((file) => `.claude/hooks/${file}`),
     ...RUNTIME_CONSUMER_FILES,
     ...RUNTIME_ROLE_TEMPLATES.map((role) => `.claude/agents/${role}.md`),
@@ -1130,6 +1447,11 @@ export async function computeRuntimeToolkitInventory(toolkitRoot: string): Promi
   await collectInventoryDirectory(canonicalRoot, "scripts/lib/runtime-consultation", files);
   await collectInventoryDirectory(canonicalRoot, "scripts/lib/runtime-role-lifecycle", files);
   await collectInventoryDirectory(canonicalRoot, "scripts/lib/runtime-bridge-codex", files);
+  // Keep every allowlisted launcher target and its sourced/dot-sourced helpers
+  // inside the content pin, including platform-specific implementations.
+  await collectInventoryDirectory(canonicalRoot, "scripts/sh", files);
+  await collectInventoryDirectory(canonicalRoot, "scripts/ps1", files);
+  await collectInventoryDirectory(canonicalRoot, "scripts/tools", files);
   await collectInventoryDirectory(canonicalRoot, "mcp-server/build", files);
   const unique = [...new Set(files)].sort();
   const inventory: RuntimeToolkitInventoryEntry[] = [];
@@ -1161,6 +1483,7 @@ export interface RuntimeConsumerInstallResult {
   registrations?: number;
   manifestChanged?: boolean;
   repairedExecutables?: string[];
+  retiredArtifacts?: string[];
 }
 
 /**
@@ -1207,11 +1530,14 @@ export async function installRuntimeConsumer(
     if (consumer === toolkit) return { ok: false, reason: "runtime-consumer-must-be-distinct", dryRun };
     const manifestPath = path.join(consumer, "l0-manifest.json");
     const manifest = await readManifest(manifestPath);
+    const manifestBefore = manifestStateWithoutTimestamp(manifest);
     const l0Sources = manifest.sources.filter((source) => source.layer === "L0" && source.role === "tooling");
     if (l0Sources.length !== 1 || l0Sources[0].remote !== undefined ||
         !(await l0SourceResolvesToToolkit(projectRoot, l0Sources[0].path, toolkit))) {
       return { ok: false, reason: "runtime-l0-source-invalid", dryRun };
     }
+    const retiredArtifactPlan = await planRetiredArtifactReconciliation(consumer, toolkit, manifest);
+    prepareRetiredArtifactChecksums(manifest, retiredArtifactPlan);
     const consumerLayer: "L1" | "L2" = await access(path.join(consumer, "skills", "registry.json"))
       .then(() => "L1" as const).catch(() => "L2" as const);
     const toolkitCommit = execFileSync("git", ["rev-parse", "HEAD"], { cwd: toolkit, encoding: "utf8" }).trim();
@@ -1276,6 +1602,7 @@ export async function installRuntimeConsumer(
 
     const roleWrites: Array<{ role: string; source: string; destination: string; content: string; migration: boolean }> = [];
     for (const role of RUNTIME_ROLE_TEMPLATES) {
+      const relative = `.claude/agents/${role}.md`;
       const source = path.join(toolkit, ".claude", "agents", `${role}.md`);
       const destination = path.join(consumer, ".claude", "agents", `${role}.md`);
       const content = await readFile(source, "utf8");
@@ -1283,7 +1610,10 @@ export async function installRuntimeConsumer(
       try {
         const existing = await readFile(destination, "utf8");
         if (existing === content) continue;
-        if (stripL0Metadata(existing) !== content) {
+        const existingDigest = `sha256:${createHash("sha256").update(existing).digest("hex")}`;
+        const isPreviouslyManaged = manifest.checksums[relative] === existingDigest;
+        const isCurrentOrdinarySyncCopy = stripL0Metadata(existing) === content;
+        if (!isPreviouslyManaged && !isCurrentOrdinarySyncCopy) {
           return { ok: false, reason: `runtime-role-conflict:${role}`, dryRun };
         }
         migration = true;
@@ -1314,7 +1644,7 @@ export async function installRuntimeConsumer(
         }
         const recorded = manifest.checksums[relative];
         const existingDigest = `sha256:${createHash("sha256").update(existing).digest("hex")}`;
-        if (recorded !== existingDigest && !isKnownLegacyDetektHook(relative, existing)) {
+        if (recorded !== existingDigest && !isKnownLegacyRuntimeFile(relative, existing)) {
           return { ok: false, reason: `runtime-consumer-file-conflict:${relative}`, dryRun };
         }
       } catch (err) {
@@ -1325,17 +1655,18 @@ export async function installRuntimeConsumer(
       consumerFileWrites.push({ relative, destination, content });
     }
 
-    const manifestBefore = manifestStateWithoutTimestamp(manifest);
     if (!dryRun) {
+      await applyRetiredArtifactPlan(consumer, retiredArtifactPlan);
       for (const write of consumerFileWrites) {
-        await mkdir(path.dirname(write.destination), { recursive: true });
-        await writeFile(write.destination, write.content, "utf8");
-        if (EXECUTABLE_CONSUMER_FILES.has(write.relative)) await chmod(write.destination, 0o755);
+        await writeRuntimeFileAtomically(
+          write.destination,
+          write.content,
+          EXECUTABLE_CONSUMER_FILES.has(write.relative) ? 0o755 : undefined,
+        );
       }
       for (const destination of executableRepairs) await chmod(destination, 0o755);
       for (const write of roleWrites) {
-        await mkdir(path.dirname(write.destination), { recursive: true });
-        await writeFile(write.destination, write.content, "utf8");
+        await writeRuntimeFileAtomically(write.destination, write.content);
       }
       if (JSON.stringify(nextSettings) !== JSON.stringify(settings)) {
         await writeSettingsAtomically(settingsPath, nextSettings);
@@ -1353,7 +1684,9 @@ export async function installRuntimeConsumer(
       }
       if (manifestStateWithoutTimestamp(manifest) !== manifestBefore) {
         manifest.last_synced = new Date().toISOString();
-        await writeManifest(manifestPath, manifest);
+        // The manifest is the transaction commit marker: publish it only after
+        // every runtime asset, role and settings update is durably visible.
+        await writeRuntimeFileAtomically(manifestPath, JSON.stringify(manifest, null, 2) + "\n");
       }
     }
     const manifestChanged = !dryRun && manifestStateWithoutTimestamp(manifest) !== manifestBefore;
@@ -1364,6 +1697,7 @@ export async function installRuntimeConsumer(
       migratedRoles: roleWrites.filter((write) => write.migration).map((write) => write.role),
       registrations: RUNTIME_HOOK_REGISTRATIONS.length,
       manifestChanged,
+      retiredArtifacts: retiredArtifactPlan.removePaths,
       repairedExecutables: executableRepairs.map((destination) =>
         path.relative(consumer, destination).replace(/\\/g, "/")),
     };
@@ -1518,6 +1852,11 @@ export async function mergeHookRegistrations(
       for (const hook of block.hooks) {
         const file = classifyOwnedHookCommand(hook.command, managedFiles);
         if (!file) { retained.push(hook); continue; }
+        // Exclusions are additive: they prevent this invocation from copying
+        // or registering a hook, but must not delete a registration already
+        // owned by the consumer. This is especially important for explicit
+        // manifests, where every unselected hook is treated as excluded.
+        if (excludeSet.has(file)) { retained.push(hook); continue; }
         const desired = desiredCommandFor(file);
         const spec = L0_REQUIRED_HOOK_REGISTRATIONS.find((entry) =>
           entry.event === event && entry.matcher === block.matcher && entry.file === file);
@@ -1925,8 +2264,15 @@ export async function syncMultiSource(
     sourceCounts[source.layer] = registry.entries.length;
   }
 
+  const l0Layer = orderedSources.find((source) => source.layer === "L0" && source.role === "tooling");
+  const msL0Root = l0Layer ? resolvedPaths[l0Layer.layer] : undefined;
+  if (!msL0Root) throw new Error("retired-artifact-l0-source-missing");
+  const retiredArtifactPlan = await planRetiredArtifactReconciliation(projectRoot, msL0Root, manifest);
+  prepareRetiredArtifactChecksums(manifest, retiredArtifactPlan);
+
   // Merge registries — last wins per name+type
   const merged = mergeRegistries(registryTuples);
+  assertRegistryDoesNotReintroduceRetiredArtifacts(merged, retiredArtifactPlan);
 
   // Detect overrides (entries from earlier layers replaced by later ones)
   const overrides: MultiSourceSyncReport["overrides"] = [];
@@ -1990,6 +2336,15 @@ export async function syncMultiSource(
     sourceCounts,
     overrides,
   };
+  if (retiredArtifactPlan.removePaths.length > 0) {
+    report.warnings.push(
+      `Permanent L0 retirement ${dryRun ? "would remove" : "will remove"}: ${retiredArtifactPlan.removePaths.join(", ")}`,
+    );
+    if (dryRun) {
+      report.removed += retiredArtifactPlan.removePaths.length;
+      report.removedPaths.push(...retiredArtifactPlan.removePaths);
+    }
+  }
 
   // Log overrides as warnings for visibility
   for (const ov of overrides) {
@@ -2121,10 +2476,12 @@ export async function syncMultiSource(
   // Reconcile hooks and settings before publishing the manifest. A hook
   // conflict or settings failure must never bless a partially reconciled
   // consumer by advancing checksums/last_synced.
-  const msL0Root = resolvedPaths[orderedSources[0].layer] ?? "";
+  const msHookExclusions = msL0Root
+    ? await hookExclusionsForManifest(manifest, msL0Root)
+    : manifest.selection?.exclude_hooks ?? [];
   if (msL0Root) {
     const hookResult = options.runtime ? { copied: [], skipped: [], errors: [] }
-      : await syncHooks(msL0Root, projectRoot, manifest.selection?.exclude_hooks ?? [], dryRun);
+      : await syncHooks(msL0Root, projectRoot, msHookExclusions, dryRun);
     for (const err of hookResult.errors) report.errors.push(`Hook sync: ${err}`);
     if ("repaired" in hookResult && hookResult.repaired.length > 0) {
       report.warnings.push(
@@ -2137,7 +2494,7 @@ export async function syncMultiSource(
     const msMergeResult = options.runtime
       ? { added: [], skipped: [], dryRun }
       : await mergeHookRegistrations(
-        projectRoot, dryRun, msL0Root, manifest.selection?.exclude_hooks ?? [],
+        projectRoot, dryRun, msL0Root, msHookExclusions,
       );
     if (msMergeResult.added.length > 0) {
       report.warnings.push(
@@ -2177,6 +2534,16 @@ export async function syncMultiSource(
             `Post-sync verification failed: ${dest} was not written to disk`,
           );
         }
+      }
+    }
+
+    if (report.errors.length === 0) {
+      try {
+        await applyRetiredArtifactPlan(projectRoot, retiredArtifactPlan);
+        report.removed += retiredArtifactPlan.removePaths.length;
+        report.removedPaths.push(...retiredArtifactPlan.removePaths);
+      } catch (err) {
+        report.errors.push(err instanceof Error ? err.message : String(err));
       }
     }
 
@@ -2342,8 +2709,12 @@ export async function syncL0(
     await readHookSettingsOrThrow(path.join(projectRoot, ".claude", "settings.json"));
   }
 
+  const retiredArtifactPlan = await planRetiredArtifactReconciliation(projectRoot, l0Root, manifest);
+  prepareRetiredArtifactChecksums(manifest, retiredArtifactPlan);
+
   // Generate registry from L0 root
   const registry = await generateRegistry(l0Root);
+  assertRegistryDoesNotReintroduceRetiredArtifacts(registry.entries, retiredArtifactPlan);
 
   // ── Fix #1: Empty registry guardrail ──────────────────────────────────
   if (registry.entries.length === 0) {
@@ -2386,6 +2757,15 @@ export async function syncL0(
     conflictPaths: [],
     manifestChanged: false,
   };
+  if (retiredArtifactPlan.removePaths.length > 0) {
+    report.warnings.push(
+      `Permanent L0 retirement ${dryRun ? "would remove" : "will remove"}: ${retiredArtifactPlan.removePaths.join(", ")}`,
+    );
+    if (dryRun) {
+      report.removed += retiredArtifactPlan.removePaths.length;
+      report.removedPaths.push(...retiredArtifactPlan.removePaths);
+    }
+  }
 
   // ── Fix #1 + #5: Count removes and apply threshold ────────────────────
   const removeActions = actions.filter((a) => a.action === "remove");
@@ -2508,8 +2888,9 @@ export async function syncL0(
 
   // Reconcile hooks/settings first; only a fully successful reconciliation may
   // publish new manifest checksums or last_synced.
+  const slHookExclusions = await hookExclusionsForManifest(manifest, l0Root);
   const slHookResult = options.runtime ? { copied: [], skipped: [], errors: [] }
-    : await syncHooks(l0Root, projectRoot, manifest.selection?.exclude_hooks ?? [], dryRun);
+    : await syncHooks(l0Root, projectRoot, slHookExclusions, dryRun);
   for (const err of slHookResult.errors) report.errors.push(`Hook sync: ${err}`);
   if ("repaired" in slHookResult && slHookResult.repaired.length > 0) {
     report.warnings.push(
@@ -2521,7 +2902,7 @@ export async function syncL0(
     const slMergeResult = options.runtime
       ? { added: [], skipped: [], dryRun }
       : await mergeHookRegistrations(
-        projectRoot, dryRun, l0Root, manifest.selection?.exclude_hooks ?? [],
+        projectRoot, dryRun, l0Root, slHookExclusions,
       );
     if (slMergeResult.added.length > 0) {
       report.warnings.push(
@@ -2563,6 +2944,16 @@ export async function syncL0(
             `Post-sync verification failed: ${dest} was not written to disk`,
           );
         }
+      }
+    }
+
+    if (report.errors.length === 0) {
+      try {
+        await applyRetiredArtifactPlan(projectRoot, retiredArtifactPlan);
+        report.removed += retiredArtifactPlan.removePaths.length;
+        report.removedPaths.push(...retiredArtifactPlan.removePaths);
+      } catch (err) {
+        report.errors.push(err instanceof Error ? err.message : String(err));
       }
     }
 
@@ -2720,7 +3111,7 @@ export async function syncHooks(
         const relative = `.claude/hooks/${filename}`;
         state = sourceBytes.equals(destinationBytes)
           ? "current"
-          : isKnownLegacyDetektHook(relative, destinationBytes) ? "legacy" : "conflict";
+          : isKnownLegacyRuntimeFile(relative, destinationBytes) ? "legacy" : "conflict";
       }
       shellPlans.set(filename, { source, destination, state });
       if (state === "conflict") {

@@ -11,11 +11,10 @@ Audit README.md and AGENTS.md against the current state of the repo. Surfaces st
 
 ### macOS / Linux
 ```bash
-COMMON_DOC="${ANDROID_COMMON_DOC:?ANDROID_COMMON_DOC is not set}"
-bash "$COMMON_DOC/scripts/sh/readme-audit.sh" --project-root "$(pwd)"
+node .claude/runtime/l0-toolkit-launcher.cjs run readme-audit --project-root "$PWD" -- $ARGUMENTS
 ```
 
 ### Windows (PowerShell)
 ```powershell
-
+node .claude/runtime/l0-toolkit-launcher.cjs run readme-audit --project-root (Get-Location).Path -- $ARGUMENTS
 ```

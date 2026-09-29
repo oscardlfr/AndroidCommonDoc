@@ -290,13 +290,13 @@ MOCKEOF
   [ -f "$twin_a" ] || skip "setup/agent-templates/quality-gater.md not found"
   [ -f "$twin_b" ] || skip ".claude/agents/quality-gater.md not found"
 
-  # Each twin must contain the wiring strings that prove secret-scan-report.sh
-  # is the authoritative scanner producer referenced in the quality-gater protocol.
+  # Each twin must route the authoritative scanner producer through the
+  # qualified consumer-local runtime adapter rather than a raw L0 script path.
   for twin in "$twin_a" "$twin_b"; do
-    grep -q "secret-scan-report.sh" "$twin" \
-      || { echo "MISSING: 'secret-scan-report.sh' in $twin" >&2; return 1; }
-    grep -q "do NOT proceed to Step 10" "$twin" \
-      || { echo "MISSING: 'do NOT proceed to Step 10' in $twin" >&2; return 1; }
+    grep -q "l0-toolkit-launcher.cjs run secret-scan" "$twin" \
+      || { echo "MISSING: runtime adapter secret-scan operation in $twin" >&2; return 1; }
+    grep -q "Non-zero exit.*exit 1 immediately" "$twin" \
+      || { echo "MISSING: fail-closed secret scan exit rule in $twin" >&2; return 1; }
     grep -q "Step S: Secret Scan" "$twin" \
       || { echo "MISSING: 'Step S: Secret Scan' in $twin" >&2; return 1; }
   done

@@ -1,7 +1,7 @@
 /**
  * MCP tool: validate-claude-md
  *
- * Validates CLAUDE.md files for ecosystem alignment:
+ * Validates the portable AGENTS.md + CLAUDE.md adapter contract:
  * - Template structure (identity header, mandatory sections, delegation)
  * - Line count budget (warn >150, error >200)
  * - Canonical rule coverage (per-layer rule matching)
@@ -40,6 +40,7 @@ export interface ValidationResult {
   errors: number;
   warnings: number;
   issues: ValidationIssue[];
+  bundles: Array<{ path: string; layer: string }>;
   summary: string;
 }
 
@@ -58,7 +59,16 @@ export interface ClaudeMdFile {
   path: string;
   layer: string;
   content: string;
+  agentsPath?: string;
+  agentsContent?: string;
 }
+
+export interface ProjectInstructionRoot {
+  name: string;
+  path: string;
+}
+
+type CanonicalCoverageSources = Record<string, string[]>;
 
 // ---------------------------------------------------------------------------
 // Known project names for circular reference detection
@@ -87,9 +97,7 @@ const L2_PROJECT_NAMES: string[] = [];
 /**
  * Validate the template structure of a CLAUDE.md file.
  *
- * Accepts two styles:
- * - **Legacy**: `> **Layer:** L{n}` + `> **Inherits:**` + `> **Purpose:**`
- * - **Boris Cherny**: `> L{n} {Type} — description` one-liner + Workflow Orchestration section
+ * Accepts the current thin adapter plus two deprecated standalone formats.
  *
  * L0-global (~/.claude/CLAUDE.md) is exempt from identity header requirement
  * since it is the root of the hierarchy.
@@ -107,6 +115,12 @@ export function validateTemplateStructure(
 
   // L0-global is the root -- exempt from identity header
   if (layer === "L0-global") {
+    return issues;
+  }
+
+  // Current portable style: CLAUDE.md is deliberately a tiny adapter whose
+  // explicit import makes the checked-in AGENTS.md contract authoritative.
+  if (/^\s*@AGENTS\.md\s*$/m.test(content)) {
     return issues;
   }
 
@@ -188,7 +202,7 @@ export function validateTemplateStructure(
         level: "warning",
         category: "template-structure",
         file,
-        message: "Missing delegation statement (expected text like 'Delegates to ~/.claude/CLAUDE.md')",
+        message: "Missing delegation/import: legacy standalone CLAUDE.md is deprecated; migrate repository authority to AGENTS.md and import it with @AGENTS.md",
       });
     }
   } else {
@@ -197,7 +211,85 @@ export function validateTemplateStructure(
       level: "error",
       category: "template-structure",
       file,
-      message: "No recognized CLAUDE.md format. Expected Boris Cherny style (`> L{n} Type — description`) or legacy (`> **Layer:** L{n}`)",
+      message: "No recognized CLAUDE.md format or Layer declaration. Use a thin adapter that imports @AGENTS.md; standalone legacy formats are deprecated",
+    });
+  }
+
+  return issues;
+}
+
+/** Infer the repository layer from the portable AGENTS.md authority. */
+export function inferInstructionLayer(agentsContent: string): string | undefined {
+  return agentsContent.match(/>\s*\*\*Layer:\*\*\s*(L[012])\b/i)?.[1]?.toUpperCase()
+    ?? agentsContent.match(/^>\s*(L[012])\b/im)?.[1]?.toUpperCase();
+}
+
+/**
+ * Validate the current portable instruction contract.
+ *
+ * The import is explicit rather than relying on Claude Code's default
+ * CLAUDE.md-or-AGENTS.md selection, and host-global files are never treated as
+ * repository authority.
+ */
+export function validatePortableInstructionContract(
+  claudeContent: string,
+  agentsContent: string | undefined,
+  claudePath = "CLAUDE.md",
+  agentsPath = "AGENTS.md",
+): ValidationIssue[] {
+  const issues: ValidationIssue[] = [];
+
+  if (!agentsContent?.trim()) {
+    issues.push({
+      level: "error",
+      category: "portable-instructions",
+      file: agentsPath,
+      message: "Missing non-empty AGENTS.md portable instruction contract",
+    });
+    return issues;
+  }
+
+  if (!/^\s*@AGENTS\.md\s*$/m.test(claudeContent)) {
+    issues.push({
+      level: "error",
+      category: "portable-instructions",
+      file: claudePath,
+      message: "CLAUDE.md must explicitly import @AGENTS.md on its own line",
+    });
+  }
+
+  const alwaysLoaded = `${agentsContent}\n${claudeContent}`;
+  const retiredStaticOrchestrator = /\b(?:dev-lead|team-lead|project-manager)\s+(?:is|acts\s+as|must\s+be)\s+(?:the\s+)?(?:main\s+)?orchestrator\b/i;
+  if (retiredStaticOrchestrator.test(alwaysLoaded)) {
+    issues.push({
+      level: "error",
+      category: "retired-topology",
+      file: `${agentsPath} + ${claudePath}`,
+      message: "Retired static leadership-orchestrator instructions are forbidden",
+    });
+  }
+  const volatilePatterns = [
+    /\bPR\s*#\d+\s+(?:OPEN|GREEN|RED|MERGED)\b/i,
+    /\bcurrent\s+branch\s*:/i,
+    /\bHEAD\s*[:=]\s*[0-9a-f]{7,40}\b/i,
+    /\bCI\s+(?:is\s+)?(?:GREEN|RED|RUNNING)\b/i,
+  ];
+  if (volatilePatterns.some((pattern) => pattern.test(alwaysLoaded))) {
+    issues.push({
+      level: "warning",
+      category: "instruction-hygiene",
+      file: `${agentsPath} + ${claudePath}`,
+      message: "Always-loaded instructions contain volatile PR/branch/CI state; move it to work evidence or backlog",
+    });
+  }
+
+  const agentsLines = agentsContent.split("\n").length;
+  if (agentsLines > 200) {
+    issues.push({
+      level: "warning",
+      category: "line-count",
+      file: agentsPath,
+      message: `Portable contract exceeds the 200-line context target: ${agentsLines} lines`,
     });
   }
 
@@ -341,6 +433,76 @@ export function validateCanonicalCoverage(
       file: "CLAUDE.md",
       message: `Canonical coverage: ${covered}/${layerRules.length} rules (${percent}%) for layer ${layer}`,
     });
+  }
+
+  return issues;
+}
+
+/**
+ * Verify every canonical rule against explicit repository-owned category
+ * sources. This keeps thin runtime adapters small without turning the
+ * canonical registry into a self-validating no-op.
+ */
+export async function validateCanonicalSourceCoverage(
+  rootDir: string,
+  rules: CanonicalRule[],
+  coverageSources: CanonicalCoverageSources,
+): Promise<ValidationIssue[]> {
+  const issues: ValidationIssue[] = [];
+  const contentByCategory = new Map<string, string>();
+
+  for (const category of new Set(rules.map((rule) => rule.category))) {
+    const sources = coverageSources[category];
+    if (!sources?.length) {
+      issues.push({
+        level: "error",
+        category: "canonical-source-coverage",
+        file: "docs/guides/canonical-rules.json",
+        message: `No repository-owned coverage_sources entry for category ${category}`,
+      });
+      continue;
+    }
+
+    const chunks: string[] = [];
+    for (const relativePath of sources) {
+      const resolved = path.resolve(rootDir, relativePath);
+      const relative = path.relative(rootDir, resolved);
+      if (relative.startsWith("..") || path.isAbsolute(relative)) {
+        issues.push({
+          level: "error",
+          category: "canonical-source-coverage",
+          file: relativePath,
+          message: "Canonical coverage source must stay inside the repository root",
+        });
+        continue;
+      }
+      try {
+        chunks.push(await readFile(resolved, "utf-8"));
+      } catch (error) {
+        issues.push({
+          level: "error",
+          category: "canonical-source-coverage",
+          file: relativePath,
+          message: `Cannot read canonical coverage source: ${error instanceof Error ? error.message : String(error)}`,
+        });
+      }
+    }
+    contentByCategory.set(category, chunks.join("\n").toLowerCase());
+  }
+
+  for (const rule of rules) {
+    const content = contentByCategory.get(rule.category) ?? "";
+    const keywords = extractKeywords(rule.rule);
+    const matches = keywords.filter((keyword) => content.includes(keyword.toLowerCase()));
+    const threshold = Math.max(1, Math.ceil(keywords.length / 2));
+    if (matches.length < threshold) {
+      issues.push({
+        level: "error",
+        category: "canonical-source-coverage",
+        file: (coverageSources[rule.category] ?? []).join(", ") || "docs/guides/canonical-rules.json",
+        message: `Canonical rule ${rule.id} is not represented by its declared repository sources (matched ${matches.length}/${keywords.length} keywords)`,
+      });
+    }
   }
 
   return issues;
@@ -660,17 +822,20 @@ export async function validateClaudeMd(
   projectName?: string,
   checkCanonical = true,
   checkVersions = true,
+  projectsOverride?: ProjectInstructionRoot[],
 ): Promise<ValidationResult> {
   const allIssues: ValidationIssue[] = [];
 
   // Load canonical rules
   let canonicalRules: CanonicalRule[] = [];
+  let canonicalCoverageSources: CanonicalCoverageSources = {};
   if (checkCanonical) {
     try {
       const rulesPath = path.join(rootDir, "docs", "guides", "canonical-rules.json");
       const rulesRaw = await readFile(rulesPath, "utf-8");
       const rulesData = JSON.parse(rulesRaw);
       canonicalRules = rulesData.rules ?? [];
+      canonicalCoverageSources = rulesData.coverage_sources ?? {};
     } catch (error) {
       allIssues.push({
         level: "warning",
@@ -702,98 +867,106 @@ export async function validateClaudeMd(
   // Discover CLAUDE.md files
   const claudeFiles: ClaudeMdFile[] = [];
 
-  // Always check global CLAUDE.md
-  try {
-    const globalPath = path.join(
-      process.env.HOME ?? process.env.USERPROFILE ?? "",
-      ".claude",
-      "CLAUDE.md",
-    );
-    const globalContent = await readFile(globalPath, "utf-8");
-    claudeFiles.push({
-      path: "~/.claude/CLAUDE.md",
-      layer: "L0-global",
-      content: globalContent,
-    });
-  } catch {
-    allIssues.push({
-      level: "warning",
-      category: "file-discovery",
-      file: "~/.claude/CLAUDE.md",
-      message: "Global CLAUDE.md not found at ~/.claude/CLAUDE.md",
-    });
-  }
+  // Personal ~/.claude files are intentionally not inputs. Repository
+  // validation and generated artifacts must be deterministic on CI and on a
+  // consumer machine that has different personal preferences.
 
-  // Check toolkit CLAUDE.md (L0)
-  try {
-    const toolkitClaudeMd = path.join(rootDir, "CLAUDE.md");
-    const toolkitContent = await readFile(toolkitClaudeMd, "utf-8");
+  const loadBundle = async (
+    bundleRoot: string,
+    displayName: string,
+    required: boolean,
+  ): Promise<void> => {
+    const [claudeResult, agentsResult] = await Promise.allSettled([
+      readFile(path.join(bundleRoot, "CLAUDE.md"), "utf-8"),
+      readFile(path.join(bundleRoot, "AGENTS.md"), "utf-8"),
+    ]);
+    const claudeExists = claudeResult.status === "fulfilled";
+    const agentsExists = agentsResult.status === "fulfilled";
+    if (!required && !claudeExists && !agentsExists) return;
+
+    const prefix = displayName === "toolkit" ? "" : `${displayName}/`;
+    if (!claudeExists) {
+      allIssues.push({
+        level: "error",
+        category: "file-discovery",
+        file: `${prefix}CLAUDE.md`,
+        message: `Missing CLAUDE.md for ${displayName} instruction bundle`,
+      });
+    }
+    if (!agentsExists) {
+      allIssues.push({
+        level: "error",
+        category: "file-discovery",
+        file: `${prefix}AGENTS.md`,
+        message: `Missing AGENTS.md for ${displayName} instruction bundle`,
+      });
+    }
+    if (!claudeExists || !agentsExists) return;
+
+    const layer = inferInstructionLayer(agentsResult.value);
+    if (!layer) {
+      allIssues.push({
+        level: "error",
+        category: "layer-classification",
+        file: `${prefix}AGENTS.md`,
+        message: "AGENTS.md must declare `> **Layer:** L0`, `L1`, or `L2`",
+      });
+      return;
+    }
+    if (displayName === "toolkit" && layer !== "L0") {
+      allIssues.push({
+        level: "error",
+        category: "layer-classification",
+        file: "AGENTS.md",
+        message: `Toolkit AGENTS.md must declare L0, found ${layer}`,
+      });
+      return;
+    }
+
     claudeFiles.push({
-      path: "CLAUDE.md",
-      layer: "L0",
-      content: toolkitContent,
+      path: `${prefix}CLAUDE.md`,
+      layer,
+      content: claudeResult.value,
+      agentsPath: `${prefix}AGENTS.md`,
+      agentsContent: agentsResult.value,
     });
-  } catch {
-    allIssues.push({
-      level: "error",
-      category: "file-discovery",
-      file: "CLAUDE.md",
-      message: "Toolkit CLAUDE.md not found at project root",
-    });
-  }
+  };
+
+  await loadBundle(rootDir, "toolkit", true);
 
   // Discover project CLAUDE.md files
   if (projectName) {
     // Validate specific project
-    const projects = await discoverProjects();
+    const projects = projectsOverride ?? await discoverProjects();
     const project = projects.find(
       (p) => p.name.toLowerCase() === projectName.toLowerCase(),
     );
     if (project) {
-      try {
-        const projClaudeMd = path.join(project.path, "CLAUDE.md");
-        const projContent = await readFile(projClaudeMd, "utf-8");
-        // Determine layer from content — supports both formats
-        const layerMatch = projContent.match(
-          />\s*\*\*Layer:\*\*\s*(L[012])/,
-        ) ?? projContent.match(
-          /^>\s*(L[012])\s+/m,
-        );
-        const layer = layerMatch ? layerMatch[1] : "L2";
-        claudeFiles.push({
-          path: `${project.name}/CLAUDE.md`,
-          layer,
-          content: projContent,
-        });
-      } catch {
-        allIssues.push({
-          level: "warning",
-          category: "file-discovery",
-          file: `${project.name}/CLAUDE.md`,
-          message: `CLAUDE.md not found for project ${project.name}`,
-        });
-      }
+      await loadBundle(project.path, project.name, true);
+    } else {
+      allIssues.push({
+        level: "error",
+        category: "file-discovery",
+        file: projectName,
+        message: `Project ${projectName} was not found`,
+      });
     }
   } else {
     // Discover all projects
-    const projects = await discoverProjects();
+    const projects = projectsOverride ?? await discoverProjects();
     for (const project of projects) {
-      try {
-        const projClaudeMd = path.join(project.path, "CLAUDE.md");
-        const projContent = await readFile(projClaudeMd, "utf-8");
-        const layerMatch = projContent.match(
-          />\s*\*\*Layer:\*\*\s*(L[012])/,
-        );
-        const layer = layerMatch ? layerMatch[1] : "L2";
-        claudeFiles.push({
-          path: `${project.name}/CLAUDE.md`,
-          layer,
-          content: projContent,
-        });
-      } catch {
-        // Silently skip projects without CLAUDE.md
-      }
+      await loadBundle(project.path, project.name, Boolean(projectsOverride));
     }
+  }
+
+  if (checkCanonical && canonicalRules.length > 0) {
+    allIssues.push(
+      ...await validateCanonicalSourceCoverage(
+        rootDir,
+        canonicalRules,
+        canonicalCoverageSources,
+      ),
+    );
   }
 
   // Run validations on each file
@@ -809,27 +982,26 @@ export async function validateClaudeMd(
     const lineIssues = validateLineCount(file.content, file.path);
     allIssues.push(...lineIssues);
 
-    // 3. Canonical coverage
-    if (checkCanonical && canonicalRules.length > 0) {
-      const coverageIssues = validateCanonicalCoverage(
-        file.content,
-        file.layer,
-        canonicalRules,
+    // 2b. Portable AGENTS.md authority + explicit Claude adapter import.
+    if (file.layer !== "L0-global") {
+      allIssues.push(
+        ...validatePortableInstructionContract(
+          file.content,
+          file.agentsContent,
+          file.path,
+          file.agentsPath ?? "AGENTS.md",
+        ),
       );
-      for (const issue of coverageIssues) {
-        issue.file = file.path;
-        allIssues.push(issue);
-      }
     }
 
-    // 4. Override validation
+    // 3. Override validation
     const overrideIssues = validateOverrides(file.content, canonicalRules);
     for (const issue of overrideIssues) {
       issue.file = file.path;
       allIssues.push(issue);
     }
 
-    // 5. Version consistency
+    // 4. Version consistency
     if (checkVersions && Object.keys(versionsManifest).length > 0) {
       const versionIssues = checkVersionConsistency(
         file.content,
@@ -861,7 +1033,8 @@ export async function validateClaudeMd(
     errors,
     warnings,
     issues: allIssues,
-    summary: `CLAUDE.md validation: ${errors} error(s), ${warnings} warning(s) across ${claudeFiles.length} file(s)`,
+    bundles: claudeFiles.map((file) => ({ path: file.path, layer: file.layer })),
+    summary: `Portable instruction validation: ${errors} error(s), ${warnings} warning(s) across ${claudeFiles.length} AGENTS.md/CLAUDE.md bundle(s)`,
   };
 }
 
@@ -882,9 +1055,9 @@ export function registerValidateClaudeMdTool(
   server.registerTool(
     "validate-claude-md",
     {
-      title: "Validate CLAUDE.md",
+      title: "Validate agent instructions",
       description:
-        "Validates CLAUDE.md files for ecosystem alignment: template structure, canonical rule coverage, circular references, override validity, version consistency, and cross-file duplicates. Returns structured JSON with errors, warnings, and pass/fail status.",
+        "Validates portable AGENTS.md contracts and their CLAUDE.md adapters: explicit loading, context budgets, retired topology, volatile state, circular references, overrides and version consistency.",
       inputSchema: z.object({
         project: z
           .string()

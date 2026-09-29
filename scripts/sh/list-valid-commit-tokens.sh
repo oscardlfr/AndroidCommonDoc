@@ -2,8 +2,8 @@
 set -euo pipefail
 
 # Lists valid commit types and scopes from the project's commit-lint config.
-# Types sourced from .github/workflows/reusable-commit-lint.yml (default: field).
-# Scopes sourced from .commitlintrc.json (valid_scopes array).
+# Types are toolkit-owned and sourced from the L0 reusable workflow.
+# Scopes are consumer-owned and sourced from the target project's config.
 
 # --- Color helpers ---
 RED='\033[31m'
@@ -14,6 +14,8 @@ RESET='\033[0m'
 
 # --- Argument parsing ---
 PROJECT_ROOT="$(pwd)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+TOOLKIT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd -P)"
 FORMAT="human"
 
 while [[ $# -gt 0 ]]; do
@@ -22,12 +24,16 @@ while [[ $# -gt 0 ]]; do
             PROJECT_ROOT="$2"
             shift 2
             ;;
+        --toolkit-root)
+            TOOLKIT_ROOT="$2"
+            shift 2
+            ;;
         --format)
             FORMAT="$2"
             shift 2
             ;;
         -h|--help)
-            echo "Usage: $0 [--project-root DIR] [--format human|json]"
+            echo "Usage: $0 [--project-root DIR] [--toolkit-root DIR] [--format human|json]"
             exit 0
             ;;
         *)
@@ -46,7 +52,7 @@ fi
 TYPES_SOURCE=".github/workflows/reusable-commit-lint.yml"
 SCOPES_SOURCE=".commitlintrc.json"
 
-TYPES_FILE="${PROJECT_ROOT}/${TYPES_SOURCE}"
+TYPES_FILE="${TOOLKIT_ROOT}/${TYPES_SOURCE}"
 SCOPES_FILE="${PROJECT_ROOT}/${SCOPES_SOURCE}"
 
 # --- Validate source files exist ---
