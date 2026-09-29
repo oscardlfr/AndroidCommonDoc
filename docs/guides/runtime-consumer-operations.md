@@ -62,15 +62,7 @@ node .claude/runtime/l0-entrypoint-launcher.cjs init-session
 node .claude/runtime/l0-entrypoint-launcher.cjs init-session --orchestrate <slug>
 ```
 
-Its PreToolUse hook derives the trusted Node path, exact consumer root, and canonical base64url intent, then verifies and rewrites the request to the internal command. Missing or extra arguments, unsafe slugs, shell operators, foreign cwd, and an invalid installation fail closed. `/resume-work`, `/work`, `/ingest-content`, and `/monitor-docs` retain the internal closed form documented in their skill files.
-
-`READY` is readiness of the support plane, not a claim that every native actor
-is currently executing. `READY`, `WAITING`, and `BUSY` are the three healthy
-role states: `WAITING` means an actor stopped normally, left one exact live
-resume handle, and is addressable without being duplicated. Repeating
-`/init-session --orchestrate` therefore does not wake or respawn a `WAITING`
-role. Use `/resume-work` for a checkpoint continuation or `/work` for new work;
-those entry points own the correlated `SendMessage` wake-up.
+Its PreToolUse hook derives the trusted Node path, exact consumer root, and canonical base64url intent, then verifies and rewrites the request to the internal command. Missing or extra arguments, unsafe slugs, shell operators, foreign cwd, and an invalid installation fail closed. `/resume-work`, `/work`, `/ingest-content`, and `/monitor-docs` retain the internal closed form documented in their skill files. `READY` is readiness of the support plane, not a claim that every native actor is currently executing. `READY`, `WAITING`, and `BUSY` are the three healthy role states: `WAITING` means an actor stopped normally, left one exact live resume handle, and is addressable without being duplicated. Repeating `/init-session --orchestrate` therefore does not wake or respawn a `WAITING` role. Use `/resume-work` for a checkpoint continuation or `/work` for new work; those entry points own the correlated `SendMessage` wake-up.
 
 The model must not discover the sibling toolkit, call `scripts/lib/runtime-collaboration-entrypoints.cjs` directly, or substitute
 `$PWD`, `$(pwd)`, `ANDROID_COMMON_DOC`, or another ambient path. A missing local
@@ -117,22 +109,7 @@ Authenticated entrypoint commands use canonical POSIX form with every token sing
 
 The persisted Claude session id does not make an actor reachable across host processes. Generation TTL is an upper bound, not proof that the originating process still owns a usable native teammate.
 A test that starts a second Claude process and expects `SendMessage` is invalid: the correct result is generation rotation plus `Agent` rehydration. Conversely, same-process checkpoint resume must exercise `SendMessage`; accepting `Agent` there would hide a lifecycle regression.
-A new process must not consume any older generation's handles. Cross-generation `SendMessage`, manual handle migration, and bridge workarounds are forbidden.
-
-A persisted `READY` state plus expired historical startup traces is not evidence that the
-actor is still reachable. If host-wide cancellation or process loss produces
-neither a live resume handle nor a terminal `SubagentStop` fence, `init-session`
-fails closed instead of reporting `READY` or guessing that it should respawn the
-actor. Start a new Claude process/session generation and rerun the canonical
-launcher; do not edit registry records, fabricate a fence, or reuse an old handle.
-When `SubagentStop` is observed, L0 records the scope-to-fence terminal fact before
-best-effort trace cleanup, so the next ensure can rehydrate that role exactly once.
-
-If a same-process resume delivery fails after its handle was reserved, the
-runtime records that exact action/session/tool failure, moves only the matching
-`BUSY` role to `DEAD`, and lets the next ordinary ensure rehydrate it through
-the policy-selected driver. Do not delete handles, edit registry JSON, or start
-a parallel `claude --resume` process as recovery.
+A new process must not consume any older generation's handles. Cross-generation `SendMessage`, manual handle migration, and bridge workarounds are forbidden. A persisted `READY` state plus expired historical startup traces is not evidence that the actor is still reachable. If host-wide cancellation or process loss produces neither a live resume handle nor a terminal `SubagentStop` fence, `init-session` fails closed instead of reporting `READY` or guessing that it should respawn the actor. Start a new Claude process/session generation and rerun the canonical launcher; do not edit registry records, fabricate a fence, or reuse an old handle. When `SubagentStop` is observed, L0 records the scope-to-fence terminal fact before best-effort trace cleanup, so the next ensure can rehydrate that role exactly once. If a same-process resume delivery fails after its handle was reserved, the runtime records that exact action/session/tool failure, moves only the matching `BUSY` role to `DEAD`, and lets the next ordinary ensure rehydrate it through the policy-selected driver. Do not delete handles, edit registry JSON, or start a parallel `claude --resume` process as recovery.
 
 ### Interactive terminal input
 
