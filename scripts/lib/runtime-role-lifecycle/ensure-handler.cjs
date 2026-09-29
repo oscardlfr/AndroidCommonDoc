@@ -236,26 +236,28 @@ function handleEnsure(rawArgv) {
         let liveness;
         if (stateResult.state === 'WAITING') {
           const handle = findUniqueClaudeResumeHandleForTarget(projectRoot, target);
-          liveness = handle.ok ? { ok: true, status: 'LIVE' }
-            : classifyClaudeSupportRoleLiveness(projectRoot, {
+          const classified = handle.ok || handle.reason !== 'UNAVAILABLE'
+            ? null : classifyClaudeSupportRoleLiveness(projectRoot, {
               generationId: binding.session_generation_id, planDigest: binding.plan_digest,
               role, runtimeSessionKey: binding.runtime_session_key, worktreeId: binding.worktree_id,
             });
-          if (!handle.ok && liveness.ok && liveness.status === 'LIVE') {
-            liveness = { ok: false, status: 'INVALID', reason: 'waiting-resume-handle-absent' };
-          }
+          liveness = handle.ok ? { ok: true, status: 'LIVE' }
+            : (classified && classified.ok && classified.status === 'ABSENT'
+              ? classified
+              : { ok: false, status: 'INVALID', reason: 'waiting-resume-handle-absent' });
         } else if (stateResult.state === 'BUSY') {
           const handle = findUniqueConsumedClaudeResumeHandleForBusyTarget(projectRoot, {
             generationId: binding.session_generation_id, ...target,
           }, stateResult.record);
-          liveness = handle.ok ? { ok: true, status: 'LIVE' }
-            : classifyClaudeSupportRoleLiveness(projectRoot, {
+          const classified = handle.ok || handle.reason !== 'UNAVAILABLE'
+            ? null : classifyClaudeSupportRoleLiveness(projectRoot, {
               generationId: binding.session_generation_id, planDigest: binding.plan_digest,
               role, runtimeSessionKey: binding.runtime_session_key, worktreeId: binding.worktree_id,
             });
-          if (!handle.ok && liveness.ok && liveness.status === 'LIVE') {
-            liveness = { ok: false, status: 'INVALID', reason: 'busy-resume-receipt-absent' };
-          }
+          liveness = handle.ok ? { ok: true, status: 'LIVE' }
+            : (classified && classified.ok && classified.status === 'ABSENT'
+              ? classified
+              : { ok: false, status: 'INVALID', reason: 'busy-resume-receipt-absent' });
         } else {
           liveness = classifyClaudeSupportRoleLiveness(projectRoot, {
             generationId: binding.session_generation_id, planDigest: binding.plan_digest,

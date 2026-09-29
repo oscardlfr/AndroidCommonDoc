@@ -304,6 +304,159 @@ function ensureLiveRoleSpawnAction(dir, sessionKey, role) {
   return findRoleSpawnAction(r1.result.actions);
 }
 
+function createReadyClaudeRoleFixture(dir, sessionKey, role, agentId) {
+  const action = ensureLiveRoleSpawnAction(dir, sessionKey, role);
+  const worktreeId = rll.computeWorktreeId(dir);
+  const planDigest = rll.discoverPlan(dir).planDigest;
+  const generationId = rll.peekSessionGeneration(dir, identityFor(sessionKey)).generationId;
+  const profileDigest = rll.roleProfileDigestFor(role);
+  const starting = rll.readRoleBindingState(
+    dir, worktreeId, planDigest, profileDigest, generationId, role,
+  );
+  const ready = rll.transitionRoleBinding(
+    dir, worktreeId, planDigest, profileDigest, generationId, role,
+    'STARTING', 'READY', starting.record, {},
+  );
+  assert.strictEqual(ready.ok, true, JSON.stringify(ready));
+  const actorBinding = rll.createRoleActorBinding(
+    dir, role, worktreeId, planDigest, generationId, 600,
+  );
+  assert.strictEqual(actorBinding.ok, true, JSON.stringify(actorBinding));
+  return {
+    action, actorBinding, worktreeId, planDigest, generationId, profileDigest,
+    ready: ready.record, agentId,
+  };
+}
+
+function ensureOrdinaryClaudeRole(dir, sessionKey, role) {
+  const grant = mintGrant(dir, sessionKey, role, 'ensure', ensureDigest([role]));
+  return runCli([
+    'ensure', '--project-root', dir, '--role', role,
+    '--lifecycle-binding', grant.grantId,
+  ], { RUNTIME_ROLE_LIFECYCLE_FAKE_CAPABILITIES: LIVE_CAPS });
+}
+
+test('ordinary ensure rejects WAITING without a live resume handle and preserves valid parked WAITING', () => {
+  const missing = makeGitProject('waiting-handle-missing-');
+  const parked = makeGitProject('waiting-handle-live-');
+  const role = LIVE_ROLE;
+  try {
+    writePlanFixture(missing, 'waiting-handle-missing');
+    const missingFixture = createReadyClaudeRoleFixture(
+      missing, 'waiting-handle-missing-session', role, 'waiting-handle-missing-agent',
+    );
+    const waitingWithoutHandle = rll.transitionRoleBinding(
+      missing, missingFixture.worktreeId, missingFixture.planDigest, missingFixture.profileDigest,
+      missingFixture.generationId, role, 'READY', 'WAITING', missingFixture.ready, {},
+    );
+    assert.strictEqual(waitingWithoutHandle.ok, true, JSON.stringify(waitingWithoutHandle));
+    const rejected = ensureOrdinaryClaudeRole(missing, 'waiting-handle-missing-session', role);
+    assert.strictEqual(rejected.status, 4, JSON.stringify(rejected.result));
+    assert.strictEqual(rejected.result.status, 'UNAVAILABLE', JSON.stringify(rejected.result));
+    assert.strictEqual(rejected.result.detail_code, 'CAPABILITY_UNAVAILABLE');
+    assert.deepStrictEqual(rejected.result.actions, []);
+    assert.strictEqual(rll.readRoleBindingState(
+      missing, missingFixture.worktreeId, missingFixture.planDigest, missingFixture.profileDigest,
+      missingFixture.generationId, role,
+    ).state, 'WAITING', 'fail-closed liveness must not mutate a possibly parked actor');
+
+    writePlanFixture(parked, 'waiting-handle-live');
+    const parkedFixture = createReadyClaudeRoleFixture(
+      parked, 'waiting-handle-live-session', role, 'waiting-handle-live-agent',
+    );
+    const handle = rll.parkClaudeResumeHandleForRoleActor(parked, {
+      sessionId: 'waiting-handle-live-session',
+      agentId: parkedFixture.agentId,
+      agentType: role,
+    });
+    assert.strictEqual(handle.ok, true, JSON.stringify(handle));
+    const accepted = ensureOrdinaryClaudeRole(parked, 'waiting-handle-live-session', role);
+    assert.strictEqual(accepted.status, 0, JSON.stringify(accepted.result));
+    assert.strictEqual(accepted.result.status, 'READY', JSON.stringify(accepted.result));
+    assert.deepStrictEqual(accepted.result.actions, []);
+    assert.strictEqual(rll.readRoleBindingState(
+      parked, parkedFixture.worktreeId, parkedFixture.planDigest, parkedFixture.profileDigest,
+      parkedFixture.generationId, role,
+    ).state, 'WAITING', 'a validated live handle must preserve parked WAITING semantics');
+  } finally {
+    cleanup(missing);
+    cleanup(parked);
+  }
+});
+
+test('ordinary ensure rejects BUSY without a consumed receipt and preserves exact resumed BUSY', () => {
+  const missing = makeGitProject('busy-receipt-missing-');
+  const resumed = makeGitProject('busy-receipt-live-');
+  const role = LIVE_ROLE;
+  try {
+    writePlanFixture(missing, 'busy-receipt-missing');
+    const missingFixture = createReadyClaudeRoleFixture(
+      missing, 'busy-receipt-missing-session', role, 'busy-receipt-missing-agent',
+    );
+    const waiting = rll.transitionRoleBinding(
+      missing, missingFixture.worktreeId, missingFixture.planDigest, missingFixture.profileDigest,
+      missingFixture.generationId, role, 'READY', 'WAITING', missingFixture.ready, {},
+    );
+    assert.strictEqual(waiting.ok, true, JSON.stringify(waiting));
+    const busyWithoutReceipt = rll.transitionRoleBinding(
+      missing, missingFixture.worktreeId, missingFixture.planDigest, missingFixture.profileDigest,
+      missingFixture.generationId, role, 'WAITING', 'BUSY', waiting.record, {},
+    );
+    assert.strictEqual(busyWithoutReceipt.ok, true, JSON.stringify(busyWithoutReceipt));
+    const rejected = ensureOrdinaryClaudeRole(missing, 'busy-receipt-missing-session', role);
+    assert.strictEqual(rejected.status, 4, JSON.stringify(rejected.result));
+    assert.strictEqual(rejected.result.status, 'UNAVAILABLE', JSON.stringify(rejected.result));
+    assert.strictEqual(rejected.result.detail_code, 'CAPABILITY_UNAVAILABLE');
+    assert.deepStrictEqual(rejected.result.actions, []);
+    assert.strictEqual(rll.readRoleBindingState(
+      missing, missingFixture.worktreeId, missingFixture.planDigest, missingFixture.profileDigest,
+      missingFixture.generationId, role,
+    ).state, 'BUSY', 'missing receipt must fail closed without mutating BUSY');
+
+    writePlanFixture(resumed, 'busy-receipt-live');
+    const resumedFixture = createReadyClaudeRoleFixture(
+      resumed, 'busy-receipt-live-session', role, 'busy-receipt-live-agent',
+    );
+    const handle = rll.parkClaudeResumeHandleForRoleActor(resumed, {
+      sessionId: 'busy-receipt-live-session',
+      agentId: resumedFixture.agentId,
+      agentType: role,
+    });
+    assert.strictEqual(handle.ok, true, JSON.stringify(handle));
+    const checkpointRef = 'checkpoint:' + '7'.repeat(64);
+    const grant = mintGrant(
+      resumed, 'busy-receipt-live-session', role, 'ensure',
+      ensureResumeDigest([role], checkpointRef),
+    );
+    const resumeActionResult = runCli([
+      'ensure', '--project-root', resumed, '--role', role,
+      '--resume-checkpoint', checkpointRef,
+      '--lifecycle-binding', grant.grantId,
+    ], { RUNTIME_ROLE_LIFECYCLE_FAKE_CAPABILITIES: LIVE_CAPS });
+    assert.strictEqual(resumeActionResult.result.status, 'ACTION_REQUIRED', JSON.stringify(resumeActionResult.result));
+    const action = resumeActionResult.result.actions[0];
+    const consumed = rll.consumeClaudeResumeHandleForObservedActor(resumed, {
+      actionId: action.action_id,
+      sessionId: 'busy-receipt-live-session',
+      toolUseId: 'busy-receipt-live-tool',
+      recipient: role,
+      message: action.payload.message,
+    });
+    assert.strictEqual(consumed.ok, true, JSON.stringify(consumed));
+    const accepted = ensureOrdinaryClaudeRole(resumed, 'busy-receipt-live-session', role);
+    assert.strictEqual(accepted.status, 0, JSON.stringify(accepted.result));
+    assert.strictEqual(accepted.result.status, 'READY', JSON.stringify(accepted.result));
+    assert.deepStrictEqual(accepted.result.actions, []);
+    assert.strictEqual(rll.readRoleBindingState(
+      resumed, resumedFixture.worktreeId, resumedFixture.planDigest, resumedFixture.profileDigest,
+      resumedFixture.generationId, role,
+    ).state, 'BUSY', 'the exact consumed receipt must preserve resumed BUSY semantics');
+  } finally {
+    cleanup(missing);
+    cleanup(resumed);
+  }
+});
+
 test('ensure resume checkpoint emits one idempotent SendMessage action and becomes READY only after the exact parked actor resumes', () => {
   const dir = makeGitProject();
   try {
