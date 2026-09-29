@@ -111,6 +111,15 @@ The persisted Claude session id does not make an actor reachable across host pro
 A test that starts a second Claude process and expects `SendMessage` is invalid: the correct result is generation rotation plus `Agent` rehydration. Conversely, same-process checkpoint resume must exercise `SendMessage`; accepting `Agent` there would hide a lifecycle regression.
 A new process must not consume any older generation's handles. Cross-generation `SendMessage`, manual handle migration, and bridge workarounds are forbidden.
 
+A persisted `READY` state plus historical startup traces is not evidence that the
+actor is still reachable. If host-wide cancellation or process loss produces
+neither a live resume handle nor a terminal `SubagentStop` fence, `init-session`
+fails closed instead of reporting `READY` or guessing that it should respawn the
+actor. Start a new Claude process/session generation and rerun the canonical
+launcher; do not edit registry records, fabricate a fence, or reuse an old handle.
+When `SubagentStop` is observed, L0 records the scope-to-fence terminal fact before
+best-effort trace cleanup, so the next ensure can rehydrate that role exactly once.
+
 ### Interactive terminal input
 
 Treat terminal control input and prompt submission as separate operations. When clearing a prompt, send `Ctrl+U`, wait, send the new prompt, then send `Enter`.

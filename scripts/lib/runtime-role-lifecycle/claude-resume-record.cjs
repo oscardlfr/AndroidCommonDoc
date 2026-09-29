@@ -3,6 +3,7 @@
 function createClaudeResumeRecord(deps) {
   const {
     CANONICAL_ROLES,
+    canonicalJSONStringify,
     CLAUDE_STARTUP_ACTOR_KEYS,
     CLAUDE_STARTUP_ACTOR_SCHEMA,
     claudeStartupActorPathFor,
@@ -12,6 +13,7 @@ function createClaudeResumeRecord(deps) {
     discoverPlan,
     findUniqueClaudePeerRoleActorBinding,
     fs,
+    ensureSecureRegistryDir,
     hasExactKeys,
     isCanonicalIsoUtc,
     isHexActionId,
@@ -24,6 +26,7 @@ function createClaudeResumeRecord(deps) {
     readClaudeAuthorityFence,
     readRegistryRecord,
     registryRepoDir,
+    publishNoClobber,
     sha256String,
     validateRoleActorBindingFor,
   } = deps;
@@ -35,6 +38,129 @@ const CLAUDE_RESUME_HANDLE_KEYS = Object.freeze([
   'teammate_name', 'worktree_id',
 ]);
 const CLAUDE_RESUME_HANDLE_SCAN_CAP = 1024;
+const CLAUDE_SUPPORT_ROLE_TERMINAL_SCHEMA = 'runtime/claude-support-role-terminal/v1';
+const CLAUDE_SUPPORT_ROLE_TERMINAL_KEYS = Object.freeze([
+  'actor_binding_id', 'agent_digest', 'authority_identity_id', 'fenced_at',
+  'plan_digest', 'role', 'schema', 'session_digest', 'session_generation_id',
+  'worktree_id',
+]);
+
+function claudeSupportRoleTerminalPathFor(projectRootOrRepoDescriptor, expected) {
+  const key = sha256String(canonicalJSONStringify([
+    expected.sessionGenerationId, expected.worktreeId, expected.planDigest, expected.role,
+    expected.actorBindingId,
+  ]));
+  return path.join(registryRepoDir(projectRootOrRepoDescriptor), 'claude-support-role-terminals', key + '.json');
+}
+
+function readClaudeSupportRoleTerminal(projectRoot, expected) {
+  const read = readRegistryRecord(claudeSupportRoleTerminalPathFor(projectRoot, expected));
+  if (!read.ok) return { ok: false, reason: 'terminal-read-failed' };
+  if (read.absent) return { ok: true, absent: true };
+  const record = read.obj;
+  if (!record || !hasExactKeys(record, CLAUDE_SUPPORT_ROLE_TERMINAL_KEYS)
+      || record.schema !== CLAUDE_SUPPORT_ROLE_TERMINAL_SCHEMA
+      || record.session_generation_id !== expected.sessionGenerationId
+      || record.worktree_id !== expected.worktreeId
+      || record.plan_digest !== expected.planDigest || record.role !== expected.role
+      || record.actor_binding_id !== expected.actorBindingId
+      || !isHexActionId(record.actor_binding_id)
+      || !isHexDigest64(record.session_digest) || !isHexDigest64(record.agent_digest)
+      || !isHexDigest64(record.authority_identity_id) || !isCanonicalIsoUtc(record.fenced_at)) {
+    return { ok: false, reason: 'terminal-shape-invalid' };
+  }
+  const fence = readClaudeAuthorityFence(projectRoot, record.authority_identity_id);
+  if (!fence.ok || fence.absent || fence.fence.fenced_at !== record.fenced_at) {
+    return { ok: false, reason: 'terminal-fence-invalid' };
+  }
+  return { ok: true, absent: false, record };
+}
+
+/** Persist the scope-to-fence join before best-effort raw trace cleanup. */
+function publishClaudeSupportRoleTerminal(projectRoot, event) {
+  try {
+    if (!event || typeof event.sessionId !== 'string' || event.sessionId.length === 0
+        || typeof event.agentId !== 'string' || event.agentId.length === 0
+        || !CANONICAL_ROLES.includes(event.agentType)) return { ok: false, reason: 'terminal-event-invalid' };
+    const worktreeId = computeWorktreeId(projectRoot);
+    const generation = peekSessionGeneration(projectRoot, {
+      provider: 'claude-hook', runtime_session_key: event.sessionId,
+    });
+    if (!generation.ok) return { ok: false, reason: 'terminal-scope-invalid' };
+    const startupRead = readRegistryRecord(
+      claudeStartupActorPathFor(projectRoot, generation.generationId, event.agentId),
+    );
+    // Not every canonical phase-scoped Claude agent is a persistent
+    // RoleActorBinding. Absence is therefore a legitimate no-op; a present
+    // but malformed startup record is never silently ignored.
+    if (!startupRead.ok) return { ok: false, reason: 'terminal-startup-read-failed' };
+    if (startupRead.absent) return { ok: true, skipped: true };
+    if (!startupRead.obj || !hasExactKeys(startupRead.obj, CLAUDE_STARTUP_ACTOR_KEYS)) {
+      return { ok: false, reason: 'terminal-startup-absent' };
+    }
+    const startup = startupRead.obj;
+    if (startup.schema !== CLAUDE_STARTUP_ACTOR_SCHEMA
+        || !isHexActionId(startup.action_id) || !isHexActionId(startup.actor_binding_id)
+        || !isHexDigest64(startup.action_digest) || !isHexDigest64(startup.claim_digest)
+        || !isHexDigest64(startup.host_contract_digest) || !isHexDigest64(startup.plan_digest)
+        || !isHexDigest64(startup.worktree_id) || !isHexDigest64(startup.session_digest)
+        || !isHexDigest64(startup.agent_digest) || !isHexDigest64(startup.session_generation_digest)
+        || !isCanonicalIsoUtc(startup.created_at) || !isCanonicalIsoUtc(startup.expiry)
+        || isoToMsForRegistry(startup.created_at) > currentClockMsForRegistry()
+        || currentClockMsForRegistry() >= isoToMsForRegistry(startup.expiry)
+        || startup.session_digest !== sha256String(event.sessionId)
+        || startup.agent_digest !== sha256String(event.agentId)
+        || startup.session_generation_digest !== sha256String(generation.generationId)
+        || startup.worktree_id !== worktreeId
+        || startup.role !== event.agentType) return { ok: false, reason: 'terminal-startup-mismatch' };
+    const actor = findUniqueClaudePeerRoleActorBinding(projectRoot, {
+      generationId: generation.generationId, planDigest: startup.plan_digest,
+      role: event.agentType, worktreeId,
+    });
+    if (!actor.ok || startup.actor_binding_id !== actor.binding.binding_id) {
+      return { ok: false, reason: 'terminal-actor-invalid' };
+    }
+    const authorityIdentityId = computeClaudeAuthorityIdentityId(
+      projectRoot, 'claude-hook', event.sessionId, event.agentId,
+    );
+    const fence = readClaudeAuthorityFence(projectRoot, authorityIdentityId);
+    if (!fence.ok || fence.absent) return { ok: false, reason: 'terminal-fence-absent' };
+    const record = {
+      schema: CLAUDE_SUPPORT_ROLE_TERMINAL_SCHEMA,
+      session_generation_id: generation.generationId,
+      worktree_id: worktreeId,
+      plan_digest: startup.plan_digest,
+      role: event.agentType,
+      actor_binding_id: actor.binding.binding_id,
+      session_digest: startup.session_digest,
+      agent_digest: startup.agent_digest,
+      authority_identity_id: authorityIdentityId,
+      fenced_at: fence.fence.fenced_at,
+    };
+    const terminalPath = claudeSupportRoleTerminalPathFor(projectRoot, {
+      sessionGenerationId: generation.generationId, worktreeId,
+      planDigest: startup.plan_digest, role: event.agentType,
+      actorBindingId: actor.binding.binding_id,
+    });
+    const secured = ensureSecureRegistryDir(path.dirname(terminalPath));
+    if (!secured.ok) return { ok: false, reason: 'terminal-dir-invalid' };
+    try { publishNoClobber(terminalPath, Buffer.from(canonicalJSONStringify(record), 'utf8'), {}); }
+    catch {
+      const existing = readClaudeSupportRoleTerminal(projectRoot, {
+        sessionGenerationId: generation.generationId, worktreeId,
+        planDigest: startup.plan_digest, role: event.agentType,
+        actorBindingId: actor.binding.binding_id,
+      });
+      return existing.ok && !existing.absent
+        && canonicalJSONStringify(existing.record) === canonicalJSONStringify(record)
+        ? { ok: true, record: existing.record, idempotent: true }
+        : { ok: false, reason: 'terminal-conflict' };
+    }
+    return { ok: true, record, idempotent: false };
+  } catch {
+    return { ok: false, reason: 'terminal-publish-failed' };
+  }
+}
 
 /**
  * Reconciles the durable READY/WAITING/BUSY projection with the exact
@@ -44,8 +170,9 @@ const CLAUDE_RESUME_HANDLE_SCAN_CAP = 1024;
  * A startup record is joined to the raw CLAUDE-ID-01 trace by the two
  * one-way identity digests.  That gives us the raw session/agent tuple
  * needed to read the immutable authority fence.  A fenced actor is proven
- * ABSENT; an unfenced, exact actor is LIVE; missing/ambiguous/cross-boundary
- * evidence fails closed and is never projected as healthy.
+ * ABSENT.  An unfenced startup observation is only historical identity
+ * evidence, never a liveness probe, so it remains UNVERIFIED. Missing,
+ * ambiguous, or cross-boundary evidence fails closed too.
  */
 function classifyClaudeSupportRoleLiveness(projectRoot, expected) {
   try {
@@ -66,6 +193,15 @@ function classifyClaudeSupportRoleLiveness(projectRoot, expected) {
       worktreeId: expected.worktreeId,
     });
     if (!actor.ok) return { ok: false, status: 'INVALID', reason: 'actor-binding-' + actor.reason.toLowerCase() };
+    const terminal = readClaudeSupportRoleTerminal(projectRoot, {
+      sessionGenerationId: expected.generationId, worktreeId: expected.worktreeId,
+      planDigest: expected.planDigest, role: expected.role,
+      actorBindingId: actor.binding.binding_id,
+    });
+    if (!terminal.ok) return { ok: false, status: 'INVALID', reason: terminal.reason };
+    if (!terminal.absent) {
+      return { ok: true, status: 'ABSENT', actorBindingId: terminal.record.actor_binding_id };
+    }
 
     const traceDir = path.join(registryRepoDir(projectRoot), 'claude-id01-traces');
     let entries;
@@ -99,9 +235,14 @@ function classifyClaudeSupportRoleLiveness(projectRoot, expected) {
             && record.plan_digest === expected.planDigest
             && record.role === expected.role) startup.push(record);
       } else if (record.schema === 'runtime/claude-id01-trace/v1') {
+        const potentiallyCorrelated = record.agent_type === expected.role
+          && record.worktree_id === expected.worktreeId
+          && record.plan_digest === expected.planDigest;
+        if (!potentiallyCorrelated) continue;
         if (!isClaudeId01RawTraceWellFormed(record)) {
           return { ok: false, status: 'INVALID', reason: 'raw-identity-shape-invalid' };
         }
+        if (currentClockMsForRegistry() >= isoToMsForRegistry(record.expiry)) continue;
         raw.push(record);
       }
     }
@@ -133,7 +274,7 @@ function classifyClaudeSupportRoleLiveness(projectRoot, expected) {
       computeClaudeAuthorityIdentityId(projectRoot, 'claude-hook', identity.session_id, identity.agent_id));
     if (!fence.ok) return { ok: false, status: 'INVALID', reason: 'authority-fence-invalid' };
     return fence.absent
-      ? { ok: true, status: 'LIVE', actorBindingId: actor.binding.binding_id }
+      ? { ok: false, status: 'UNVERIFIED', reason: 'positive-liveness-evidence-absent' }
       : { ok: true, status: 'ABSENT', actorBindingId: actor.binding.binding_id };
   } catch {
     return { ok: false, status: 'INVALID', reason: 'actor-liveness-internal' };
@@ -356,6 +497,10 @@ function resolveClaudeResumeRoleActorScope(projectRoot, event) {
     findClaudeResumeHandlesForActor,
     resolveClaudeResumeRoleActorScope,
     classifyClaudeSupportRoleLiveness,
+    CLAUDE_SUPPORT_ROLE_TERMINAL_SCHEMA,
+    claudeSupportRoleTerminalPathFor,
+    readClaudeSupportRoleTerminal,
+    publishClaudeSupportRoleTerminal,
   });
 }
 

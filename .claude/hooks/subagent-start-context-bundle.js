@@ -607,7 +607,7 @@ function handleSubagentStop(data) {
   // (section 8.4 bullet 1) -- never a search key into the classifier
   // itself, never compared by string-prefix/substring, never turned into
   // authority on its own.
-  const agentType = rawAgentType;
+  let agentType = rawAgentType;
   const sessionId = data.session_id;
   const agentId = data.agent_id;
   const projectRoot = process.env.CLAUDE_PROJECT_DIR || process.cwd();
@@ -756,6 +756,24 @@ function handleSubagentStop(data) {
   }
   if (!claudeId01Preflight || !claudeId01Preflight.ok) {
     blockStop(`[subagent-start-context-bundle] SubagentStop: CLAUDE-ID-01/requester-binding preflight FAILED: ${(claudeId01Preflight && claudeId01Preflight.reason) || 'unknown'} -- refusing to allow the stop; the identity fence, already durable, is not affected.`);
+    return;
+  }
+
+  // Persist the role scope -> terminal fence join after preflight succeeds
+  // and before CLAUDE-ID-01's best-effort cleanup removes the raw identity
+  // traces that identify the exact durable READY projection terminated by
+  // this fence. Phase-scoped agents without a RoleActorBinding are skipped
+  // by the publisher and retain the existing terminal path.
+  let terminalObservation;
+  try {
+    terminalObservation = rll.publishClaudeSupportRoleTerminal(projectRoot, {
+      sessionId, agentId, agentType,
+    });
+  } catch {
+    terminalObservation = { ok: false, reason: 'terminal-observation-threw' };
+  }
+  if (!terminalObservation || !terminalObservation.ok) {
+    blockStop(`[subagent-start-context-bundle] SubagentStop: durable terminal role observation FAILED: ${(terminalObservation && terminalObservation.reason) || 'unknown'} -- refusing trace cleanup.`);
     return;
   }
 

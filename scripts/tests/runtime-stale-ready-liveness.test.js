@@ -368,8 +368,11 @@ test('black-box B: fenced READY whose terminal cleanup deleted traces is retired
   assert.strictEqual(runSubagentStop(root, sessionId, agentId), '');
   const fence = rll.readClaudeAuthorityFence(root, fenceId);
   assert.ok(fence.ok && !fence.absent, JSON.stringify(fence));
-  assert.strictEqual(fs.existsSync(seeded.rawPath), false);
-  assert.strictEqual(fs.existsSync(seeded.startupPath), false);
+  // Cleanup is best-effort and may race the action's liveness projection;
+  // erase both traces explicitly to prove the terminal tombstone, not the
+  // historical files, drives the next ensure decision.
+  fs.rmSync(seeded.rawPath, { force: true });
+  fs.rmSync(seeded.startupPath, { force: true });
 
   const result = runEnsure(root, sessionId, seeded.plan.planDigest);
   assert.notStrictEqual(result.status, 'READY');

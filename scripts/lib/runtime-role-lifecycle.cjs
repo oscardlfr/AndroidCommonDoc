@@ -842,12 +842,12 @@ const {
 } = claudePeerBinding;
 
 const claudeResumeRecord = createClaudeResumeRecord({
-  CANONICAL_ROLES, CLAUDE_STARTUP_ACTOR_KEYS, CLAUDE_STARTUP_ACTOR_SCHEMA,
+  CANONICAL_ROLES, canonicalJSONStringify, CLAUDE_STARTUP_ACTOR_KEYS, CLAUDE_STARTUP_ACTOR_SCHEMA,
   claudeStartupActorPathFor, computeClaudeAuthorityIdentityId, computeWorktreeId,
   currentClockMsForRegistry, discoverPlan, findUniqueClaudePeerRoleActorBinding,
-  fs, hasExactKeys, isCanonicalIsoUtc, isHexActionId, isHexCsprng32,
+  fs, ensureSecureRegistryDir, hasExactKeys, isCanonicalIsoUtc, isHexActionId, isHexCsprng32,
   isHexDigest64, isClaudeId01RawTraceWellFormed, isoToMsForRegistry, path, peekSessionGeneration,
-  readClaudeAuthorityFence, readRegistryRecord, registryRepoDir,
+  publishNoClobber, readClaudeAuthorityFence, readRegistryRecord, registryRepoDir,
   sha256String, validateRoleActorBindingFor,
 });
 const {
@@ -863,6 +863,7 @@ const {
   findClaudeResumeHandlesForActor,
   resolveClaudeResumeRoleActorScope,
   classifyClaudeSupportRoleLiveness,
+  publishClaudeSupportRoleTerminal,
 } = claudeResumeRecord;
 
 const claudeResumeLifecycle = createClaudeResumeLifecycle({
@@ -1343,6 +1344,7 @@ admitAndCreateRootSourceBinding,
   findUniqueClaudeResumeHandleForTarget,
   findUniqueConsumedClaudeResumeHandleForBusyTarget,
   classifyClaudeSupportRoleLiveness,
+  publishClaudeSupportRoleTerminal,
   // Section C parity (item 4): the one closed-shape/range/chronology validator for a completed attestation, lazily required by runtime-consultation.cjs's isClaudeId01AttestationWellFormedLocal instead of a second, drifting copy.
   isClaudeId01AttestationWellFormed,
   ROLE_COMMAND_GRANT_SCHEMA,
