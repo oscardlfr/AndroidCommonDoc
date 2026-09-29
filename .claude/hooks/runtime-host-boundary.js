@@ -293,6 +293,68 @@ function settleNativeLivenessProbe(event) {
   } catch { return { ok: false }; }
 }
 
+function shutdownRequestFromEvent(event) {
+  if (!event || event.tool_name !== 'SendMessage' || !isPlainObject(event.tool_input)) return null;
+  const input = event.tool_input;
+  const recipient = typeof input.to === 'string' ? input.to : input.recipient;
+  const nested = isPlainObject(input.message) && input.message.type === 'shutdown_request';
+  const flat = input.type === 'shutdown_request';
+  if ((!nested && !flat) || typeof recipient !== 'string' || !/^[a-z][a-z0-9-]{0,63}$/.test(recipient)) return null;
+  return { recipient };
+}
+
+function projectRootFromEvent(event) {
+  return event && typeof event.cwd === 'string' && path.isAbsolute(event.cwd)
+    ? event.cwd
+    : (typeof process.env.CLAUDE_PROJECT_DIR === 'string' && path.isAbsolute(process.env.CLAUDE_PROJECT_DIR)
+      ? process.env.CLAUDE_PROJECT_DIR : null);
+}
+
+function reserveNativeShutdownTerminal(event) {
+  const shutdown = shutdownRequestFromEvent(event);
+  const projectRoot = projectRootFromEvent(event);
+  if (!shutdown || !projectRoot || event.hook_event_name !== 'PreToolUse'
+      || typeof event.session_id !== 'string' || typeof event.tool_use_id !== 'string') {
+    return { ok: false, ignored: true };
+  }
+  try {
+    return require('../../scripts/lib/runtime-role-lifecycle.cjs').reserveClaudeShutdownTerminal(projectRoot, {
+      sessionId: event.session_id, toolUseId: event.tool_use_id, recipient: shutdown.recipient,
+    });
+  } catch { return { ok: false }; }
+}
+
+function settleNativeShutdownTerminal(event) {
+  const shutdown = shutdownRequestFromEvent(event);
+  const projectRoot = projectRootFromEvent(event);
+  if (!shutdown || !projectRoot || !['PostToolUse', 'PostToolUseFailure'].includes(event.hook_event_name)
+      || typeof event.session_id !== 'string' || typeof event.tool_use_id !== 'string') {
+    return { ok: false, ignored: true };
+  }
+  const base = {
+    sessionId: event.session_id, toolUseId: event.tool_use_id, recipient: shutdown.recipient,
+  };
+  try {
+    const lifecycle = require('../../scripts/lib/runtime-role-lifecycle.cjs');
+    if (event.hook_event_name === 'PostToolUseFailure') {
+      return lifecycle.settleClaudeShutdownTerminal(projectRoot, { ...base, outcome: 'failed' });
+    }
+    let response = event.tool_response;
+    if (typeof response === 'string') {
+      try { response = JSON.parse(response); } catch { return { ok: false, reason: 'INVALID' }; }
+    }
+    if (!isPlainObject(response)) return { ok: false, reason: 'INVALID' };
+    if (response.success === false) {
+      return lifecycle.settleClaudeShutdownTerminal(projectRoot, { ...base, outcome: 'failed' });
+    }
+    if (response.success !== true || response.target !== shutdown.recipient
+        || typeof response.request_id !== 'string') return { ok: false, reason: 'INVALID' };
+    return lifecycle.settleClaudeShutdownTerminal(projectRoot, {
+      ...base, outcome: 'confirmed', requestId: response.request_id,
+    });
+  } catch { return { ok: false }; }
+}
+
 function recordStartupReadyOutcome(event) {
   const projectRoot = event && typeof event.cwd === 'string' && path.isAbsolute(event.cwd)
     ? event.cwd
@@ -516,6 +578,8 @@ module.exports = {
   recordProductionNativeOutcome,
   settleNativeResumeFailure,
   settleNativeLivenessProbe,
+  reserveNativeShutdownTerminal,
+  settleNativeShutdownTerminal,
   recordStartupReadyOutcome,
   admitEntrypointPreToolUse,
   admitNativeActionEvent,
@@ -533,6 +597,7 @@ if (require.main === module) {
       const event = JSON.parse(input);
       if (event && event.hook_event_name === 'PreToolUse') {
         admitEntrypointPreToolUse(event);
+        reserveNativeShutdownTerminal(event);
         const nativeAction = admitNativeActionEvent(event);
         if (nativeAction.owning && !nativeAction.admitted) {
           process.stdout.write(JSON.stringify({
@@ -547,6 +612,7 @@ if (require.main === module) {
         processPreToolUse(event, {});
       }
       else if (event && (event.hook_event_name === 'PostToolUse' || event.hook_event_name === 'PostToolUseFailure')) {
+        settleNativeShutdownTerminal(event);
         settleNativeLivenessProbe(event);
         settleNativeResumeFailure(event);
         recordProductionNativeOutcome(event);

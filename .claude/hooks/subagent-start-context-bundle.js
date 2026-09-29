@@ -624,6 +624,31 @@ function handleSubagentStop(data) {
     return;
   }
 
+  // A successful native shutdown_request is terminal, never resumable. The
+  // SendMessage boundary reserves and settles that request by exact main
+  // session/tool-use/recipient. A still-pending request blocks this stop
+  // until the host publishes success or failure; malformed/ambiguous state
+  // also fails closed. Only the absence of a confirmed explicit shutdown may
+  // enter the ordinary resumable park path below.
+  let shutdownTerminal = { ok: true, status: 'NONE' };
+  if (rll.findClaudeShutdownTerminalForRole) {
+    try {
+      shutdownTerminal = rll.findClaudeShutdownTerminalForRole(projectRoot, {
+        sessionId, agentId, agentType,
+      });
+    } catch {
+      shutdownTerminal = { ok: false, reason: 'shutdown-terminal-lookup-threw' };
+    }
+    if (!shutdownTerminal || !shutdownTerminal.ok) {
+      blockStop(`[subagent-start-context-bundle] SubagentStop: explicit shutdown correlation FAILED: ${(shutdownTerminal && shutdownTerminal.reason) || 'unknown'} -- refusing to classify this stop as resumable.`);
+      return;
+    }
+    if (shutdownTerminal.status === 'PENDING') {
+      blockStop('[subagent-start-context-bundle] SubagentStop: explicit shutdown request is still awaiting its correlated host outcome -- retry after PostToolUse/PostToolUseFailure settles it.');
+      return;
+    }
+  }
+
   // P4 Windows native-Claude persistence correction: a first ordinary stop
   // for an exactly correlated persistent claude-sendmessage role actor parks
   // the role as resumable WAITING instead of publishing the terminal
@@ -634,7 +659,7 @@ function handleSubagentStop(data) {
   // (wrong state/driver, ambiguous, no live actor, already fenced, etc.)
   // falls through completely unchanged to the existing terminal behavior --
   // this never broadens what shouldFence already decides below.
-  if (rll.parkClaudeResumeHandleForRoleActor) {
+  if (shutdownTerminal.status !== 'CONFIRMED' && rll.parkClaudeResumeHandleForRoleActor) {
     let parkResult;
     try {
       parkResult = rll.parkClaudeResumeHandleForRoleActor(projectRoot, { sessionId, agentId, agentType });
@@ -797,6 +822,19 @@ function handleSubagentStop(data) {
     }
     if (!deleteResult || !deleteResult.ok) {
       blockStop(`[subagent-start-context-bundle] SubagentStop: CLAUDE-ID-01 trace deletion FAILED: ${(deleteResult && deleteResult.reason) || 'unknown'}`);
+      return;
+    }
+  }
+
+  if (shutdownTerminal.status === 'CONFIRMED' && rll.consumeClaudeShutdownTerminal) {
+    let consumed;
+    try {
+      consumed = rll.consumeClaudeShutdownTerminal(projectRoot, shutdownTerminal);
+    } catch {
+      consumed = { ok: false, reason: 'shutdown-terminal-consume-threw' };
+    }
+    if (!consumed || !consumed.ok) {
+      blockStop(`[subagent-start-context-bundle] SubagentStop: explicit shutdown settlement consumption FAILED: ${(consumed && consumed.reason) || 'unknown'} -- terminal fence remains durable.`);
       return;
     }
   }

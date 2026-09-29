@@ -13,6 +13,7 @@ const test = require('node:test');
 const { createClaudeResumeRecord } = require('../lib/runtime-role-lifecycle/claude-resume-record.cjs');
 const RLL_IMPL = path.resolve(__dirname, '../lib/runtime-role-lifecycle.cjs');
 const SUBAGENT_HOOK = path.resolve(__dirname, '../../.claude/hooks/subagent-start-context-bundle.js');
+const runtimeHostBoundary = require(path.resolve(__dirname, '../../.claude/hooks/runtime-host-boundary.js'));
 const rll = require(RLL_IMPL);
 const rc = require('../lib/runtime-consultation.cjs');
 
@@ -29,7 +30,7 @@ function sha(value) { return crypto.createHash('sha256').update(value).digest('h
 function exact(value, keys) {
   return value && Object.keys(value).sort().join('\0') === [...keys].sort().join('\0');
 }
-function fixture() {
+function fixture({ findActor } = {}) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'l0-stale-ready-'));
   const traceDir = path.join(root, 'claude-id01-traces');
   fs.mkdirSync(traceDir, { recursive: true });
@@ -58,10 +59,10 @@ function fixture() {
     currentClockMsForRegistry: () => NOW,
     discoverPlan: () => ({ ok: true, planDigest: PLAN }),
     ensureSecureRegistryDir: (dir) => { fs.mkdirSync(dir, { recursive: true }); return { ok: true }; },
-    findUniqueClaudePeerRoleActorBinding: (_root, expected) => {
+    findUniqueClaudePeerRoleActorBinding: findActor || ((_root, expected) => {
       const binding = actors.get(expected.role);
       return binding ? { ok: true, binding } : { ok: false, reason: 'UNAVAILABLE' };
-    },
+    }),
     fs,
     hasExactKeys: exact,
     isCanonicalIsoUtc: (value) => typeof value === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/.test(value),
@@ -178,6 +179,25 @@ test('terminal publication does not block cleanup after the actor binding is no 
   assert.deepStrictEqual(published, {
     ok: true, skipped: true, reason: 'terminal-actor-no-longer-live',
   });
+});
+
+test('terminal publication rejects reversed startup chronology and invalid actor lookup', (t) => {
+  const chronology = fixture();
+  const invalidActor = fixture({ findActor: () => ({ ok: false, reason: 'INVALID' }) });
+  t.after(() => fs.rmSync(chronology.root, { recursive: true, force: true }));
+  t.after(() => fs.rmSync(invalidActor.root, { recursive: true, force: true }));
+  const role = ROLES[0];
+  const observed = chronology.add(role, { fencedActor: true });
+  const startup = JSON.parse(fs.readFileSync(observed.startupPath, 'utf8'));
+  startup.expiry = '2026-09-29T11:58:59Z';
+  fs.writeFileSync(observed.startupPath, JSON.stringify(startup));
+  assert.deepStrictEqual(chronology.api.publishClaudeSupportRoleTerminal(chronology.root, {
+    sessionId: SESSION, agentId: observed.agentId, agentType: role,
+  }), { ok: false, reason: 'terminal-startup-mismatch' });
+  const invalidObserved = invalidActor.add(role, { fencedActor: true });
+  assert.deepStrictEqual(invalidActor.api.publishClaudeSupportRoleTerminal(invalidActor.root, {
+    sessionId: SESSION, agentId: invalidObserved.agentId, agentType: role,
+  }), { ok: false, reason: 'terminal-actor-invalid' });
 });
 
 test('expired and unrelated raw traces are ignored instead of creating false ambiguity', (t) => {
@@ -369,6 +389,105 @@ function currentRoleState(root, seeded) {
     seeded.action.session_generation_id, CLI_ROLE,
   );
 }
+
+function shutdownEvent(root, sessionId, toolUseId, outcome) {
+  const event = {
+    hook_event_name: 'PreToolUse', tool_name: 'SendMessage', cwd: root,
+    session_id: sessionId, tool_use_id: toolUseId,
+    tool_input: { to: CLI_ROLE, summary: 'stop one role', message: { type: 'shutdown_request', reason: 'test' } },
+  };
+  const reserved = runtimeHostBoundary.reserveNativeShutdownTerminal(event);
+  assert.strictEqual(reserved.ok, true, JSON.stringify(reserved));
+  if (!outcome) return event;
+  const settled = runtimeHostBoundary.settleNativeShutdownTerminal({
+    ...event,
+    hook_event_name: outcome === 'failed' ? 'PostToolUseFailure' : 'PostToolUse',
+    tool_response: outcome === 'confirmed'
+      ? { success: true, request_id: 'shutdown-1@' + CLI_ROLE, target: CLI_ROLE }
+      : undefined,
+  });
+  assert.strictEqual(settled.ok, true, JSON.stringify(settled));
+  return event;
+}
+
+test('explicit successful shutdown is terminal and never parks toxic history for resume', (t) => {
+  const root = makeCliProject();
+  t.after(() => cleanupCliProject(root));
+  const sessionId = 'explicit-shutdown-session';
+  const agentId = 'explicit-shutdown-agent';
+  const seeded = seedReadyClaudeActor(root, sessionId, agentId);
+  shutdownEvent(root, sessionId, 'shutdown-tool-success', 'confirmed');
+  assert.strictEqual(runSubagentStop(root, sessionId, agentId), '');
+  const fenceId = rll.computeClaudeAuthorityIdentityId(root, 'claude-hook', sessionId, agentId);
+  assert.strictEqual(rll.readClaudeAuthorityFence(root, fenceId).absent, false);
+  assert.notStrictEqual(currentRoleState(root, seeded).state, 'WAITING');
+  const next = runEnsure(root, sessionId, seeded.plan.planDigest);
+  assert.strictEqual(next.status, 'ACTION_REQUIRED', JSON.stringify(next));
+  assert.ok(next.actions.some((action) => action.kind === 'role-spawn'), JSON.stringify(next));
+});
+
+test('failed shutdown request preserves ordinary resumable parking', (t) => {
+  const root = makeCliProject();
+  t.after(() => cleanupCliProject(root));
+  const sessionId = 'failed-shutdown-session';
+  const agentId = 'failed-shutdown-agent';
+  const seeded = seedReadyClaudeActor(root, sessionId, agentId);
+  shutdownEvent(root, sessionId, 'shutdown-tool-failure', 'failed');
+  assert.strictEqual(runSubagentStop(root, sessionId, agentId), '');
+  assert.strictEqual(currentRoleState(root, seeded).state, 'WAITING');
+  const fenceId = rll.computeClaudeAuthorityIdentityId(root, 'claude-hook', sessionId, agentId);
+  assert.strictEqual(rll.readClaudeAuthorityFence(root, fenceId).absent, true);
+});
+
+test('pending shutdown race blocks SubagentStop instead of incorrectly parking', (t) => {
+  const root = makeCliProject();
+  t.after(() => cleanupCliProject(root));
+  const sessionId = 'pending-shutdown-session';
+  const agentId = 'pending-shutdown-agent';
+  const seeded = seedReadyClaudeActor(root, sessionId, agentId);
+  shutdownEvent(root, sessionId, 'shutdown-tool-pending');
+  const output = JSON.parse(runSubagentStop(root, sessionId, agentId));
+  assert.strictEqual(output.decision, 'block');
+  assert.match(output.reason, /awaiting its correlated host outcome/);
+  assert.strictEqual(currentRoleState(root, seeded).state, 'READY');
+});
+
+test('successful shutdown evidence cannot terminalize a replacement identity', (t) => {
+  const root = makeCliProject();
+  t.after(() => cleanupCliProject(root));
+  const sessionId = 'foreign-shutdown-session';
+  const seeded = seedReadyClaudeActor(root, sessionId, 'original-shutdown-agent');
+  shutdownEvent(root, sessionId, 'shutdown-tool-foreign', 'confirmed');
+  const output = JSON.parse(runSubagentStop(root, sessionId, 'replacement-shutdown-agent'));
+  assert.strictEqual(output.decision, 'block');
+  assert.match(output.reason, /explicit shutdown correlation FAILED/);
+  assert.strictEqual(currentRoleState(root, seeded).state, 'READY');
+});
+
+test('shutdown correlation replay is idempotent and malformed settled evidence fails closed', (t) => {
+  const replayRoot = makeCliProject();
+  const malformedRoot = makeCliProject();
+  t.after(() => cleanupCliProject(replayRoot));
+  t.after(() => cleanupCliProject(malformedRoot));
+  seedReadyClaudeActor(replayRoot, 'replay-shutdown-session', 'replay-shutdown-agent');
+  shutdownEvent(replayRoot, 'replay-shutdown-session', 'shutdown-tool-replay', 'confirmed');
+  shutdownEvent(replayRoot, 'replay-shutdown-session', 'shutdown-tool-replay', 'confirmed');
+  assert.strictEqual(runSubagentStop(replayRoot, 'replay-shutdown-session', 'replay-shutdown-agent'), '');
+
+  const seeded = seedReadyClaudeActor(malformedRoot, 'malformed-shutdown-session', 'malformed-shutdown-agent');
+  shutdownEvent(malformedRoot, 'malformed-shutdown-session', 'shutdown-tool-malformed', 'confirmed');
+  const confirmedPath = path.join(
+    rll.registryRepoDir(malformedRoot), 'claude-shutdown-terminal', sha('malformed-shutdown-session'),
+    CLI_ROLE, sha('shutdown-tool-malformed') + '.confirmed.json',
+  );
+  fs.writeFileSync(confirmedPath, '{"schema":"broken"}');
+  const blocked = JSON.parse(runSubagentStop(
+    malformedRoot, 'malformed-shutdown-session', 'malformed-shutdown-agent',
+  ));
+  assert.strictEqual(blocked.decision, 'block');
+  assert.match(blocked.reason, /explicit shutdown correlation FAILED/);
+  assert.strictEqual(currentRoleState(malformedRoot, seeded).state, 'READY');
+});
 
 test('black-box A: durable READY plus expired startup/raw but no fence is not sufficient after host-wide cancellation', (t) => {
   const root = makeCliProject();

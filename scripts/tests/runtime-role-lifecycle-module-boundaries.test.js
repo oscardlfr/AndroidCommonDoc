@@ -37,6 +37,7 @@ const modulePaths = Object.freeze({
   livenessProbe: path.join(moduleDir, 'claude-liveness-probe.cjs'),
   resumeDelivery: path.join(moduleDir, 'claude-resume-delivery.cjs'),
   resumeLifecycle: path.join(moduleDir, 'claude-resume-lifecycle.cjs'),
+  shutdownTerminal: path.join(moduleDir, 'claude-shutdown-terminal.cjs'),
   oneShotRecord: path.join(moduleDir, 'claude-one-shot-record.cjs'),
   oneShotOperations: path.join(moduleDir, 'claude-one-shot-operations.cjs'),
   roleBindingState: path.join(moduleDir, 'role-binding-state.cjs'),
@@ -106,6 +107,7 @@ const factories = Object.freeze({
   livenessProbe: require(modulePaths.livenessProbe).createClaudeLivenessProbe,
   resumeDelivery: require(modulePaths.resumeDelivery).createClaudeResumeDelivery,
   resumeLifecycle: require(modulePaths.resumeLifecycle).createClaudeResumeLifecycle,
+  shutdownTerminal: require(modulePaths.shutdownTerminal).createClaudeShutdownTerminal,
   oneShotRecord: require(modulePaths.oneShotRecord).createClaudeOneShotRecord,
   oneShotOperations: require(modulePaths.oneShotOperations).createClaudeOneShotOperations,
   roleBindingState: require(modulePaths.roleBindingState).createRoleBindingState,
@@ -413,7 +415,7 @@ test('Claude authority admission capability is reference-bound and one-use withi
   ), false);
 });
 
-test('facade preserves its 271-key ABI and re-exports core factory references', () => {
+test('facade preserves its 275-key ABI and re-exports core factory references', () => {
   const coreFactoryNames = Object.freeze({
     runtimeIdentity: 'createRuntimeIdentityModule',
     privateRegistry: 'createPrivateRegistryModule',
@@ -487,7 +489,7 @@ test('facade preserves its 271-key ABI and re-exports core factory references', 
 
     const facade = require(facadePath);
     const publicKeys = Object.keys(facade).sort();
-    assert.strictEqual(publicKeys.length, 271);
+    assert.strictEqual(publicKeys.length, 275);
     assert.strictEqual(Object.isFrozen(facade), false);
     for (const surface of Object.values(captured)) {
       for (const [name, value] of Object.entries(surface)) {

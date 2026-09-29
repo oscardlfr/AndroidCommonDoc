@@ -26,6 +26,7 @@ const { createClaudeResumeRecord } = require('./runtime-role-lifecycle/claude-re
 const { createClaudeLivenessProbe } = require('./runtime-role-lifecycle/claude-liveness-probe.cjs');
 const { createClaudeResumeDelivery } = require('./runtime-role-lifecycle/claude-resume-delivery.cjs');
 const { createClaudeResumeLifecycle } = require('./runtime-role-lifecycle/claude-resume-lifecycle.cjs');
+const { createClaudeShutdownTerminal } = require('./runtime-role-lifecycle/claude-shutdown-terminal.cjs');
 const { createClaudeOneShotRecord } = require('./runtime-role-lifecycle/claude-one-shot-record.cjs');
 const { createClaudeOneShotOperations } = require('./runtime-role-lifecycle/claude-one-shot-operations.cjs');
 const { createRoleBindingState } = require('./runtime-role-lifecycle/role-binding-state.cjs');
@@ -862,13 +863,11 @@ const claudeResumeLifecycle = createClaudeResumeLifecycle({
   registryRepoDir, roleProfileDigestFor, sha256String, transitionRoleBinding, validateClaudePeerExpected,
   validateRoleActorBindingFor, withRegistryLock,
 });
-const {
-  CLAUDE_RESUME_HANDLE_TTL_SECONDS,
-  parkClaudeResumeHandleForRoleActor,
-  consumeClaudeResumeHandleForObservedActor,
-  findUniqueClaudeResumeHandleForTarget,
-  findUniqueConsumedClaudeResumeHandleForBusyTarget,
-} = claudeResumeLifecycle;
+const { CLAUDE_RESUME_HANDLE_TTL_SECONDS, parkClaudeResumeHandleForRoleActor, consumeClaudeResumeHandleForObservedActor, findUniqueClaudeResumeHandleForTarget, findUniqueConsumedClaudeResumeHandleForBusyTarget } = claudeResumeLifecycle;
+const claudeShutdownTerminal = createClaudeShutdownTerminal({ CANONICAL_ROLES, canonicalJSONStringify, CLAUDE_STARTUP_ACTOR_KEYS,
+  CLAUDE_STARTUP_ACTOR_SCHEMA, claudeStartupActorPathFor, computeWorktreeId, currentClockMsForRegistry, ensureSecureRegistryDir, findUniqueClaudePeerRoleActorBinding, fs, hasExactKeys, isCanonicalIsoUtc, isHexActionId, isHexDigest64,
+  isoPlusSecondsForRegistry, isoToMsForRegistry, nowIsoForRegistry, path, peekSessionGeneration, publishNoClobber, readRegistryRecord, registryRepoDir, sha256String });
+const { reserveClaudeShutdownTerminal, settleClaudeShutdownTerminal, findClaudeShutdownTerminalForRole, consumeClaudeShutdownTerminal } = claudeShutdownTerminal;
 const directRoleHostAdmission = createDirectRoleHostAdmission({
   path, registryRepoDir, readRegistryRecord, ensureSecureRegistryDir, publishNoClobber,
   canonicalJSONStringify, sha256String, isHexActionId, nowIsoForRegistry, withRegistryLock,
@@ -1326,6 +1325,8 @@ admitAndCreateRootSourceBinding,
   consumeClaudeResumeHandleForObservedActor,
   findUniqueClaudeResumeHandleForTarget,
   findUniqueConsumedClaudeResumeHandleForBusyTarget,
+  reserveClaudeShutdownTerminal, settleClaudeShutdownTerminal,
+  findClaudeShutdownTerminalForRole, consumeClaudeShutdownTerminal,
   // Section C parity (item 4): the one closed-shape/range/chronology validator for a completed attestation, lazily required by runtime-consultation.cjs's isClaudeId01AttestationWellFormedLocal instead of a second, drifting copy.
   isClaudeId01AttestationWellFormed,
   ROLE_COMMAND_GRANT_SCHEMA,
