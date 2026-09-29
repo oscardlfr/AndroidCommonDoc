@@ -124,13 +124,13 @@ test('five fenced support actors are classified ABSENT, never healthy READY', (t
   assert.ok(results.every((result) => result.ok));
 });
 
-test('five exact unexpired unfenced support actors remain LIVE within the bounded host contract', (t) => {
+test('five exact unexpired unfenced startup histories remain UNVERIFIED until an active probe', (t) => {
   const f = fixture();
   t.after(() => fs.rmSync(f.root, { recursive: true, force: true }));
   for (const role of ROLES) f.add(role);
   assert.deepStrictEqual(
     ROLES.map((role) => f.api.classifyClaudeSupportRoleLiveness(f.root, f.expected(role)).status),
-    Array(5).fill('LIVE'),
+    Array(5).fill('UNVERIFIED'),
   );
 });
 
@@ -167,7 +167,7 @@ test('expired and unrelated raw traces are ignored instead of creating false amb
   fs.writeFileSync(path.join(f.traceDir, 'raw-unrelated.json'), JSON.stringify(unrelated));
   assert.strictEqual(
     f.api.classifyClaudeSupportRoleLiveness(f.root, f.expected(role)).status,
-    'LIVE',
+    'UNVERIFIED',
   );
 });
 

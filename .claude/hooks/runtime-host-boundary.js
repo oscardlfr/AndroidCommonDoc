@@ -269,6 +269,30 @@ function settleNativeResumeFailure(event) {
   }
 }
 
+function settleNativeLivenessProbe(event) {
+  if (!event || !['PostToolUse', 'PostToolUseFailure'].includes(event.hook_event_name)
+      || event.tool_name !== 'SendMessage' || !event.tool_input
+      || typeof event.tool_input.message !== 'string'
+      || !event.tool_input.message.startsWith('RUNTIME_LIVENESS_PROBE/v1\n')) {
+    return { ok: false, ignored: true };
+  }
+  const projectRoot = typeof event.cwd === 'string' && path.isAbsolute(event.cwd)
+    ? event.cwd
+    : (typeof process.env.CLAUDE_PROJECT_DIR === 'string' && path.isAbsolute(process.env.CLAUDE_PROJECT_DIR)
+      ? process.env.CLAUDE_PROJECT_DIR : null);
+  const actionId = actionIdFromNativeEvent(event);
+  if (!projectRoot || !actionId || typeof event.session_id !== 'string'
+      || typeof event.tool_use_id !== 'string') return { ok: false, ignored: true };
+  try {
+    const lifecycle = require('../../scripts/lib/runtime-role-lifecycle.cjs');
+    return lifecycle.settleClaudeLivenessProbeOutcome(projectRoot, {
+      actionId, sessionId: event.session_id, toolUseId: event.tool_use_id,
+      recipient: event.tool_input.recipient, message: event.tool_input.message,
+      success: event.hook_event_name === 'PostToolUse', response: event.tool_response,
+    });
+  } catch { return { ok: false }; }
+}
+
 function recordStartupReadyOutcome(event) {
   const projectRoot = event && typeof event.cwd === 'string' && path.isAbsolute(event.cwd)
     ? event.cwd
@@ -333,6 +357,17 @@ function admitNativeActionEvent(event) {
         reason: 'native-resume-consumption-failed:' + (consumed && consumed.reason ? consumed.reason : 'invalid'),
       };
       return { admitted: true, owning: true, actionId, operation, consumed: true };
+    }
+    if (input.message.startsWith('RUNTIME_LIVENESS_PROBE/v1\n')) {
+      const reserved = owner.reserveClaudeLivenessProbeBeforeDelivery(projectRoot, {
+        actionId, sessionId: event.session_id, toolUseId: event.tool_use_id,
+        recipient: input.recipient, message: input.message,
+      });
+      if (!reserved || reserved.ok !== true) return {
+        admitted: false, owning: true,
+        reason: 'native-liveness-probe-reservation-failed:' + (reserved && reserved.reason ? reserved.reason : 'invalid'),
+      };
+      return { admitted: true, owning: true, actionId, operation, reserved: true };
     }
   }
   return { admitted: true, actionId, operation };
@@ -480,6 +515,7 @@ module.exports = {
   processPostToolUse,
   recordProductionNativeOutcome,
   settleNativeResumeFailure,
+  settleNativeLivenessProbe,
   recordStartupReadyOutcome,
   admitEntrypointPreToolUse,
   admitNativeActionEvent,
@@ -511,6 +547,7 @@ if (require.main === module) {
         processPreToolUse(event, {});
       }
       else if (event && (event.hook_event_name === 'PostToolUse' || event.hook_event_name === 'PostToolUseFailure')) {
+        settleNativeLivenessProbe(event);
         settleNativeResumeFailure(event);
         recordProductionNativeOutcome(event);
         if (event.hook_event_name === 'PostToolUse' && event.tool_name === 'Bash') recordStartupReadyOutcome(event);

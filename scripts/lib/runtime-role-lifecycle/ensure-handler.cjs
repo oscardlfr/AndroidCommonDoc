@@ -14,13 +14,15 @@ path, SUBCOMMAND_SPEC, parseSubcommandArgv, usageError, invalidError, unavailabl
   getCapabilityManifest, roleProfileDigestFor, readRoleBindingState, retainedSupervisorBridgeApi,
   readRegistryRecord, actionPathFor, isoToMsForRegistry, currentClockMsForRegistry, transitionRoleBinding,
   classifyClaudeSupportRoleLiveness,
+  claudeLivenessProbeMessage, findClaudeLivenessProbeState,
   findUniqueClaudeResumeHandleForTarget, findUniqueConsumedClaudeResumeHandleForBusyTarget,
   resolveHostOperationForAction, actionForEnvelope, respawnBudgetExceeded, quarantineViaRehydrating,
   isTestCapability, hasRegisteredValidatedDiskConsumer, codexAppServerStartupEligible,
   resolveSupervisorStartability, selectLifecycleEligibleDriverForRole, transitionRoleBindingAtomicViaWaypoint,
   roleBindingForEnvelope, mintSupervisorBatchUnderTransaction, computeRepoId, generateActionId,
-  buildRoleSpawnPayload, claudeReadyBootstrapMessageFor, effectiveActionTtlSeconds, futureIsoForRegistry,
+  buildRoleSpawnPayload, buildRoleNotifyPayload, claudeReadyBootstrapMessageFor, effectiveActionTtlSeconds, futureIsoForRegistry,
   mintRoleLifecycleAction, canonicalJSONStringify,
+  registryRepoDir, withRegistryLock,
 }) {
 
 /**
@@ -170,6 +172,45 @@ function handleEnsure(rawArgv) {
     sawUnavailable = true;
     unavailableReasons.push(String(role) + ':' + String(reason));
   };
+  const resolveOrMintLivenessProbe = (role, stateRecord, liveness) => {
+    const lockKey = sha256String(canonicalJSONStringify([
+      binding.session_generation_id, binding.worktree_id, binding.plan_digest,
+      role, liveness.actorBindingId, liveness.actorDigest,
+    ]));
+    const lockDir = path.join(registryRepoDir(projectRoot), 'locks', 'claude-liveness-scope-' + lockKey + '.lock');
+    const locked = withRegistryLock(lockDir, () => {
+      const probe = findClaudeLivenessProbeState(projectRoot, {
+        generationId: binding.session_generation_id, planDigest: binding.plan_digest,
+        role, worktreeId: binding.worktree_id,
+        actorBindingId: liveness.actorBindingId, actorDigest: liveness.actorDigest,
+      });
+      if (!probe.ok || probe.status !== 'NONE') return probe;
+      const actionId = generateActionId();
+      const message = claudeLivenessProbeMessage(
+        actionId, liveness.actorBindingId, liveness.actorDigest,
+      );
+      const payload = buildRoleNotifyPayload(
+        stateRecord.binding_id, role,
+        `liveness:${liveness.actorBindingId}:${liveness.actorDigest}`,
+        'session-control', message,
+      );
+      const ttl = effectiveActionTtlSeconds(pair.policy, binding.expiry, {
+        kind: 'role-notify', runtime: 'claude-native',
+      });
+      if (!ttl.ok) return { ok: false, reason: 'liveness-action-ttl-invalid' };
+      const minted = mintRoleLifecycleAction(
+        projectRoot, actionId, 'role-notify', 'claude-native', computeRepoId(projectRoot),
+        binding.worktree_id, binding.plan_digest,
+        sha256String(canonicalJSONStringify(pair.routing)), binding.session_generation_id,
+        role, payload, futureIsoForRegistry(ttl.ttlSeconds),
+      );
+      return minted.ok
+        ? { ok: true, status: 'PENDING', action: minted.action }
+        : { ok: false, reason: 'liveness-action-mint-failed' };
+    }, { maxWaitMs: 5000 });
+    return locked.ok && locked.value
+      ? locked.value : { ok: false, reason: 'liveness-scope-lock-failed' };
+  };
   let hardError = false;
 
   // Pass 1: classify each role's current state; collect ABSENT/DEAD roles
@@ -220,6 +261,25 @@ function handleEnsure(rawArgv) {
             generationId: binding.session_generation_id, planDigest: binding.plan_digest,
             role, runtimeSessionKey: binding.runtime_session_key, worktreeId: binding.worktree_id,
           });
+        }
+        if (stateResult.state === 'READY' && liveness.ok && liveness.status === 'UNVERIFIED') {
+          const probe = resolveOrMintLivenessProbe(role, stateResult.record, liveness);
+          if (!probe.ok) {
+            noteUnavailable(role, 'claude-liveness-probe-' + (probe.reason || 'invalid'));
+            continue;
+          }
+          if (probe.status === 'LIVE') {
+            liveness = { ok: true, status: 'LIVE' };
+          } else if (probe.status === 'ABSENT') {
+            liveness = { ok: true, status: 'ABSENT' };
+          } else if (probe.status === 'PENDING') {
+            sawActionRequired = true;
+            const operation = resolveHostOperationForAction(probe.action.kind, probe.action.runtime);
+            collectedActions.push(operation
+              ? Object.assign(actionForEnvelope(probe.action), { operation })
+              : actionForEnvelope(probe.action));
+            continue;
+          } else { noteUnavailable(role, 'claude-liveness-probe-state-invalid'); continue; }
         }
         if (!liveness.ok) {
           noteUnavailable(role, 'claude-actor-' + (liveness.reason || 'invalid'));

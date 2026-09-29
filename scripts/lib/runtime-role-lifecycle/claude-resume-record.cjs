@@ -170,10 +170,9 @@ function publishClaudeSupportRoleTerminal(projectRoot, event) {
  * A startup record is joined to the raw CLAUDE-ID-01 trace by the two
  * one-way identity digests.  That gives us the raw session/agent tuple
  * needed to read the immutable authority fence.  A fenced actor is proven
- * ABSENT. An exact, unexpired startup/raw observation without a fence remains
- * the bounded positive evidence accepted by the current host contract; once
- * it expires it is history and fails closed. Missing, ambiguous, expired, or
- * cross-boundary evidence fails closed too.
+ * ABSENT. Startup/raw observations establish identity only; they never prove
+ * current reachability. An unfenced actor is UNVERIFIED until an exact active
+ * host probe records a short-lived positive outcome.
  */
 function classifyClaudeSupportRoleLiveness(projectRoot, expected) {
   try {
@@ -256,7 +255,6 @@ function classifyClaudeSupportRoleLiveness(projectRoot, expected) {
         || !isHexDigest64(observed.agent_digest)
         || !isCanonicalIsoUtc(observed.created_at)
         || !isCanonicalIsoUtc(observed.expiry)
-        || currentClockMsForRegistry() >= isoToMsForRegistry(observed.expiry)
         || observed.actor_binding_id !== actor.binding.binding_id
         || observed.session_digest !== sha256String(expected.runtimeSessionKey)) {
       return { ok: false, status: 'INVALID', reason: 'actor-identity-mismatch' };
@@ -267,16 +265,20 @@ function classifyClaudeSupportRoleLiveness(projectRoot, expected) {
       && record.plan_digest === expected.planDigest
       && sha256String(record.session_id) === observed.session_digest
       && sha256String(record.agent_id) === observed.agent_digest);
-    if (identities.length !== 1) {
-      return { ok: false, status: 'INVALID', reason: identities.length === 0 ? 'raw-identity-absent' : 'raw-identity-ambiguous' };
+    if (identities.length > 1) {
+      return { ok: false, status: 'INVALID', reason: 'raw-identity-ambiguous' };
     }
-    const identity = identities[0];
-    const fence = readClaudeAuthorityFence(projectRoot,
-      computeClaudeAuthorityIdentityId(projectRoot, 'claude-hook', identity.session_id, identity.agent_id));
-    if (!fence.ok) return { ok: false, status: 'INVALID', reason: 'authority-fence-invalid' };
-    return fence.absent
-      ? { ok: true, status: 'LIVE', actorBindingId: actor.binding.binding_id }
-      : { ok: true, status: 'ABSENT', actorBindingId: actor.binding.binding_id };
+    if (identities.length === 1) {
+      const identity = identities[0];
+      const fence = readClaudeAuthorityFence(projectRoot,
+        computeClaudeAuthorityIdentityId(projectRoot, 'claude-hook', identity.session_id, identity.agent_id));
+      if (!fence.ok) return { ok: false, status: 'INVALID', reason: 'authority-fence-invalid' };
+      if (!fence.absent) return { ok: true, status: 'ABSENT', actorBindingId: actor.binding.binding_id };
+    }
+    return {
+      ok: true, status: 'UNVERIFIED', actorBindingId: actor.binding.binding_id,
+      actorDigest: observed.agent_digest,
+    };
   } catch {
     return { ok: false, status: 'INVALID', reason: 'actor-liveness-internal' };
   }

@@ -879,6 +879,12 @@ const claudeResumeLifecycle = createClaudeResumeLifecycle({
 });
 const {
   CLAUDE_RESUME_HANDLE_TTL_SECONDS,
+  CLAUDE_LIVENESS_PROBE_SCHEMA,
+  CLAUDE_LIVENESS_OUTCOME_SCHEMA,
+  claudeLivenessProbeMessage,
+  reserveClaudeLivenessProbeBeforeDelivery,
+  settleClaudeLivenessProbeOutcome,
+  findClaudeLivenessProbeState,
   parkClaudeResumeHandleForRoleActor,
   consumeClaudeResumeHandleForObservedActor,
   settleNativeResumeNotificationFailure,
@@ -1148,14 +1154,14 @@ const ensureHandler = createEnsureHandler({
   computeWorktreeId, executeResumeCheckpointEnsure, reconcileRetainedSupervisorForEnsure,
   getCapabilityManifest, roleProfileDigestFor, readRoleBindingState, retainedSupervisorBridgeApi,
   readRegistryRecord, actionPathFor, isoToMsForRegistry, currentClockMsForRegistry, transitionRoleBinding,
-  classifyClaudeSupportRoleLiveness,
+  classifyClaudeSupportRoleLiveness, claudeLivenessProbeMessage, findClaudeLivenessProbeState,
   findUniqueClaudeResumeHandleForTarget, findUniqueConsumedClaudeResumeHandleForBusyTarget,
   resolveHostOperationForAction, actionForEnvelope, respawnBudgetExceeded, quarantineViaRehydrating,
   isTestCapability, hasRegisteredValidatedDiskConsumer, codexAppServerStartupEligible,
   resolveSupervisorStartability, selectLifecycleEligibleDriverForRole, transitionRoleBindingAtomicViaWaypoint,
   roleBindingForEnvelope, mintSupervisorBatchUnderTransaction, computeRepoId, generateActionId,
-  buildRoleSpawnPayload, claudeReadyBootstrapMessageFor, effectiveActionTtlSeconds, futureIsoForRegistry,
-  mintRoleLifecycleAction, canonicalJSONStringify,
+  buildRoleSpawnPayload, buildRoleNotifyPayload, claudeReadyBootstrapMessageFor, effectiveActionTtlSeconds, futureIsoForRegistry,
+  mintRoleLifecycleAction, canonicalJSONStringify, registryRepoDir, withRegistryLock,
 });
 const { handleEnsure } = ensureHandler;
 
@@ -1347,6 +1353,12 @@ admitAndCreateRootSourceBinding,
   findUniqueConsumedClaudeResumeHandleForBusyTarget,
   classifyClaudeSupportRoleLiveness,
   publishClaudeSupportRoleTerminal,
+  CLAUDE_LIVENESS_PROBE_SCHEMA,
+  CLAUDE_LIVENESS_OUTCOME_SCHEMA,
+  claudeLivenessProbeMessage,
+  reserveClaudeLivenessProbeBeforeDelivery,
+  settleClaudeLivenessProbeOutcome,
+  findClaudeLivenessProbeState,
   // Section C parity (item 4): the one closed-shape/range/chronology validator for a completed attestation, lazily required by runtime-consultation.cjs's isClaudeId01AttestationWellFormedLocal instead of a second, drifting copy.
   isClaudeId01AttestationWellFormed,
   ROLE_COMMAND_GRANT_SCHEMA,
