@@ -448,6 +448,14 @@ test('resume lookup selects only the current generation when one Claude session 
     assert.strictEqual(selected.record.binding_id, currentHandle.record.binding_id);
 
     const oldPath = rll.claudeResumeHandlePathFor(dir, oldHandle.record.binding_id);
+    const missingGeneration = JSON.parse(fs.readFileSync(oldPath, 'utf8'));
+    delete missingGeneration.session_generation_id;
+    fs.writeFileSync(oldPath, JSON.stringify(missingGeneration));
+    assert.deepStrictEqual(rll.findUniqueClaudeResumeHandleForTarget(dir, expected), {
+      ok: false, reason: 'INVALID',
+    }, 'a current-schema handle claiming the target scope cannot omit its generation');
+    fs.writeFileSync(oldPath, JSON.stringify(oldHandle.record));
+
     const incompatibleHistory = JSON.parse(fs.readFileSync(oldPath, 'utf8'));
     delete incompatibleHistory.teammate_name;
     fs.writeFileSync(oldPath, JSON.stringify(incompatibleHistory));

@@ -252,13 +252,17 @@ function findUniqueClaudeResumeHandleForTarget(projectRoot, expected) {
       // schema cannot disable a later session. A raw record that claims this
       // role/worktree/PLAN and main session remains fail-closed below.
       if (
-        read.obj.session_generation_id !== expected.generationId
+        read.obj.schema !== CLAUDE_RESUME_HANDLE_SCHEMA
         || read.obj.role !== expected.targetRole || read.obj.worktree_id !== expected.worktreeId
         || read.obj.plan_digest !== expected.planDigest
       ) {
         continue;
       }
-      if (typeof read.obj.session === 'string' && sha256String(read.obj.session) !== expected.sessionDigest) {
+      if (typeof read.obj.session !== 'string' || !isHexCsprng32(read.obj.session_generation_id)) {
+        return { ok: false, reason: 'INVALID' };
+      }
+      if (read.obj.session_generation_id !== expected.generationId
+          || sha256String(read.obj.session) !== expected.sessionDigest) {
         continue;
       }
       // Expiry is routine immutable history, not structural corruption. Read
@@ -357,13 +361,17 @@ function findUniqueConsumedClaudeResumeHandleForBusyTarget(projectRoot, expected
       // Apply the generation/scope discriminator before current-schema
       // validation. Historical records outside this BUSY target cannot
       // poison it; a record claiming this exact target still fails closed.
-      if (raw.obj.session_generation_id !== expected.generationId
+      if (raw.obj.schema !== CLAUDE_RESUME_HANDLE_SCHEMA
           || raw.obj.role !== expected.targetRole
           || raw.obj.worktree_id !== expected.worktreeId
           || raw.obj.plan_digest !== expected.planDigest) {
         continue;
       }
-      if (typeof raw.obj.session === 'string' && sha256String(raw.obj.session) !== expected.sessionDigest) {
+      if (typeof raw.obj.session !== 'string' || !isHexCsprng32(raw.obj.session_generation_id)) {
+        return { ok: false, reason: 'INVALID' };
+      }
+      if (raw.obj.session_generation_id !== expected.generationId
+          || sha256String(raw.obj.session) !== expected.sessionDigest) {
         continue;
       }
       const shaped = validateClaudeResumeHandleRecordShape(raw.obj, handleId);
