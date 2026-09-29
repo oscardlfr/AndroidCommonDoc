@@ -62,20 +62,11 @@ node .claude/runtime/l0-entrypoint-launcher.cjs init-session
 node .claude/runtime/l0-entrypoint-launcher.cjs init-session --orchestrate <slug>
 ```
 
-`--orchestrate <slug>` requires an existing
-`.planning/wave-<slug>/PLAN.md`. The entrypoint initializes or validates the
-control-plane state for that plan; it does not create or infer the PLAN. Do not
-invent a one-off slug for diagnostics—use the consumer's real materialized
-wave, or run dashboard-only mode.
+`--orchestrate <slug>` requires an existing `.planning/wave-<slug>/PLAN.md`. The entrypoint initializes or validates that plan's control-plane state; it does not create or infer the PLAN. Do not invent a diagnostic slug—use the consumer's real materialized wave or dashboard-only mode.
 
 Its PreToolUse hook derives the trusted Node path, exact consumer root, and canonical base64url intent, then verifies and rewrites the request to the internal command. Missing or extra arguments, unsafe slugs, shell operators, foreign cwd, and an invalid installation fail closed. `/resume-work`, `/work`, `/ingest-content`, and `/monitor-docs` retain the internal closed form documented in their skill files. `READY` is readiness of the support plane, not a claim that every native actor is currently executing. `READY`, `WAITING`, and `BUSY` are the three healthy role states: `WAITING` means an actor stopped normally, left one exact live resume handle, and is addressable without being duplicated. Repeating `/init-session --orchestrate` therefore does not wake or respawn a `WAITING` role. Use `/resume-work` for a checkpoint continuation or `/work` for new work; those entry points own the correlated `SendMessage` wake-up.
 
-The model must not discover the sibling toolkit, call `scripts/lib/runtime-collaboration-entrypoints.cjs` directly, or substitute
-`$PWD`, `$(pwd)`, `ANDROID_COMMON_DOC`, or another ambient path. A missing local
-launcher, missing/ambiguous/remote/symlinked L0 tooling source, commit or digest
-drift, or missing executable closure is a closed failure. Do not fall back to a
-dashboard-only imitation. Refresh the toolkit checkout deliberately, rerun one
-plain `/sync-l0`, and restart the host.
+The model must not discover the sibling toolkit, call `scripts/lib/runtime-collaboration-entrypoints.cjs` directly, or substitute `$PWD`, `$(pwd)`, `ANDROID_COMMON_DOC`, or another ambient path. A missing local launcher, missing/ambiguous/remote/symlinked L0 tooling source, commit or digest drift, or missing executable closure is a closed failure. Do not fall back to a dashboard-only imitation. Refresh the toolkit checkout deliberately, rerun one plain `/sync-l0`, and restart the host.
 
 ## Launch Claude from a consumer
 
