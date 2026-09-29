@@ -42,6 +42,20 @@ test('consumer operations document distinguishes interactive input and permissio
   assert.match(text, /Bash.*still require explicit approval/s);
 });
 
+test('resume-work documentation distinguishes same-process notification from cross-process rehydration', () => {
+  const operations = fs.readFileSync(path.join(root, 'docs', 'guides', 'runtime-consumer-operations.md'), 'utf8');
+  const skill = fs.readFileSync(path.join(root, 'skills', 'resume-work', 'SKILL.md'), 'utf8');
+
+  for (const text of [operations, skill]) {
+    assert.match(text, /same host process and session generation/i);
+    assert.match(text, /`role-notify`\s*\/\s*`SendMessage`/);
+    assert.match(text, /new host process/i);
+    assert.match(text, /`role-spawn`\s*\/\s*`Agent`/);
+    assert.match(text, /must not.*consume.*older.*handles/is);
+    assert.match(text, /cross-generation `SendMessage`/i);
+  }
+});
+
 test('provenance and wave docs reject prose-only authority claims', () => {
   const provenance = fs.readFileSync(path.join(root, 'docs', 'agents', 'evidence-provenance-contract.md'), 'utf8');
   const session = fs.readFileSync(path.join(root, 'docs', 'agents', 'tl-session-start.md'), 'utf8');

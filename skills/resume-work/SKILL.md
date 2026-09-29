@@ -34,6 +34,25 @@ sync and runtime sync instead of guessing a toolkit path.
 
 The decoded intent is exactly `{"checkpoint_ref":"checkpoint:<sha256>"}` when no wave is active, or canonical `{"checkpoint_ref":"checkpoint:<sha256>","wave_slug":"<slug>"}` for an active wave. The entrypoint validates the persisted control-plane state and derives only its class-aware lifecycle roles. Reuse `READY` bindings, execute only returned `ACTION_REQUIRED` actions, and surface `BLOCKED|UNAVAILABLE|FAILED` without treating historical memory as live authority.
 
+### Resume routing contract
+
+The host-process boundary determines the only valid native action:
+
+- In the same host process and session generation, an explicit checkpoint resume
+  reuses each parked actor through `role-notify` / `SendMessage`. The runtime
+  consumes the exact resume handle before delivery. A successful rerun returns
+  `READY` with `actions=[]`.
+- A new host process rotates the session generation. Actors from an older
+  generation are not reachable teammates in the new process, even when the
+  persisted Claude session id is the same. The runtime rehydrates them through
+  `role-spawn` / `Agent`; it must not send to, consume, or transplant the older
+  generation's handles.
+
+Do not require `SendMessage` after starting a new Claude process and do not keep a
+generation alive merely because its TTL has not elapsed. Process identity is part
+of the live-generation contract. A cross-generation `SendMessage`, handle-scope
+rewrite, or manual bridge is a closed failure, never a recovery procedure.
+
 ## Steps
 
 1. **Discover the active wave and runtime presence**: Resolve the active wave slug and include it in the canonical runtime intent. The shared entrypoint rejects missing, stale, illegal or PLAN/HEAD-drifted phase state, then probes/reuses/rehydrates only the class-aware roles returned by the control plane through the existing Wave-1 lifecycle manager. Reading historical Claude memory alone is never treated as runtime resume.
@@ -82,6 +101,7 @@ The decoded intent is exactly `{"checkpoint_ref":"checkpoint:<sha256>"}` when no
 ## Notes
 
 - Phase and role selection use the shared wave control plane; runtime presence uses the existing role-lifecycle manager. Neither path embeds vendor-specific dispatch or messaging knowledge.
+- `SendMessage` resumes only parked actors in the current host-process generation; a new host process rehydrates actors with `Agent` in a new generation.
 - Memory files inform "pending" items and decisions, but are never treated as proof of a live runtime binding — only a `probe` result confirms that
 - This skill is primarily read-only — it gathers context and presents it
 - The dashboard sections adapt to what exists: skip Marketing if no business docs, skip Product if no spec

@@ -88,32 +88,34 @@ Set-Location C:\absolute\path\to\consumer
 claude --add-dir $env:ANDROID_COMMON_DOC --effort high
 ```
 
-`--add-dir` grants host filesystem reachability; `--effort high` is verified from the native PreToolUse event. Neither replaces
-`l0-manifest.json`, runtime digests, certificate pins, or the Git hooks. Linked Git
-worktrees may retain the manifest path authored relative to the main checkout; the
-installer and hook launcher use Git's common directory, not an ambient fallback.
-Runtime PLAN authority comes from the signed launcher composition and owning action digest,
-never branch spelling or global PLAN uniqueness; retained waves and `-c1` worktree
-suffixes are supported. Two resolved toolkits fail closed as ambiguous.
+`--add-dir` grants host filesystem reachability; `--effort high` is verified from the native PreToolUse event. Neither replaces `l0-manifest.json`, runtime digests, certificate pins, or the Git hooks. Linked Git worktrees may retain the manifest path authored relative to the main checkout; the installer and hook launcher use Git's common directory, not an ambient fallback.
+Runtime PLAN authority comes from the signed launcher composition and owning action digest, never branch spelling or global PLAN uniqueness; retained waves and `-c1` worktree suffixes are supported.
+Two resolved toolkits fail closed as ambiguous.
 
-Run Gradle serially within one worktree. Concurrent Gradle invocations that share
-the same checkout/build directories can produce transient unresolved-reference
-cascades that disappear on an isolated rerun. If parallel validation is required,
-use distinct worktrees and isolated Gradle/build directories. Before selecting a
-platform compilation target, enumerate the checkout's actual tasks (for example,
-`./gradlew tasks --all`); do not infer `macosX64` from the presence of
-`macosArm64` or from a different consumer's target matrix.
+Run Gradle serially within one worktree. Concurrent Gradle invocations that share the same checkout/build directories can produce transient unresolved-reference cascades that disappear on an isolated rerun.
+If parallel validation is required, use distinct worktrees and isolated Gradle/build directories. Before selecting a platform compilation target, enumerate the checkout's actual tasks (for example, `./gradlew tasks --all`).
+Do not infer `macosX64` from the presence of `macosArm64` or from a different consumer's target matrix.
 
-Authenticated entrypoint commands use canonical POSIX form with every token single-quoted. Double-quoted commands
-are non-canonical and intentionally pass through ordinary approval.
+Authenticated entrypoint commands use canonical POSIX form with every token single-quoted. Double-quoted commands are non-canonical and intentionally pass through ordinary approval.
+
+### Resume actions and host-process generations
+
+`resume-work` selects native actions from reachability, not from the apparent age of a persisted record:
+
+| Situation | Required action | Handle rule |
+|---|---|---|
+| Same host process and session generation, with one live parked handle per role | `role-notify` / `SendMessage` | Consume that generation's exact handle before delivery; a rerun converges to `READY` with no actions |
+| New host process, including `claude --resume <session-id>` | `role-spawn` / `Agent` in a newly rotated generation | Preserve the old handle as historical evidence; never deliver it or rewrite its scope |
+
+The persisted Claude session id does not make an actor reachable across host processes. Generation TTL is an upper bound, not proof that the originating process still owns a usable native teammate.
+A test that starts a second Claude process and expects `SendMessage` is invalid: the correct result is generation rotation plus `Agent` rehydration. Conversely, same-process checkpoint resume must exercise `SendMessage`; accepting `Agent` there would hide a lifecycle regression.
+A new process must not consume any older generation's handles. Cross-generation `SendMessage`, manual handle migration, and bridge workarounds are forbidden.
 
 ### Interactive terminal input
 
-Treat terminal control input and prompt submission as separate operations. When
-clearing a prompt, send `Ctrl+U`, wait, send the new prompt, then send `Enter`.
-Combining those actions in one PTY write can truncate or concatenate input; this
-is a terminal boundary, not an L0 hook repair. Use `-p` / `--print` only for a
-bounded, non-persistent one-turn invocation.
+Treat terminal control input and prompt submission as separate operations. When clearing a prompt, send `Ctrl+U`, wait, send the new prompt, then send `Enter`.
+Combining those actions in one PTY write can truncate or concatenate input; this is a terminal boundary, not an L0 hook repair.
+Use `-p` / `--print` only for a bounded, non-persistent one-turn invocation.
 
 ## Quality-gate ownership by layer
 

@@ -1151,7 +1151,7 @@
       "description": "Resume session with a CEO/CTO dashboard — shows status by department from last session.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:cc5646317c1840f2b70f165f3fbcee1c93c31f380e9359da6180cb98ff0c3035",
+      "hash": "sha256:18394b34115e310285317e6c64e5a9825a7db391f71548cf626bf60adfad91f3",
       "dependencies": [],
       "frontmatter": {
         "name": "resume-work",
