@@ -2299,6 +2299,39 @@ function ensureResumeMatrixRoles(dir, sessionKey, roles, checkpointRef) {
   return runCli(args, { RUNTIME_ROLE_LIFECYCLE_FAKE_CAPABILITIES: LIVE_CAPS });
 }
 
+function recordResumeMatrixLiveActor(dir, sessionKey, action, actorBinding, agentId) {
+  const digest = (value) => crypto.createHash('sha256').update(value).digest('hex');
+  rll.recordClaudeId01SubagentStartObservation(dir, {
+    sessionId: sessionKey, agentId, agentType: action.role, actionId: action.action_id,
+  });
+  const now = new Date();
+  const startup = {
+    schema: 'runtime/claude-startup-actor/v1',
+    session_digest: digest(sessionKey),
+    agent_digest: digest(agentId),
+    role: action.role,
+    action_id: action.action_id,
+    action_digest: digest(rc.canonicalJSONStringify(action)),
+    claim_digest: '4'.repeat(64),
+    actor_binding_id: actorBinding.binding.binding_id,
+    worktree_id: action.worktree_id,
+    plan_digest: action.plan_digest,
+    session_generation_digest: digest(action.session_generation_id),
+    host_contract_digest: '5'.repeat(64),
+    created_at: now.toISOString().replace(/\.\d{3}Z$/, 'Z'),
+    expiry: new Date(now.getTime() + 300000).toISOString().replace(/\.\d{3}Z$/, 'Z'),
+  };
+  const startupKey = digest(
+    'claude-startup-v2:' + action.session_generation_id + ':' + digest(agentId),
+  );
+  const startupPath = path.join(
+    rll.registryRepoDir(dir), 'claude-id01-traces', 'startup-v2-' + startupKey + '.json',
+  );
+  assert.strictEqual(rll.writeRegistryRecordReplace(
+    startupPath, Buffer.from(rc.canonicalJSONStringify(startup), 'utf8'),
+  ).ok, true);
+}
+
 function admitSendMessageThroughRealBoundary(dir, sessionKey, action, ordinal) {
   return runtimeHostBoundary.admitNativeActionEvent({
     hook_event_name: 'PreToolUse',
@@ -2453,6 +2486,15 @@ test('L1-RESUME-MATRIX B/D: a new process with the same raw session id rotates G
         action.session_generation_id, action.role, before.state, 'READY', before.record, {},
       );
       assert.strictEqual(ready.ok, true, JSON.stringify(ready));
+      const actorBinding = rll.createRoleActorBinding(
+        dir, action.role, action.worktree_id, action.plan_digest,
+        action.session_generation_id, 120,
+      );
+      assert.strictEqual(actorBinding.ok, true, JSON.stringify(actorBinding));
+      recordResumeMatrixLiveActor(
+        dir, sessionKey, action, actorBinding,
+        'resume-matrix-' + action.role + '-' + action.session_generation_id,
+      );
     }
     for (const [role, handle] of fixture.handles) {
       assert.strictEqual(fs.existsSync(path.join(
