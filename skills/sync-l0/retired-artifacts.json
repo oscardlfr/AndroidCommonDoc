@@ -8,6 +8,11 @@
       "retired_in": "W31.6",
       "replacement": "docs/agents/main-agent-orchestration-guide.md",
       "known_l0_sha256": [
+        "8b48fa3706f28f71399a1c19f1e205098b0fa76d5e6c76ac03d36f845cc237df",
+        "ac8e613a00ff4ca2019594df9c32f73e6eff58a1dfea8642f355632469bd4016",
+        "a09d20dd6d9c976ccdf7b6f9d95ec8d0d6ca4937b17e812b57a9d9fb75adefdb",
+        "e4aa2e717bc83f7c8790ba303894b807a8b87e25fa7c3871fa331e49c6b5410c",
+        "cc741907271b88ea0721993aee4302d831e3a5a872b2bafb61f7952981bc7de4",
         "01c2f6e75d4e441bae0975ab459afda8501e0dbe57a2d60cf1827cd42ed969ba"
       ]
     }

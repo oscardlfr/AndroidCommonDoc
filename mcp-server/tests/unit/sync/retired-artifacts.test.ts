@@ -11,7 +11,14 @@ import { createDefaultManifest, readManifest, writeManifest, type Manifest } fro
 
 const RETIRED_PATH = ".claude/agents/team-lead.md";
 const REAL_L0_ROOT = path.resolve(import.meta.dirname, "../../../..");
-const HISTORICAL_TEAM_LEAD_SHA256 = "01c2f6e75d4e441bae0975ab459afda8501e0dbe57a2d60cf1827cd42ed969ba";
+const HISTORICAL_TEAM_LEAD_SHA256 = [
+  "8b48fa3706f28f71399a1c19f1e205098b0fa76d5e6c76ac03d36f845cc237df",
+  "ac8e613a00ff4ca2019594df9c32f73e6eff58a1dfea8642f355632469bd4016",
+  "a09d20dd6d9c976ccdf7b6f9d95ec8d0d6ca4937b17e812b57a9d9fb75adefdb",
+  "e4aa2e717bc83f7c8790ba303894b807a8b87e25fa7c3871fa331e49c6b5410c",
+  "cc741907271b88ea0721993aee4302d831e3a5a872b2bafb61f7952981bc7de4",
+  "01c2f6e75d4e441bae0975ab459afda8501e0dbe57a2d60cf1827cd42ed969ba",
+];
 const LEGACY_CONTENT = `---\nname: team-lead\ntemplate_version: "6.2.1"\n---\n\nLegacy L0 team lead.\n`;
 const LEGACY_SHA256 = createHash("sha256").update(LEGACY_CONTENT).digest("hex");
 
@@ -61,16 +68,16 @@ describe("permanent retired-artifact tombstones", () => {
     await rm(root, { recursive: true, force: true });
   });
 
-  it("pins the audited 6.2.1 digest without republishing retired consumer-specific bytes", async () => {
+  it("pins every audited L0 revision without republishing retired consumer-specific bytes", async () => {
     const tombstones = JSON.parse(await readFile(
       path.join(REAL_L0_ROOT, "skills", "sync-l0", "retired-artifacts.json"), "utf8",
     ));
     const migrations = JSON.parse(await readFile(
       path.join(REAL_L0_ROOT, "setup", "agent-templates", "MIGRATIONS.json"), "utf8",
     ));
-    expect(tombstones.artifacts[0].known_l0_sha256).toEqual([HISTORICAL_TEAM_LEAD_SHA256]);
+    expect(tombstones.artifacts[0].known_l0_sha256).toEqual(HISTORICAL_TEAM_LEAD_SHA256);
     expect(migrations.templates["team-lead"]["RETIRED-W31.6"].known_l0_sha256)
-      .toEqual([HISTORICAL_TEAM_LEAD_SHA256]);
+      .toEqual(HISTORICAL_TEAM_LEAD_SHA256);
     await expect(access(path.join(
       REAL_L0_ROOT,
       "mcp-server/tests/fixtures/retired-team-lead-v6.2.1.md.fixture",

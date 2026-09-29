@@ -31,7 +31,9 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
   ignores decoys and code fences, rejects missing or ambiguous declarations,
   and binds the PLAN class to the mandatory `CLASS` sentinel before publication.
 - Permanent sync tombstones remove only cryptographically identified historical
-  L0 artifacts such as the retired `team-lead` agent. Locally modified,
+  L0 artifacts such as the retired `team-lead` agent. The retirement allowlist
+  covers every L0 revision distributed before retirement, so older untouched
+  consumers converge without manual deletion. Locally modified,
   consumer-owned, symlinked, ambiguously cased, or unknown-provenance files are
   preserved and fail closed across ordinary, prune, runtime, L1/L2, and linked
   worktree paths.

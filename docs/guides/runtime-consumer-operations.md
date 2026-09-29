@@ -41,28 +41,26 @@ Both launchers resolve the one local L0 tooling source from `l0-manifest.json` a
 Standalone hooks remain copyable.
 Remote, missing, ambiguous, or symlinked source targets fail closed. Re-run plain `/sync-l0` after changing toolkit revisions. A managed topology from an older sync is updated automatically only when its current bytes still match the checksum recorded by that sync. Local topology drift or a customized role remains a conflict and is never overwritten.
 
-The shell hook installer also verifies executable mode. An identical Detekt hook that lost its executable bit is
-repaired without `--force` and reported as an executable repair; the mode-only repair does not rewrite the manifest.
-Differing bytes fail and require review. A repeated ordinary or runtime sync with no manifest-tracked change and no
-pending mode repair preserves `l0-manifest.json` byte-for-byte, including `last_synced`, so verification stays clean.
+The shell hook installer also verifies executable mode. An identical Detekt hook that lost its executable bit is repaired without `--force` and reported as an executable repair; the mode-only repair does not rewrite the manifest. Differing bytes fail and require review. A repeated ordinary or runtime sync with no manifest-tracked change and no pending mode repair preserves `l0-manifest.json` byte-for-byte, including `last_synced`, so verification stays clean.
+
+### Retired managed artifacts
+
+Ordinary sync also applies permanent L0 retirement tombstones. This is narrower than `--prune`: a retired path is removed automatically only when its normalized content matches one of the audited L0 revisions, and the allowlist covers every revision distributed before retirement. The canonical upgrade is the same two commands shown above: plain `--dry-run`, then plain sync. Do not add `--prune`, `--force`, delete the file manually, or copy a replacement hook or agent.
+
+The dry run names every retirement it would apply and performs zero writes. A modified file, symlink, hardlink, case-ambiguous path, project-owned declaration, or unknown digest is preserved and fails closed. If `retired-artifact-local-content-conflict:<path>` appears, inspect that path as consumer-owned content; retain any required behavior under a new project-owned name before retrying. A historical unmodified L0 copy must never require this manual recovery path.
 
 Older runtime adopters may have consumer hooks that L0 copied before it began recording those paths in `checksums`. Refresh recognizes only the published historical byte digest at its exact destination path, preflights the complete runtime closure, then replaces all eligible files and commits their current checksums atomically. A digest at the wrong path, modified bytes, or a customized sibling aborts the refresh before any runtime file is changed. Do not use `--force` or copy hooks manually to recover this state; review the reported path and preserve genuine consumer customizations.
 
 ### Runtime skill invocation and failure behavior
 
-`/init-session` has a deliberately small public surface so the model never has
-to discover paths or construct an encoded intent:
+`/init-session` has a deliberately small public surface so the model never has to discover paths or construct an encoded intent:
 
 ```bash
 node .claude/runtime/l0-entrypoint-launcher.cjs init-session
 node .claude/runtime/l0-entrypoint-launcher.cjs init-session --orchestrate <slug>
 ```
 
-Its PreToolUse hook derives the trusted Node path, exact consumer root, and
-canonical base64url intent, then verifies and rewrites the request to the
-internal command. Missing or extra arguments, unsafe slugs, shell operators,
-foreign cwd, and an invalid installation fail closed. `/resume-work`, `/work`, `/ingest-content`, and `/monitor-docs`
-retain the internal closed form documented in their skill files.
+Its PreToolUse hook derives the trusted Node path, exact consumer root, and canonical base64url intent, then verifies and rewrites the request to the internal command. Missing or extra arguments, unsafe slugs, shell operators, foreign cwd, and an invalid installation fail closed. `/resume-work`, `/work`, `/ingest-content`, and `/monitor-docs` retain the internal closed form documented in their skill files.
 
 The model must not discover the sibling toolkit, call `scripts/lib/runtime-collaboration-entrypoints.cjs` directly, or substitute
 `$PWD`, `$(pwd)`, `ANDROID_COMMON_DOC`, or another ambient path. A missing local

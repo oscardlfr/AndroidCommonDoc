@@ -40,6 +40,14 @@ Synchronize L0 assets and atomically refresh an already-enabled source-reference
 5. **Updates** manifest checksums and `last_synced` only when manifest-tracked
    managed state changes. A no-op apply preserves `l0-manifest.json` byte-for-byte.
 
+Permanent retirement tombstones are the one deliberate exception to additive
+sync. Ordinary `/sync-l0` removes a retired path without `--prune` only when its
+normalized bytes match one of the audited L0 revisions recorded in
+`retired-artifacts.json`. The allowlist must cover every revision that L0
+distributed before retirement, not only the final revision. Modified,
+hardlinked, symlinked, ambiguously-cased, or project-owned content is preserved
+and fails closed.
+
 When `manifest.runtime.enabled` is already true, ordinary `/sync-l0` refreshes
 registry assets and the closed runtime consumer contract in the same atomic
 workflow. No second sync command is required. `--runtime` performs the initial
@@ -267,6 +275,13 @@ Future direction: `<!-- L1-LOCAL -->` marker in agent files will designate proje
 
 - Files listed in `l2_specific` are never modified during sync
 - Orphaned files (in checksums but not in registry) are only removed if they have L0 version headers
+- Retired managed files are removed automatically only by an exact audited
+  historical digest. Run ordinary `/sync-l0 --dry-run`, review the reported
+  permanent retirement, then run ordinary `/sync-l0`; neither `--prune` nor a
+  manual deletion is part of the managed upgrade path.
+- A `retired-artifact-local-content-conflict` means the bytes are not a known L0
+  revision. Preserve and review them as consumer content; do not use `--force`
+  to bypass retirement safety.
 - Each materialized file includes its source hash for audit trail
 - Hook propagation is additive — project-local hooks are never removed
 - `--runtime --dry-run` performs no writes, including when validation fails

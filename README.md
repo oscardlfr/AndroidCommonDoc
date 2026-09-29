@@ -177,7 +177,7 @@ Downstream projects maintain local copies of L0 skills via the **registry + mani
 
 1. **Registry** (`skills/registry.json`) -- catalogs all 161 synchronized skill, agent, and command entries with SHA-256 hashes
 2. **Manifest** (`l0-manifest.json` in each project) -- declares which L0 entries to sync, tracks checksums, and lists source layers for chain topology
-3. **Sync engine** (`/sync-l0` skill) -- materializes copies with `l0_source` / `l0_hash` headers for drift detection. Additive by default (never removes files); use `--prune` to clean orphans. Resolves paths via git toplevel for worktree safety. In chain mode, `syncMultiSource()` merges registries from all sources before syncing.
+3. **Sync engine** (`/sync-l0` skill) -- materializes copies with `l0_source` / `l0_hash` headers for drift detection. It is additive for live registry entries; `--prune` cleans ordinary orphans, while permanent tombstones automatically remove only exact audited historical L0 bytes. Resolves paths via git toplevel for worktree safety. In chain mode, `syncMultiSource()` merges registries from all sources before syncing.
 
 ```bash
 # In your project: sync all L0 skills (additive — safe)
@@ -1330,8 +1330,8 @@ See [layer-topology.md](docs/architecture/layer-topology.md#auto-sync) for the f
 
 ```bash
 # In the downstream project:
-/sync-l0              # additive sync (pulls new/updated, never removes)
-/sync-l0 --prune      # also removes orphaned files
+/sync-l0              # add/update; also retires exact audited obsolete L0 files
+/sync-l0 --prune      # additionally removes ordinary orphaned files
 /sync-l0 --dry-run    # preview changes without writing
 /sync-l0 --runtime    # install/verify source-referenced runtime (no prune/force)
 ```
