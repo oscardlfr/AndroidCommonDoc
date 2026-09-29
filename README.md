@@ -608,7 +608,7 @@ These three skills are the recommended way to start any session. They discover a
 | Skill | What it does |
 |-------|-------------|
 | `/work <task>` | **Primary entry point.** Smart task routing -- reads agent frontmatter (domain+intent), matches your task description, and delegates to the best agent or skill. Extensible: add new agents and `/work` finds them |
-| `/init-session` | Canonical runtime readiness dashboard; `--orchestrate <slug>` ensures only the support plane admitted by the current wave and fails closed instead of constructing a manual fallback |
+| `/init-session` | Canonical runtime readiness dashboard; `--orchestrate <slug>` ensures only the support plane admitted by the current wave. A parked `WAITING` role is healthy and is woken by `/work` or `/resume-work`, not duplicated by init |
 | `/resume-work` | CEO/CTO session resume -- department-level status across your project (engineering, product, content). Picks up where you left off |
 | `/android-skills-consume` | **Reference.** Bridge doc for Google's Android Skills ecosystem (`navigation-3`, `edge-to-edge`, `r8-analyzer`, `agp-9-upgrade`, `migrate-xml-views-to-jetpack-compose`, `play-billing-library-version-upgrade`, `android-cli`) — install via `android skills add`. Per-layer applicability in `.planning/intel/android-skills-catalog.md` |
 
