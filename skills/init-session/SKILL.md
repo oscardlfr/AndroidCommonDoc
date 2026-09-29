@@ -16,7 +16,10 @@ Show canonical runtime readiness and, when requested, ensure the support plane.
 /init-session --orchestrate <slug>         # ensure core support plane, then dashboard
 ```
 
-The `<slug>` is required when `--orchestrate` is passed. Example: `/init-session --orchestrate bl-w32-07`.
+The `<slug>` is required when `--orchestrate` is passed. It must name an
+existing `.planning/wave-<slug>/PLAN.md`; the entrypoint may initialize the
+wave's control-plane state, but it does not create or infer a PLAN. Example:
+`/init-session --orchestrate bl-w32-07` after that wave's PLAN exists.
 
 ## Canonical Runtime Entrypoint
 
@@ -51,7 +54,11 @@ Skip this step if `--orchestrate` flag is absent. Default behavior is read-only 
 
 When `--orchestrate <slug>` is passed:
 
-1. Validate slug is present: if `--orchestrate` is passed without a slug, emit error: "Usage: /init-session --orchestrate <slug>" and exit.
+1. Validate that the slug is present and names the already-materialized
+   `.planning/wave-<slug>/PLAN.md`. If `--orchestrate` is passed without a slug,
+   emit error: "Usage: /init-session --orchestrate <slug>" and exit. Do not
+   invent a diagnostic slug: a missing PLAN is an invalid scope and must fail
+   closed.
 2. Submit the slug through the canonical shorthand above. The hook alone constructs the internal runtime intent. The entrypoint initializes or reads the shared phase state and obtains class-aware lifecycle work from the control plane; never run a second orchestration path, use a hard-coded roster, or embed vendor-specific dispatch/messaging calls:
    - `probe(profile)` reads the active `runtime-collaboration-policy.json` profile (`auto|persistent|ephemeral|disk-only`) and connector capabilities.
    - Execute each returned `ensure` action through the existing Wave-1 role-lifecycle manager. HARNESS, DOC and FAST-PATH role floors come only from `wave-topology.yaml` plus the active PLAN; `quality-gater` stays phase-scoped and is never parked in the persistent plane.
@@ -86,4 +93,8 @@ manifest or scan markers after the launcher returns.
 
 - Dashboard mode is read-only; orchestration may perform only the actions admitted by the runtime envelope.
 - Run this at the start of a new session to orient yourself
-- Session naming: the wave slug names the wave artifact directory (`.planning/wave-<slug>/`). Pick descriptive slugs (e.g., `feature-auth`) — they serve as wave identifiers. The load-bearing contract is the disk artifacts in that directory, not named-team membership.
+- Session naming: the wave slug names an existing wave artifact directory
+  (`.planning/wave-<slug>/`). Create and approve its PLAN through the normal
+  planning workflow before invoking orchestration. Pick descriptive slugs
+  (e.g., `feature-auth`) — they serve as wave identifiers. The load-bearing
+  contract is the disk artifacts in that directory, not named-team membership.

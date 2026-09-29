@@ -783,7 +783,7 @@
       "description": "Show the canonical runtime readiness dashboard. Optionally ensures the persistent support plane with --orchestrate <slug>.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:281ebdcbbe315d40bdbd16e5ffa077238243976bcf2cd8d6c133fbd0a470d596",
+      "hash": "sha256:2c0774a9f1eb9bf6ef288c10d889d2c023f76be7bf558b5226a9dd9e1dfd66ce",
       "dependencies": [],
       "frontmatter": {
         "name": "init-session",
@@ -3256,7 +3256,7 @@
       "description": "Show canonical runtime readiness and optionally ensure the support plane.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:b6f474e5023774c0c1126d8f6f31a034f466192b970502b66ba5c46a917081f1",
+      "hash": "sha256:4d8eddcc8a80fd6f41dba58b08088c4f50525fc8b603df4660fb98a268e8510c",
       "dependencies": [],
       "frontmatter": {
         "description": "Show canonical runtime readiness and optionally ensure the support plane."
