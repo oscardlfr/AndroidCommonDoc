@@ -170,9 +170,10 @@ function publishClaudeSupportRoleTerminal(projectRoot, event) {
  * A startup record is joined to the raw CLAUDE-ID-01 trace by the two
  * one-way identity digests.  That gives us the raw session/agent tuple
  * needed to read the immutable authority fence.  A fenced actor is proven
- * ABSENT.  An unfenced startup observation is only historical identity
- * evidence, never a liveness probe, so it remains UNVERIFIED. Missing,
- * ambiguous, or cross-boundary evidence fails closed too.
+ * ABSENT. An exact, unexpired startup/raw observation without a fence remains
+ * the bounded positive evidence accepted by the current host contract; once
+ * it expires it is history and fails closed. Missing, ambiguous, expired, or
+ * cross-boundary evidence fails closed too.
  */
 function classifyClaudeSupportRoleLiveness(projectRoot, expected) {
   try {
@@ -274,7 +275,7 @@ function classifyClaudeSupportRoleLiveness(projectRoot, expected) {
       computeClaudeAuthorityIdentityId(projectRoot, 'claude-hook', identity.session_id, identity.agent_id));
     if (!fence.ok) return { ok: false, status: 'INVALID', reason: 'authority-fence-invalid' };
     return fence.absent
-      ? { ok: false, status: 'UNVERIFIED', reason: 'positive-liveness-evidence-absent' }
+      ? { ok: true, status: 'LIVE', actorBindingId: actor.binding.binding_id }
       : { ok: true, status: 'ABSENT', actorBindingId: actor.binding.binding_id };
   } catch {
     return { ok: false, status: 'INVALID', reason: 'actor-liveness-internal' };

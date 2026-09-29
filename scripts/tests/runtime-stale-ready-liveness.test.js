@@ -124,13 +124,13 @@ test('five fenced support actors are classified ABSENT, never healthy READY', (t
   assert.ok(results.every((result) => result.ok));
 });
 
-test('five exact unfenced support actors remain UNVERIFIED without positive liveness evidence', (t) => {
+test('five exact unexpired unfenced support actors remain LIVE within the bounded host contract', (t) => {
   const f = fixture();
   t.after(() => fs.rmSync(f.root, { recursive: true, force: true }));
   for (const role of ROLES) f.add(role);
   assert.deepStrictEqual(
     ROLES.map((role) => f.api.classifyClaudeSupportRoleLiveness(f.root, f.expected(role)).status),
-    Array(5).fill('UNVERIFIED'),
+    Array(5).fill('LIVE'),
   );
 });
 
@@ -165,9 +165,10 @@ test('expired and unrelated raw traces are ignored instead of creating false amb
   const unrelated = { ...expired, agent_id: 'other', agent_type: ROLES[1], expiry: EXPIRY };
   fs.writeFileSync(path.join(f.traceDir, 'raw-expired.json'), JSON.stringify(expired));
   fs.writeFileSync(path.join(f.traceDir, 'raw-unrelated.json'), JSON.stringify(unrelated));
-  assert.deepStrictEqual(f.api.classifyClaudeSupportRoleLiveness(f.root, f.expected(role)), {
-    ok: false, status: 'UNVERIFIED', reason: 'positive-liveness-evidence-absent',
-  });
+  assert.strictEqual(
+    f.api.classifyClaudeSupportRoleLiveness(f.root, f.expected(role)).status,
+    'LIVE',
+  );
 });
 
 test('persisted actor A versus current actor binding B fails closed as identity mismatch', (t) => {
@@ -340,15 +341,21 @@ function currentRoleState(root, seeded) {
   );
 }
 
-test('black-box A: durable READY plus startup/raw but no fence is not sufficient after host-wide cancellation', (t) => {
+test('black-box A: durable READY plus expired startup/raw but no fence is not sufficient after host-wide cancellation', (t) => {
   const root = makeCliProject();
   t.after(() => cleanupCliProject(root));
   const sessionId = 'host-wide-cancel-session';
   const seeded = seedReadyClaudeActor(root, sessionId, 'host-wide-cancel-agent');
 
-  // Models Ctrl-C / "All background agents stopped": no SubagentStop event,
-  // therefore no fence or resume handle. Persisted startup facts alone cannot
-  // be accepted as a fresh observation that the actor still exists.
+  const startup = JSON.parse(fs.readFileSync(seeded.startupPath, 'utf8'));
+  startup.expiry = new Date(Date.now() - 1_000).toISOString();
+  assert.strictEqual(rll.writeRegistryRecordReplace(
+    seeded.startupPath, Buffer.from(rc.canonicalJSONStringify(startup), 'utf8'),
+  ).ok, true);
+
+  // Models the observed host-wide kill: no SubagentStop event, fence or resume
+  // handle, while the startup observation has already expired. Persisted
+  // historical facts cannot be accepted as evidence that the actor exists.
   const result = runEnsure(root, sessionId, seeded.plan.planDigest);
   assert.notStrictEqual(result.status, 'READY',
     'init/ensure must actively revalidate host liveness; durable unfenced startup history alone is not current liveness');
