@@ -540,6 +540,21 @@ test('ordinary ensure rejects BUSY without a consumed receipt and preserves exac
       message: action.payload.message,
     });
     assert.strictEqual(consumed.ok, true, JSON.stringify(consumed));
+
+    const consumedHandlePath = rll.claudeResumeHandlePathFor(resumed, handle.record.binding_id);
+    const malformedConsumed = JSON.parse(fs.readFileSync(consumedHandlePath, 'utf8'));
+    delete malformedConsumed.session_generation_id;
+    fs.writeFileSync(consumedHandlePath, JSON.stringify(malformedConsumed));
+    const malformedRejected = ensureOrdinaryClaudeRole(resumed, 'busy-receipt-live-session', role);
+    assert.strictEqual(malformedRejected.status, 4, JSON.stringify(malformedRejected.result));
+    assert.strictEqual(malformedRejected.result.status, 'UNAVAILABLE', JSON.stringify(malformedRejected.result));
+    assert.deepStrictEqual(malformedRejected.result.actions, []);
+    assert.strictEqual(rll.readRoleBindingState(
+      resumed, resumedFixture.worktreeId, resumedFixture.planDigest, resumedFixture.profileDigest,
+      resumedFixture.generationId, role,
+    ).state, 'BUSY', 'a malformed consumed handle must fail closed without mutating BUSY');
+    fs.writeFileSync(consumedHandlePath, JSON.stringify(handle.record));
+
     const probe = ensureOrdinaryClaudeRole(resumed, 'busy-receipt-live-session', role);
     assert.strictEqual(probe.result.status, 'ACTION_REQUIRED', JSON.stringify(probe.result));
     assert.strictEqual(probe.result.actions.length, 1, JSON.stringify(probe.result));
