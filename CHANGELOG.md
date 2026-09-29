@@ -37,6 +37,15 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
   consumer-owned, symlinked, ambiguously cased, or unknown-provenance files are
   preserved and fail closed across ordinary, prune, runtime, L1/L2, and linked
   worktree paths.
+- Initial runtime adoption now declares L1/L2 identity explicitly and atomically
+  instead of inferring architecture from an optional skills registry. Legacy
+  manifests retain marker-based compatibility until refresh persists the role;
+  contradictory declarations fail closed.
+- Runtime adoption recognizes exact same-path L0 revisions reachable from the
+  qualified toolkit commit, plus ordinary-sync copies whose body, embedded
+  provenance, and manifest checksum agree. Historical managed consumers can
+  upgrade without per-version digest surgery, while edited or cross-path bytes
+  still fail closed.
 - Recovery and research modes are now separated explicitly: safe mode disables
   plugins and MCP, while a bounded Context7 research session restores only the
   explicit user setting source under restricted mode, preauthorizes the two

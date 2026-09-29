@@ -132,10 +132,12 @@ Proceed? [Y/n]
 Auto-discovers L0/L1 sources from the current L0 checkout, explicit paths,
 sibling directories (`../`, `../../`), and any existing `l0-manifest.json`.
 
-**Discovery markers:**
+**Discovery authority:**
 - **L0**: has `skills/registry.json` + `mcp-server/` (no `l0-manifest.json`)
-- **L1**: has `skills/registry.json` + `l0-manifest.json` (own registry + consumes upstream)
-- **L2**: has `l0-manifest.json` only (consumer, no own registry)
+- **L1/L2**: `l0-manifest.json.consumer_layer` is authoritative and does not
+  depend on whether the project publishes its own skills registry.
+- **Legacy fallback only**: registry + manifest means L1; manifest without a
+  registry means L2. Persist the confirmed layer explicitly during setup.
 
 ```
 Scanning for L0/L1 sources...
@@ -160,7 +162,7 @@ Layer topology:
   (2) chain               — This project inherits from a parent layer (L1→L0)
 ```
 
-If **flat**: `topology: "flat"`, `sources` = `[{ layer: "L0", path: l0_source }]`.
+If **flat**: `topology: "flat"`, `sources` = `[{ layer: "L0", path: l0_source }]`, and persist the confirmed `consumer_layer`.
 
 If **chain**: ask for the parent layer path:
 ```
@@ -169,7 +171,7 @@ Parent layer path (relative to this project):
 Parent layer name (e.g. L1):
 > L1
 ```
-Then `topology: "chain"`, `sources` = `[{ layer: "L0", path: l0_source, role: "tooling" }, { layer: "L1", path: parent_path, role: "ecosystem" }]`.
+Then `topology: "chain"`, `sources` = `[{ layer: "L0", path: l0_source, role: "tooling" }, { layer: "L1", path: parent_path, role: "ecosystem" }]`, and persist `consumer_layer: "L2"`.
 
 Validate that each source path contains `skills/registry.json` before proceeding.
 

@@ -6,8 +6,9 @@
  *
  * Classification:
  *   - L0: has skills/registry.json + mcp-server/ (no l0-manifest.json)
- *   - L1: has skills/registry.json + l0-manifest.json (has own registry + consumes L0)
- *   - L2: has l0-manifest.json only (consumer, no own registry)
+ *   - L1/L2: explicit l0-manifest.json consumer_layer wins
+ *   - legacy L1: has skills/registry.json + l0-manifest.json
+ *   - legacy L2: has l0-manifest.json only
  *   - unknown: none of the above
  *
  * Resolution priority:
@@ -62,13 +63,25 @@ export function classifyRepo(repoPath: string): LayerRole {
   const hasMcpServer = existsSync(join(repoPath, "mcp-server"));
   const hasManifest = existsSync(join(repoPath, "l0-manifest.json"));
 
+  if (hasManifest) {
+    try {
+      const parsed = JSON.parse(readFileSync(join(repoPath, "l0-manifest.json"), "utf8"));
+      if (parsed.consumer_layer === "L1" || parsed.consumer_layer === "L2") {
+        return parsed.consumer_layer;
+      }
+      if (Object.prototype.hasOwnProperty.call(parsed, "consumer_layer")) return "unknown";
+    } catch {
+      return "unknown";
+    }
+  }
+
   // L0: canonical source — has registry + mcp-server, no manifest
   if (hasRegistry && hasMcpServer && !hasManifest) return "L0";
 
-  // L1: intermediate — has own registry AND consumes upstream
+  // Legacy L1 marker: intermediate — has own registry AND consumes upstream
   if (hasRegistry && hasManifest) return "L1";
 
-  // L2: consumer only — has manifest but no own registry
+  // Legacy L2 marker: consumer only — has manifest but no own registry
   if (hasManifest && !hasRegistry) return "L2";
 
   return "unknown";

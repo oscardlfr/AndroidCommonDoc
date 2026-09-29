@@ -146,8 +146,13 @@ function resolveRuntimeProjectContext(consumerRoot) {
   if (canonicalSource === null) return fail('runtime-l0-source-unresolved');
   if (canonicalSource !== TOOLKIT_ROOT) return fail('runtime-toolkit-source-mismatch');
 
+  const declaredLayer = manifest.consumer_layer;
+  if (declaredLayer !== undefined && !['L1', 'L2'].includes(declaredLayer)) {
+    return fail('runtime-consumer-manifest-invalid');
+  }
   const hasRegistry = fs.existsSync(path.join(canonicalConsumer, 'skills', 'registry.json'));
-  const observedLayer = hasRegistry ? 'L1' : 'L2';
+  const legacyObservedLayer = hasRegistry ? 'L1' : 'L2';
+  const observedLayer = declaredLayer || legacyObservedLayer;
   if (manifest.runtime.consumer_layer !== observedLayer) return fail('runtime-consumer-layer-mismatch');
   return {
     ok: true,

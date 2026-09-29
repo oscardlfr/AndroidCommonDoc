@@ -182,6 +182,12 @@ describe("runtime consumer metadata", () => {
     expect(parsed.runtime).toEqual(runtime);
   });
 
+  it("preserves an explicit project consumer layer independently of registry capabilities", () => {
+    expect(validateManifest(makeV2Manifest({ consumer_layer: "L1" })).consumer_layer).toBe("L1");
+    expect(validateManifest(makeV2Manifest({ consumer_layer: "L2" })).consumer_layer).toBe("L2");
+    expect(ManifestSchemaV2.safeParse(makeV2Manifest({ consumer_layer: "L0" })).success).toBe(false);
+  });
+
   it("rejects disabled, malformed and extended runtime pins", () => {
     const invalid = [
       { ...runtime, enabled: false },

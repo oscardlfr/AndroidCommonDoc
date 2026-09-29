@@ -15,7 +15,8 @@ Synchronize L0 assets and atomically refresh an already-enabled source-reference
 /sync-l0
 /sync-l0 --project-root /path/to/my-project
 /sync-l0 --l0-root /path/to/AndroidCommonDoc
-/sync-l0 --runtime --project-root /path/to/consumer
+/sync-l0 --runtime --consumer-layer L1 --project-root /path/to/consumer
+/sync-l0 --runtime --consumer-layer L2 --project-root /path/to/consumer
 /sync-l0 --assets-only --project-root /path/to/consumer
 ```
 
@@ -24,6 +25,10 @@ Synchronize L0 assets and atomically refresh an already-enabled source-reference
 - `--project-root` -- Path to the downstream project root (default: current working directory)
 - `--l0-root` -- Optional ordinary-sync override. If omitted, resolve the manifest `sources[]` entry whose layer is `L0`. In runtime mode an override must equal that declared local source.
 - `--runtime` -- Adopt the source-referenced collaboration runtime for the first time, or request it explicitly. Requires an existing manifest with exactly one local `L0`/`tooling` source.
+- `--consumer-layer L1|L2` -- Explicit architectural identity for initial
+  runtime adoption. It is independent of whether the consumer publishes its
+  own skills registry. Dry-run previews it without writing; apply records it
+  atomically in the manifest and runtime pin; conflicts fail closed.
 - `--assets-only` -- Explicit maintenance escape hatch that skips runtime refresh even when `manifest.runtime.enabled` is true. Do not use for normal consumer upgrades.
 - `--dry-run` -- Validate and preview without changing consumer files.
 
@@ -98,7 +103,8 @@ The sync CLI can be invoked two ways:
 ```bash
 cd <androidcommondoc>/mcp-server && npm run build
 node build/sync/sync-l0-cli.js --project-root <target-project>
-node build/sync/sync-l0-cli.js --project-root <consumer-project> --runtime  # first adoption
+node build/sync/sync-l0-cli.js --project-root <consumer-project> --runtime --consumer-layer L1  # first L1 adoption
+node build/sync/sync-l0-cli.js --project-root <consumer-project> --runtime --consumer-layer L2  # first L2 adoption
 node build/sync/sync-l0-cli.js --project-root <consumer-project>            # every later upgrade
 ```
 

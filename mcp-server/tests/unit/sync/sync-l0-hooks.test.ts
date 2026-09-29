@@ -5,20 +5,26 @@ import { tmpdir } from "node:os";
 import { spawnSync } from "node:child_process";
 import { createRequire } from "node:module";
 import { createHash } from "node:crypto";
-import { syncHooks, installRuntimeConsumer, syncL0 } from "../../../src/sync/sync-engine.js";
+import {
+  syncHooks,
+  installRuntimeConsumer,
+  isHistoricalToolkitFile,
+  syncL0,
+} from "../../../src/sync/sync-engine.js";
 
 const REAL_L0_ROOT = resolve(import.meta.dirname, "../../../..");
 const localRequire = createRequire(import.meta.url);
 const runtimeContext = localRequire(join(REAL_L0_ROOT, "scripts", "lib", "runtime-project-context.cjs"));
 const waveControl = localRequire(join(REAL_L0_ROOT, "scripts", "lib", "wave-control-plane.cjs"));
 
-async function writeRuntimeManifest(projectRoot: string): Promise<void> {
+async function writeRuntimeManifest(projectRoot: string, consumerLayer?: "L1" | "L2"): Promise<void> {
   await writeFile(join(projectRoot, "l0-manifest.json"), JSON.stringify({
     version: 2,
     sources: [{ layer: "L0", path: relative(projectRoot, REAL_L0_ROOT), role: "tooling" }],
     topology: "flat", last_synced: "2026-09-05T00:00:00.000Z",
     selection: { mode: "include-all", exclude_skills: [], exclude_agents: [], exclude_commands: [], exclude_categories: [], exclude_hooks: [] },
     checksums: {}, l2_specific: { commands: [], agents: [], skills: [] }, migrations_applied: [],
+    ...(consumerLayer ? { consumer_layer: consumerLayer } : {}),
   }, null, 2) + "\n");
 }
 
@@ -313,6 +319,27 @@ describe("source-referenced runtime installation", () => {
 
   afterEach(async () => {
     await rm(projectRoot, { recursive: true, force: true });
+  });
+
+  it("admits only exact same-path revisions reachable from the qualified toolkit HEAD", async () => {
+    const toolkit = join(projectRoot, "toolkit-history");
+    const relative = ".claude/hooks/tool-use-logger.js";
+    const file = join(toolkit, relative);
+    await mkdir(join(toolkit, ".claude", "hooks"), { recursive: true });
+    expect(spawnSync("git", ["init", "--quiet"], { cwd: toolkit }).status).toBe(0);
+    expect(spawnSync("git", ["config", "user.email", "runtime-test@example.invalid"], { cwd: toolkit }).status).toBe(0);
+    expect(spawnSync("git", ["config", "user.name", "Runtime Test"], { cwd: toolkit }).status).toBe(0);
+    await writeFile(file, "historical logger\n", "utf8");
+    expect(spawnSync("git", ["add", relative], { cwd: toolkit }).status).toBe(0);
+    expect(spawnSync("git", ["commit", "--quiet", "-m", "historical"], { cwd: toolkit }).status).toBe(0);
+    await writeFile(file, "current logger\n", "utf8");
+    expect(spawnSync("git", ["add", relative], { cwd: toolkit }).status).toBe(0);
+    expect(spawnSync("git", ["commit", "--quiet", "-m", "current"], { cwd: toolkit }).status).toBe(0);
+
+    expect(isHistoricalToolkitFile(toolkit, relative, "historical logger\n")).toBe(true);
+    expect(isHistoricalToolkitFile(toolkit, relative, "locally edited logger\n")).toBe(false);
+    expect(isHistoricalToolkitFile(toolkit, ".claude/hooks/other.js", "historical logger\n")).toBe(false);
+    expect(isHistoricalToolkitFile(toolkit, "../tool-use-logger.js", "historical logger\n")).toBe(false);
   });
 
   it("removes known retired-agent manifest provenance during runtime installation", async () => {
@@ -690,6 +717,25 @@ describe("source-referenced runtime installation", () => {
     expect(await readFile(join(projectRoot, "l0-manifest.json"), "utf8")).toBe(manifestBytesBefore);
   });
 
+  it("certifies an explicitly declared L1 without requiring a skills registry", async () => {
+    await writeRuntimeManifest(projectRoot, "L1");
+    await expect(readFile(join(projectRoot, "skills", "registry.json"), "utf8")).rejects.toThrow();
+
+    const dry = await installRuntimeConsumer(projectRoot, REAL_L0_ROOT, { dryRun: true });
+    expect(dry.ok).toBe(true);
+    expect(dry.consumerLayer).toBe("L1");
+    expect(JSON.parse(await readFile(join(projectRoot, "l0-manifest.json"), "utf8")).runtime)
+      .toBeUndefined();
+
+    const installed = await installRuntimeConsumer(projectRoot, REAL_L0_ROOT);
+    expect(installed.ok).toBe(true);
+    expect(installed.consumerLayer).toBe("L1");
+    const manifest = JSON.parse(await readFile(join(projectRoot, "l0-manifest.json"), "utf8"));
+    expect(manifest.consumer_layer).toBe("L1");
+    expect(manifest.runtime.consumer_layer).toBe("L1");
+    expect(runtimeContext.verifyRuntimeConsumerInstallation(projectRoot, { verifyContent: true }).ok).toBe(true);
+  });
+
   it("reports a runtime mode-only repair without rewriting the manifest", async () => {
     const installed = await installRuntimeConsumer(projectRoot, REAL_L0_ROOT);
     expect(installed.ok).toBe(true);
@@ -1046,6 +1092,49 @@ describe("source-referenced runtime installation", () => {
       .toBe(await readFile(join(REAL_L0_ROOT, relative), "utf8"));
   });
 
+  it("upgrades a historical ordinary-sync role when its body and provenance match the recorded checksum", async () => {
+    const relative = ".claude/agents/arch-platform.md";
+    const destination = join(projectRoot, relative);
+    const historicalSource = "---\nname: arch-platform\ntemplate_version: \"1.32.0\"\n---\nhistorical managed role\n";
+    const recorded = `sha256:${createHash("sha256").update(historicalSource).digest("hex")}`;
+    const materialized = historicalSource.replace("\n---\n", `\nl0_source: C:\\\\legacy\\\\AndroidCommonDoc\nl0_hash: ${recorded}\nl0_synced: 2026-05-17T16:29:39.626Z\n---\n`);
+    await mkdir(join(projectRoot, ".claude", "agents"), { recursive: true });
+    await writeFile(destination, materialized, "utf8");
+    const manifestPath = join(projectRoot, "l0-manifest.json");
+    const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
+    manifest.checksums[relative] = recorded;
+    await writeFile(manifestPath, JSON.stringify(manifest, null, 2) + "\n", "utf8");
+
+    const installed = await installRuntimeConsumer(projectRoot, REAL_L0_ROOT);
+
+    expect(installed.ok).toBe(true);
+    expect(installed.migratedRoles).toContain("arch-platform");
+    expect(await readFile(destination, "utf8"))
+      .toBe(await readFile(join(REAL_L0_ROOT, relative), "utf8"));
+  });
+
+  it("rejects a historical ordinary-sync role whose body drifted after publication", async () => {
+    const relative = ".claude/agents/arch-platform.md";
+    const destination = join(projectRoot, relative);
+    const historicalSource = "---\nname: arch-platform\ntemplate_version: \"1.32.0\"\n---\nhistorical managed role\n";
+    const recorded = `sha256:${createHash("sha256").update(historicalSource).digest("hex")}`;
+    const materialized = historicalSource
+      .replace("historical managed role", "locally edited role")
+      .replace("\n---\n", `\nl0_source: manifest:L0/tooling\nl0_hash: ${recorded}\nl0_synced: 2026-05-17T16:29:39.626Z\n---\n`);
+    await mkdir(join(projectRoot, ".claude", "agents"), { recursive: true });
+    await writeFile(destination, materialized, "utf8");
+    const manifestPath = join(projectRoot, "l0-manifest.json");
+    const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
+    manifest.checksums[relative] = recorded;
+    await writeFile(manifestPath, JSON.stringify(manifest, null, 2) + "\n", "utf8");
+
+    const installed = await installRuntimeConsumer(projectRoot, REAL_L0_ROOT);
+
+    expect(installed.ok).toBe(false);
+    expect(installed.reason).toBe("runtime-role-conflict:arch-platform");
+    expect(await readFile(destination, "utf8")).toBe(materialized);
+  });
+
   it("rejects an in-place runtime role whose bytes drift from its recorded checksum", async () => {
     const relative = ".claude/agents/arch-platform.md";
     const destination = join(projectRoot, relative);
@@ -1122,6 +1211,58 @@ describe("source-referenced runtime installation", () => {
       expect(second.stdout).toContain("Runtime: enabled by l0-manifest.json; refreshing assets and runtime together");
       expect(second.stdout).toContain("Runtime consumer: L2");
       expect(await readFile(join(cliRoot, ".claude", "settings.json"), "utf8")).toBe(settingsBefore);
+    } finally {
+      await rm(cliRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("adopts an explicit L1 layer atomically through the CLI without a registry or manual manifest edit", async () => {
+    const cliRoot = await mkdtemp(join(tmpdir(), "runtime explicit l1 consumer "));
+    try {
+      await writeRuntimeManifest(cliRoot);
+      const manifestBefore = await readFile(join(cliRoot, "l0-manifest.json"), "utf8");
+      const cli = join(REAL_L0_ROOT, "mcp-server", "build", "sync", "sync-l0-cli.js");
+      const args = [
+        cli, "--project-root", cliRoot, "--l0-root", REAL_L0_ROOT,
+        "--runtime", "--consumer-layer", "L1",
+      ];
+
+      const dry = spawnSync(process.execPath, [...args, "--dry-run"], { encoding: "utf8" });
+      expect(dry.status, dry.stderr || dry.stdout).toBe(0);
+      expect(dry.stdout).toContain("Runtime consumer: L1");
+      expect(await readFile(join(cliRoot, "l0-manifest.json"), "utf8")).toBe(manifestBefore);
+      await expect(readFile(join(cliRoot, "skills", "registry.json"), "utf8")).rejects.toThrow();
+
+      const applied = spawnSync(process.execPath, args, { encoding: "utf8" });
+      expect(applied.status, applied.stderr || applied.stdout).toBe(0);
+      const manifest = JSON.parse(await readFile(join(cliRoot, "l0-manifest.json"), "utf8"));
+      expect(manifest.consumer_layer).toBe("L1");
+      expect(manifest.runtime.consumer_layer).toBe("L1");
+      expect(runtimeContext.verifyRuntimeConsumerInstallation(cliRoot, { verifyContent: true }).ok).toBe(true);
+
+      const repeat = spawnSync(process.execPath,
+        [cli, "--project-root", cliRoot, "--l0-root", REAL_L0_ROOT], { encoding: "utf8" });
+      expect(repeat.status, repeat.stderr || repeat.stdout).toBe(0);
+      expect(repeat.stdout).toContain("Runtime consumer: L1");
+    } finally {
+      await rm(cliRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects a CLI layer override that contradicts an explicit manifest declaration without writes", async () => {
+    const cliRoot = await mkdtemp(join(tmpdir(), "runtime layer conflict "));
+    try {
+      await writeRuntimeManifest(cliRoot, "L2");
+      const manifestBefore = await readFile(join(cliRoot, "l0-manifest.json"), "utf8");
+      const cli = join(REAL_L0_ROOT, "mcp-server", "build", "sync", "sync-l0-cli.js");
+      const rejected = spawnSync(process.execPath, [
+        cli, "--project-root", cliRoot, "--l0-root", REAL_L0_ROOT,
+        "--runtime", "--consumer-layer", "L1", "--dry-run",
+      ], { encoding: "utf8" });
+      expect(rejected.status).toBe(1);
+      expect(rejected.stderr).toContain("runtime-consumer-layer-conflict");
+      expect(await readFile(join(cliRoot, "l0-manifest.json"), "utf8")).toBe(manifestBefore);
+      await expect(readFile(join(cliRoot, ".claude", "settings.json"), "utf8")).rejects.toThrow();
     } finally {
       await rm(cliRoot, { recursive: true, force: true });
     }

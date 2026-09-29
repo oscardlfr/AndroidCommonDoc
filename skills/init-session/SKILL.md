@@ -74,13 +74,13 @@ When `--orchestrate <slug>` is passed:
   not permission to inspect the checkout ad hoc.
 
 When the canonical envelope reports layer identity, interpret only the fields
-it supplies. Never invent a top-level `layer` field; manifest v2 has none. The
-canonical marker rules are `no manifest = L0`, `registry + manifest = L1`, and
-`manifest without registry = L2`. A `runtime-consumer/v1` block reports its
-certified role separately through `consumer_layer`; flag any disagreement with
-marker-based classification instead of silently choosing one. These are result
-interpretation rules, not permission to read the manifest or scan markers after
-the launcher returns.
+it supplies. `l0-manifest.json.consumer_layer` is the L1/L2 architectural
+authority; publishing a skills registry is an independent capability. Legacy
+manifests without that field may use the old registry marker only until the next
+runtime refresh persists the inferred role. A `runtime-consumer/v1` block must
+agree with the explicit declaration; flag disagreement instead of silently
+choosing one. These are result interpretation rules, not permission to read the
+manifest or scan markers after the launcher returns.
 
 ## Notes
 
