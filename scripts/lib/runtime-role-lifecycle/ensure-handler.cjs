@@ -202,7 +202,9 @@ function handleEnsure(rawArgv) {
         };
         if (stateResult.state === 'WAITING' || stateResult.state === 'BUSY') {
           const handle = stateResult.state === 'WAITING'
-            ? findUniqueClaudeResumeHandleForTarget(projectRoot, target)
+            ? findUniqueClaudeResumeHandleForTarget(projectRoot, {
+              generationId: binding.session_generation_id, ...target,
+            })
             : findUniqueConsumedClaudeResumeHandleForBusyTarget(projectRoot, {
               generationId: binding.session_generation_id, ...target,
             }, stateResult.record);

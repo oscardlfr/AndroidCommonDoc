@@ -218,7 +218,16 @@ function consumeClaudeResumeHandleForObservedActor(projectRoot, event) {
  */
 function findUniqueClaudeResumeHandleForTarget(projectRoot, expected) {
   try {
-    const expectedValid = validateClaudePeerExpected(expected);
+    const expectedKeys = ['generationId', 'planDigest', 'sessionDigest', 'targetRole', 'worktreeId'];
+    if (!expected || typeof expected !== 'object' || Array.isArray(expected)
+        || !hasExactKeys(expected, expectedKeys) || !isHexCsprng32(expected.generationId)) {
+      return { ok: false, reason: 'INVALID' };
+    }
+    const peerExpected = {
+      planDigest: expected.planDigest, sessionDigest: expected.sessionDigest,
+      targetRole: expected.targetRole, worktreeId: expected.worktreeId,
+    };
+    const expectedValid = validateClaudePeerExpected(peerExpected);
     if (!expectedValid.ok) return expectedValid;
     const dir = path.join(registryRepoDir(projectRoot), 'claude-resume-handles');
     let entries;
@@ -243,7 +252,8 @@ function findUniqueClaudeResumeHandleForTarget(projectRoot, expected) {
       // schema cannot disable a later session. A raw record that claims this
       // role/worktree/PLAN and main session remains fail-closed below.
       if (
-        read.obj.role !== expected.targetRole || read.obj.worktree_id !== expected.worktreeId
+        read.obj.session_generation_id !== expected.generationId
+        || read.obj.role !== expected.targetRole || read.obj.worktree_id !== expected.worktreeId
         || read.obj.plan_digest !== expected.planDigest
       ) {
         continue;
