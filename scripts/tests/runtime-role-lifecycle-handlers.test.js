@@ -2443,6 +2443,29 @@ function admitSendMessageThroughRealBoundary(dir, sessionKey, action, ordinal) {
   });
 }
 
+function settleLivenessProbeThroughRealBoundary(dir, sessionKey, action, agentId, ordinal) {
+  const event = {
+    hook_event_name: 'PreToolUse',
+    tool_name: 'SendMessage',
+    cwd: dir,
+    session_id: sessionKey,
+    tool_use_id: `liveness-matrix-message-${ordinal}`,
+    tool_input: {
+      recipient: action.payload.teammate_name,
+      message: action.payload.message,
+    },
+  };
+  const admitted = runtimeHostBoundary.admitNativeActionEvent(event);
+  assert.strictEqual(admitted.admitted, true, JSON.stringify(admitted));
+  assert.strictEqual(admitted.reserved, true, JSON.stringify(admitted));
+  const settled = runtimeHostBoundary.settleNativeLivenessProbe(Object.assign({}, event, {
+    hook_event_name: 'PostToolUse',
+    tool_response: { success: true, resumedAgentId: agentId },
+  }));
+  assert.strictEqual(settled.ok, true, JSON.stringify(settled));
+  assert.strictEqual(settled.status, 'LIVE', JSON.stringify(settled));
+}
+
 function createReadyAndParkedSupportPlane(dir, sessionKey, roles) {
   const initial = ensureResumeMatrixRoles(dir, sessionKey, roles);
   assert.strictEqual(initial.status, 0, JSON.stringify(initial.result));
@@ -2612,6 +2635,24 @@ test('L1-RESUME-MATRIX B/D: a new process with the same raw session id rotates G
     assert.strictEqual(completed.result.status, 'READY', JSON.stringify(completed.result));
     assert.deepStrictEqual(completed.result.actions, []);
     assert.deepStrictEqual(completed.result.operation.resumed_roles, roles);
+
+    const probes = ensureResumeMatrixRoles(dir, sessionKey, roles);
+    assert.strictEqual(probes.result.status, 'ACTION_REQUIRED', JSON.stringify(probes.result));
+    assert.strictEqual(probes.result.actions.length, roles.length, JSON.stringify(probes.result.actions));
+    assert.ok(probes.result.actions.every((action) =>
+      action.kind === 'role-notify' && action.operation === 'SendMessage' &&
+      action.session_generation_id === rotated.generationId));
+    assert.strictEqual(probes.result.actions.some((action) => action.operation === 'Agent'), false,
+      'G2 liveness validation must not mint a sixth Agent');
+    for (let index = 0; index < probes.result.actions.length; index += 1) {
+      const action = probes.result.actions[index];
+      settleLivenessProbeThroughRealBoundary(
+        dir, sessionKey, action,
+        'resume-matrix-' + action.role + '-' + action.session_generation_id,
+        index,
+      );
+    }
+
     for (let pass = 0; pass < 2; pass += 1) {
       const init = ensureResumeMatrixRoles(dir, sessionKey, roles);
       assert.strictEqual(init.result.status, 'READY', JSON.stringify(init.result));
