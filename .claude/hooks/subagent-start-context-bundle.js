@@ -764,13 +764,15 @@ function handleSubagentStop(data) {
   // traces that identify the exact durable READY projection terminated by
   // this fence. Phase-scoped agents without a RoleActorBinding are skipped
   // by the publisher and retain the existing terminal path.
-  let terminalObservation;
-  try {
-    terminalObservation = rll.publishClaudeSupportRoleTerminal(projectRoot, {
-      sessionId, agentId, agentType,
-    });
-  } catch {
-    terminalObservation = { ok: false, reason: 'terminal-observation-threw' };
+  let terminalObservation = { ok: true, skipped: true };
+  if (rll.CANONICAL_ROLES.includes(agentType)) {
+    try {
+      terminalObservation = rll.publishClaudeSupportRoleTerminal(projectRoot, {
+        sessionId, agentId, agentType,
+      });
+    } catch {
+      terminalObservation = { ok: false, reason: 'terminal-observation-threw' };
+    }
   }
   if (!terminalObservation || !terminalObservation.ok) {
     blockStop(`[subagent-start-context-bundle] SubagentStop: durable terminal role observation FAILED: ${(terminalObservation && terminalObservation.reason) || 'unknown'} -- refusing trace cleanup.`);
