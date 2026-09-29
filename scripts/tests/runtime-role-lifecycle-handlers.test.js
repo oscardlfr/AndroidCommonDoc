@@ -322,6 +322,7 @@ function createReadyClaudeRoleFixture(dir, sessionKey, role, agentId) {
     dir, role, worktreeId, planDigest, generationId, 600,
   );
   assert.strictEqual(actorBinding.ok, true, JSON.stringify(actorBinding));
+  recordResumeMatrixLiveActor(dir, sessionKey, action, actorBinding, agentId);
   return {
     action, actorBinding, worktreeId, planDigest, generationId, profileDigest,
     ready: ready.record, agentId,
@@ -350,6 +351,13 @@ test('ordinary ensure rejects WAITING without a live resume handle and preserves
       missingFixture.generationId, role, 'READY', 'WAITING', missingFixture.ready, {},
     );
     assert.strictEqual(waitingWithoutHandle.ok, true, JSON.stringify(waitingWithoutHandle));
+    assert.strictEqual(rll.classifyClaudeSupportRoleLiveness(missing, {
+      generationId: missingFixture.generationId,
+      planDigest: missingFixture.planDigest,
+      role,
+      runtimeSessionKey: 'waiting-handle-missing-session',
+      worktreeId: missingFixture.worktreeId,
+    }).status, 'UNVERIFIED', 'the regression requires exact startup identity without a live resume handle');
     const rejected = ensureOrdinaryClaudeRole(missing, 'waiting-handle-missing-session', role);
     assert.strictEqual(rejected.status, 4, JSON.stringify(rejected.result));
     assert.strictEqual(rejected.result.status, 'UNAVAILABLE', JSON.stringify(rejected.result));
@@ -403,6 +411,13 @@ test('ordinary ensure rejects BUSY without a consumed receipt and preserves exac
       missingFixture.generationId, role, 'WAITING', 'BUSY', waiting.record, {},
     );
     assert.strictEqual(busyWithoutReceipt.ok, true, JSON.stringify(busyWithoutReceipt));
+    assert.strictEqual(rll.classifyClaudeSupportRoleLiveness(missing, {
+      generationId: missingFixture.generationId,
+      planDigest: missingFixture.planDigest,
+      role,
+      runtimeSessionKey: 'busy-receipt-missing-session',
+      worktreeId: missingFixture.worktreeId,
+    }).status, 'UNVERIFIED', 'the regression requires exact startup identity without a consumed receipt');
     const rejected = ensureOrdinaryClaudeRole(missing, 'busy-receipt-missing-session', role);
     assert.strictEqual(rejected.status, 4, JSON.stringify(rejected.result));
     assert.strictEqual(rejected.result.status, 'UNAVAILABLE', JSON.stringify(rejected.result));
