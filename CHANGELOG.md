@@ -44,6 +44,9 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
   root-owned `login` ancestor no longer invalidates the macOS parent chain (still exactly one signed Claude ancestor).
 - CI: the Node hook-test step runs every non-skipped file, lists every failure and then fails.
 - Entrypoint admission names the wave class/sentinel defect (`WAVE_CLASS_SECTION_MISSING`, `WAVE_CLASS_SECTION_AMBIGUOUS`, `PLAN_WAVE_CLASS_MISSING`, `PLAN_WAVE_CLASS_AMBIGUOUS`, `INVALID_WAVE_CLASS`, `WAVE_CLASS_SENTINEL_MISSING`, `INVALID_WAVE_CLASS_SENTINEL`) with how to recover; any other error stays generic.
+- Requester authority and `consult` find their wave when a consumer has several `.planning/wave-*` directories: `discoverPlan` has an opt-in `activeWaveByBranch` that reuses the existing branch resolver (`<prefix>/<slug>`, no environment, no alias); every other caller keeps the exact-one-wave rule and a branch that names no wave still fails.
+- A DOC wave now starts its declared `Required-Architects` through the lifecycle together with `context-provider` and `doc-updater`, so Pass B and PREP consultations have an architect peer; a DOC wave without the declaration fails as before. The planner template states that a FAST-PATH wave finalizes without a Pass B consultation.
+- `tl-session-start.md` documents the orchestrator's consumer PREP recipe (`wave-control init`, `verdict-request-write`, `verdict-write`, `wave-control transition`), run by a test against a consumer with a distinct toolkit.
 - `branch-guard` resolves the branch of the session's own worktree (hook event cwd or `git -C`), so commits in a desktop managed linked worktree on a feature branch are no longer denied because the main checkout is on `develop`.
 - The entrypoint launcher reports "/init-session runs only from Claude Code ... Codex is not a supported entrypoint host" when the bare shorthand reaches it unrewritten, instead of the opaque closed-argv error.
 

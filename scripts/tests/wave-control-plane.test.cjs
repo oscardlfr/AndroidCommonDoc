@@ -205,6 +205,32 @@ test('declared roles reject duplicates and non-architect role names', () => {
   }
 });
 
+test('a DOC wave starts its declared architects through the lifecycle, in addition to its floor roles', () => {
+  const doc = (required) => fixture({ className: 'DOC', architects: 'declared', lifecycleRoles: '[context-provider, doc-updater]', executionMode: 'ephemeral', required });
+  let root = doc('**Required-Architects**: arch-integration\n');
+  try {
+    const state = control.initialize(root, 'demo');
+    assert.deepStrictEqual(state.required_roles, ['arch-integration']);
+    assert.deepStrictEqual(state.lifecycle_roles, ['context-provider', 'doc-updater', 'arch-integration']);
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+
+  root = doc('**Required-Architects**: arch-platform, arch-testing\n');
+  try {
+    assert.deepStrictEqual(control.initialize(root, 'demo').lifecycle_roles,
+      ['context-provider', 'doc-updater', 'arch-platform', 'arch-testing']);
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+
+  root = doc('');
+  try { assert.throws(() => control.initialize(root, 'demo'), /DECLARED_ROLES_MISSING/, 'a DOC wave without Required-Architects still fails as before'); }
+  finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
+
+test('fixed-architect classes keep their configured lifecycle roles unchanged', () => {
+  const root = fixture({ className: 'HARNESS', architects: '[arch-platform]', lifecycleRoles: '[arch-platform, context-provider]', executionMode: 'persistent' });
+  try { assert.deepStrictEqual(control.initialize(root, 'demo').lifecycle_roles, ['arch-platform', 'context-provider']); }
+  finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
+
 test('lifecycle roles reject duplicates and invalid names independently of verdict roles', () => {
   for (const lifecycleRoles of ['[context-provider, context-provider]', '[Bad Role]']) {
     const root = fixture({ className: 'HARNESS', architects: '[arch-platform]', lifecycleRoles, executionMode: 'persistent' });

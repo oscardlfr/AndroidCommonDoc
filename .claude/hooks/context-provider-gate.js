@@ -1808,7 +1808,7 @@ function tryInjectRequesterGrant(toolInput, sessionId, agentType, agentId) {
   let planResult;
   try {
     worktreeId = runtimeRoleLifecycle.computeWorktreeId(projectRoot);
-    planResult = runtimeRoleLifecycle.discoverPlan(projectRoot);
+    planResult = runtimeRoleLifecycle.discoverPlan(projectRoot, null, { activeWaveByBranch: true });
   } catch {
     return m7DenyResult('[M7/WP4] unable to resolve project scope for recognized subcommand "' + subcommand + '".');
   }

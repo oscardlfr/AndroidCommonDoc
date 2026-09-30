@@ -155,7 +155,10 @@ function createRuntimeIdentityModule({
     return { ok: true, planPath: candidate, planDigest, waveSlug };
   }
 
-  function discoverPlan(projectRoot, expected = null) {
+  // `options.activeWaveByBranch` (opt-in, requester authority and consult only): when several wave directories hold a
+  // PLAN, the wave is the one named by the current branch through the existing hook resolver (`<prefix>/<slug>`; no
+  // environment, no planning alias). Every other caller keeps the exact-one-wave contract.
+  function discoverPlan(projectRoot, expected = null, options = {}) {
     if (expected && typeof expected === 'object' && !Array.isArray(expected)) {
       const keys = Object.keys(expected).sort();
       if (JSON.stringify(keys) !== JSON.stringify(['expectedDigest', 'waveSlug'])) return { ok: false };
@@ -180,6 +183,12 @@ function createRuntimeIdentityModule({
           try { if (sha256File(candidate) === expectedDigest) matches.push(candidate); } catch { return { ok: false }; }
         }
       }
+    }
+    if (matches.length > 1 && options && options.activeWaveByBranch === true && expectedDigest === null) {
+      const { getWaveSlug } = require('../../../.claude/hooks/hook-control-plane-utils.js');
+      const slug = getWaveSlug(projectRoot, { useEnv: false, useAlias: false, gitTimeoutMs: 3000 });
+      const named = slug ? path.join(planningDir, 'wave-' + slug, 'PLAN.md') : null;
+      if (named && matches.includes(named)) matches.splice(0, matches.length, named);
     }
     if (matches.length !== 1) return { ok: false };
     let planDigest;

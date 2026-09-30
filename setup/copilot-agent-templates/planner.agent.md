@@ -77,6 +77,8 @@ You are not a requester of runtime-consultation, and the main orchestrator canno
     SendMessage(to="arch-platform", summary="planner consult request",
       message="CONSULT-REQUEST wave=<slug>. Run your documented runtime-consult transaction against context-provider with this question, complete await-result and accept-result, and reply with ONLY the path of the accepted result file. Question: <what you need to plan the task; one line>")
 
+Which architect answers depends on the wave class: a HARNESS wave has all three `arch-*`; a DOC wave has only its declared `Required-Architects`, so address one of those instead of the default; a **FAST-PATH** wave has no support plane at all (no context-provider, no `arch-*`), so you finalize it without a Pass B consultation, remove the marker, and record `Pass B consultation: not applicable (FAST-PATH)` in the PLAN.
+
 The architect replies with the path of an accepted result file. `Read` exactly that path, cite what it returned in the PLAN, and only then remove the marker and finalize. If no arch-* is addressable, or the reply carries no accepted result path, STOP and report `NO-ACCEPTED-CONSULT-RESULT`; never finalize on the architect's prose alone and never send to context-provider yourself.
 
 FORBIDDEN: Running discovery Bash commands (grep/rg/find pattern searches) at any point — CP mediation replaces them, whether via the transaction or an accelerating SendMessage.

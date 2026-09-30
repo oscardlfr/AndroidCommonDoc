@@ -5322,6 +5322,32 @@ const HARNESS_SUFFIX_NEGATIVE_TABLE = [
     } finally { cleanupConsultFixture(fixture); }
   });
 
+  consultLauncherTest('CONSULT-LAUNCHER-5: a consumer with several wave directories consults in the wave named by its branch', () => {
+    const fixture = consultFixture('consult-l5', '# plan\n');
+    try {
+      const root = fixture.consumerRoot;
+      // The proof helper resolves a unique wave, so it runs before the earlier wave directory appears.
+      primeClaudeId01Trace(root, 'arch-testing', 'consult-l5-session', 'arch-testing');
+      const old = path.join(root, '.planning', 'wave-consult-l5-old');
+      fs.mkdirSync(old, { recursive: true });
+      fs.writeFileSync(path.join(old, 'PLAN.md'), '# an earlier wave\n');
+      const git = (...a) => assert.strictEqual(spawnSync('git', a, { cwd: root, encoding: 'utf8' }).status, 0, a.join(' '));
+      git('switch', '-q', '-c', 'feature/consult-l5');
+      const r = runNonMainBash(launcherConsultCommand(root, 'consult', consultArgs(root)), root, 'arch-testing', 'consult-l5-session');
+      assert.strictEqual(r.exit, 0, JSON.stringify(r));
+      const out = runRewrittenIn(root, rewrittenOf(r, 'CONSULT-LAUNCHER-5'));
+      const envelope = JSON.parse(out.stdout.trim().split('\n').pop());
+      assert.strictEqual(envelope.status, 'SUCCESS', out.stdout + out.stderr);
+      assert.strictEqual(JSON.parse(fs.readFileSync(envelope.artifact_ref, 'utf8')).wave_slug, 'consult-l5', 'the request binds the branch wave, not an earlier one');
+
+      // A branch that names no wave leaves the ambiguity fatal, as before.
+      git('switch', '-q', '-c', 'feature/elsewhere');
+      const denied = runNonMainBash(launcherConsultCommand(root, 'consult', consultArgs(root)), root, 'arch-testing', 'consult-l5-session');
+      const body = assertPreToolUseDeny(denied, 'CONSULT-LAUNCHER-5 no matching wave');
+      assert.match(body.hookSpecificOutput.permissionDecisionReason, /no discoverable PLAN/);
+    } finally { cleanupConsultFixture(fixture); }
+  });
+
   consultLauncherTest('CONSULT-LAUNCHER-3: negatives — non-allowlisted argv, foreign root, direct toolkit path, main orchestrator, forged binding, non-requester role', () => {
     const fixture = consultFixture('consult-l3', '# plan\n');
     try {

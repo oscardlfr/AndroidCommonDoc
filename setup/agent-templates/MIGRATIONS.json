@@ -139,7 +139,7 @@
       "1.22.3": {
         "date": "2026-09-30",
         "breaking": false,
-        "summary": "Pass B consults context-provider through the mediated chain: the planner sends its bounded question to the arch-* owner (arch-platform by default), which runs the documented runtime-consult transaction and returns the accepted result path; the planner reads it, cites it and only then removes the DRAFT-CONTEXT-PENDING marker.",
+        "summary": "Pass B consults context-provider through the mediated chain: the planner sends its bounded question to the arch-* owner (arch-platform by default), which runs the documented runtime-consult transaction and returns the accepted result path; the planner reads it, cites it and only then removes the DRAFT-CONTEXT-PENDING marker. DOC waves address a declared architect; FAST-PATH waves finalize without the consultation and record that in the PLAN.",
         "migration_hint": "Run plain /sync-l0; runtime-enabled consumers refresh the managed agents and the toolkit launcher atomically."
       },
       "1.22.2": {

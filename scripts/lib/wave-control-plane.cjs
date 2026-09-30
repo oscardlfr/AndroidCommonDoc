@@ -225,11 +225,16 @@ function executionMode(root, className) {
   }
   return spec.execution_mode;
 }
-function lifecycleRoles(root, className) {
+function lifecycleRoles(root, className, declaredArchitects) {
   const spec = (topology(root).class_artifacts || {})[className];
   const roles = spec && spec.lifecycle_roles;
   if (!Array.isArray(roles) || roles.some((role) => !LIFECYCLE_ROLE_RE.test(role))
     || new Set(roles).size !== roles.length) throw new Error('INVALID_LIFECYCLE_ROLES');
+  // A class whose architects are "declared" (DOC) names them only in the PLAN, so the lifecycle must start them too:
+  // otherwise Pass B and PREP consultations have no architect peer with a lifecycle startup record.
+  if (spec.architects === 'declared' && Array.isArray(declaredArchitects)) {
+    return [...new Set([...roles, ...declaredArchitects])];
+  }
   return roles.slice();
 }
 function currentInputs(root, slug) {
@@ -243,7 +248,7 @@ function currentInputs(root, slug) {
   }
   const className = planClass;
   return { ...p, head: gitHead(p.root), planDigest: sha256(planBytes), className,
-    roles: requiredRoles(p.root, planText, className), lifecycleRoles: lifecycleRoles(p.root, className),
+    roles: requiredRoles(p.root, planText, className), lifecycleRoles: lifecycleRoles(p.root, className, requiredRoles(p.root, planText, className)),
     executionMode: executionMode(p.root, className) };
 }
 function validateStateShape(state) {
