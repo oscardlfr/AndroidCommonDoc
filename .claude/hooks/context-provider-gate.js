@@ -25,7 +25,7 @@ const path = require('path');
 const crypto = require('crypto');
 const { spawnSync } = require('child_process');
 const coordinationArtifact = require('./coordination-artifact.js');
-const { getWaveSlug } = require('./hook-control-plane-utils.js');
+const { getWaveSlug, MEDIATED_RECIPIENT_ROLES } = require('./hook-control-plane-utils.js');
 
 // M7/WP4 (P0-2, lifecycle-grant injection, below): lazily-tolerant of either
 // sibling module failing to load -- a corrupt/missing file must never turn
@@ -412,7 +412,7 @@ function isAcceptedConsultationTransactionValid(txnDir, requestId, repoId, expec
     ) {
       return false;
     }
-    if (expectedProfileDigest && reqObj.target_role_profile_digest !== expectedProfileDigest) return false;
+    if (Array.isArray(expectedProfileDigest) && !expectedProfileDigest.includes(reqObj.target_role_profile_digest)) return false;
     if (!validateViaConsultationCli(coordRootForValidate, ctx.projectRoot, 'consult-v2', requestPath, ctx, callerIdentity)) return false;
 
     const acceptedClassified = runtimeConsultationLib.classifyDurableRead(path.join(txnDir, 'accepted-result.json'), { parse: true });
@@ -594,7 +594,12 @@ function hasCurrentAcceptedConsultation(ctx, architectIdentity, callerIdentity) 
   try {
     repoId = runtimeRoleLifecycle.computeRepoId(ctx.projectRoot);
     if (typeof repoId !== 'string' || repoId.length === 0) return false;
-    expectedProfileDigest = runtimeRoleLifecycle.roleProfileDigestFor('context-provider');
+    // A request published by the consultation CLI carries the deterministic target-role profile digest; fixtures and the
+    // role-lifecycle carry the role template digest. Both name the same context-provider profile and both are accepted.
+    expectedProfileDigest = [runtimeRoleLifecycle.roleProfileDigestFor('context-provider')];
+    if (typeof runtimeConsultationLib.targetRoleProfileDigestFor === 'function') {
+      expectedProfileDigest.push(runtimeConsultationLib.targetRoleProfileDigestFor('context-provider'));
+    }
     transactionsDirPath = path.join(coordRootForValidate, repoId, ctx.waveSlug, ctx.planSha256, 'transactions');
   } catch {
     return false;
@@ -1808,7 +1813,7 @@ function tryInjectRequesterGrant(toolInput, sessionId, agentType, agentId) {
   let planResult;
   try {
     worktreeId = runtimeRoleLifecycle.computeWorktreeId(projectRoot);
-    planResult = runtimeRoleLifecycle.discoverPlan(projectRoot, null, { activeWaveByBranch: true });
+    planResult = runtimeRoleLifecycle.discoverPlan(projectRoot);
   } catch {
     return m7DenyResult('[M7/WP4] unable to resolve project scope for recognized subcommand "' + subcommand + '".');
   }
@@ -2434,18 +2439,18 @@ process.stdin.on('end', () => {
       }
       process.exit(0);
     }
-    const SPECIALIST_NAMES = [
-      'test-specialist', 'toolkit-specialist', 'ui-specialist',
-      'domain-model-specialist', 'data-layer-specialist'
-    ];
-    const isSpecialist = SPECIALIST_NAMES.some(s => agentType === s || agentType.startsWith(s));
+    // Mediated recipients (specialists and the planner) rely on an arch-* answer, not on a consult of their own.
+    const isSpecialist = MEDIATED_RECIPIENT_ROLES.some(s => agentType === s || agentType.startsWith(s));
     const tmpDir = process.env.TMPDIR || process.env.TMP || os.tmpdir();
     // team-lead exemption removed: main is now caught by empty agent_type check above
     const EXEMPT_TYPES = ['context-provider', 'project-manager'];
     if (EXEMPT_TYPES.some(e => agentType === e || agentType.startsWith(e))) process.exit(0);
     // quality-gater verifies the committed HEAD and can never consult context-provider (only arch-* may), so the
     // pattern-discovery gate would wait forever for a consult it cannot make. Exact role or harness-suffixed instance only.
-    if (agentType === 'quality-gater' || harnessSuffixCandidateRole(agentType) === 'quality-gater') process.exit(0);
+    // doc-updater is exempt for the same reason: it cannot consult (only arch-* may) and its input arrives pre-consulted.
+    for (const preConsulted of ['quality-gater', 'doc-updater']) {
+      if (agentType === preConsulted || harnessSuffixCandidateRole(agentType) === preConsulted) process.exit(0);
+    }
 
     // 2a. Read on pattern-discovery paths requires CP consultation (T-BUG-015)
     try {

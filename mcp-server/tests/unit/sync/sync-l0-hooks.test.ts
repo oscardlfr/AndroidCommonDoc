@@ -546,7 +546,7 @@ describe("source-referenced runtime installation", () => {
     const first = await installRuntimeConsumer(projectRoot, REAL_L0_ROOT);
     expect(first.ok).toBe(true);
     expect(first.consumerLayer).toBe("L2");
-    expect(first.registrations).toBe(17);
+    expect(first.registrations).toBe(18);
     expect(first.toolkitContentDigest).toMatch(/^[0-9a-f]{64}$/);
     const inventoryPaths = new Set(first.inventory?.map((entry) => entry.relative_path));
     expect(inventoryPaths.has("scripts/lib/runtime-consultation.cjs")).toBe(true);

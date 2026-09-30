@@ -15,12 +15,12 @@ const CORE_HOOK_FILES = Object.freeze([
   'subagent-start-context-bundle.js', 'runtime-host-boundary.js',
   'runtime-host-session-start.js', 'bash-cli-spawn-gate.js',
   'premature-execution-gate.js', 'plan-md-write-gate.js',
-  'hook-control-plane-utils.js', 'tool-use-logger.js',
+  'hook-control-plane-utils.js', 'tool-use-logger.js', 'context-provider-consulted.js',
 ]);
 const SOURCE_REFERENCED_HOOK_FILES = new Set([
   'agent-spawn-execution-gate.js', 'context-provider-gate.js',
   'bash-cli-spawn-gate.js',
-  'hook-control-plane-utils.js',
+  'hook-control-plane-utils.js', 'context-provider-consulted.js',
   'premature-execution-gate.js', 'plan-md-write-gate.js',
   'runtime-consultation-target-gate.js',
   'runtime-host-boundary.js', 'runtime-host-session-start.js',
@@ -61,6 +61,7 @@ const HOOK_MATRIX = Object.freeze([
   ['PreToolUse', 'Bash|Task|Agent|SendMessage', 'runtime-host-boundary.js', 5],
   ['PostToolUse', '.*', 'tool-use-logger.js', 5],
   ['PostToolUse', 'Bash|Task|Agent|SendMessage', 'runtime-host-boundary.js', 5],
+  ['PostToolUse', 'SendMessage', 'context-provider-consulted.js', 5],
   ['PostToolUseFailure', 'Agent|SendMessage', 'tool-use-logger.js', 5],
   ['PostToolUseFailure', 'Bash|Task|Agent|SendMessage', 'runtime-host-boundary.js', 5],
   ['SubagentStart', '.*', 'subagent-start-context-bundle.js', 10],

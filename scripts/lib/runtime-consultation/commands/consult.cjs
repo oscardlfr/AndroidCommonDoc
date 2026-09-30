@@ -60,7 +60,7 @@ function createConsultCommand({
   function discoverWavePlan(projectRoot) {
     let found;
     try {
-      found = getRuntimeRoleLifecycle().discoverPlan(projectRoot, null, { activeWaveByBranch: true });
+      found = getRuntimeRoleLifecycle().discoverPlan(projectRoot);
     } catch (err) {
       found = { ok: false };
     }

@@ -712,13 +712,15 @@ describe("T-BUG-021: context-provider-gate has per-specialist arch-response flag
     expect(content).toMatch(/BL-W35-06/);
   });
 
-  it("context-provider-gate.js has SPECIALIST_NAMES list with all 5 specialists", () => {
-    const content = fs.readFileSync(GATE_HOOK, "utf-8");
-    expect(content).toMatch(/test-specialist/);
-    expect(content).toMatch(/toolkit-specialist/);
-    expect(content).toMatch(/ui-specialist/);
-    expect(content).toMatch(/domain-model-specialist/);
-    expect(content).toMatch(/data-layer-specialist/);
+  it("the shared MEDIATED_RECIPIENT_ROLES list names all 5 specialists and the planner, and both hooks use it", () => {
+    const shared = fs.readFileSync(path.join(path.dirname(GATE_HOOK), "hook-control-plane-utils.js"), "utf-8");
+    for (const role of ["test-specialist", "toolkit-specialist", "ui-specialist", "domain-model-specialist", "data-layer-specialist", "planner"]) {
+      expect(shared).toContain(`'${role}'`);
+    }
+    expect(fs.readFileSync(GATE_HOOK, "utf-8")).toMatch(/MEDIATED_RECIPIENT_ROLES/);
+    expect(fs.readFileSync(CONSULTED_HOOK, "utf-8")).toMatch(/MEDIATED_RECIPIENT_ROLES/);
+    expect(fs.readFileSync(GATE_HOOK, "utf-8")).not.toMatch(/const SPECIALIST_NAMES = \[/);
+    expect(fs.readFileSync(CONSULTED_HOOK, "utf-8")).not.toMatch(/const SPECIALIST_NAMES = \[/);
   });
 
   it("context-provider-gate.js has CLAUDE_CP_GATE_DISABLED env var bypass", () => {
@@ -731,10 +733,10 @@ describe("T-BUG-021: context-provider-gate has per-specialist arch-response flag
     expect(content).toMatch(/claude-arch-responded/);
   });
 
-  it("context-provider-consulted.js has ARCH_PREFIXES + SPECIALIST_NAMES write logic", () => {
+  it("context-provider-consulted.js has ARCH_SENDER_PREFIXES + MEDIATED_RECIPIENT_ROLES write logic", () => {
     const content = fs.readFileSync(CONSULTED_HOOK, "utf-8");
-    expect(content).toMatch(/ARCH_PREFIXES/);
-    expect(content).toMatch(/SPECIALIST_NAMES/);
+    expect(content).toMatch(/ARCH_SENDER_PREFIXES/);
+    expect(content).toMatch(/MEDIATED_RECIPIENT_ROLES/);
     expect(content).toMatch(/claude-arch-responded/);
   });
 

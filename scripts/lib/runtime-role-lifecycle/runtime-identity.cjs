@@ -155,10 +155,10 @@ function createRuntimeIdentityModule({
     return { ok: true, planPath: candidate, planDigest, waveSlug };
   }
 
-  // `options.activeWaveByBranch` (opt-in, requester authority and consult only): when several wave directories hold a
-  // PLAN, the wave is the one named by the current branch through the existing hook resolver (`<prefix>/<slug>`; no
-  // environment, no planning alias). Every other caller keeps the exact-one-wave contract.
-  function discoverPlan(projectRoot, expected = null, options = {}) {
+  // Without a digest, several wave directories holding a PLAN resolve to the wave named by the current branch through the
+  // existing hook resolver (`<prefix>/<slug>`; no environment, no planning alias); a single wave is unchanged and a branch
+  // that names no wave leaves the ambiguity fatal.
+  function discoverPlan(projectRoot, expected = null) {
     if (expected && typeof expected === 'object' && !Array.isArray(expected)) {
       const keys = Object.keys(expected).sort();
       if (JSON.stringify(keys) !== JSON.stringify(['expectedDigest', 'waveSlug'])) return { ok: false };
@@ -184,7 +184,7 @@ function createRuntimeIdentityModule({
         }
       }
     }
-    if (matches.length > 1 && options && options.activeWaveByBranch === true && expectedDigest === null) {
+    if (matches.length > 1 && expectedDigest === null) {
       const { getWaveSlug } = require('../../../.claude/hooks/hook-control-plane-utils.js');
       const slug = getWaveSlug(projectRoot, { useEnv: false, useAlias: false, gitTimeoutMs: 3000 });
       const named = slug ? path.join(planningDir, 'wave-' + slug, 'PLAN.md') : null;

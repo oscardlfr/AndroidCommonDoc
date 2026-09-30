@@ -1239,6 +1239,7 @@ const SOURCE_REFERENCED_HOOK_FILES = new Set([
   "architect-verdict-presence-gate.js",
   "bash-cli-spawn-gate.js",
   "context-provider-gate.js",
+  "context-provider-consulted.js",
   "hook-control-plane-utils.js",
   "premature-execution-gate.js",
   "plan-md-write-gate.js",
@@ -1415,7 +1416,7 @@ const RUNTIME_CORE_HOOK_FILES = [
   "subagent-start-context-bundle.js", "runtime-host-boundary.js",
   "runtime-host-session-start.js", "bash-cli-spawn-gate.js",
   "premature-execution-gate.js", "plan-md-write-gate.js",
-  "hook-control-plane-utils.js", "tool-use-logger.js",
+  "hook-control-plane-utils.js", "tool-use-logger.js", "context-provider-consulted.js",
 ] as const;
 
 const RUNTIME_ROLE_TEMPLATES = [
@@ -1438,6 +1439,7 @@ const RUNTIME_HOOK_REGISTRATIONS: readonly (HookRegistrationEntry & { timeout: n
   { event: "PreToolUse", matcher: "Bash|Task|Agent|SendMessage", file: "runtime-host-boundary.js", timeout: 5 },
   { event: "PostToolUse", matcher: ".*", file: "tool-use-logger.js", timeout: 5 },
   { event: "PostToolUse", matcher: "Bash|Task|Agent|SendMessage", file: "runtime-host-boundary.js", timeout: 5 },
+  { event: "PostToolUse", matcher: "SendMessage", file: "context-provider-consulted.js", timeout: 5 },
   { event: "PostToolUseFailure", matcher: "Agent|SendMessage", file: "tool-use-logger.js", timeout: 5 },
   { event: "PostToolUseFailure", matcher: "Bash|Task|Agent|SendMessage", file: "runtime-host-boundary.js", timeout: 5 },
   { event: "SubagentStart", matcher: ".*", file: "subagent-start-context-bundle.js", timeout: HOOK_TIMEOUT_SECONDS.subagentLifecycle },

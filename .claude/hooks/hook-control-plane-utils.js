@@ -2,6 +2,15 @@ const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
 
+// Roles that consult context-provider only through an architect (the mediated chain): specialists and the single-use
+// planner. context-provider-consulted.js writes their per-role "an arch-* answered" flag and context-provider-gate.js
+// reads it, so both hooks share this one list.
+const ARCH_SENDER_PREFIXES = Object.freeze(['arch-platform', 'arch-testing', 'arch-integration']);
+const MEDIATED_RECIPIENT_ROLES = Object.freeze([
+  'test-specialist', 'toolkit-specialist', 'ui-specialist',
+  'domain-model-specialist', 'data-layer-specialist', 'planner',
+]);
+
 const PROTECTED_SLUGS = new Set(['develop', 'master', 'main', 'HEAD']);
 
 function isValidSlug(slug) {
@@ -91,6 +100,8 @@ function loadYaml(projectRoot) {
 }
 
 module.exports = {
+  ARCH_SENDER_PREFIXES,
+  MEDIATED_RECIPIENT_ROLES,
   isValidSlug,
   isProtectedSlug,
   slugFromBranch,

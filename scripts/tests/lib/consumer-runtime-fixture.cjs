@@ -12,7 +12,7 @@ const { execFileSync } = require('node:child_process');
 const ROOT = fs.realpathSync(path.resolve(__dirname, '../../..'));
 const runtimeContext = require(path.join(ROOT, 'scripts/lib/runtime-project-context.cjs'));
 const SOURCE_REFERENCED = new Set([
-  'agent-spawn-execution-gate.js', 'bash-cli-spawn-gate.js', 'context-provider-gate.js',
+  'agent-spawn-execution-gate.js', 'bash-cli-spawn-gate.js', 'context-provider-consulted.js', 'context-provider-gate.js',
   'premature-execution-gate.js', 'runtime-consultation-target-gate.js', 'plan-md-write-gate.js',
   'runtime-host-boundary.js', 'runtime-host-session-start.js', 'subagent-start-context-bundle.js',
 ]);

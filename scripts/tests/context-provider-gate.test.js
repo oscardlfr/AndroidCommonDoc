@@ -4255,7 +4255,7 @@ console.log('\nAll context-provider-gate tests passed.');
       fs.copyFileSync(path.join(path.resolve(__dirname, '../..'), '.claude/agents', role + '.md'), destination);
     }
     const sourceReferenced = new Set([
-      'agent-spawn-execution-gate.js', 'bash-cli-spawn-gate.js', 'context-provider-gate.js',
+      'agent-spawn-execution-gate.js', 'bash-cli-spawn-gate.js', 'context-provider-consulted.js', 'context-provider-gate.js',
       'premature-execution-gate.js', 'plan-md-write-gate.js', 'runtime-consultation-target-gate.js',
       'runtime-host-boundary.js', 'runtime-host-session-start.js', 'subagent-start-context-bundle.js',
     ]);
@@ -5373,6 +5373,128 @@ const HARNESS_SUFFIX_NEGATIVE_TABLE = [
       assert.strictEqual(envelope.detail_code, 'AUTHORITY_INVALID');
     } finally { cleanupConsultFixture(fixture); }
   });
+
+  // ─────────────────────────────────────────────────────────────────────────────────────────────
+  // CHAIN-1: the complete mediated consult with the REAL hooks, in a consumer (toolkit != consumer) that holds three waves
+  // while the branch names one: arch consult -> context-provider claim, lease-heartbeat, publish-result through the target
+  // gate -> arch await-result and accept-result -> the arch's SendMessage to the planner -> the planner reads the result and,
+  // with the accepted chain, searches. Only what no hook can produce outside a live Claude session is simulated:
+  //   SIM-1 CLAUDE-ID-01 bounded-proof trace of arch-testing and planner (primeClaudeId01Trace: the real SubagentStart /
+  //         PreToolUse observation functions, driven directly);
+  //   SIM-2 context-provider's lifecycle binding (ClaudeOneShotBinding for the claude-agent driver dispatch selects, else a
+  //         RoleActorBinding) in place of the SubagentStart startup a real context-provider spawn performs.
+  // No live peers exist here, so there is no SendMessage activation to deliver to context-provider.
+  // ─────────────────────────────────────────────────────────────────────────────────────────────
+  const TARGET_GATE_HOOK = path.resolve(__dirname, '../../.claude/hooks/runtime-consultation-target-gate.js');
+  const CONSULTED_HOOK_FILE = path.resolve(__dirname, '../../.claude/hooks/context-provider-consulted.js');
+
+  function runHookFile(hookPath, payload, root) {
+    const env = Object.assign({}, process.env, { CLAUDE_PROJECT_DIR: root, CLAUDE_WAVE_SLUG: '' });
+    if (env.RUNTIME_TEST_CLAUDE_SESSION_EVIDENCE) env.NODE_OPTIONS = [env.NODE_OPTIONS, '--require', CLAUDE_SESSION_IDENTITY_PRELOAD].filter(Boolean).join(' ');
+    const result = spawnSync('node', ['--require', CLAUDE_SESSION_IDENTITY_PRELOAD, hookPath], { input: JSON.stringify(payload), env, encoding: 'utf8', cwd: root });
+    return { exit: result.status, stdout: result.stdout, stderr: result.stderr };
+  }
+
+  function envelopeOf(out, label) {
+    const envelope = JSON.parse(out.stdout.trim().split('\n').pop());
+    assert.strictEqual(envelope.status, 'SUCCESS', label + ': ' + out.stdout + out.stderr);
+    return envelope;
+  }
+
+  consultLauncherTest('CHAIN-1: the full mediated consult with real hooks, three waves, branch naming one', () => {
+    // One Claude session: every agent (arch, planner, context-provider) shares the session id and differs by agent id.
+    const SESSION = 'chain-session';
+    // The context-provider peer's own session key (its lifecycle identity is simulated, SIM-2).
+    const CP_SESSION = 'chain-cp-session';
+    const fixture = consultFixture('chain-wave', '# plan\n');
+    try {
+      const root = fixture.consumerRoot;
+      const coord = path.join(root, '.planning', 'coordination');
+      const git = (...a) => assert.strictEqual(spawnSync('git', a, { cwd: root, encoding: 'utf8' }).status, 0, a.join(' '));
+      for (const other of ['chain-earlier-a', 'chain-earlier-b']) {
+        fs.mkdirSync(path.join(root, '.planning', 'wave-' + other), { recursive: true });
+        fs.writeFileSync(path.join(root, '.planning', 'wave-' + other, 'PLAN.md'), '# earlier ' + other + '\n');
+      }
+      git('switch', '-q', '-c', 'feature/chain-wave');
+      assert.strictEqual(fs.readdirSync(path.join(root, '.planning')).filter((n) => n.startsWith('wave-')).length, 3);
+
+      // SIM-1: CLAUDE-ID-01 traces.
+      primeClaudeId01Trace(root, 'arch-testing', SESSION, 'arch-testing');
+      primeClaudeId01Trace(root, 'planner', SESSION, 'planner');
+      // 1. arch-testing consults through the launcher form (real context-provider-gate hook, real CLI).
+      const consultArgv = ['--coordination-root', coord, '--question', 'Which rules apply to a README-only change?'];
+      let hook = runNonMainBash(launcherConsultCommand(root, 'consult', consultArgv), root, 'arch-testing', SESSION);
+      const consulted = envelopeOf(runRewrittenIn(root, rewrittenOf(hook, 'consult')), 'consult');
+      const request = consulted.artifact_ref;
+      assert.ok(request && request.startsWith(coord), 'the request lives under the consumer coordination root');
+
+      // SIM-2: context-provider's lifecycle identity for the driver dispatch selected. A live spawn creates it in
+      // subagent-start-context-bundle.js from the spawn action; here the same primitives are called directly.
+      const generation = rll.resolveSessionGeneration(root, { ok: true, provider: 'claude-hook', runtime_session_key: CP_SESSION });
+      assert.strictEqual(generation.ok, true, JSON.stringify(generation));
+      const planDigest = rll.discoverPlan(root).planDigest;
+      const worktreeId = rll.computeWorktreeId(root);
+      const requestObj = JSON.parse(fs.readFileSync(request, 'utf8'));
+      const activation = JSON.parse(fs.readFileSync(path.join(path.dirname(request), 'activations',
+        fs.readdirSync(path.join(path.dirname(request), 'activations'))[0]), 'utf8'));
+      let cpBinding;
+      if (activation.selected_driver === 'claude-agent') {
+        cpBinding = rll.createClaudeOneShotBinding(root, CP_SESSION, generation.generationId, 'context-provider', 'context-provider',
+          consulted.activation_action.spawn_action_id, requestObj.request_id, requestObj.initial_attempt_id, 0,
+          'context-provider', worktreeId, planDigest, 600);
+      } else {
+        cpBinding = rll.createRoleActorBinding(root, 'context-provider', worktreeId, planDigest, generation.generationId, 600);
+      }
+      assert.strictEqual(cpBinding.ok, true, activation.selected_driver + ': ' + JSON.stringify(cpBinding));
+
+      // 2. context-provider claims, heartbeats and answers through the REAL target gate.
+      const target = (argv) => {
+        const command = rll.renderPosixDirect(['node', IMPL_RC].concat(argv));
+        const r = runHookFile(TARGET_GATE_HOOK, {
+          hook_event_name: 'PreToolUse', tool_name: 'Bash', tool_input: { command },
+          session_id: CP_SESSION, agent_type: 'context-provider', agent_id: 'context-provider', cwd: root,
+        }, root);
+        assert.strictEqual(r.exit, 0, argv[0] + ': ' + JSON.stringify(r));
+        return envelopeOf(runRewrittenIn(root, rewrittenOf(r, argv[0])), argv[0]);
+      };
+      const claim = target(['claim', '--coordination-root', coord, '--request', request, '--role', 'context-provider']);
+      target(['lease-heartbeat', '--coordination-root', coord, '--request', request, '--claim', claim.artifact_ref]);
+      const answer = Buffer.from('For a README-only change, run the docs checks only.', 'utf8').toString('base64url');
+      target(['publish-result', '--coordination-root', coord, '--request', request, '--claim', claim.artifact_ref, '--content', answer]);
+
+      // 3. arch-testing awaits and accepts (real gate hook mints each transactional grant).
+      const again = (sub, extra) => {
+        const r = runNonMainBash(launcherConsultCommand(root, sub, ['--coordination-root', coord, '--request', request].concat(extra)), root, 'arch-testing', SESSION);
+        return envelopeOf(runRewrittenIn(root, rewrittenOf(r, sub)), sub);
+      };
+      const awaited = again('await-result', ['--timeout', '30']);
+      assert.ok(awaited.artifact_ref, 'await-result names the result');
+      again('accept-result', []);
+      const txnDir = path.dirname(request);
+      const accepted = JSON.parse(fs.readFileSync(path.join(txnDir, 'accepted-result.json'), 'utf8'));
+      const resultFile = path.join(txnDir, accepted.candidate_result_path);
+      assert.ok(fs.existsSync(resultFile), 'the accepted result file is on disk');
+
+      // 4. The arch's SendMessage to the planner records the mediated answer (real PostToolUse hook).
+      const sent = runHookFile(CONSULTED_HOOK_FILE, {
+        hook_event_name: 'PostToolUse', tool_name: 'SendMessage', tool_input: { to: 'planner', message: resultFile },
+        session_id: SESSION, agent_type: 'arch-testing', agent_id: 'arch-testing',
+      }, root);
+      assert.strictEqual(sent.exit, 0);
+
+      // 5. The planner reads the accepted result and, with the accepted chain of its architect, may search.
+      const read = runHookFile(HOOK, {
+        hook_event_name: 'PreToolUse', tool_name: 'Read', tool_input: { file_path: resultFile },
+        session_id: SESSION, agent_type: 'planner', agent_id: 'planner',
+      }, root);
+      assert.ok(!/"permissionDecision":"deny"/.test(read.stdout || ''), 'the planner reads the accepted result: ' + read.stdout);
+      const search = runHookFile(HOOK, {
+        hook_event_name: 'PreToolUse', tool_name: 'Grep', tool_input: { pattern: 'x', path: '/project/docs/di/di-patterns-modules.md' },
+        session_id: SESSION, agent_type: 'planner', agent_id: 'planner',
+      }, root);
+      assert.ok(!/"permissionDecision":"deny"/.test(search.stdout || ''), 'the planner searches after its architect\'s accepted chain: ' + search.stdout);
+    } finally { cleanupConsultFixture(fixture); }
+  });
 }
 
 // BL-CONS-P1-08 (same root cause): quality-gater is a phase-scoped verifier that cannot consult context-provider
@@ -5397,8 +5519,57 @@ const HARNESS_SUFFIX_NEGATIVE_TABLE = [
   });
 
   qualityGaterTest('QG-EXEMPT-2: the exemption is exact — other non-consulting roles stay blocked', () => {
-    for (const agentType of ['verifier', 'quality-gate-orchestrator', 'quality-gaterx-imposter', 'doc-updater']) {
+    for (const agentType of ['verifier', 'quality-gate-orchestrator', 'quality-gaterx-imposter', 'doc-updaterx-imposter']) {
       assertPreToolUseDeny(runSearchAs(agentType), 'QG-EXEMPT-2 ' + agentType);
     }
+  });
+}
+
+// ═════════════════════════════════════════════════════════════════════════
+// BL-CONS-P1-08 (mediated chain): the single-use planner is a mediated recipient exactly like a specialist. It can never
+// hold an accepted consult in its own name (only arch-* may consult), so once the PLAN exists its search tools are allowed
+// only after an arch-* answered it with an accepted consultation of the same wave. doc-updater cannot consult either and
+// receives its context pre-consulted, so it is exempt like quality-gater.
+// ═════════════════════════════════════════════════════════════════════════
+{
+  const { test: mediatedTest } = require('node:test');
+  const searchAs = (proj, session, agentType) => runHook({
+    tool_name: 'Grep', tool_input: { pattern: 'x', path: '/project/docs/di/di-patterns-modules.md' },
+    session_id: session, agent_type: agentType, agent_id: agentType,
+  }, { CLAUDE_PROJECT_DIR: proj, CLAUDE_WAVE_SLUG: POSTPLAN_WAVE_SLUG });
+
+  mediatedTest('MEDIATED-PLANNER-1: the planner searches only after an arch-* answered it with an accepted consultation', () => {
+    const { proj, planSha256 } = makePostPlanProject();
+    try {
+      assertPreToolUseDeny(searchAs(proj, 'med-p0', 'planner'), 'planner without any arch response is denied');
+      writeArchResponseFlagWithInstance('med-p1', 'planner', 'arch-testing', 'arch-testing-instance-1');
+      const chain = buildCanonicalAcceptedConsultation(proj, POSTPLAN_WAVE_SLUG, planSha256, 'arch-testing', 'med-p1', 'arch-testing-instance-1');
+      assert.ok(chain.requestPath);
+      const r = runSpecialistPostPlan(proj, 'med-p1', 'planner');
+      assert.strictEqual(r.exit, 0, JSON.stringify(r));
+      assert.ok(!/"permissionDecision":"deny"/.test(r.stdout || ''), 'the planner is allowed after the architect chain: ' + r.stdout);
+    } finally { cleanupLifecycleFixture(proj); }
+  });
+
+  mediatedTest('MEDIATED-PLANNER-2: a flag alone, or the session-wide consult flag, does not admit the planner once the PLAN exists', () => {
+    const { proj } = makePostPlanProject();
+    try {
+      writeArchResponseFlagWithInstance('med-p2', 'planner', 'arch-testing', 'arch-testing-instance-2');
+      assertPreToolUseDeny(runSpecialistPostPlan(proj, 'med-p2', 'planner'), 'an arch response flag without an accepted chain is denied');
+      writeSessionFlag('med-p3');
+      assertPreToolUseDeny(searchAs(proj, 'med-p3', 'planner'), 'the session-wide flag is not an arch response for the planner');
+    } finally { cleanupLifecycleFixture(proj); }
+  });
+
+  mediatedTest('MEDIATED-DOC-UPDATER-1: doc-updater is not left without an exit once the PLAN exists', () => {
+    const { proj } = makePostPlanProject();
+    try {
+      for (const agentType of ['doc-updater', 'doc-updater-2']) {
+        const r = searchAs(proj, 'med-du-' + agentType, agentType);
+        assert.strictEqual(r.exit, 0, JSON.stringify(r));
+        assert.ok(!/"permissionDecision":"deny"/.test(r.stdout || ''), agentType + ' must be allowed: ' + r.stdout);
+      }
+      assertPreToolUseDeny(searchAs(proj, 'med-du-x', 'doc-updaterx'), 'the exemption is exact, never a prefix match');
+    } finally { cleanupLifecycleFixture(proj); }
   });
 }
