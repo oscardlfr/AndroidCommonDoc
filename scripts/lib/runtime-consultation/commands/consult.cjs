@@ -69,13 +69,12 @@ function createConsultCommand({
     return found.planPath;
   }
 
-  /** Idempotent empty subject bundle, matching the manifest shape `publish-request` decodes. */
+  /** Empty subject bundle, matching the manifest shape `publish-request` decodes; published by atomic rename so a concurrent consult never reads a partial file. */
   function writeSubjectBundle(coordRoot) {
     const bundlePath = path.join(path.dirname(coordRoot), 'coordination-subject-bundle-manifest.json');
-    const bytes = JSON.stringify({ schema: 'coordination/subject-bundle-manifest/v1', entries: [] });
-    let existing = null;
-    try { existing = fs.readFileSync(bundlePath, 'utf8'); } catch (err) { existing = null; }
-    if (existing !== bytes) fs.writeFileSync(bundlePath, bytes, { mode: 0o600 });
+    const temporary = bundlePath + '.' + process.pid + '.' + Date.now() + '.tmp';
+    fs.writeFileSync(temporary, JSON.stringify({ schema: 'coordination/subject-bundle-manifest/v1', entries: [] }), { mode: 0o600 });
+    fs.renameSync(temporary, bundlePath);
     return bundlePath;
   }
 
