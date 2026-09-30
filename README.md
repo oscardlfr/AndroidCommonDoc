@@ -167,7 +167,7 @@ When you run `/sync-l0` or merge an auto-sync PR, these assets are materialized 
 | Skills | `.claude/skills/*/SKILL.md` | 62 |
 | Agents | `.claude/agents/*.md` | 39 |
 | Commands | `.claude/commands/*.md` | 59 |
-| **Total** | | **161 entries** |
+| **Total** | | **160 entries** |
 
 **Not synced:** scripts (invoked at runtime from L0 path), Detekt rules (consumed via JAR), docs (reference only), MCP tools (server runs from L0).
 
@@ -175,7 +175,7 @@ When you run `/sync-l0` or merge an auto-sync PR, these assets are materialized 
 
 Downstream projects maintain local copies of L0 skills via the **registry + manifest + sync engine**:
 
-1. **Registry** (`skills/registry.json`) -- catalogs all 161 synchronized skill, agent, and command entries with SHA-256 hashes
+1. **Registry** (`skills/registry.json`) -- catalogs all 160 synchronized skill, agent, and command entries with SHA-256 hashes
 2. **Manifest** (`l0-manifest.json` in each project) -- declares which L0 entries to sync, tracks checksums, and lists source layers for chain topology
 3. **Sync engine** (`/sync-l0` skill) -- materializes copies with `l0_source` / `l0_hash` headers for drift detection. It is additive for live registry entries; `--prune` cleans ordinary orphans, while permanent tombstones automatically remove only exact audited historical L0 bytes. Resolves paths via git toplevel for worktree safety. In chain mode, `syncMultiSource()` merges registries from all sources before syncing.
 
@@ -1126,7 +1126,7 @@ Layer 3: ENFORCEMENT (quality gate Step 0.5)
                    |  +----------+    +------------------+   |
                    |  | skills/  |    | skills/          |   |
                    |  | */       |--->| registry.json    |   |
-                   |  | SKILL.md |    | (161 entries,    |   |
+                   |  | SKILL.md |    | (160 entries,    |   |
                    |  | (canon.) |    |  SHA-256 hashes) |   |
                    |  +----------+    +--------+---------+   |
                    |                           |              |
@@ -1159,7 +1159,7 @@ AndroidCommonDoc/
 |   +-- model-profiles.json # Agent model tier config (budget/balanced/advanced/quality)
 +-- skills/
 |   +-- */SKILL.md          # 62 canonical skill definitions
-|   +-- registry.json       # L0 registry (161 entries, SHA-256 hashes)
+|   +-- registry.json       # L0 registry (160 entries, SHA-256 hashes)
 |   +-- params.json         # Parameter manifest
 |   +-- params.schema.json  # JSON Schema for parameter validation
 +-- scripts/

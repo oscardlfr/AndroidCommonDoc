@@ -98,10 +98,9 @@ test('consult (arch-testing): publishes a context-provider request from the PLAN
     assert.strictEqual(request.source_role, 'arch-testing');
     assert.strictEqual(request.target_role, 'context-provider');
     assert.strictEqual(request.wave_slug, 'consult-arch');
-    const dispatched = path.join(path.dirname(out.artifact_ref), 'attempts');
-    assert.ok(fs.existsSync(path.dirname(out.artifact_ref)), 'transaction directory exists');
-    assert.ok(out.activation_action === null || typeof out.activation_action === 'object');
-    void dispatched;
+    const txnDir = path.dirname(out.artifact_ref);
+    assert.ok(fs.existsSync(path.join(txnDir, 'activations')), 'the request was dispatched: an activation is recorded');
+    assert.ok(out.activation_action === null || typeof out.activation_action.kind === 'string', 'the activation action is null or names its driver kind');
   });
 });
 
