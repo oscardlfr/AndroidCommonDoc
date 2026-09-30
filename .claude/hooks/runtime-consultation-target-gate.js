@@ -138,6 +138,56 @@ function findLiveRoleActorBindings(repoDescriptor, role, worktreeId, planDigest)
   return matches;
 }
 
+// A role can legitimately have more than one still-unexpired binding in the
+// same generation after an explicit terminal shutdown followed by a respawn:
+// bindings are immutable evidence, while the authority fence revokes the old
+// actor.  `ready` already has a stronger correlation source than role scope:
+// SubagentStart publishes one startup trace containing this exact action and
+// actor binding.  Resolve through that trace so retained terminal history can
+// neither create false ambiguity nor be selected as the new actor.
+function findReadyRoleActorBinding(repoDescriptor, action, data) {
+  const candidates = findLiveRoleActorBindings(
+    repoDescriptor, action.role, action.worktree_id, action.plan_digest,
+  ).filter((binding) => binding.session_generation_id === action.session_generation_id);
+  if (candidates.length === 0) return null;
+
+  const candidateIds = new Set(candidates.map((binding) => binding.binding_id));
+  const tracesDir = path.join(rll.registryRepoDir(repoDescriptor), 'claude-id01-traces');
+  let entries;
+  try {
+    entries = fs.readdirSync(tracesDir, { withFileTypes: true });
+  } catch {
+    return null;
+  }
+  if (entries.length > 1024) return null;
+
+  const sessionDigest = rc.sha256String(data.session_id);
+  const generationDigest = rc.sha256String(action.session_generation_id);
+  const actionDigest = rc.sha256String(rc.canonicalJSONStringify(action));
+  const matches = [];
+  for (const entry of entries) {
+    if (!entry.isFile() || !entry.name.startsWith('startup-v2-') || !entry.name.endsWith('.json')) continue;
+    const read = rll.readRegistryRecord(path.join(tracesDir, entry.name));
+    if (!read.ok || read.absent || !read.obj) continue;
+    const trace = read.obj;
+    if (
+      trace.schema === 'runtime/claude-startup-actor/v1'
+      && trace.session_digest === sessionDigest
+      && trace.session_generation_digest === generationDigest
+      && trace.action_id === action.action_id
+      && trace.action_digest === actionDigest
+      && trace.role === action.role
+      && trace.worktree_id === action.worktree_id
+      && trace.plan_digest === action.plan_digest
+      && candidateIds.has(trace.actor_binding_id)
+    ) {
+      matches.push(trace.actor_binding_id);
+    }
+  }
+  if (matches.length !== 1) return null;
+  return candidates.find((binding) => binding.binding_id === matches[0]) || null;
+}
+
 // Official PreToolUse deny contract (code.claude.com/docs/en/hooks): exit 0,
 // hookSpecificOutput{hookEventName:'PreToolUse', permissionDecision:'deny',
 // permissionDecisionReason} -- never the deprecated top-level decision:'block'
@@ -221,13 +271,11 @@ function handleReadyOwning(tokens, cliIdx, toolInput, data) {
   // binding also happens to still be live for the same {role,worktree,plan}
   // scope (a post-check on `candidates.length===1` alone would instead
   // misreport that coexistence as ambiguity).
-  const candidates = findLiveRoleActorBindings(repoDescriptor, action.role, action.worktree_id, action.plan_digest)
-    .filter((b) => b.session_generation_id === action.session_generation_id);
-  if (candidates.length !== 1) {
+  const binding = findReadyRoleActorBinding(repoDescriptor, action, data);
+  if (!binding) {
     block('[RC-TARGET-GATE] ready: no single live RoleActorBinding for this action\'s exact scope.');
     return;
   }
-  const binding = candidates[0];
 
   const argvDigest = rc.sha256String('ready:' + actionId);
   let mintResult;
