@@ -117,6 +117,7 @@ function selectDispatchDriver({ allowedDrivers, rootSourceDispatch, requiredDriv
       let resumeHandle;
       try {
         resumeHandle = rll.findUniqueClaudeResumeHandleForTarget(projectRoot, {
+          generationId: mainBinding.generation.generationId,
           sessionDigest: sha256String(mainBinding.binding.runtime_session_key),
           worktreeId: reqObj.requester_worktree_id,
           planDigest: reqObj.plan_digest,
