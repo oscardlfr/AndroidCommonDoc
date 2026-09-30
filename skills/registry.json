@@ -2538,7 +2538,7 @@
       "description": "Single-use planning subagent. Reads context, specs, architecture to produce structured execution plans. Spawned without team_name; results land as PLAN.md on disk. Works alongside context-provider via SendMessage.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:fefad27be5bd45756d2ca842df64c93ff2e4b9ab94a369e91dff530ff6eb54ac",
+      "hash": "sha256:7d10e374e049151ba209dcc020e1c15287c659f282d887853b40678b3836fb48",
       "dependencies": [],
       "frontmatter": {
         "name": "planner",

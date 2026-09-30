@@ -6,7 +6,7 @@ model: sonnet
 domain: development
 intent: [plan, scope, breakdown, estimate]
 token_budget: 4000
-template_version: "1.22.1"
+template_version: "1.22.2"
 ---
 
 ## Runtime source boundary
@@ -156,6 +156,7 @@ After context-gathering (Process 1–7) and BEFORE writing the finalized PLAN.md
 
 ### Wave Class
 - **Class**: <HARNESS|DOC|FAST-PATH>
+- **Required-Architects**: <comma-separated arch-* roles; DOC waves only>
 
 ### Open Questions
 - Q1: {question for the orchestrator to resolve before architect dispatch}
@@ -180,7 +181,7 @@ Adjust rows to match the actual class floor. FAST-PATH waves: table contains onl
 
 The `premature-execution-gate.js` Spawn-Table check (T2) blocks all specialist EXECUTE dispatches until `### Spawn Table` is present in PLAN.md. Omitting this section from the finalized plan will block the entire EXECUTE phase. The Pass A draft does not need a Spawn Table — it is not yet bindable.
 
-Also write the CLASS sentinel in Pass B: `Write(".planning/wave-{slug}/CLASS", content="{WAVE_CLASS}")` where `WAVE_CLASS` is one of `HARNESS`, `DOC`, or `FAST-PATH`. QG verifies CLASS sentinel agrees with `### Wave Class` in PLAN.md.
+Write the CLASS sentinel in BOTH passes: `Write(".planning/wave-{slug}/CLASS", content="{WAVE_CLASS}")` where `WAVE_CLASS` is one of `HARNESS`, `DOC`, or `FAST-PATH`. `/init-session --orchestrate <slug>` runs between Pass A and Pass B and validates the draft, so the Pass A draft must already be parseable: the class line is exactly `- **Class**: <HARNESS|DOC|FAST-PATH>` with no annotation (record uncertainty under Open Questions), a DOC draft declares `- **Required-Architects**:`, and the sentinel matches the class. Pass B may change the class by rewriting both. QG verifies CLASS sentinel agrees with `### Wave Class` in PLAN.md.
 
 ## Plan Delivery
 

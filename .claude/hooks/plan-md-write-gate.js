@@ -76,12 +76,12 @@ process.stdin.on('end', () => {
   if (agentType === 'planner') {
     const activeSlug = getWaveSlug(projectRoot, { protectedEnvReturnsNull: true });
     if (!activeSlug) {
-      block('[planner-gate] planner write denied: active wave slug is unavailable; set CLAUDE_WAVE_SLUG to the exact wave before dispatch.');
+      block('[planner-gate] planner write denied: active wave slug is unavailable; switch to the wave branch (git switch -c feature/<slug>) or set CLAUDE_WAVE_SLUG before dispatch.');
     }
     const allowedPlan = `.planning/wave-${activeSlug}/PLAN.md`;
     const allowedClass = `.planning/wave-${activeSlug}/CLASS`;
     if (filePath !== allowedPlan && filePath !== allowedClass) {
-      block(`[planner-gate] planner writes are confined to ${allowedPlan} and ${allowedClass}; cross-wave, external, symlinked, and unrelated writes are denied.`);
+      block(`[planner-gate] planner writes are confined to ${allowedPlan} and ${allowedClass}; the active wave comes from the current branch (<prefix>/${activeSlug}) or CLAUDE_WAVE_SLUG, so plan a new wave on its own branch (git switch -c feature/<slug>); cross-wave, external, symlinked, and unrelated writes are denied.`);
     }
 
     // Auto-create wave-quality-gates sentinel stub for this wave.

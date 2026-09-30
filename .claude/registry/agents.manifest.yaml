@@ -1618,8 +1618,8 @@ agents:
   planner:
     canonical_name: planner
     subagent_type: planner
-    template_version: "1.22.1"
-    template_frontmatter_sha256: 3355e14b995523f9b1d5729c69b71d01b51f3dfce9c275622c59ea141d4b3b33
+    template_version: "1.22.2"
+    template_frontmatter_sha256: 928a67593fe6a5b6ef7c8072be3e456a82b10431d2a646e44554cb62e8f998ca
     category: orchestrator
     lifecycle: ephemeral
     description: "Single-use planning subagent. Reads context, specs, architecture to produce structured execution plans. Spawned without team_name; results land as PLAN.md on disk. Works alongside context-provider via SendMessage."
