@@ -1135,6 +1135,73 @@ test('R131-BOUNDARY-RESUME-SENDMESSAGE-27b: role-notify forces SendMessage and c
   }
 });
 
+test('R131-BOUNDARY-SHUTDOWN-RESERVATION-FAILS-CLOSED: an owning shutdown request is denied when durable reservation fails', () => {
+  const lib = requireBoundaryLib();
+  const rll = require('../lib/runtime-role-lifecycle.cjs');
+  const saved = rll.reserveClaudeShutdownTerminal;
+  rll.reserveClaudeShutdownTerminal = () => ({ ok: false, reason: 'test-failure' });
+  try {
+    const event = {
+      hook_event_name: 'PreToolUse', tool_name: 'SendMessage', cwd: PROJECT_ROOT,
+      session_id: 'shutdown-session', tool_use_id: 'shutdown-tool',
+      tool_input: { to: 'arch-platform', message: { type: 'shutdown_request', reason: 'done' } },
+    };
+    assert.deepStrictEqual(lib.admitNativeShutdownReservation(event), {
+      admitted: false, owning: true, reason: 'native-shutdown-reservation-failed',
+    });
+  } finally {
+    rll.reserveClaudeShutdownTerminal = saved;
+  }
+});
+
+test('R131-BOUNDARY-RESUME-FAILURE-27c: only PostToolUseFailure settles the exact resume SendMessage', () => {
+  const lib = requireBoundaryLib();
+  const rll = require('../lib/runtime-role-lifecycle.cjs');
+  const actionId = 'a'.repeat(32);
+  const handleId = 'b'.repeat(32);
+  const message = [
+    'RUNTIME_RESUME/v1', `checkpoint:${'c'.repeat(64)}`, `resume-handle:${handleId}`,
+    `runtime-action:${actionId}`, 'host-status:validated-and-consumed-before-delivery',
+    'actor-action:none', 'reply:none', 'next:wait-for-correlated-task',
+  ].join('\n');
+  const saved = rll.settleNativeResumeNotificationFailure;
+  const observed = [];
+  rll.settleNativeResumeNotificationFailure = (_root, event) => {
+    observed.push(event);
+    return { ok: true };
+  };
+  const base = {
+    tool_name: 'SendMessage', cwd: PROJECT_ROOT, session_id: 'session-1', tool_use_id: 'tool-use-1',
+    tool_input: { recipient: 'arch-platform', message },
+  };
+  try {
+    assert.deepStrictEqual(lib.settleNativeResumeFailure({
+      ...base, hook_event_name: 'PostToolUse',
+    }), { ok: false, ignored: true });
+    assert.strictEqual(observed.length, 0, 'a successful send must not manufacture positive liveness or mutate state');
+
+    assert.deepStrictEqual(lib.settleNativeResumeFailure({
+      ...base, hook_event_name: 'PostToolUseFailure',
+    }), { ok: true });
+    assert.deepStrictEqual(observed, [{
+      actionId,
+      sessionId: 'session-1',
+      toolUseId: 'tool-use-1',
+      recipient: 'arch-platform',
+      message,
+    }]);
+
+    assert.deepStrictEqual(lib.settleNativeResumeFailure({
+      ...base,
+      hook_event_name: 'PostToolUseFailure',
+      tool_input: { recipient: 'arch-platform', message: 'not-a-runtime-resume' },
+    }), { ok: false, ignored: true });
+    assert.strictEqual(observed.length, 1, 'an unowned SendMessage failure must not reach lifecycle settlement');
+  } finally {
+    rll.settleNativeResumeNotificationFailure = saved;
+  }
+});
+
 test('R131-BOUNDARY-CALLER-COMPOSITION-REJECTION-28: forged composition id cannot admit an entrypoint event', () => {
   const lib = requireBoundaryLib();
   const rll = require('../lib/runtime-role-lifecycle.cjs');

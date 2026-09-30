@@ -1130,6 +1130,24 @@ _assert_pretooluse_deny() {
   [ "$status" -eq 0 ]
 }
 
+@test "TG-READY-TERMINAL-HISTORY PASS: an older same-generation binding cannot make the current action's startup-traced actor ambiguous" {
+  local out action_id worktree_id plan_digest gen_id
+  out="$(_mint_pending_role_spawn_full arch-testing tg-ready-terminal-history-session)"
+  read -r action_id worktree_id plan_digest gen_id <<< "$out"
+  [ -n "$action_id" ]
+
+  # Models immutable terminal history retained after a shutdown.  It has the
+  # same role/generation/scope but no startup trace for this new action.
+  _mint_role_actor_binding arch-testing "$worktree_id" "$plan_digest" "$gen_id" 60 >/dev/null
+
+  local cmd; cmd="$(_render_posix_direct node "$RLL_IMPL" ready --action "$action_id")"
+  _make_input "$cmd" arch-testing tg-ready-terminal-history-session
+  _run_hook
+  [ "$status" -eq 0 ]
+  local grant_id; grant_id="$(_extract_injected lifecycle-binding)"
+  [ -n "$grant_id" ] || { printf '# terminal-history ready hook output: %s\n' "$output" >&3; false; }
+}
+
 # ══════════════════════════════════════════════════════════════════════════
 # Consultation target surface: claim / lease-heartbeat / publish-result /
 # worker-stop-ack. CORRECTED DESIGN (supersedes the first-pass "no injection"

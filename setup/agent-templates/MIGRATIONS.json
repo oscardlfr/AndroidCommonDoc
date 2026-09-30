@@ -136,6 +136,12 @@
       }
     },
     "planner": {
+      "1.22.2": {
+        "date": "2026-09-30",
+        "breaking": false,
+        "summary": "Make the Pass A draft parseable by /init-session --orchestrate: exact class line, CLASS sentinel in both passes, and Required-Architects for DOC waves.",
+        "migration_hint": "Run plain /sync-l0; planning from scratch starts on the wave branch (git switch -c feature/<slug>)."
+      },
       "1.22.1": {
         "date": "2026-09-29",
         "breaking": false,

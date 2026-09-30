@@ -196,6 +196,18 @@ function findOwningRoleLifecycleCandidate(projectRoot, worktreeId, role, session
     }
   }
 
+  // A fulfilled spawn action (its execution claim consumed) stays unexpired
+  // for its TTL. When the RoleBinding names a live pending action -- the
+  // replacement after an explicit terminal shutdown -- that fulfilled history
+  // must not make ownership ambiguous. Without a binding-pending candidate it
+  // still owns, so a replay is denied by its claim instead of passing unowned.
+  if ([...foundByActionId.values()].some((found) => found.record)) {
+    for (const [actionId, found] of foundByActionId) {
+      const consumedMarker = rll.roleSpawnExecutionClaimPathFor(projectRoot, actionId).replace(/\.json$/, '.consumed');
+      if (!found.record && fs.existsSync(consumedMarker)) foundByActionId.delete(actionId);
+    }
+  }
+
   const owningByActionId = foundByActionId.size > 0 ? foundByActionId : expiredBindingActionsById;
   if (owningByActionId.size === 0) return { candidate: null, ambiguous: false };
   if (owningByActionId.size > 1) return { candidate: null, ambiguous: true };

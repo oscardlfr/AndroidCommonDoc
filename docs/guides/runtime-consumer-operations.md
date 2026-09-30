@@ -62,7 +62,7 @@ node .claude/runtime/l0-entrypoint-launcher.cjs init-session
 node .claude/runtime/l0-entrypoint-launcher.cjs init-session --orchestrate <slug>
 ```
 
-Its PreToolUse hook derives the trusted Node path, exact consumer root, and canonical base64url intent, then verifies and rewrites the request to the internal command. Missing or extra arguments, unsafe slugs, shell operators, foreign cwd, and an invalid installation fail closed. `/resume-work`, `/work`, `/ingest-content`, and `/monitor-docs` retain the internal closed form documented in their skill files.
+Its PreToolUse hook derives the trusted Node path, exact consumer root, and canonical base64url intent, then verifies and rewrites the request to the internal command. `--orchestrate <slug>` requires an existing `.planning/wave-<slug>/PLAN.md`; it initializes or validates that plan's control-plane state but never creates the PLAN, so do not invent a diagnostic slug. Missing or extra arguments, unsafe slugs, shell operators, foreign cwd, and an invalid installation fail closed. `/resume-work`, `/work`, `/ingest-content`, and `/monitor-docs` retain the internal closed form documented in their skill files. `READY` is readiness of the support plane, not a claim that every native actor is currently executing. `READY`, `WAITING`, and `BUSY` are the three healthy role states: `WAITING` means an actor stopped normally, left one exact live resume handle, and is addressable without being duplicated. Repeating `/init-session --orchestrate` therefore does not wake or respawn a `WAITING` role. Use `/resume-work` for a checkpoint continuation or `/work` for new work; those entry points own the correlated `SendMessage` wake-up.
 
 The model must not discover the sibling toolkit, call `scripts/lib/runtime-collaboration-entrypoints.cjs` directly, or substitute
 `$PWD`, `$(pwd)`, `ANDROID_COMMON_DOC`, or another ambient path. A missing local
@@ -106,10 +106,15 @@ Authenticated entrypoint commands use canonical POSIX form with every token sing
 |---|---|---|
 | Same host process and session generation, with one live parked handle per role | `role-notify` / `SendMessage` | Consume that generation's exact handle before delivery; a rerun converges to `READY` with no actions |
 | New host process, including `claude --resume <session-id>` | `role-spawn` / `Agent` in a newly rotated generation | Preserve the old handle as historical evidence; never deliver it or rewrite its scope |
+| Explicit successful `shutdown_request` for one support role | `role-spawn` / `Agent` for a fresh actor | The correlated stop is terminal. Never park or resume the stopped actor's transcript |
 
 The persisted Claude session id does not make an actor reachable across host processes. Generation TTL is an upper bound, not proof that the originating process still owns a usable native teammate.
 A test that starts a second Claude process and expects `SendMessage` is invalid: the correct result is generation rotation plus `Agent` rehydration. Conversely, same-process checkpoint resume must exercise `SendMessage`; accepting `Agent` there would hide a lifecycle regression.
-A new process must not consume any older generation's handles. Cross-generation `SendMessage`, manual handle migration, and bridge workarounds are forbidden.
+A new process must not consume any older generation's handles. Cross-generation `SendMessage`, manual handle migration, and bridge workarounds are forbidden. A persisted `READY` state plus historical startup traces proves identity, not current reachability. For an unfenced `READY` Claude actor, `init-session` emits one bounded, inert `SendMessage` liveness probe per role and accepts `LIVE` only from the exact correlated positive acknowledgement. The 2.1.x adapter accepts the closed legacy `resumedAgentId`, pinned `pin.id`, and combined `resumedAgentId` + `pin` receipts, including the `to` recipient alias used by newer PostToolUse events; every identity must still match the startup actor digest. The exact host response `success:false`/`No agent named '<recipient>' is reachable...` retires only the unchanged matching actor and rehydrates it once; generic delivery failures, altered messages, expired actions, foreign sessions, `WAITING` races, and stale replays remain unverified and cannot kill or duplicate an actor. A rerun after all exact probe outcomes converges to zero-action `READY`; do not edit registry records, fabricate a fence, delete handles, or start a parallel `claude --resume` process.
+
+An ordinary completed support-role turn is resumable: `SubagentStop` parks its exact actor and preserves one handle. An explicit shutdown is different. The `SendMessage` boundary records the exact current actor, sender session and tool use as `PENDING`, then settles only the correlated host result as `SUCCEEDED` or `FAILED`. `SUCCEEDED` makes the matching `SubagentStop` terminal before parking; `FAILED` preserves ordinary parking; `PENDING`, malformed evidence, a foreign actor or a replay against a replacement blocks fail-closed. The terminal path publishes the authority fence and role tombstone before best-effort trace cleanup, so the next `init-session` creates a fresh actor and never resumes a transcript containing the consumed shutdown request. The replacement actor's `ready` admission is correlated through its exact startup action trace; retained terminal bindings are immutable history and cannot make that admission ambiguous. Never create, edit or delete these registry records manually.
+
+If a same-process resume delivery fails after its handle was reserved, the runtime correlates that exact action/session/tool failure, moves only the matching `BUSY` role to `DEAD`, and lets the next ordinary ensure rehydrate it through the policy-selected driver.
 
 ### Interactive terminal input
 
@@ -234,13 +239,7 @@ Mode distinctions:
 
 ## Claude 2.1.x compatibility
 
-The runtime supports the Claude Code `2.1.x` protocol family as one compatibility
-contract. Updating between `2.1` patches does not require editing,
-deleting, regenerating, or committing a certificate; restart and launch normally.
-The runtime binds host-owned version/model evidence to the live session and worktree
-and requires the running executable to carry Anthropic's valid platform signature
-(Developer ID on macOS or Authenticode on Windows). An executable SHA-256 may be
-retained as diagnostic evidence, but it is not a per-patch compatibility gate.
+The runtime supports the Claude Code `2.1.x` protocol family as one compatibility contract. Updating between `2.1` patches does not require editing, deleting, regenerating, or committing a certificate; restart and launch normally. The runtime binds host-owned version/model evidence to the live session and worktree and requires the running executable to carry Anthropic's valid platform signature (Developer ID on macOS or Authenticode on Windows). An executable SHA-256 may be retained as diagnostic evidence, but it is not a per-patch compatibility gate.
 
 `SessionStart.model` is optional in Claude Code 2.1.x. When omitted, PreToolUse
 returns a signed pending composition bound to the exact session, tool, input and

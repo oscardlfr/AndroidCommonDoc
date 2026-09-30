@@ -2,13 +2,13 @@
 
 function createClaudeResumeLifecycle(deps) {
   const {
-    actionPathFor,
     CLAUDE_RESUME_HANDLE_SCAN_CAP,
     CLAUDE_RESUME_HANDLE_SCHEMA,
     canonicalJSONStringify,
     claudeResumeHandleConsumedMarkerPathFor,
     claudeResumeHandlePathFor,
     computeClaudeAuthorityIdentityId,
+    consumeNativeResumeNotificationBeforeDelivery,
     currentClockMsForRegistry,
     ensureSecureRegistryDir,
     findClaudeResumeHandlesForActor,
@@ -17,7 +17,6 @@ function createClaudeResumeLifecycle(deps) {
     hasExactKeys,
     isCanonicalIsoUtc,
     isClaudeResumeHandleConsumed,
-    isHexActionId,
     isHexCsprng32,
     isoPlusSecondsForRegistry,
     isoToMsForRegistry,
@@ -26,7 +25,6 @@ function createClaudeResumeLifecycle(deps) {
     publishNoClobber,
     readClaudeAuthorityFence,
     readClaudeResumeHandle,
-    readLiveSessionGenerationById,
     readRegistryRecord,
     readRoleBindingState,
     registryRepoDir,
@@ -41,81 +39,7 @@ function createClaudeResumeLifecycle(deps) {
     withRegistryLock,
   } = deps;
 
-const CLAUDE_RESUME_HANDLE_TTL_SECONDS = 3600;
-
-function consumeNativeResumeNotificationBeforeDelivery(projectRoot, event) {
-  const actionId = event && event.actionId;
-  if (typeof projectRoot !== 'string' || !isHexActionId(actionId) || !event ||
-      typeof event.sessionId !== 'string' || typeof event.recipient !== 'string' ||
-      typeof event.message !== 'string' || typeof event.toolUseId !== 'string' || event.toolUseId.length === 0) {
-    return { ok: false, reason: 'invalid-arguments' };
-  }
-  const match = /^RUNTIME_RESUME\/v1\ncheckpoint:[0-9a-f]{64}\nresume-handle:([0-9a-f]{32})\nruntime-action:([0-9a-f]{32})\nhost-status:validated-and-consumed-before-delivery\nactor-action:none\nreply:none\nnext:wait-for-correlated-task$/.exec(event.message);
-  if (!match || match[2] !== actionId) return { ok: false, reason: 'resume-message-invalid' };
-  const handleId = match[1];
-  const lockKey = sha256String(canonicalJSONStringify(['native-resume-delivery', actionId, handleId]));
-  const lockDir = path.join(registryRepoDir(projectRoot), 'locks', 'native-resume-delivery-' + lockKey + '.lock');
-  const locked = withRegistryLock(lockDir, () => {
-    const actionRead = readRegistryRecord(actionPathFor(projectRoot, actionId));
-    if (!actionRead.ok || actionRead.absent || !actionRead.obj) return { ok: false, reason: 'action-unavailable' };
-    const action = actionRead.obj;
-    if (action.kind !== 'role-notify' || action.runtime !== 'claude-native' || !action.payload ||
-        action.payload.artifact_kind !== 'session-control' || action.payload.message !== event.message ||
-        action.payload.teammate_name !== event.recipient || action.role !== event.recipient) {
-      return { ok: false, reason: 'action-input-mismatch' };
-    }
-    if (currentClockMsForRegistry() >= isoToMsForRegistry(action.expires_at) ||
-        !readLiveSessionGenerationById(projectRoot, action.session_generation_id).ok) {
-      return { ok: false, reason: 'action-expired-or-generation-closed' };
-    }
-    const handleRead = readClaudeResumeHandle(projectRoot, handleId);
-    if (!handleRead.ok) return { ok: false, reason: 'resume-handle-unavailable' };
-    const handle = handleRead.record;
-    if (handle.role !== action.role || handle.worktree_id !== action.worktree_id ||
-        handle.plan_digest !== action.plan_digest || handle.session_generation_id !== action.session_generation_id ||
-        handle.session !== event.sessionId) return { ok: false, reason: 'resume-handle-scope-mismatch' };
-    if (isClaudeResumeHandleConsumed(projectRoot, handleId)) return { ok: false, reason: 'resume-delivery-replay' };
-    const actor = validateRoleActorBindingFor(
-      projectRoot, handle.actor_binding_id, handle.role, handle.worktree_id, handle.plan_digest,
-    );
-    const fence = readClaudeAuthorityFence(
-      projectRoot, computeClaudeAuthorityIdentityId(projectRoot, 'claude-hook', handle.session, handle.agent_id),
-    );
-    if (!actor.ok || actor.binding.session_generation_id !== action.session_generation_id ||
-        !fence.ok || !fence.absent) return { ok: false, reason: 'resume-actor-authority-invalid' };
-    const profileDigest = roleProfileDigestFor(action.role);
-    const state = readRoleBindingState(
-      projectRoot, action.worktree_id, action.plan_digest, profileDigest,
-      action.session_generation_id, action.role,
-    );
-    if (!state.ok || state.state !== 'WAITING' || !state.record || state.record.driver !== 'claude-sendmessage') {
-      return { ok: false, reason: 'resume-role-not-waiting' };
-    }
-    const consumedAt = nowIsoForRegistry();
-    try {
-      publishNoClobber(claudeResumeHandleConsumedMarkerPathFor(projectRoot, handleId), Buffer.from(canonicalJSONStringify({
-        schema: 'runtime/native-resume-delivery/v1', action_id: actionId, handle_id: handleId,
-        session_digest: sha256String(event.sessionId), tool_use_digest: sha256String(event.toolUseId),
-        consumed_at: consumedAt,
-      }), 'utf8'), {});
-    } catch {
-      return { ok: false, reason: 'resume-delivery-replay' };
-    }
-    const busy = transitionRoleBinding(
-      projectRoot, action.worktree_id, action.plan_digest, profileDigest,
-      action.session_generation_id, action.role, 'WAITING', 'BUSY', state.record, {},
-    );
-    if (!busy.ok) {
-      const reread = readRoleBindingState(
-        projectRoot, action.worktree_id, action.plan_digest, profileDigest,
-        action.session_generation_id, action.role,
-      );
-      if (!reread.ok || reread.state !== 'BUSY') return { ok: false, reason: 'resume-role-transition-failed' };
-    }
-    return { ok: true, actionId, handleId };
-  }, { maxWaitMs: 5000 });
-  return locked.ok && locked.value ? locked.value : { ok: false, reason: 'resume-delivery-lock-failed' };
-}
+  const CLAUDE_RESUME_HANDLE_TTL_SECONDS = 3600;
 
 /**
  * Parks the exact correlated persistent claude-sendmessage role actor as
@@ -294,7 +218,16 @@ function consumeClaudeResumeHandleForObservedActor(projectRoot, event) {
  */
 function findUniqueClaudeResumeHandleForTarget(projectRoot, expected) {
   try {
-    const expectedValid = validateClaudePeerExpected(expected);
+    const expectedKeys = ['generationId', 'planDigest', 'sessionDigest', 'targetRole', 'worktreeId'];
+    if (!expected || typeof expected !== 'object' || Array.isArray(expected)
+        || !hasExactKeys(expected, expectedKeys) || !isHexCsprng32(expected.generationId)) {
+      return { ok: false, reason: 'INVALID' };
+    }
+    const peerExpected = {
+      planDigest: expected.planDigest, sessionDigest: expected.sessionDigest,
+      targetRole: expected.targetRole, worktreeId: expected.worktreeId,
+    };
+    const expectedValid = validateClaudePeerExpected(peerExpected);
     if (!expectedValid.ok) return expectedValid;
     const dir = path.join(registryRepoDir(projectRoot), 'claude-resume-handles');
     let entries;
@@ -314,6 +247,24 @@ function findUniqueClaudeResumeHandleForTarget(projectRoot, expected) {
       const read = readRegistryRecord(claudeResumeHandlePathFor(projectRoot, handleId));
       if (!read.ok) return { ok: false, reason: 'INVALID' };
       if (read.absent || !read.obj) continue;
+      // Resume-handle history is append-only across runtime upgrades. Scope
+      // it before enforcing the current exact shape so an unrelated earlier
+      // schema cannot disable a later session. A raw record that claims this
+      // role/worktree/PLAN and main session remains fail-closed below.
+      if (
+        read.obj.schema !== CLAUDE_RESUME_HANDLE_SCHEMA
+        || read.obj.role !== expected.targetRole || read.obj.worktree_id !== expected.worktreeId
+        || read.obj.plan_digest !== expected.planDigest
+      ) {
+        continue;
+      }
+      if (typeof read.obj.session !== 'string' || !isHexCsprng32(read.obj.session_generation_id)) {
+        return { ok: false, reason: 'INVALID' };
+      }
+      if (read.obj.session_generation_id !== expected.generationId
+          || sha256String(read.obj.session) !== expected.sessionDigest) {
+        continue;
+      }
       // Expiry is routine immutable history, not structural corruption. Read
       // and validate the complete closed shape first so malformed stale files
       // still poison the scan; then skip a well-formed expired record before
@@ -407,16 +358,26 @@ function findUniqueConsumedClaudeResumeHandleForBusyTarget(projectRoot, expected
       const handleId = entry.name.slice(0, -5);
       const raw = readRegistryRecord(claudeResumeHandlePathFor(projectRoot, handleId));
       if (!raw.ok || raw.absent || !raw.obj) return { ok: false, reason: 'INVALID' };
+      // Apply the generation/scope discriminator before current-schema
+      // validation. Historical records outside this BUSY target cannot
+      // poison it; a record claiming this exact target still fails closed.
+      if (raw.obj.schema !== CLAUDE_RESUME_HANDLE_SCHEMA
+          || raw.obj.role !== expected.targetRole
+          || raw.obj.worktree_id !== expected.worktreeId
+          || raw.obj.plan_digest !== expected.planDigest) {
+        continue;
+      }
+      if (typeof raw.obj.session !== 'string' || !isHexCsprng32(raw.obj.session_generation_id)) {
+        return { ok: false, reason: 'INVALID' };
+      }
+      if (raw.obj.session_generation_id !== expected.generationId
+          || sha256String(raw.obj.session) !== expected.sessionDigest) {
+        continue;
+      }
       const shaped = validateClaudeResumeHandleRecordShape(raw.obj, handleId);
       if (!shaped.ok) return { ok: false, reason: 'INVALID' };
       const record = shaped.record;
-      if (record.session_generation_id !== expected.generationId
-          || sha256String(record.session) !== expected.sessionDigest
-          || record.role !== expected.targetRole
-          || record.worktree_id !== expected.worktreeId
-          || record.plan_digest !== expected.planDigest) {
-        continue;
-      }
+      if (sha256String(record.session) !== expected.sessionDigest) return { ok: false, reason: 'INVALID' };
       const live = validateClaudeResumeHandleRecord(record, handleId);
       if (!live.ok) return { ok: false, reason: 'INVALID' };
       const markerRead = readRegistryRecord(claudeResumeHandleConsumedMarkerPathFor(projectRoot, handleId));
@@ -457,6 +418,7 @@ function findUniqueConsumedClaudeResumeHandleForBusyTarget(projectRoot, expected
     return { ok: false, reason: 'INVALID' };
   }
 }
+
 
   return Object.freeze({
     CLAUDE_RESUME_HANDLE_TTL_SECONDS,

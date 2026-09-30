@@ -13,12 +13,17 @@ path, SUBCOMMAND_SPEC, parseSubcommandArgv, usageError, invalidError, unavailabl
   computeWorktreeId, executeResumeCheckpointEnsure, reconcileRetainedSupervisorForEnsure,
   getCapabilityManifest, roleProfileDigestFor, readRoleBindingState, retainedSupervisorBridgeApi,
   readRegistryRecord, actionPathFor, isoToMsForRegistry, currentClockMsForRegistry, transitionRoleBinding,
+  classifyClaudeSupportRoleLiveness,
+  claudeLivenessProbeMessage, findClaudeLivenessProbeState,
+  findUniqueClaudeResumeHandleForTarget, findUniqueConsumedClaudeResumeHandleForBusyTarget,
   resolveHostOperationForAction, actionForEnvelope, respawnBudgetExceeded, quarantineViaRehydrating,
   isTestCapability, hasRegisteredValidatedDiskConsumer, codexAppServerStartupEligible,
   resolveSupervisorStartability, selectLifecycleEligibleDriverForRole, transitionRoleBindingAtomicViaWaypoint,
   roleBindingForEnvelope, mintSupervisorBatchUnderTransaction, computeRepoId, generateActionId,
-  buildRoleSpawnPayload, claudeReadyBootstrapMessageFor, effectiveActionTtlSeconds, futureIsoForRegistry,
+  buildRoleSpawnPayload, buildRoleNotifyPayload, claudeReadyBootstrapMessageFor, effectiveActionTtlSeconds, futureIsoForRegistry,
   mintRoleLifecycleAction, canonicalJSONStringify,
+  registryRepoDir, withRegistryLock,
+  groupEnsurePendingSpawns, resolveOrMintLivenessProbe,
 }) {
 
 /**
@@ -183,6 +188,83 @@ function handleEnsure(rawArgv) {
     }
 
     if (stateResult.state === 'READY' || stateResult.state === 'WAITING' || stateResult.state === 'BUSY') {
+      if (stateResult.record.driver === 'claude-sendmessage') {
+        const target = {
+          planDigest: binding.plan_digest,
+          sessionDigest: sha256String(binding.runtime_session_key),
+          targetRole: role,
+          worktreeId: binding.worktree_id,
+        };
+        let liveness;
+        const expectedLiveness = {
+          generationId: binding.session_generation_id, planDigest: binding.plan_digest,
+          role, runtimeSessionKey: binding.runtime_session_key, worktreeId: binding.worktree_id,
+        };
+        if (stateResult.state === 'WAITING' || stateResult.state === 'BUSY') {
+          const handle = stateResult.state === 'WAITING'
+            ? findUniqueClaudeResumeHandleForTarget(projectRoot, {
+              generationId: binding.session_generation_id, ...target,
+            })
+            : findUniqueConsumedClaudeResumeHandleForBusyTarget(projectRoot, {
+              generationId: binding.session_generation_id, ...target,
+            }, stateResult.record);
+          // A durable terminal tombstone is newer and stronger evidence than
+          // resume-handle history. Classify it even when multiple consumed
+          // receipts make the BUSY handle lookup intentionally INVALID; an
+          // explicit shutdown must still rehydrate a fresh actor.
+          const classified = classifyClaudeSupportRoleLiveness(projectRoot, expectedLiveness);
+          liveness = classified && classified.ok && classified.status === 'ABSENT' ? classified
+            : (handle.ok ? classified : {
+              ok: false, status: 'INVALID', reason: stateResult.state === 'WAITING'
+                ? 'waiting-resume-handle-absent' : 'busy-resume-receipt-absent',
+            });
+        } else liveness = classifyClaudeSupportRoleLiveness(projectRoot, expectedLiveness);
+        if (liveness && liveness.ok && liveness.status === 'UNVERIFIED') {
+          const probe = resolveOrMintLivenessProbe(projectRoot, binding, pair, role, stateResult.record, liveness);
+          if (!probe.ok) {
+            noteUnavailable(role, 'claude-liveness-probe-' + (probe.reason || 'invalid'));
+            continue;
+          }
+          if (probe.status === 'LIVE') {
+            liveness = { ok: true, status: 'LIVE' };
+          } else if (probe.status === 'ABSENT') {
+            liveness = { ok: true, status: 'ABSENT' };
+          } else if (probe.status === 'PENDING') {
+            sawActionRequired = true;
+            const operation = resolveHostOperationForAction(probe.action.kind, probe.action.runtime);
+            collectedActions.push(operation
+              ? Object.assign(actionForEnvelope(probe.action), { operation })
+              : actionForEnvelope(probe.action));
+            continue;
+          } else { noteUnavailable(role, 'claude-liveness-probe-state-invalid'); continue; }
+        }
+        if (!liveness.ok) {
+          noteUnavailable(role, 'claude-actor-' + (liveness.reason || 'invalid'));
+          continue;
+        }
+        if (liveness.status === 'ABSENT') {
+          const dead = transitionRoleBinding(
+            projectRoot, binding.worktree_id, binding.plan_digest, profileDigest,
+            binding.session_generation_id, role, stateResult.state, 'DEAD', stateResult.record, {},
+          );
+          if (!dead.ok) { hardError = true; break; }
+          if (respawnBudgetExceeded(dead.record, pair.policy)) {
+            const quarantine = quarantineViaRehydrating(
+              projectRoot, binding.worktree_id, binding.plan_digest, profileDigest,
+              binding.session_generation_id, role, 'DEAD', dead.record, 'respawn-budget-exceeded',
+            );
+            if (!quarantine.ok) { hardError = true; break; }
+            noteUnavailable(role, 'respawn-budget-exceeded');
+            continue;
+          }
+          pendingSpawns.push({
+            role, profileDigest, fromState: 'DEAD', toState: 'REHYDRATING',
+            fromRecord: dead.record, respawnCount: (dead.record.respawn_count || 0) + 1,
+            excludeDriver: null, requiredDriver: 'claude-sendmessage',
+          });
+          continue;
+        }
+      }
       if (stateResult.record.driver === 'codex-app-server') {
         let liveWorker;
         try {
@@ -286,9 +368,9 @@ function handleEnsure(rawArgv) {
     const fromRecord = fromState === 'ABSENT' ? null : stateResult.record;
     const respawnCount = fromState === 'DEAD' ? ((stateResult.record.respawn_count || 0) + 1) : (fromState === 'UNAVAILABLE' ? (stateResult.record.respawn_count || 0) : 0);
     const excludeDriver = fromState === 'UNAVAILABLE' ? stateResult.record.driver : null;
-    const requiredDriver = (
-      fromState === 'DEAD' && stateResult.record.driver === 'codex-app-server'
-    ) ? 'codex-app-server' : null;
+    const requiredDriver = fromState === 'DEAD'
+      && ['codex-app-server', 'claude-sendmessage'].includes(stateResult.record.driver)
+      ? stateResult.record.driver : null;
     pendingSpawns.push({
       role, profileDigest, fromState, toState, fromRecord, respawnCount,
       excludeDriver, requiredDriver,
@@ -300,110 +382,18 @@ function handleEnsure(rawArgv) {
     return;
   }
 
-  // TeamCreate is obsolete for the accepted Claude profile. Historical
-  // team-ensure records remain readable for registry compatibility but no
-  // longer exclude the direct Agent+SendMessage driver.
-  const driverExclusions = undefined;
-
-  // Pass 2: resolve a driver for each pending spawn (pure lookup, no
-  // mutation). The six routing drivers are NOT interchangeable -- only
-  // `claude-sendmessage` (role-spawn) and `codex-app-server`
-  // (supervisor-start) have an ensure()-mintable action at all (the closed
-  // action kind/runtime union, PLAN.md ~L154-163, has no member for the
-  // other three: `claude-agent` is a one-shot per-CONSULTATION-REQUEST
-  // accelerator selected later by `dispatch`; `codex-mcp` is a per-request
-  // MCP frontend activated via `claude-mcp-launch`, never `session-run`;
-  // `runtime-spawn` wakes an already-registered externally-supervised disk
-  // consumer). Each of the six gets its OWN explicit branch -- never a
-  // shared catch-all that could mint a fabricated action with a dishonest
-  // driver literal for a role that actually resolved to codex-mcp/runtime-spawn.
-  const codexAppServerGroup = [];
-  const claudeSendmessageGroup = [];
-  const deterministicAppServerTestBackend = (
-    isTestCapability()
-    && process.env.RUNTIME_ROLE_LIFECYCLE_TEST_BACKEND === 'deterministic-app-server-v1'
+  const groupedSpawns = groupEnsurePendingSpawns(
+    projectRoot, binding, pair, capabilityManifest, pendingSpawns,
   );
-  const policySelectedLifecycleDriverBase = (!deterministicAppServerTestBackend &&
-    pair.policy.schema === 'runtime-collaboration-policy/v2'
-    && pair.policy.selection.requested_host === 'claude'
-    && pair.policy.selection.requested_role_engine === 'claude'
-    && pair.policy.selection.fallback.mode === 'deny'
-    && pair.policy.selection.fallback.allowed.length === 0
-  ) ? 'claude-sendmessage' : null;
-  const codexWorkerOptInRolesForEnsure = (pair.policy.schema === 'runtime-collaboration-policy/v2' && Array.isArray(pair.policy.selection.codex_worker_opt_in_roles))
-    ? pair.policy.selection.codex_worker_opt_in_roles : [];
-  // Lazily-memoized first-start check -- computed at most once per
-  // ensure() call (a project-wide pin/credential probe, not role-scoped),
-  // only if pass 2 actually needs it. `null` means "not yet checked".
-  let supervisorStartabilityResult = null;
-  function ensureSupervisorStartabilityChecked() {
-    if (supervisorStartabilityResult === null) {
-      supervisorStartabilityResult = resolveSupervisorStartability(projectRoot, 'codex-app-server');
-    }
-    return supervisorStartabilityResult;
-  }
-  for (const spawn of pendingSpawns) {
-    // A role re-entering from UNAVAILABLE excludes exactly the one driver
-    // that just failed, on top of the batch-wide `driverExclusions` and the
-    // noop-consumer-gate exclusion below.
-    const perRoleExclusions = (driverExclusions || [])
-      .concat(spawn.excludeDriver ? [spawn.excludeDriver] : [])
-      .concat(hasRegisteredValidatedDiskConsumer(projectRoot, spawn.role, binding.worktree_id, binding.plan_digest, binding.session_generation_id) ? [] : ['noop']);
-    let policySelectedLifecycleDriver = policySelectedLifecycleDriverBase;
-    if (codexWorkerOptInRolesForEnsure.includes(spawn.role)) {
-      policySelectedLifecycleDriver = null;
-    }
-    let driver = null;
-    if (policySelectedLifecycleDriver) {
-      if (
-        !perRoleExclusions.includes(policySelectedLifecycleDriver)
-        && capabilityManifest.availableDrivers.includes(policySelectedLifecycleDriver)
-      ) driver = policySelectedLifecycleDriver;
-    } else if (spawn.requiredDriver === 'codex-app-server' || codexWorkerOptInRolesForEnsure.includes(spawn.role)) {
-      if (
-        codexAppServerStartupEligible(pair.routing, spawn.role, perRoleExclusions)
-        && ensureSupervisorStartabilityChecked().ok
-      ) driver = 'codex-app-server';
-    } else {
-      driver = selectLifecycleEligibleDriverForRole(
-        pair.routing, spawn.role, capabilityManifest, perRoleExclusions,
-      );
-    }
-    // `getCapabilityManifest`'s real branch only reports `codex-app-server`
-    // available once a registry entry is already READY -- a first-ever
-    // `ensure()` call can never have one. LAST-RESORT ONLY (never overrides
-    // an already-viable selection -- `driver` is non-null then and this is
-    // unreached): when no driver was selectable, ask whether a first
-    // codex-app-server supervisor CAN be started and, if routing permits it
-    // for this role, route it into the same codex-app-server batch below.
-    if (
-      !policySelectedLifecycleDriver && !spawn.requiredDriver && !driver
-      && codexAppServerStartupEligible(pair.routing, spawn.role, perRoleExclusions)
-      && ensureSupervisorStartabilityChecked().ok
-    ) {
-      driver = 'codex-app-server';
-    }
-    if (!driver) { noteUnavailable(spawn.role, 'no-eligible-driver'); continue; }
-    if (driver === 'noop') {
-      // Single atomic fromState->READY write via the toState waypoint
-      // (validated but never persisted) -- never a durable, pending_action_id-less
-      // waypoint record on disk.
-      const t = transitionRoleBindingAtomicViaWaypoint(projectRoot, binding.worktree_id, binding.plan_digest, spawn.profileDigest, binding.session_generation_id, spawn.role, spawn.fromState, spawn.toState, 'READY', spawn.fromRecord, { driver, respawn_count: spawn.respawnCount });
-      if (!t.ok) { hardError = true; break; }
-      collectedBindings.push(roleBindingForEnvelope(t.record));
-      continue;
-    }
-    if (driver === 'codex-app-server') { codexAppServerGroup.push(Object.assign({ driver }, spawn)); continue; }
-    if (driver === 'claude-sendmessage') { claudeSendmessageGroup.push(Object.assign({ driver }, spawn)); continue; }
-    // Closed routing-driver enum makes this structurally unreachable --
-    // fail closed rather than silently drop an unrecognized driver.
-    hardError = true;
-    break;
-  }
-  if (hardError) {
+  if (!groupedSpawns.ok) {
     invalidError('ensure', 'INTERNAL_ERROR');
     return;
   }
+  collectedBindings.push(...groupedSpawns.collectedBindings);
+  for (const unavailable of groupedSpawns.unavailable) {
+    noteUnavailable(unavailable.role, unavailable.reason);
+  }
+  const { codexAppServerGroup, claudeSendmessageGroup } = groupedSpawns;
 
   // codex-app-server: at most ONE retained supervisor per (worktree, plan,
   // session). classify+mint+transition+publish-owner all happen atomically

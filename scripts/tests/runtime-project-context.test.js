@@ -275,3 +275,56 @@ test('P3-RUNTIME-INSTALL exact source hooks, role bytes, commit and content pin 
     );
   } finally { fs.rmSync(f.root, { recursive: true, force: true }); }
 });
+
+// Registry path helpers resolve the repository identity once per record. A
+// hook event over an accumulated registry spawned hundreds of `git rev-parse`
+// processes and exceeded the host SubagentStart/SubagentStop timeout.
+function countGitSpawns(script) {
+  const preload = [
+    "const cp = require('child_process');",
+    "const orig = cp.execFileSync;",
+    "let n = 0;",
+    "cp.execFileSync = function (cmd) { if (cmd === 'git') n += 1; return orig.apply(this, arguments); };",
+    "process.on('exit', () => process.stderr.write('GIT_SPAWNS=' + n + '\\n'));",
+  ].join('\n');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'identity-cache-preload-'));
+  try {
+    fs.writeFileSync(path.join(dir, 'preload.cjs'), preload);
+    const r = require('node:child_process').spawnSync(process.execPath, ['-r', path.join(dir, 'preload.cjs'), '-e', script], { encoding: 'utf8' });
+    assert.strictEqual(r.status, 0, r.stderr);
+    return { count: Number(/GIT_SPAWNS=(\d+)/.exec(r.stderr)[1]), stdout: r.stdout.trim() };
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+}
+
+test('runtime identity resolves git once per process for repeated registry paths', () => {
+  const repo = fs.mkdtempSync(path.join(os.tmpdir(), 'identity-cache-'));
+  try {
+    execFileSync('git', ['init', '-q', repo]);
+    const rll = JSON.stringify(path.resolve(__dirname, '../lib/runtime-role-lifecycle.cjs'));
+    const { count, stdout } = countGitSpawns(
+      `const r = require(${rll}); const ids = new Set();` +
+      `for (let i = 0; i < 50; i += 1) { ids.add(r.registryRepoDir(${JSON.stringify(repo)})); ids.add(r.computeWorktreeId(${JSON.stringify(repo)})); }` +
+      'process.stdout.write(String(ids.size));',
+    );
+    assert.strictEqual(stdout, '2', 'repeated resolution must stay stable');
+    assert.ok(count <= 2, 'expected one git spawn per identity kind, saw ' + count);
+  } finally { fs.rmSync(repo, { recursive: true, force: true }); }
+});
+
+test('runtime identity never answers a repository recreated at the same path from a stale entry', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'identity-cache-recreate-'));
+  try {
+    const repo = path.join(root, 'repo');
+    const other = path.join(root, 'other');
+    execFileSync('git', ['init', '-q', repo]);
+    execFileSync('git', ['init', '-q', other]);
+    execFileSync('git', ['-C', other, 'commit', '-q', '--allow-empty', '-m', 'init'], { env: { ...process.env, GIT_AUTHOR_NAME: 't', GIT_AUTHOR_EMAIL: 't@t', GIT_COMMITTER_NAME: 't', GIT_COMMITTER_EMAIL: 't@t' } });
+    const rll = require('../lib/runtime-role-lifecycle.cjs');
+    const before = rll.computeRepoId(repo);
+    fs.rmSync(repo, { recursive: true, force: true });
+    execFileSync('git', ['-C', other, 'worktree', 'add', '-q', '--detach', repo]);
+    const after = rll.computeRepoId(repo);
+    assert.notStrictEqual(after, before, 'a recreated repository must not reuse the cached identity');
+    assert.strictEqual(after, rll.computeRepoId(other), 'a linked worktree shares its main repository identity');
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});

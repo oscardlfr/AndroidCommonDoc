@@ -63,6 +63,12 @@ function mintIsolatedHostContractSession(repoRoot, { rc, runtimeHostClaude, wake
     // The fixture owns one complete canonical HARNESS wave so qualification
     // and later hook admission bind to the same deterministic project context.
     const waveSlug = 'host-contract-fixture';
+    const planningRoot = path.join(worktreeRoot, '.planning');
+    for (const entry of fs.readdirSync(planningRoot, { withFileTypes: true })) {
+      if (entry.isDirectory() && entry.name.startsWith('wave-')) {
+        fs.rmSync(path.join(planningRoot, entry.name), { recursive: true, force: true });
+      }
+    }
     const waveDir = path.join(worktreeRoot, '.planning', 'wave-' + waveSlug);
     fs.mkdirSync(waveDir, { recursive: true });
     fs.writeFileSync(

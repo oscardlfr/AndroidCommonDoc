@@ -1,8 +1,8 @@
 'use strict';
-
 function createClaudeResumeRecord(deps) {
   const {
     CANONICAL_ROLES,
+    canonicalJSONStringify,
     CLAUDE_STARTUP_ACTOR_KEYS,
     CLAUDE_STARTUP_ACTOR_SCHEMA,
     claudeStartupActorPathFor,
@@ -12,21 +12,23 @@ function createClaudeResumeRecord(deps) {
     discoverPlan,
     findUniqueClaudePeerRoleActorBinding,
     fs,
+    ensureSecureRegistryDir,
     hasExactKeys,
     isCanonicalIsoUtc,
     isHexActionId,
     isHexCsprng32,
     isHexDigest64,
+    isClaudeId01RawTraceWellFormed,
     isoToMsForRegistry,
     path,
     peekSessionGeneration,
     readClaudeAuthorityFence,
     readRegistryRecord,
     registryRepoDir,
+    publishNoClobber,
     sha256String,
     validateRoleActorBindingFor,
   } = deps;
-
 const CLAUDE_RESUME_HANDLE_SCHEMA = 'runtime/claude-resume-handle/v1';
 const CLAUDE_RESUME_HANDLE_KEYS = Object.freeze([
   'actor_binding_id', 'agent_id', 'binding_id', 'created_at', 'expiry',
@@ -34,15 +36,253 @@ const CLAUDE_RESUME_HANDLE_KEYS = Object.freeze([
   'teammate_name', 'worktree_id',
 ]);
 const CLAUDE_RESUME_HANDLE_SCAN_CAP = 1024;
-
+const CLAUDE_SUPPORT_ROLE_TERMINAL_SCHEMA = 'runtime/claude-support-role-terminal/v1';
+const CLAUDE_SUPPORT_ROLE_TERMINAL_KEYS = Object.freeze([
+  'actor_binding_id', 'agent_digest', 'authority_identity_id', 'fenced_at',
+  'plan_digest', 'role', 'schema', 'session_digest', 'session_generation_id',
+  'worktree_id',
+]);
+function claudeSupportRoleTerminalPathFor(projectRootOrRepoDescriptor, expected) {
+  const key = sha256String(canonicalJSONStringify([
+    expected.sessionGenerationId, expected.worktreeId, expected.planDigest, expected.role,
+    expected.actorBindingId,
+  ]));
+  return path.join(registryRepoDir(projectRootOrRepoDescriptor), 'claude-support-role-terminals', key + '.json');
+}
+function readClaudeSupportRoleTerminal(projectRoot, expected) {
+  const read = readRegistryRecord(claudeSupportRoleTerminalPathFor(projectRoot, expected));
+  if (!read.ok) return { ok: false, reason: 'terminal-read-failed' };
+  if (read.absent) return { ok: true, absent: true };
+  const record = read.obj;
+  if (!record || !hasExactKeys(record, CLAUDE_SUPPORT_ROLE_TERMINAL_KEYS)
+      || record.schema !== CLAUDE_SUPPORT_ROLE_TERMINAL_SCHEMA
+      || record.session_generation_id !== expected.sessionGenerationId
+      || record.worktree_id !== expected.worktreeId
+      || record.plan_digest !== expected.planDigest || record.role !== expected.role
+      || record.actor_binding_id !== expected.actorBindingId
+      || !isHexActionId(record.actor_binding_id)
+      || !isHexDigest64(record.session_digest) || !isHexDigest64(record.agent_digest)
+      || !isHexDigest64(record.authority_identity_id) || !isCanonicalIsoUtc(record.fenced_at)) {
+    return { ok: false, reason: 'terminal-shape-invalid' };
+  }
+  const fence = readClaudeAuthorityFence(projectRoot, record.authority_identity_id);
+  if (!fence.ok || fence.absent || fence.fence.fenced_at !== record.fenced_at) {
+    return { ok: false, reason: 'terminal-fence-invalid' };
+  }
+  return { ok: true, absent: false, record };
+}
+/** Persist the scope-to-fence join before best-effort raw trace cleanup. */
+function publishClaudeSupportRoleTerminal(projectRoot, event) {
+  try {
+    if (!event || typeof event.sessionId !== 'string' || event.sessionId.length === 0
+        || typeof event.agentId !== 'string' || event.agentId.length === 0
+        || !CANONICAL_ROLES.includes(event.agentType)) return { ok: false, reason: 'terminal-event-invalid' };
+    const worktreeId = computeWorktreeId(projectRoot);
+    const generation = peekSessionGeneration(projectRoot, {
+      provider: 'claude-hook', runtime_session_key: event.sessionId,
+    });
+    if (!generation.ok) return generation.reason === 'session-generation-absent' ? { ok: true, skipped: true, reason: 'terminal-session-generation-absent' } : { ok: false, reason: 'terminal-scope-invalid' };
+    const startupRead = readRegistryRecord(
+      claudeStartupActorPathFor(projectRoot, generation.generationId, event.agentId),
+    );
+    // Not every canonical phase-scoped Claude agent is a persistent
+    // RoleActorBinding. Absence is therefore a legitimate no-op; a present
+    // but malformed startup record is never silently ignored.
+    if (!startupRead.ok) return { ok: false, reason: 'terminal-startup-read-failed' };
+    if (startupRead.absent) return { ok: true, skipped: true };
+    if (!startupRead.obj || !hasExactKeys(startupRead.obj, CLAUDE_STARTUP_ACTOR_KEYS)) {
+      return { ok: false, reason: 'terminal-startup-absent' };
+    }
+    const startup = startupRead.obj;
+    if (startup.schema !== CLAUDE_STARTUP_ACTOR_SCHEMA
+        || !isHexActionId(startup.action_id) || !isHexActionId(startup.actor_binding_id)
+        || !isHexDigest64(startup.action_digest) || !isHexDigest64(startup.claim_digest)
+        || !isHexDigest64(startup.host_contract_digest) || !isHexDigest64(startup.plan_digest)
+        || !isHexDigest64(startup.worktree_id) || !isHexDigest64(startup.session_digest)
+        || !isHexDigest64(startup.agent_digest) || !isHexDigest64(startup.session_generation_digest)
+        || !isCanonicalIsoUtc(startup.created_at) || !isCanonicalIsoUtc(startup.expiry)
+        || isoToMsForRegistry(startup.created_at) > currentClockMsForRegistry() || isoToMsForRegistry(startup.expiry) < isoToMsForRegistry(startup.created_at)
+        || startup.session_digest !== sha256String(event.sessionId)
+        || startup.agent_digest !== sha256String(event.agentId)
+        || startup.session_generation_digest !== sha256String(generation.generationId)
+        || startup.worktree_id !== worktreeId
+        || startup.role !== event.agentType) return { ok: false, reason: 'terminal-startup-mismatch' };
+    const actor = findUniqueClaudePeerRoleActorBinding(projectRoot, {
+      generationId: generation.generationId, planDigest: startup.plan_digest,
+      role: event.agentType, worktreeId,
+    });
+    if (!actor.ok) return actor.reason === 'UNAVAILABLE'
+      ? { ok: true, skipped: true, reason: 'terminal-actor-no-longer-live' }
+      : { ok: false, reason: 'terminal-actor-invalid' };
+    if (startup.actor_binding_id !== actor.binding.binding_id) return { ok: false, reason: 'terminal-actor-invalid' };
+    const authorityIdentityId = computeClaudeAuthorityIdentityId(
+      projectRoot, 'claude-hook', event.sessionId, event.agentId,
+    );
+    const fence = readClaudeAuthorityFence(projectRoot, authorityIdentityId);
+    if (!fence.ok || fence.absent) return { ok: false, reason: 'terminal-fence-absent' };
+    const record = {
+      schema: CLAUDE_SUPPORT_ROLE_TERMINAL_SCHEMA,
+      session_generation_id: generation.generationId,
+      worktree_id: worktreeId,
+      plan_digest: startup.plan_digest,
+      role: event.agentType,
+      actor_binding_id: actor.binding.binding_id,
+      session_digest: startup.session_digest,
+      agent_digest: startup.agent_digest,
+      authority_identity_id: authorityIdentityId,
+      fenced_at: fence.fence.fenced_at,
+    };
+    const terminalPath = claudeSupportRoleTerminalPathFor(projectRoot, {
+      sessionGenerationId: generation.generationId, worktreeId,
+      planDigest: startup.plan_digest, role: event.agentType,
+      actorBindingId: actor.binding.binding_id,
+    });
+    const secured = ensureSecureRegistryDir(path.dirname(terminalPath));
+    if (!secured.ok) return { ok: false, reason: 'terminal-dir-invalid' };
+    try { publishNoClobber(terminalPath, Buffer.from(canonicalJSONStringify(record), 'utf8'), {}); }
+    catch {
+      const existing = readClaudeSupportRoleTerminal(projectRoot, {
+        sessionGenerationId: generation.generationId, worktreeId,
+        planDigest: startup.plan_digest, role: event.agentType,
+        actorBindingId: actor.binding.binding_id,
+      });
+      return existing.ok && !existing.absent
+        && canonicalJSONStringify(existing.record) === canonicalJSONStringify(record)
+        ? { ok: true, record: existing.record, idempotent: true }
+        : { ok: false, reason: 'terminal-conflict' };
+    }
+    return { ok: true, record, idempotent: false };
+  } catch {
+    return { ok: false, reason: 'terminal-publish-failed' };
+  }
+}
+/**
+ * Reconciles the durable READY/WAITING/BUSY projection with the exact
+ * hook-observed Claude actor identity.  RoleBinding is intentionally not an
+ * actor identity, so callers must not treat its state as liveness by itself.
+ *
+ * A startup record is joined to the raw CLAUDE-ID-01 trace by the two
+ * one-way identity digests.  That gives us the raw session/agent tuple
+ * needed to read the immutable authority fence.  A fenced actor is proven
+ * ABSENT. Startup/raw observations establish identity only; they never prove
+ * current reachability. An unfenced actor is UNVERIFIED until an exact active
+ * host probe records a short-lived positive outcome.
+ */
+function classifyClaudeSupportRoleLiveness(projectRoot, expected) {
+  try {
+    const expectedKeys = ['generationId', 'planDigest', 'role', 'runtimeSessionKey', 'worktreeId'];
+    if (!expected || typeof expected !== 'object' || Array.isArray(expected)
+        || !hasExactKeys(expected, expectedKeys)
+        || !isHexCsprng32(expected.generationId)
+        || !isHexDigest64(expected.worktreeId)
+        || !isHexDigest64(expected.planDigest)
+        || !CANONICAL_ROLES.includes(expected.role)
+        || typeof expected.runtimeSessionKey !== 'string' || expected.runtimeSessionKey.length === 0) {
+      return { ok: false, status: 'INVALID', reason: 'expected-scope-invalid' };
+    }
+    const actor = findUniqueClaudePeerRoleActorBinding(projectRoot, {
+      generationId: expected.generationId,
+      planDigest: expected.planDigest,
+      role: expected.role,
+      worktreeId: expected.worktreeId,
+    });
+    if (!actor.ok) return { ok: false, status: 'INVALID', reason: 'actor-binding-' + actor.reason.toLowerCase() };
+    const terminal = readClaudeSupportRoleTerminal(projectRoot, {
+      sessionGenerationId: expected.generationId, worktreeId: expected.worktreeId,
+      planDigest: expected.planDigest, role: expected.role,
+      actorBindingId: actor.binding.binding_id,
+    });
+    if (!terminal.ok) return { ok: false, status: 'INVALID', reason: terminal.reason };
+    if (!terminal.absent) {
+      return { ok: true, status: 'ABSENT', actorBindingId: terminal.record.actor_binding_id };
+    }
+    const traceDir = path.join(registryRepoDir(projectRoot), 'claude-id01-traces');
+    let entries;
+    try { entries = fs.readdirSync(traceDir, { withFileTypes: true }); }
+    catch (error) {
+      return error && error.code === 'ENOENT'
+        ? { ok: false, status: 'INVALID', reason: 'actor-trace-absent' }
+        : { ok: false, status: 'INVALID', reason: 'actor-trace-unreadable' };
+    }
+    if (entries.length > CLAUDE_RESUME_HANDLE_SCAN_CAP) {
+      return { ok: false, status: 'INVALID', reason: 'actor-trace-scan-cap' };
+    }
+    const startup = [];
+    const raw = [];
+    for (const entry of entries.slice().sort((a, b) => a.name.localeCompare(b.name))) {
+      if (entry.name.startsWith('.')) continue;
+      if (!entry.isFile() || !entry.name.endsWith('.json')) {
+        return { ok: false, status: 'INVALID', reason: 'actor-trace-entry-invalid' };
+      }
+      const read = readRegistryRecord(path.join(traceDir, entry.name));
+      if (!read.ok || read.absent || !read.obj) {
+        return { ok: false, status: 'INVALID', reason: 'actor-trace-read-failed' };
+      }
+      const record = read.obj;
+      if (record.schema === CLAUDE_STARTUP_ACTOR_SCHEMA) {
+        // Scope append-only history before enforcing the current exact shape.
+        const potentiallyCorrelated = record.session_generation_digest === sha256String(expected.generationId)
+          && record.worktree_id === expected.worktreeId && record.plan_digest === expected.planDigest && record.role === expected.role;
+        if (!potentiallyCorrelated) continue;
+        if (!hasExactKeys(record, CLAUDE_STARTUP_ACTOR_KEYS)) {
+          return { ok: false, status: 'INVALID', reason: 'startup-trace-shape-invalid' };
+        }
+        startup.push(record);
+      } else if (record.schema === 'runtime/claude-id01-trace/v1') {
+        const potentiallyCorrelated = record.agent_type === expected.role
+          && record.worktree_id === expected.worktreeId
+          && record.plan_digest === expected.planDigest;
+        if (!potentiallyCorrelated) continue;
+        if (!isClaudeId01RawTraceWellFormed(record)) {
+          return { ok: false, status: 'INVALID', reason: 'raw-identity-shape-invalid' };
+        }
+        if (currentClockMsForRegistry() >= isoToMsForRegistry(record.expiry)) continue;
+        raw.push(record);
+      }
+    }
+    if (startup.length !== 1) {
+      return { ok: false, status: 'INVALID', reason: startup.length === 0 ? 'startup-trace-absent' : 'startup-trace-ambiguous' };
+    }
+    const observed = startup[0];
+    if (!isHexActionId(observed.actor_binding_id)
+        || !isHexDigest64(observed.session_digest)
+        || !isHexDigest64(observed.agent_digest)
+        || !isCanonicalIsoUtc(observed.created_at)
+        || !isCanonicalIsoUtc(observed.expiry)
+        || observed.actor_binding_id !== actor.binding.binding_id
+        || observed.session_digest !== sha256String(expected.runtimeSessionKey)) {
+      return { ok: false, status: 'INVALID', reason: 'actor-identity-mismatch' };
+    }
+    const identities = raw.filter((record) => record
+      && record.agent_type === expected.role
+      && record.worktree_id === expected.worktreeId
+      && record.plan_digest === expected.planDigest
+      && sha256String(record.session_id) === observed.session_digest
+      && sha256String(record.agent_id) === observed.agent_digest);
+    if (identities.length > 1) {
+      return { ok: false, status: 'INVALID', reason: 'raw-identity-ambiguous' };
+    }
+    if (identities.length === 1) {
+      const identity = identities[0];
+      const fence = readClaudeAuthorityFence(projectRoot,
+        computeClaudeAuthorityIdentityId(projectRoot, 'claude-hook', identity.session_id, identity.agent_id));
+      if (!fence.ok) return { ok: false, status: 'INVALID', reason: 'authority-fence-invalid' };
+      if (!fence.absent) return { ok: true, status: 'ABSENT', actorBindingId: actor.binding.binding_id };
+    }
+    return {
+      ok: true, status: 'UNVERIFIED', actorBindingId: actor.binding.binding_id,
+      actorDigest: observed.agent_digest,
+    };
+  } catch {
+    return { ok: false, status: 'INVALID', reason: 'actor-liveness-internal' };
+  }
+}
 function claudeResumeHandlePathFor(projectRootOrRepoDescriptor, handleId) {
   return path.join(registryRepoDir(projectRootOrRepoDescriptor), 'claude-resume-handles', handleId + '.json');
 }
-
 function claudeResumeHandleConsumedMarkerPathFor(projectRootOrRepoDescriptor, handleId) {
   return claudeResumeHandlePathFor(projectRootOrRepoDescriptor, handleId) + '.consumed';
 }
-
 function validateClaudeResumeHandleRecordShape(record, handleId) {
   if (!isHexActionId(handleId)) return { ok: false, reason: 'INVALID' };
   if (!record || !hasExactKeys(record, CLAUDE_RESUME_HANDLE_KEYS)) return { ok: false, reason: 'INVALID' };
@@ -63,7 +303,6 @@ function validateClaudeResumeHandleRecordShape(record, handleId) {
   }
   return { ok: true, record };
 }
-
 function validateClaudeResumeHandleRecord(record, handleId) {
   const shaped = validateClaudeResumeHandleRecordShape(record, handleId);
   if (!shaped.ok) return shaped;
@@ -74,7 +313,6 @@ function validateClaudeResumeHandleRecord(record, handleId) {
   if (nowMs >= expiryMs) return { ok: false, reason: 'INVALID' };
   return { ok: true, record };
 }
-
 function readClaudeResumeHandle(projectRootOrRepoDescriptor, handleId) {
   if (!isHexActionId(handleId)) return { ok: false, reason: 'INVALID' };
   let read;
@@ -127,18 +365,18 @@ function findClaudeResumeHandlesForActor(projectRoot, expected) {
     const handleId = entry.name.slice(0, -5);
     const read = readRegistryRecord(claudeResumeHandlePathFor(projectRoot, handleId));
     if (!read.ok || read.absent || !read.obj) return { ok: false, reason: 'INVALID' };
+    // Scope append-only history before current-shape validation; an exact
+    // actor-tuple claimant remains fail-closed below.
+    const correlated = read.obj.worktree_id === expected.worktreeId && read.obj.plan_digest === expected.planDigest
+      && read.obj.role === expected.role && read.obj.session === expected.session
+      && read.obj.agent_id === expected.agentId && read.obj.actor_binding_id === expected.actorBindingId;
+    if (!correlated) continue;
     const shaped = validateClaudeResumeHandleRecordShape(read.obj, handleId);
     if (!shaped.ok) return { ok: false, reason: 'INVALID' };
     const record = shaped.record;
-    if (
-      record.worktree_id === expected.worktreeId && record.plan_digest === expected.planDigest
-      && record.role === expected.role && record.session === expected.session
-      && record.agent_id === expected.agentId && record.actor_binding_id === expected.actorBindingId
-    ) {
-      const live = validateClaudeResumeHandleRecord(record, handleId);
-      if (!live.ok) return { ok: false, reason: 'INVALID' };
-      records.push(live.record);
-    }
+    const live = validateClaudeResumeHandleRecord(record, handleId);
+    if (!live.ok) return { ok: false, reason: 'INVALID' };
+    records.push(live.record);
   }
   return { ok: true, records };
 }
@@ -250,6 +488,11 @@ function resolveClaudeResumeRoleActorScope(projectRoot, event) {
     isClaudeResumeHandleConsumed,
     findClaudeResumeHandlesForActor,
     resolveClaudeResumeRoleActorScope,
+    classifyClaudeSupportRoleLiveness,
+    CLAUDE_SUPPORT_ROLE_TERMINAL_SCHEMA,
+    claudeSupportRoleTerminalPathFor,
+    readClaudeSupportRoleTerminal,
+    publishClaudeSupportRoleTerminal,
   });
 }
 

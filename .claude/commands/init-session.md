@@ -21,6 +21,10 @@ exactly this standalone Bash call with the supplied slug:
 node .claude/runtime/l0-entrypoint-launcher.cjs init-session --orchestrate <slug>
 ```
 
+The slug must name an existing `.planning/wave-<slug>/PLAN.md`. The launcher
+may initialize that wave's control-plane state, but it never creates or infers
+a PLAN. Do not invent a diagnostic or one-off slug.
+
 Do not run `ls`, `find`, `pwd`, Read, Glob, Grep, `git status`, Python, or any
 other discovery/rendering step before or after a failed launcher call. The
 PreToolUse hook rewrites the public shorthand into the qualified runtime

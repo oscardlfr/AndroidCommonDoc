@@ -58,6 +58,7 @@ function handleRootSource(rawArgv) {
     && claudeArchitectRole.record.driver === 'claude-sendmessage'
   ) {
     const parkedArchitect = findUniqueClaudeResumeHandleForTarget(projectRoot, {
+      generationId: context.generation.generationId,
       sessionDigest: sha256String(context.binding.runtime_session_key),
       worktreeId: context.worktreeId,
       planDigest: context.plan.planDigest,
