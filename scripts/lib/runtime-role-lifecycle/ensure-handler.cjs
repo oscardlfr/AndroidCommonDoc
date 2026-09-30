@@ -208,10 +208,13 @@ function handleEnsure(rawArgv) {
             : findUniqueConsumedClaudeResumeHandleForBusyTarget(projectRoot, {
               generationId: binding.session_generation_id, ...target,
             }, stateResult.record);
-          const classified = handle.ok || handle.reason === 'UNAVAILABLE'
-            ? classifyClaudeSupportRoleLiveness(projectRoot, expectedLiveness) : null;
-          liveness = handle.ok ? classified
-            : (classified && classified.ok && classified.status === 'ABSENT' ? classified : {
+          // A durable terminal tombstone is newer and stronger evidence than
+          // resume-handle history. Classify it even when multiple consumed
+          // receipts make the BUSY handle lookup intentionally INVALID; an
+          // explicit shutdown must still rehydrate a fresh actor.
+          const classified = classifyClaudeSupportRoleLiveness(projectRoot, expectedLiveness);
+          liveness = classified && classified.ok && classified.status === 'ABSENT' ? classified
+            : (handle.ok ? classified : {
               ok: false, status: 'INVALID', reason: stateResult.state === 'WAITING'
                 ? 'waiting-resume-handle-absent' : 'busy-resume-receipt-absent',
             });

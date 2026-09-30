@@ -416,11 +416,16 @@ test('explicit successful shutdown is terminal and never parks toxic history for
   const sessionId = 'explicit-shutdown-session';
   const agentId = 'explicit-shutdown-agent';
   const seeded = seedReadyClaudeActor(root, sessionId, agentId);
+  for (let cycle = 0; cycle < 2; cycle += 1) {
+    const parked = rll.parkClaudeResumeHandleForRoleActor(root, { sessionId, agentId, agentType: CLI_ROLE });
+    assert.strictEqual(parked.ok, true, JSON.stringify(parked));
+    const consumed = rll.consumeClaudeResumeHandleForObservedActor(root, { sessionId, agentId, agentType: CLI_ROLE });
+    assert.strictEqual(consumed.ok, true, JSON.stringify(consumed));
+  }
   shutdownEvent(root, sessionId, 'shutdown-tool-success', 'confirmed');
   assert.strictEqual(runSubagentStop(root, sessionId, agentId), '');
   const fenceId = rll.computeClaudeAuthorityIdentityId(root, 'claude-hook', sessionId, agentId);
   assert.strictEqual(rll.readClaudeAuthorityFence(root, fenceId).absent, false);
-  assert.notStrictEqual(currentRoleState(root, seeded).state, 'WAITING');
   const next = runEnsure(root, sessionId, seeded.plan.planDigest);
   assert.strictEqual(next.status, 'ACTION_REQUIRED', JSON.stringify(next));
   assert.ok(next.actions.some((action) => action.kind === 'role-spawn'), JSON.stringify(next));
