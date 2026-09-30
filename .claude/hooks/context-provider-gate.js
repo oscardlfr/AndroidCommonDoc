@@ -956,6 +956,16 @@ function parseEntrypointCliCommand(command, event) {
   return tokens;
 }
 
+const WAVE_CLASS_RECOVERY = Object.freeze({
+  WAVE_CLASS_SECTION_MISSING: "the PLAN has no '### Wave Class' section; add it with a '- **Class**: HARNESS|DOC|FAST-PATH' line (the planner writes it in Pass A).",
+  WAVE_CLASS_SECTION_AMBIGUOUS: "the PLAN has more than one '### Wave Class' section; keep exactly one.",
+  PLAN_WAVE_CLASS_MISSING: "the Wave Class section declares no class; add a '- **Class**: HARNESS|DOC|FAST-PATH' line.",
+  PLAN_WAVE_CLASS_AMBIGUOUS: "the Wave Class section declares more than one '**Class**:' line; keep exactly one.",
+  INVALID_WAVE_CLASS: 'the declared class is not one of HARNESS, DOC or FAST-PATH.',
+  WAVE_CLASS_SENTINEL_MISSING: 'write .planning/wave-<slug>/CLASS with the PLAN class (the planner writes it in Pass A).',
+  INVALID_WAVE_CLASS_SENTINEL: 'CLASS must contain exactly HARNESS, DOC or FAST-PATH and match the PLAN class.',
+});
+
 function canonicalizeInstalledEntrypointSurface(tokens, event) {
   if (!runtimeProjectContext || tokens.length < 3 || tokens[2] !== 'execute') {
     return { recognized: false, tokens: null, reason: null };
@@ -1549,6 +1559,10 @@ function tryInjectEntrypointComposition(toolInput, event) {
     // unexpected parser/runtime exception cannot leak host details.
     if (error && error.message === 'wave-control-work-outside-execute') {
       return m7DenyResult('[R131/P3] wave-control-work-outside-execute: /work is available only during EXECUTE.');
+    }
+    // Exact, closed set of wave class/sentinel codes: each names the file to fix and never echoes paths or host details.
+    if (error && typeof error.message === 'string' && Object.prototype.hasOwnProperty.call(WAVE_CLASS_RECOVERY, error.message)) {
+      return m7DenyResult('[R131/P3] ' + error.message + ': ' + WAVE_CLASS_RECOVERY[error.message]);
     }
     return m7DenyResult('[R131/P3] collaboration entrypoint intent or scope is invalid.');
   }

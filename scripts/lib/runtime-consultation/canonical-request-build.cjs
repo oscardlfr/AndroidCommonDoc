@@ -265,7 +265,7 @@ function deriveCanonicalRequestFields(coordRoot, planPath, subjectBundleManifest
     routingPolicyDigest: input.routingPolicyDigest,
   });
   if (built.request.content_ref) resolveContentRefOrThrow(planRoot, built.request.content_ref);
-  assertRolePolicy(built.request.source_role, built.request.target_role, { planPath });
+  assertRolePolicy(built.request.source_role, built.request.target_role);
   return Object.assign(built, {
     coordRoot, planPath, planRoot, planDigest, repoId, worktreeId,
     subjectBundleManifest, subjectScopeDigest,

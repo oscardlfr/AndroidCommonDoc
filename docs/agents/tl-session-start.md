@@ -161,13 +161,13 @@ For non-trivial new work, continue directly to the Planning Phase below — Plan
 
 ### Consumer Consultation + Supported Surfaces
 
-In an L1/L2 consumer, the **requester subagent itself** (the planner in Pass B, `arch-*` in PREP/EXECUTE, never the main orchestrator, whose binding cannot be minted) consults context-provider through the installed launcher. Every token is single-quoted and `<ROOT>` is the subagent's absolute working directory:
+In an L1/L2 consumer, only an **`arch-*` subagent itself** (PREP/EXECUTE, never the main orchestrator, whose binding cannot be minted) consults context-provider, through the installed launcher. The single-use planner has no edge of its own: in Pass B it sends its bounded question by SendMessage to the `arch-*` owner of the topic (`arch-platform` by default), which runs the transaction as the mediated requester and replies with the path of the accepted result file; the planner reads it, cites it in the PLAN and only then removes the marker. Every token is single-quoted and `<ROOT>` is the subagent's absolute working directory:
 
 ```
 'node' '.claude/runtime/l0-toolkit-launcher.cjs' 'run' 'runtime-consult' '--project-root' '<ROOT>' '--' 'consult' '--coordination-root' '<ROOT>/.planning/coordination' '--question' '<question>'
 ```
 
-`consult` derives the plan reference, intent and subject bundle from the active wave PLAN, publishes the request and dispatches it. When the printed `activation_action.kind` is `claude-sendmessage`, send its `message` verbatim to its `target_name`, then run the same launcher form with `await-result` (`--request <artifact_ref> --timeout 300`) and `accept-result`. The launcher admits exactly `consult`, `record-delivery`, `await-result` and `accept-result`; a consumer never invokes the toolkit path directly. The planner edge exists only while the PLAN's first line is `STATUS: DRAFT-CONTEXT-PENDING`.
+`consult` derives the plan reference, intent and subject bundle from the active wave PLAN, publishes the request and dispatches it. When the printed `activation_action.kind` is `claude-sendmessage`, send its `message` verbatim to its `target_name`, then run the same launcher form with `await-result` (`--request <artifact_ref> --timeout 300`) and `accept-result`. The launcher admits exactly `consult`, `record-delivery`, `await-result` and `accept-result`; a consumer never invokes the toolkit path directly.
 
 Supported surfaces: the Claude Code CLI and the Claude desktop app, both with **Sonnet 5.5 and effort High**. A model/profile mismatch reports `host-model-mismatch`; switch the session model and effort, then run `/init-session` again. A desktop Code-tab session runs in a managed linked worktree of the same repository and is admitted as the consumer root.
 

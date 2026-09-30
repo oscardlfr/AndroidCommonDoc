@@ -106,9 +106,9 @@ test('consult (arch-testing): publishes a context-provider request from the PLAN
 });
 
 test('consult bootstraps a missing coordination root (a requester never runs root-init first)', () => {
-  withWave({ slug: 'consult-fresh', plan: MARKER + '\n', initRoot: false }, (ctx) => {
+  withWave({ slug: 'consult-fresh', plan: '# plan\n', initRoot: false }, (ctx) => {
     assert.strictEqual(fs.existsSync(ctx.coordRoot), false, 'fixture starts without a coordination root');
-    const out = envelope(consult(ctx, 'planner'));
+    const out = envelope(consult(ctx, 'arch-platform'));
     assert.strictEqual(out.status, 'SUCCESS', JSON.stringify(out));
     assert.ok(fs.existsSync(ctx.coordRoot), 'consult created the coordination root');
     assert.ok(out.artifact_ref.startsWith(ctx.coordRoot));
@@ -126,29 +126,25 @@ test('consult does not create a coordination root for a foreign worktree', () =>
   });
 });
 
-test('consult (planner): admitted only while the PLAN carries the draft marker', () => {
-  withWave({ slug: 'consult-draft', plan: MARKER + '\n\n## Execution Plan: probe\n' }, (ctx) => {
-    const out = envelope(consult(ctx, 'planner'));
-    assert.strictEqual(out.status, 'SUCCESS', JSON.stringify(out));
-    const request = JSON.parse(fs.readFileSync(out.artifact_ref, 'utf8'));
-    assert.strictEqual(request.source_role, 'planner');
-    assert.strictEqual(request.target_role, 'context-provider');
-  });
+test('consult (planner): the planner is never a requester — with or without the draft marker the mediated chain applies', () => {
+  for (const [slug, plan] of [['consult-draft', MARKER + '\n\n## Execution Plan: probe\n'], ['consult-final', '## Execution Plan: probe\n']]) {
+    withWave({ slug, plan }, (ctx) => {
+      const out = envelope(consult(ctx, 'planner'));
+      assert.strictEqual(out.status, 'INVALID', slug + ': ' + JSON.stringify(out));
+      assert.strictEqual(out.detail_code, 'AUTHORITY_INVALID');
+      assert.strictEqual(fs.existsSync(path.join(ctx.coordRoot, 'repos')), false, 'no request was published');
+    });
+  }
 });
 
-test('consult (planner): a marker-free PLAN is rejected as AUTHORITY_INVALID', () => {
-  withWave({ slug: 'consult-final', plan: '## Execution Plan: probe\n' }, (ctx) => {
-    const out = envelope(consult(ctx, 'planner'));
-    assert.strictEqual(out.status, 'INVALID', JSON.stringify(out));
-    assert.strictEqual(out.detail_code, 'AUTHORITY_INVALID');
-  });
-});
-
-test('consult (planner): the marker must be the first PLAN line, not quoted text later in the file', () => {
-  withWave({ slug: 'consult-decoy', plan: '## Execution Plan: probe\n\n' + MARKER + '\n' }, (ctx) => {
-    const out = envelope(consult(ctx, 'planner'));
-    assert.strictEqual(out.status, 'INVALID', JSON.stringify(out));
-    assert.strictEqual(out.detail_code, 'AUTHORITY_INVALID');
+test('consult: an unauthorized role is rejected before any coordination root is created', () => {
+  withWave({ slug: 'consult-nowrite', plan: MARKER + '\n', initRoot: false }, (ctx) => {
+    for (const role of ['planner', 'toolkit-specialist']) {
+      const out = envelope(consult(ctx, role));
+      assert.strictEqual(out.status, 'INVALID', role + ': ' + JSON.stringify(out));
+      assert.strictEqual(out.detail_code, 'AUTHORITY_INVALID');
+      assert.strictEqual(fs.existsSync(ctx.coordRoot), false, role + ' must not create the coordination root');
+    }
   });
 });
 
@@ -183,24 +179,13 @@ test('consult: a coordination root from a foreign worktree is rejected', () => {
   });
 });
 
-test('assertRolePolicy: planner → context-provider needs the draft PLAN; nothing else widens', () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rcc-policy-'));
-  try {
-    const draft = path.join(dir, 'draft.md');
-    const final = path.join(dir, 'final.md');
-    fs.writeFileSync(draft, MARKER + '\n');
-    fs.writeFileSync(final, '## Execution Plan\n');
-    assert.doesNotThrow(() => assertRolePolicy('planner', 'context-provider', { planPath: draft }));
-    assert.throws(() => assertRolePolicy('planner', 'context-provider', { planPath: final }), /AUTHORITY_INVALID|mediated chain/);
-    assert.throws(() => assertRolePolicy('planner', 'context-provider'), /mediated chain/);
-    assert.doesNotThrow(() => assertRolePolicy('planner', 'context-provider', { persisted: true }), 'read-side revalidation of a published draft consult');
-    assert.throws(() => assertRolePolicy('toolkit-specialist', 'context-provider', { persisted: true }), /mediated chain/, 'persisted never widens other roles');
-    for (const role of ['toolkit-specialist', 'test-specialist', 'doc-updater', 'quality-gater', 'verifier']) {
-      assert.throws(() => assertRolePolicy(role, 'context-provider', { planPath: draft }), /mediated chain/, role);
-    }
-    assert.doesNotThrow(() => assertRolePolicy('arch-platform', 'context-provider'));
-  } finally {
-    fs.rmSync(dir, { recursive: true, force: true });
+test('assertRolePolicy: only arch-* may address context-provider; the planner has no edge of its own', () => {
+  for (const role of ['planner', 'toolkit-specialist', 'test-specialist', 'doc-updater', 'quality-gater', 'verifier']) {
+    assert.throws(() => assertRolePolicy(role, 'context-provider'), /mediated chain/, role);
+    assert.throws(() => assertRolePolicy(role, 'context-provider', { planPath: '/any', persisted: true }), /mediated chain/, role + ' (no widening context)');
+  }
+  for (const role of ['arch-platform', 'arch-testing', 'arch-integration']) {
+    assert.doesNotThrow(() => assertRolePolicy(role, 'context-provider'), role);
   }
 });
 

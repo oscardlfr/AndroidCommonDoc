@@ -954,6 +954,7 @@ COMMANDS.dispatch = cmdDispatch;
 const { createConsultCommand } = require('./runtime-consultation/commands/consult.cjs');
 COMMANDS.consult = createConsultCommand({
   CliError,
+  assertRolePolicy,
   cmdPublishRequest,
   cmdRootInit,
   computeWorktreeId,

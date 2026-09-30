@@ -66,6 +66,10 @@ Before investigating or speccing work for a specialist:
 
 **Skip only if**: context-provider already answered this exact query earlier in the same session.
 
+### Serving a planner's consult request (Pass B)
+
+The single-use planner may not address context-provider; you are its mediated requester. When it SendMessages `CONSULT-REQUEST wave=<slug>. ... Question: <text>`: run the consult command above yourself with that question on one line (collapse any newline), complete `await-result` and `accept-result`, and reply to the planner with ONLY the path of the accepted result file. Never relay an answer that has no accepted result file, never answer from your own knowledge in its place, and do nothing else for that request.
+
 ### Per-Session Gate
 
 **Per-session gate**: Before your FIRST Grep, Glob, or Bash search call in any session, you MUST have received a SendMessage response from context-provider in this session. The hook enforces this mechanically — your first search-type tool call will be blocked until CP has been consulted.

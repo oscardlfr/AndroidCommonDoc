@@ -28,10 +28,10 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
   subject bundle from the active wave PLAN and publishes and dispatches a context-provider consult. Consumers reach it only
   through the installed launcher operation `runtime-consult` (closed subcommand allowlist: `consult`, `record-delivery`,
   `await-result`, `accept-result`); the hook maps that exact argv to the canonical target and mints the requester binding,
-  and denies a direct toolkit path, a forged binding, a foreign root and the main orchestrator. The planner template and the
-  three architect templates document the exact command.
-- Planner draft edge: `planner → context-provider` is valid only while the PLAN's first line is
-  `STATUS: DRAFT-CONTEXT-PENDING` and the PLAN matches the planner's authenticated binding.
+  and denies a direct toolkit path, a forged binding, a foreign root, the main orchestrator and every non-`arch-*` role
+  before anything is written. The three architect templates document the exact command; in Pass B the planner asks the
+  `arch-*` owner by SendMessage (the existing mediated chain, no planner edge) and reads the accepted result path it
+  returns.
 - Consumer manifests keep `sources[0].repository`, `sources[0].ref` and top-level `l0Commit` through sync; `l0Commit` advances
   to the synced commit only when the consumer already carries it.
 
@@ -43,6 +43,8 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
   L0's legacy `init-session` command was retired in favor of its skill so a consumer with L0 added lists one entry; a
   root-owned `login` ancestor no longer invalidates the macOS parent chain (still exactly one signed Claude ancestor).
 - CI: the Node hook-test step runs every non-skipped file, lists every failure and then fails.
+- Entrypoint admission names the wave class/sentinel defect (`WAVE_CLASS_SECTION_MISSING`, `WAVE_CLASS_SECTION_AMBIGUOUS`, `PLAN_WAVE_CLASS_MISSING`, `PLAN_WAVE_CLASS_AMBIGUOUS`, `INVALID_WAVE_CLASS`, `WAVE_CLASS_SENTINEL_MISSING`, `INVALID_WAVE_CLASS_SENTINEL`) with how to recover; any other error stays generic.
+- `branch-guard` resolves the branch of the session's own worktree (hook event cwd or `git -C`), so commits in a desktop managed linked worktree on a feature branch are no longer denied because the main checkout is on `develop`.
 - The entrypoint launcher reports "/init-session runs only from Claude Code ... Codex is not a supported entrypoint host" when the bare shorthand reaches it unrewritten, instead of the opaque closed-argv error.
 
 ### Fixed (post-#255 live-consumer convergence)

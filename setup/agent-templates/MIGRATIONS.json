@@ -139,7 +139,7 @@
       "1.22.3": {
         "date": "2026-09-30",
         "breaking": false,
-        "summary": "Consult context-provider from a consumer through the single documented launcher command (runtime-consult consult / await-result / accept-result) run by the requester subagent itself, replacing the SendMessage-only consult instruction. The planner edge is valid only while the PLAN's first line is STATUS: DRAFT-CONTEXT-PENDING.",
+        "summary": "Pass B consults context-provider through the mediated chain: the planner sends its bounded question to the arch-* owner (arch-platform by default), which runs the documented runtime-consult transaction and returns the accepted result path; the planner reads it, cites it and only then removes the DRAFT-CONTEXT-PENDING marker.",
         "migration_hint": "Run plain /sync-l0; runtime-enabled consumers refresh the managed agents and the toolkit launcher atomically."
       },
       "1.22.2": {
@@ -454,7 +454,7 @@
       "1.41.2": {
         "date": "2026-09-30",
         "breaking": false,
-        "summary": "Consult context-provider from a consumer through the single documented launcher command (runtime-consult consult / await-result / accept-result) run by the requester subagent itself, replacing the SendMessage-only consult instruction.",
+        "summary": "Consult context-provider from a consumer through the single documented launcher command (runtime-consult consult / await-result / accept-result) run by the architect itself, and serve the planner's Pass B CONSULT-REQUEST as its mediated requester, replacing the SendMessage-only consult instruction.",
         "migration_hint": "Run plain /sync-l0; runtime-enabled consumers refresh the managed agents and the toolkit launcher atomically."
       },
       "1.41.1": {
@@ -646,7 +646,7 @@
       "1.36.2": {
         "date": "2026-09-30",
         "breaking": false,
-        "summary": "Consult context-provider from a consumer through the single documented launcher command (runtime-consult consult / await-result / accept-result) run by the requester subagent itself, replacing the SendMessage-only consult instruction.",
+        "summary": "Consult context-provider from a consumer through the single documented launcher command (runtime-consult consult / await-result / accept-result) run by the architect itself, and serve the planner's Pass B CONSULT-REQUEST as its mediated requester, replacing the SendMessage-only consult instruction.",
         "migration_hint": "Run plain /sync-l0; runtime-enabled consumers refresh the managed agents and the toolkit launcher atomically."
       },
       "1.36.1": {
@@ -818,7 +818,7 @@
       "1.32.2": {
         "date": "2026-09-30",
         "breaking": false,
-        "summary": "Consult context-provider from a consumer through the single documented launcher command (runtime-consult consult / await-result / accept-result) run by the requester subagent itself, replacing the SendMessage-only consult instruction.",
+        "summary": "Consult context-provider from a consumer through the single documented launcher command (runtime-consult consult / await-result / accept-result) run by the architect itself, and serve the planner's Pass B CONSULT-REQUEST as its mediated requester, replacing the SendMessage-only consult instruction.",
         "migration_hint": "Run plain /sync-l0; runtime-enabled consumers refresh the managed agents and the toolkit launcher atomically."
       },
       "1.32.1": {

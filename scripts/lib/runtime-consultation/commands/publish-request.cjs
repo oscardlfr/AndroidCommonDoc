@@ -155,11 +155,7 @@ function cmdPublishRequest(flags, grantContext) {
     throw new CliError('INVALID', 'AUTHORITY_INVALID', 'publish-request requires an authenticated requester grant to derive source_role');
   }
   const sourceRole = grantContext.role;
-  // The planner's draft-only edge is bound to the PLAN the grant itself was minted for, never an arbitrary marker-bearing file.
-  if (sourceRole === 'planner' && !(grantContext.binding && grantContext.binding.plan_digest === planDigest)) {
-    throw new CliError('INVALID', 'AUTHORITY_INVALID', 'planner consult PLAN does not match its authenticated binding');
-  }
-  assertRolePolicy(sourceRole, intent.target_role, { planPath });
+  assertRolePolicy(sourceRole, intent.target_role);
 
   fs.mkdirSync(planRoot, { recursive: true });
   materializePlanRef(planRoot, planPath);

@@ -5282,25 +5282,19 @@ const HARNESS_SUFFIX_NEGATIVE_TABLE = [
     } finally { cleanupConsultFixture(fixture); }
   });
 
-  consultLauncherTest('CONSULT-LAUNCHER-2: the planner consults in Pass B only while the PLAN carries the draft marker', () => {
-    const draft = consultFixture('consult-l2-draft', DRAFT_MARKER + '\n\n## Execution Plan: probe\n');
-    try {
-      primeClaudeId01Trace(draft.consumerRoot, 'planner', 'consult-l2-session', 'planner');
-      initCoordinationRoot(draft, 'planner', 'consult-l2-session');
-      const r = runNonMainBash(launcherConsultCommand(draft.consumerRoot, 'consult', consultArgs(draft.consumerRoot)), draft.consumerRoot, 'planner', 'consult-l2-session');
-      const out = runRewrittenIn(draft.consumerRoot, rewrittenOf(r, 'CONSULT-LAUNCHER-2 draft'));
-      assert.strictEqual(JSON.parse(out.stdout.trim().split('\n').pop()).status, 'SUCCESS', out.stdout + out.stderr);
-    } finally { cleanupConsultFixture(draft); }
-    const final = consultFixture('consult-l2-final', '## Execution Plan: probe\n');
-    try {
-      primeClaudeId01Trace(final.consumerRoot, 'planner', 'consult-l2b-session', 'planner');
-      initCoordinationRoot(final, 'planner', 'consult-l2b-session');
-      const r = runNonMainBash(launcherConsultCommand(final.consumerRoot, 'consult', consultArgs(final.consumerRoot)), final.consumerRoot, 'planner', 'consult-l2b-session');
-      const out = runRewrittenIn(final.consumerRoot, rewrittenOf(r, 'CONSULT-LAUNCHER-2 final'));
-      const envelope = JSON.parse(out.stdout.trim().split('\n').pop());
-      assert.strictEqual(envelope.status, 'INVALID', out.stdout);
-      assert.strictEqual(envelope.detail_code, 'AUTHORITY_INVALID');
-    } finally { cleanupConsultFixture(final); }
+  consultLauncherTest('CONSULT-LAUNCHER-2: the planner never consults directly — it asks an arch-* owner through the mediated chain', () => {
+    for (const [slug, plan] of [['consult-l2-draft', DRAFT_MARKER + '\n\n## Execution Plan: probe\n'], ['consult-l2-final', '## Execution Plan: probe\n']]) {
+      const fixture = consultFixture(slug, plan);
+      try {
+        primeClaudeId01Trace(fixture.consumerRoot, 'planner', slug + '-session', 'planner');
+        const r = runNonMainBash(launcherConsultCommand(fixture.consumerRoot, 'consult', consultArgs(fixture.consumerRoot)), fixture.consumerRoot, 'planner', slug + '-session');
+        const out = runRewrittenIn(fixture.consumerRoot, rewrittenOf(r, 'CONSULT-LAUNCHER-2 ' + slug));
+        const envelope = JSON.parse(out.stdout.trim().split('\n').pop());
+        assert.strictEqual(envelope.status, 'INVALID', slug + ': ' + out.stdout);
+        assert.strictEqual(envelope.detail_code, 'AUTHORITY_INVALID');
+        assert.strictEqual(fs.existsSync(path.join(fixture.consumerRoot, '.planning', 'coordination')), false, 'the planner leaves no coordination root');
+      } finally { cleanupConsultFixture(fixture); }
+    }
   });
 
   consultLauncherTest('CONSULT-LAUNCHER-4: shell metacharacters inside the single-quoted question are data; outside it nothing is admitted', () => {

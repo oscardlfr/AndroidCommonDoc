@@ -614,6 +614,57 @@ function assertForeignShorthand(label, cwd, projectDirEnv) {
   }
 }
 
-assert.strictEqual(passed, 25);
+// A class/sentinel defect in the wave must tell the operator what to fix instead of the generic scope error, while every
+// other exception stays generic (no paths or host details).
+function orchestrateDenialAfter(label, mutate) {
+  const sessionId = uniqueSessionId();
+  const minted = recordManagedSystemInit(sessionId);
+  try {
+    const ctx = buildWorktreeContext(minted.worktreeRoot);
+    const slug = minted.waveSlug;
+    const waveDir = path.join(ctx.worktreeRoot, '.planning', 'wave-' + slug);
+    mutate({ waveDir, plan: path.join(waveDir, 'PLAN.md'), sentinel: path.join(waveDir, 'CLASS') });
+    const command = 'node .claude/runtime/l0-entrypoint-launcher.cjs init-session --orchestrate ' + slug;
+    const result = runHookAt(baseEvent(command, ctx.worktreeRoot, sessionId), ctx.hookPath, ctx.worktreeRoot);
+    assert.strictEqual(result.status, 0, label + ': hook exit code');
+    const body = JSON.parse(result.stdout);
+    assert.strictEqual(body.hookSpecificOutput.permissionDecision, 'deny', label + ': ' + result.stdout);
+    return body.hookSpecificOutput.permissionDecisionReason;
+  } finally {
+    minted.cleanup();
+  }
+}
 
-console.log('25/25 PASS');
+const rewritePlan = (transform) => ({ plan }) => fs.writeFileSync(plan, transform(fs.readFileSync(plan, 'utf8')));
+const CLASS_LINE = /^[ \t]*(?:-[ \t]+)?\*\*Class\*\*:.*$/m;
+const CLASS_DENIALS = [
+  ['WAVE_CLASS_SECTION_MISSING', rewritePlan((t) => t.replace(/^#{2,3}[ \t]+Wave[ \t]+Class[ \t]*$/m, '### Wave Klass')), /Wave Class.*section/i],
+  ['WAVE_CLASS_SECTION_AMBIGUOUS', rewritePlan((t) => t + '\n### Wave Class\n- **Class**: HARNESS\n'), /more than one.*Wave Class/i],
+  ['PLAN_WAVE_CLASS_MISSING', rewritePlan((t) => t.replace(CLASS_LINE, '')), /\*\*Class\*\*/],
+  ['PLAN_WAVE_CLASS_AMBIGUOUS', rewritePlan((t) => t.replace(CLASS_LINE, (m) => m + '\n' + m)), /more than one.*\*\*Class\*\*/i],
+  ['INVALID_WAVE_CLASS', rewritePlan((t) => t.replace(CLASS_LINE, '- **Class**: BOGUS')), /HARNESS, DOC or FAST-PATH/],
+  ['WAVE_CLASS_SENTINEL_MISSING', ({ sentinel }) => fs.rmSync(sentinel), /write \.planning\/wave-<slug>\/CLASS/],
+  ['INVALID_WAVE_CLASS_SENTINEL', ({ sentinel }) => fs.writeFileSync(sentinel, 'BOGUS\n'), /CLASS must contain/],
+];
+for (const [code, mutate, guidance] of CLASS_DENIALS) {
+  const reason = orchestrateDenialAfter('case-15-' + code, mutate);
+  assert.ok(reason.includes(code), code + ' must be named: ' + reason);
+  assert.match(reason, guidance, code + ' must say how to recover: ' + reason);
+  assert.ok(!reason.includes('intent or scope is invalid'), code + ' must not be the generic message: ' + reason);
+  console.log('PASS: case-15-' + code);
+  passed += 1;
+}
+{
+  const reason = orchestrateDenialAfter('case-16-unknown-exception-stays-generic', ({ plan }) => {
+    fs.rmSync(plan);
+    fs.mkdirSync(plan); // reading a directory throws EISDIR, which is not an allowlisted code
+  });
+  assert.match(reason, /collaboration entrypoint intent or scope is invalid/, reason);
+  assert.ok(!/EISDIR|illegal operation|\.planning|\/tmp|\/private/.test(reason), 'no host detail may leak: ' + reason);
+  console.log('PASS: case-16-unknown-exception-stays-generic');
+  passed += 1;
+}
+
+assert.strictEqual(passed, 33);
+
+console.log('33/33 PASS');

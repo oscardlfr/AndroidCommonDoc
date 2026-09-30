@@ -31,7 +31,7 @@ All three runtime facades are thin **composition/CLI roots**, not owners of doma
 
 | Facade (composition/CLI root) | Internal module directory, by responsibility | Physical LOC / max line | Modules | Public ABI |
 |---|---|---|---|---|
-| `scripts/lib/runtime-consultation.cjs` | `runtime-consultation/`: identity/argv/path primitives, durability, protocol, transactions, transition locks, host bridge, content publication, R33 conformance (deferred, see below), root lifecycle/ACL, grant registry and authority, routing/canonical-request construction, dispatch, CLI command controllers | 1,418 / 235 | 58 | 69 keys |
+| `scripts/lib/runtime-consultation.cjs` | `runtime-consultation/`: identity/argv/path primitives, durability, protocol, transactions, transition locks, host bridge, content publication, R33 conformance (deferred, see below), root lifecycle/ACL, grant registry and authority, routing/canonical-request construction, dispatch, CLI command controllers | 1,419 / 235 | 58 | 69 keys |
 | `scripts/lib/runtime-role-lifecycle.cjs` | `runtime-role-lifecycle/`: bindings, actions, policy, authority, grants, recovery, root-source contract/bootstrap history, and Claude lifecycle observations | 1,500 / 283 | 67 | 275 keys |
 | `scripts/lib/runtime-bridge-codex.cjs` | `runtime-bridge-codex/`: process admission, isolation, credentials and owned-child lifecycle, plus supervisor/connection engines, turn execution and read-view projection, internal-search/Context7 evidence retrieval, deterministic MCP loopback (test-only), and CLI command controllers | 1,020 / 282 | 84 | 52 keys (81 under test capability) |
 

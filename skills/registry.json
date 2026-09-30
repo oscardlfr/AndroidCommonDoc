@@ -1923,7 +1923,7 @@
       "description": "Integration architect. Mini-orchestrator: verifies compilation, DI wiring, navigation via MCP tools. Fixes wiring gaps, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:93bd0a885206db823dffd430ce0350226fa3fb01aef437ad9143bd70129ae395",
+      "hash": "sha256:e96797927d346f607685b629a88fea0b0353f8d210b80f544f62c003a925e913",
       "dependencies": [],
       "frontmatter": {
         "name": "arch-integration",
@@ -1953,7 +1953,7 @@
       "description": "Platform architecture architect. Mini-orchestrator: verifies KMP patterns via MCP tools, fixes violations directly or via delegation, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:d805e5b5d5961fd877f8ba886c47389f1b515d529c957eda62f3cb429d34e30d",
+      "hash": "sha256:a69ddeef586043d5baec0945d263b6f622710de614b6a96d27821a222119e82e",
       "dependencies": [],
       "frontmatter": {
         "name": "arch-platform",
@@ -1982,7 +1982,7 @@
       "description": "Test quality architect. Mini-orchestrator: verifies TDD compliance, detects test gaps, delegates fixes to test-specialist, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict.",
       "category": "testing",
       "tier": "core",
-      "hash": "sha256:ec5ccb36d09aa6d27df2a4b2ae9c8fd1e61fa1267e248c23bde6cd31df3bf419",
+      "hash": "sha256:3beb36792175dd818eed9880d998d6bbef9797fe955b6834a9d3c804c462c576",
       "dependencies": [],
       "frontmatter": {
         "name": "arch-testing",
@@ -2538,7 +2538,7 @@
       "description": "Single-use planning subagent. Reads context, specs, architecture to produce structured execution plans. Spawned without team_name; results land as PLAN.md on disk. Works alongside context-provider via SendMessage.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:0d13e07e2fa8ae5a9a27cea93329200c738e1e08a3c8d3174d86d2247d3f2d8f",
+      "hash": "sha256:30986d96c636b90e843b726810bad3b40f07b139cd9ff24309edbb5838fb323a",
       "dependencies": [],
       "frontmatter": {
         "name": "planner",

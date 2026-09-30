@@ -11,6 +11,7 @@ const MAX_QUESTION_BYTES = 8192;
 
 function createConsultCommand({
   CliError,
+  assertRolePolicy,
   cmdPublishRequest,
   cmdRootInit,
   computeWorktreeId,
@@ -80,6 +81,11 @@ function createConsultCommand({
 
   function cmdConsult(flags, grantContext) {
     requireFlags(flags, ['coordination-root', 'question']);
+    // The mediated-chain policy is enforced before anything is written, so an unauthorized role leaves no trace.
+    if (!grantContext || typeof grantContext.role !== 'string') {
+      throw new CliError('INVALID', 'AUTHORITY_INVALID', 'consult requires an authenticated requester grant');
+    }
+    assertRolePolicy(grantContext.role, CONSULT_TARGET_ROLE);
     if (Buffer.byteLength(flags.question, 'utf8') > MAX_QUESTION_BYTES || flags.question.trim().length === 0) {
       throw new CliError('INVALID', 'INVALID_ARGUMENT', 'consult question must be 1..' + MAX_QUESTION_BYTES + ' bytes');
     }
