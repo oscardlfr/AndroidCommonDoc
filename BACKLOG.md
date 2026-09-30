@@ -1,6 +1,6 @@
 # AndroidCommonDoc Backlog
 
-> **Last updated**: 2026-09-28
+> **Last updated**: 2026-09-30
 > **Roadmap baseline**: `develop@8ee5d831439312504a98e636c071583528824316` (PR #255). **H1, G0, ordered Waves 1–7, first-consumer hardening, consumer-contract convergence, and runtime-adoption finalization are SHIPPED.**
 > **Current delivery**: the active bounded convergence below contains only defects independently reproduced by a live consumer after PR #255 plus the portable agent/memory modernization. There is no numbered wave marked `NEXT`. **R33 remains deferred.**
 > **Source of truth**: this file owns ordering and scope. `git log`, merged PRs, and `project_*shipped.md` memory entries own historical detail.
@@ -152,6 +152,28 @@ outside its selected set. It requires negative and positive fixtures, clean L1
 and L2/worktree acceptance, one local full aggregate, and required GitHub CI.
 After merge, replace this paragraph with one shipped-history line.
 
+### PR #259 runtime liveness closure — IN REVIEW, PRUNEABLE after merge
+
+Physical acceptance on the final candidate (clean interactive Claude `2.1.285`,
+Sonnet 5.5, `--effort high`, Agent Teams enabled, disposable consumer worktrees):
+
+| Scenario | Result |
+|---|---|
+| L2 bootstrap → probes → `READY`; explicit `shutdown_request` of one role → next init spawns a **new** actor only for that role → `READY` → stable re-init with zero actions | PASS (6 unique members, terminated binding fenced, no resumable handle left) |
+| Same explicit-shutdown cycle on an L1 consumer | PASS |
+| Ordinary stop (`TaskStop`) → role parked `WAITING` → next message resumes the **same** actor with its history → re-init with zero spawns | PASS |
+| Ordinary consumer session without orchestration (`/init-session` dashboard, one-shot agents, git/read) | PASS, no hook denial |
+| Planning from scratch on `feature/<slug>`: planner Pass A draft → `--orchestrate <slug>` over the draft → support plane `READY` | PASS |
+| Planner Pass B consultation of context-provider from a consumer | **FAIL** — tracked as `BL-CONS-P1-08` |
+
+Defects found only by the live runs and fixed in this PR: fulfilled spawn
+history made a replacement spawn ambiguous; subagent lifecycle hooks spawned one
+`git` process per registry record (7.5 s) and hit the 10 s host timeout; a
+terminated RoleActorBinding competed with its live replacement; a SubagentStop
+without a session generation blocked; the planner Pass A draft was not
+parseable by the wave control plane. After merge, replace this block with one
+shipped-history line.
+
 ### P0 — evidence integrity and consumer data safety
 
 | ID | Open problem | Minimum professional closure | Dependencies |
@@ -168,6 +190,8 @@ After merge, replace this paragraph with one shipped-history line.
 | `BL-CONS-P1-05` | **`L0_SYNC` changes over-trigger consumer CI**. A clean auto-sync merge tree was classified `FULL` solely because generated `l0-manifest.json` was an `unmapped executable path`, forcing the complete product matrix. | Add a fail-closed `L0_SYNC` class for machine-proven sync-only changes. It must validate manifest schema/digests, generated inventory/parity, runtime sync, and the relevant smoke tests. Any malformed manifest, undeclared path, mixed product change, missing provenance, or classifier error remains `FULL`. Add positive sync-only and all negative downgrade-bypass cases. | L0 owns the portable policy/template; consumers may implement their local classifier without weakening the unknown-path fallback. |
 | `BL-CONS-P1-06` | **Root-source human-consent boundary is undecided**. The runtime can derive a binding from observed session/worktree/PLAN identity without a request-scoped human confirmation, while other roadmap text calls true human/OS authentication out of contract. | Decide the threat model first. If required, design a request-bound confirmation, mint-time gate, and dispatch-time freshness/scope check backed by a capability an AI cannot self-assert. Otherwise remove the stronger claim and document the explicit boundary. | Architecture decision; do not implement a prose-only or self-signed “human” artifact. |
 | `BL-CONS-P1-07` | **Windows drive-letter confinement remains brittle in `write-coordination-artifact.sh`**. Two incorrect path behaviors currently cancel each other. | Correct absolute drive-letter classification and physical/lexical confinement atomically, with outside-root and fallback-tier negatives. | Do not port only the R131 normalization; preserve fail-closed behavior at every cut point. |
+| `BL-CONS-P1-08` | **Context-provider consultation is unreachable from consumers**. context-provider accepts only `COORDINATION_CONSULT/v1` requests published by the runtime-consultation `publish-request` command, but an L1/L2 consumer has no launcher operation, documentation or grant path for a requester to publish one. Planner Pass B cannot finalize a plan from scratch, and architects/specialists cannot consult context-provider during a consumer wave. | Second bounded PR after #259: expose one allowlisted consumer launcher operation for publish-request/await-result with its grant and gate admission, document the exact requester command in the planner and architect templates, and resolve `BL-CONS-P2-02` in the same change. Prove it with a clean L2 acceptance: plan from scratch → orchestrate draft → Pass B accepted CP result → marker-free PLAN, plus an architect consult during EXECUTE. | Do not relax the disk-result contract; owner chose a separate PR over accepting informal SendMessage answers. |
+| `BL-CONS-P1-09` | **CI Node hook tests stop at the first failing file** (`set -e` loop in `reusable-shell-tests.yml`), hiding every later failure and forcing one push per defect. PR #259 had 21 files never executed after the first failure. | Run every non-skipped file, list all failures, exit non-zero at the end; keep the pinned R33 skip list. | Independent CI fix. |
 | `BL-QG-P1-01` | **Quality-gate session ordering can make the one expensive local full run stale before minting**. The first consumer ran Bats before explicit QG initialization/wave binding, so otherwise-green evidence carried unusable provenance; planning defects were detected only after the cost was paid. | Provide one canonical orchestration entrypoint that preflights `CLASS`, exact Path Manifest, clean HEAD, architect verdict bindings, and explicit wave/PLAN inputs; initializes QG; then runs/selects the one six-shard full aggregate exactly once. Reject incomplete planning before any expensive suite starts. | Separate workflow-hardening PLAN; do not weaken freshness, path audit, aggregate completeness, or required GitHub `CI Gate` merge authority. |
 | `BL-QG-P1-02` | **A valid PLAN amendment cannot supersede its stale PREP verdict**. The protocol requires stale PREP authority to be superseded, but `write-verdict` rejects the superseding record because the old and new `plan_sha256` differ (`superseded-binding-mismatch`), forcing a fresh wave slug instead of the documented same-wave recovery. | Define one narrow PLAN-transition supersession contract: verify the old record and lineage, require the new PLAN/request/HEAD binding to be current, publish atomically, and reject cross-wave, cross-role, cross-phase, unrelated-request, or unproven old records. Add positive amended-PLAN recovery and every mismatch negative. | Separate workflow-hardening PLAN; do not relax ordinary binding equality or mix this with runtime stabilization. |
 | `BL-QG-P1-03` | **Verdict checker result depends on project-root spelling**. The same valid record produced `INTERNAL_ERROR` with a relative project root and PASS with the canonical absolute root. | Normalize and confine the project root once, or reject relative input explicitly with a stable validation error. Prove relative, absolute, symlink/alias, missing, and outside-root cases return deterministic equivalent policy outcomes. | Separate workflow-hardening PLAN; no runtime dependency. |
@@ -179,6 +203,8 @@ After merge, replace this paragraph with one shipped-history line.
 | `BL-CONS-P2-01` | `reusable-audit-report.yml` renders raw `project`, `layer`, and `cve_high` into downloadable HTML. | Escape rendered text with `html.escape(..., quote=True)` and prove hostile tags/attributes are absent from the artifact. | Independent bounded security-output fix. |
 | `BL-CONS-P2-02` | The documented draft-only `planner → context-provider` bootstrap edge is rejected by the shipped role policy, which permits only `arch-* → context-provider`. | Choose either one exact draft-only exception with negative role/phase tests or correct the documentation; never open general specialist access. | Owner decision before code. |
 | `BL-CONS-P2-03` | PowerShell `run-qg` has no restored security-critical parity path. | Implement and qualify only on an environment with real `pwsh`; retain identical failure/authority semantics. | Windows-capable execution environment. |
+| `BL-CONS-P2-04` | **macOS-only runtime test failures**: `runtime-claude-ready-bootstrap` (envelope budget vs the long Homebrew `node` path) and `runtime-collaboration-entrypoint-hook` fail on macOS, also on `develop`, and pass on Linux CI. The master-only `runtime-macos` job runs both. | Determine whether the real Claude tool-result budget is exceeded for real consumer paths; fix the root cause, never relax the budget without evidence. | Must be closed before the next `master` release. |
+| `BL-CONS-P2-05` | **Push gates govern ordinary consumer development**. `push-authorization-gate` requires the git pre-push hook plus fresh quality-gate/pre-pr stamps for every consumer push, and consumers still wire the retired `pre-push-pre-pr-gate.js`. | Owner decision: enforce consumer push gates only while an L0 wave is active, and retire the legacy gate wiring through sync. | Deferred by the owner until the runtime is validated. |
 | `BL-GOV-P2-01` | **Future work/evidence/decision management pattern**. L0 lacks one concise operational view that connects an accepted work item to its current evidence, superseded attempts, decisions, blockers, and terminal outcome. | Future design task only: evaluate the useful work/evidence/decision pattern demonstrated in DawSync, generalize it without product coupling, and decide whether it belongs above existing PLAN/verdict/evidence records as an index rather than a competing authority. Define migration, retention, query, and single-source-of-truth rules before any implementation. | Do not implement in the documentation-reconciliation change; requires a separate approved PLAN and consumer-neutral prototype. |
 
 ### Blocked and trigger-only
@@ -186,6 +212,10 @@ After merge, replace this paragraph with one shipped-history line.
 - **R33 native** remains `PENDING_EXTERNAL_RELEASE`; do not schedule it before
   the required platform release exists.
 - Upstream Agent Teams notification reporting requires a minimal live repro.
+- Live acceptance harness facts: a structured `shutdown_request` needs the Agent
+  Teams `SendMessage` variant (`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`, set by the
+  desktop app); host composition rejects a Claude session nested inside another
+  Claude process tree.
 - macOS shell/hook, Gradle truststore, and Xcode/iOS smoke checks require their
   owning platform validation window.
 - Product/plugin/OSS packaging ideas remain outside the L0 runtime stabilization
