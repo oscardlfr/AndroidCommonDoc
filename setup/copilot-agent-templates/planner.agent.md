@@ -76,7 +76,7 @@ Pass A makes no Bash-gated claim at all — it is Write-only. In Pass B, your FI
 
 Run it yourself, as this subagent: the requester binding is minted from your agent type, so the main orchestrator can never run it. It is admitted only while the PLAN's first line is `STATUS: DRAFT-CONTEXT-PENDING`. Every token is single-quoted and `<ROOT>` is your absolute working directory:
 
-    'node' '.claude/runtime/l0-toolkit-launcher.cjs' 'run' 'runtime-consult' '--project-root' '<ROOT>' '--' 'consult' '--coordination-root' '<ROOT>/.planning/coordination' '--question' '<what you need to plan the task; no ; & | backtick or newline>'
+    'node' '.claude/runtime/l0-toolkit-launcher.cjs' 'run' 'runtime-consult' '--project-root' '<ROOT>' '--' 'consult' '--coordination-root' '<ROOT>/.planning/coordination' '--question' '<what you need to plan the task; one line, no newline>'
 
 It prints one JSON line. When `activation_action.kind` is `claude-sendmessage`, `SendMessage` its `message` VERBATIM to `activation_action.target_name`. Then run the same launcher form with `'await-result' '--coordination-root' '<ROOT>/.planning/coordination' '--request' '<artifact_ref>' '--timeout' '300'`, then `'accept-result' '--coordination-root' '<ROOT>/.planning/coordination' '--request' '<artifact_ref>'`, and read the result file named in the last envelope. Only then remove the marker and finalize the PLAN; any other status means STOP.
 

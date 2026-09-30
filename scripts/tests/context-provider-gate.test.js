@@ -5303,6 +5303,31 @@ const HARNESS_SUFFIX_NEGATIVE_TABLE = [
     } finally { cleanupConsultFixture(final); }
   });
 
+  consultLauncherTest('CONSULT-LAUNCHER-4: shell metacharacters inside the single-quoted question are data; outside it nothing is admitted', () => {
+    const fixture = consultFixture('consult-l4', '# plan\n');
+    try {
+      const root = fixture.consumerRoot;
+      primeClaudeId01Trace(root, 'arch-testing', 'consult-l4-session', 'arch-testing');
+      const question = "Which rules apply; (1) quote the intro & confirm; (2) a | b, `x`, $(y) and it's fine?";
+      const args = ['--coordination-root', path.join(root, '.planning', 'coordination'), '--question', question];
+      const r = runNonMainBash(launcherConsultCommand(root, 'consult', args), root, 'arch-testing', 'consult-l4-session');
+      assert.strictEqual(r.exit, 0, JSON.stringify(r));
+      const rewritten = rewrittenOf(r, 'CONSULT-LAUNCHER-4 quoted metacharacters');
+      const tokens = rll.parsePosixDirect(rewritten);
+      assert.strictEqual(tokens[tokens.indexOf('--question') + 1], question, 'the question reaches the CLI byte for byte');
+      const out = runRewrittenIn(root, rewritten);
+      assert.strictEqual(JSON.parse(out.stdout.trim().split('\n').pop()).status, 'SUCCESS', out.stdout + out.stderr);
+
+      // A real chained command is never rewritten: no binding is minted or injected for it.
+      const chained = launcherConsultCommand(root, 'consult', args) + ' ; echo chained';
+      assertPreToolUseDeny(runNonMainBash(chained, root, 'arch-testing', 'consult-l4-session'), 'a chained consult command is denied with its rule, never passed through unbound');
+      const multiline = launcherConsultCommand(root, 'consult', args.slice(0, 2).concat(['--question', 'one'])) + "\n'echo' 'second'";
+      assertPreToolUseDeny(runNonMainBash(multiline, root, 'arch-testing', 'consult-l4-session'), 'a multi-line consult command is denied');
+      const unquoted = "node .claude/runtime/l0-toolkit-launcher.cjs run runtime-consult --project-root " + root + " -- consult --question hi";
+      assertPreToolUseDeny(runNonMainBash(unquoted, root, 'arch-testing', 'consult-l4-session'), 'an unquoted consult command is denied with the documented form');
+    } finally { cleanupConsultFixture(fixture); }
+  });
+
   consultLauncherTest('CONSULT-LAUNCHER-3: negatives — non-allowlisted argv, foreign root, direct toolkit path, main orchestrator, forged binding, non-requester role', () => {
     const fixture = consultFixture('consult-l3', '# plan\n');
     try {

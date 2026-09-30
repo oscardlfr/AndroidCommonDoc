@@ -1661,6 +1661,7 @@ function harnessSuffixCandidateRole(name) {
 // launcher operation. The exact argv is mapped to the canonical toolkit target here -- the only place the requester
 // grant is minted -- mirroring the entrypoint-launcher branch above. Every deviation is an explicit deny.
 const CONSULT_LAUNCHER_RELATIVE_PATH = '.claude/runtime/l0-toolkit-launcher.cjs';
+const CONSULT_LAUNCHER_INTENT_RE = /^\S+\s+'?\.claude\/runtime\/l0-toolkit-launcher\.cjs'?\s+'?run'?\s+'?runtime-consult'?(?:\s|$)/;
 const CONSULT_LAUNCHER_SUBCOMMANDS = Object.freeze(['consult', 'record-delivery', 'await-result', 'accept-result']);
 
 /** @returns {null|{deny:string}|{tokens:string[]}} null when the command is not the consult launcher form. */
@@ -1717,11 +1718,21 @@ function tryInjectRequesterGrant(toolInput, sessionId, agentType, agentId) {
   const command = toolInput && toolInput.command;
   if (typeof command !== 'string' || command.length === 0) return null; // not applicable.
   if (!runtimeRoleLifecycle || !runtimeConsultationLib) return null; // not applicable: mechanism itself unavailable.
-  if (/[;&|`\n]|\$\(/.test(command)) return null; // not applicable.
+  // Shell metacharacters make a command not applicable, except inside the closed launcher form below, whose strict
+  // every-token-single-quoted grammar proves they are data (a chained command never parses and stays not applicable).
+  const hasShellMetacharacters = /[;&|`\n]|\$\(/.test(command);
 
   let tokens = runtimeRoleLifecycle.parsePosixDirect(command);
-  if (!tokens) return null; // not applicable.
+  if (!tokens) {
+    // The consult launcher form must never fall through silently: an unbound command only fails later with an opaque
+    // AUTHORITY_INVALID, so a recognizable-but-malformed form is denied with the rule it broke.
+    if (CONSULT_LAUNCHER_INTENT_RE.test(command)) {
+      return m7DenyResult('[BL-CONS-P1-08] the consult command must be exactly the documented form: every token single-quoted, single spaces between tokens, no newline and nothing chained after it.');
+    }
+    return null; // not applicable.
+  }
   const launcherForm = canonicalizeConsultLauncher(tokens);
+  if (hasShellMetacharacters && !launcherForm) return null; // not applicable.
   if (launcherForm) {
     if (launcherForm.deny) return m7DenyResult('[BL-CONS-P1-08] ' + launcherForm.deny);
     tokens = launcherForm.tokens;
