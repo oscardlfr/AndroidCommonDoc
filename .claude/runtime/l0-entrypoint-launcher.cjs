@@ -116,7 +116,12 @@ function resolveManifestToolkit(projectRoot) {
   return [...candidates][0];
 }
 
+// The bare shorthand (`init-session ...`) is rewritten only by the Claude Code PreToolUse hook; any other host reaches
+// the launcher with it untouched and must be told why, not shown the closed-argv error meant for the rewritten form.
+const UNSUPPORTED_HOST_MESSAGE = '/init-session runs only from Claude Code (CLI or desktop app, Sonnet 5.5, effort High); Codex is not a supported entrypoint host';
+
 function parseArgv(argv) {
+  if (argv.length > 0 && ENTRYPOINTS.has(argv[0])) fail(UNSUPPORTED_HOST_MESSAGE);
   if (argv.length !== 7 || argv[0] !== 'execute'
       || argv[1] !== '--entrypoint' || !ENTRYPOINTS.has(argv[2])
       || argv[3] !== '--project-root' || argv[5] !== '--intent'

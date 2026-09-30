@@ -43,6 +43,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
   L0's legacy `init-session` command was retired in favor of its skill so a consumer with L0 added lists one entry; a
   root-owned `login` ancestor no longer invalidates the macOS parent chain (still exactly one signed Claude ancestor).
 - CI: the Node hook-test step runs every non-skipped file, lists every failure and then fails.
+- The entrypoint launcher reports "/init-session runs only from Claude Code ... Codex is not a supported entrypoint host" when the bare shorthand reaches it unrewritten, instead of the opaque closed-argv error.
 
 ### Fixed (post-#255 live-consumer convergence)
 
