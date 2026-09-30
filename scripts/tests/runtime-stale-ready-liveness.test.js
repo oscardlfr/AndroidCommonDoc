@@ -30,7 +30,7 @@ function sha(value) { return crypto.createHash('sha256').update(value).digest('h
 function exact(value, keys) {
   return value && Object.keys(value).sort().join('\0') === [...keys].sort().join('\0');
 }
-function fixture({ findActor } = {}) {
+function fixture({ findActor, peekGeneration } = {}) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'l0-stale-ready-'));
   const traceDir = path.join(root, 'claude-id01-traces');
   fs.mkdirSync(traceDir, { recursive: true });
@@ -72,7 +72,7 @@ function fixture({ findActor } = {}) {
     isClaudeId01RawTraceWellFormed: (value) => exact(value, rawKeys),
     isoToMsForRegistry: Date.parse,
     path,
-    peekSessionGeneration: () => ({ ok: true, generationId: GENERATION }),
+    peekSessionGeneration: peekGeneration || (() => ({ ok: true, generationId: GENERATION })),
     publishNoClobber: (file, bytes) => fs.writeFileSync(file, bytes, { flag: 'wx' }),
     readClaudeAuthorityFence: (_root, id) => fenced.has(id)
       ? { ok: true, absent: false, fence: fenced.get(id) }
@@ -179,6 +179,24 @@ test('terminal publication does not block cleanup after the actor binding is no 
   assert.deepStrictEqual(published, {
     ok: true, skipped: true, reason: 'terminal-actor-no-longer-live',
   });
+});
+
+test('terminal publication skips a session that never minted a generation and rejects an unusable one', (t) => {
+  const absent = fixture({ peekGeneration: () => ({ ok: false, reason: 'session-generation-absent' }) });
+  const expired = fixture({ peekGeneration: () => ({ ok: false, reason: 'session-generation-expired' }) });
+  const malformed = fixture({ peekGeneration: () => ({ ok: false, reason: 'session-generation-shape-invalid' }) });
+  for (const f of [absent, expired, malformed]) t.after(() => fs.rmSync(f.root, { recursive: true, force: true }));
+  const role = ROLES[0];
+  // Startup actor records are generation-scoped: without a generation none can exist.
+  assert.deepStrictEqual(absent.api.publishClaudeSupportRoleTerminal(absent.root, {
+    sessionId: SESSION, agentId: role + '-actor', agentType: role,
+  }), { ok: true, skipped: true, reason: 'terminal-session-generation-absent' });
+  for (const f of [expired, malformed]) {
+    const observed = f.add(role, { fencedActor: true });
+    assert.deepStrictEqual(f.api.publishClaudeSupportRoleTerminal(f.root, {
+      sessionId: SESSION, agentId: observed.agentId, agentType: role,
+    }), { ok: false, reason: 'terminal-scope-invalid' });
+  }
 });
 
 test('terminal publication rejects reversed startup chronology and invalid actor lookup', (t) => {

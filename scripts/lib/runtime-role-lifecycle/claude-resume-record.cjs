@@ -81,7 +81,7 @@ function publishClaudeSupportRoleTerminal(projectRoot, event) {
     const generation = peekSessionGeneration(projectRoot, {
       provider: 'claude-hook', runtime_session_key: event.sessionId,
     });
-    if (!generation.ok) return { ok: false, reason: 'terminal-scope-invalid' };
+    if (!generation.ok) return generation.reason === 'session-generation-absent' ? { ok: true, skipped: true, reason: 'terminal-session-generation-absent' } : { ok: false, reason: 'terminal-scope-invalid' };
     const startupRead = readRegistryRecord(
       claudeStartupActorPathFor(projectRoot, generation.generationId, event.agentId),
     );
