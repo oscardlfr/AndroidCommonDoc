@@ -22,6 +22,28 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 - Agent templates now treat memory as durable-only advisory context, keep the
   quality gate phase-scoped, and reject retired orchestrators or dated model pins.
 
+### Added (consumer readiness)
+
+- `runtime-consultation.cjs consult`: one requester command (`commands/consult.cjs`) that derives plan reference, intent and
+  subject bundle from the active wave PLAN and publishes and dispatches a context-provider consult. Consumers reach it only
+  through the installed launcher operation `runtime-consult` (closed subcommand allowlist: `consult`, `record-delivery`,
+  `await-result`, `accept-result`); the hook maps that exact argv to the canonical target and mints the requester binding,
+  and denies a direct toolkit path, a forged binding, a foreign root and the main orchestrator. The planner template and the
+  three architect templates document the exact command.
+- Planner draft edge: `planner → context-provider` is valid only while the PLAN's first line is
+  `STATUS: DRAFT-CONTEXT-PENDING` and the PLAN matches the planner's authenticated binding.
+- Consumer manifests keep `sources[0].repository`, `sources[0].ref` and top-level `l0Commit` through sync; `l0Commit` advances
+  to the synced commit only when the consumer already carries it.
+
+### Fixed (consumer readiness)
+
+- `quality-gater` is no longer blocked by the pattern-discovery gate, which waited for a consult it can never make.
+- Desktop Code-tab sessions: a registered linked worktree of the same repository is accepted as the consumer root for the
+  init-session shorthand; a session whose model differs from the profile reports `host-model-mismatch` with a one-line fix;
+  L0's legacy `init-session` command was retired in favor of its skill so a consumer with L0 added lists one entry; a
+  root-owned `login` ancestor no longer invalidates the macOS parent chain (still exactly one signed Claude ancestor).
+- CI: the Node hook-test step runs every non-skipped file, lists every failure and then fails.
+
 ### Fixed (post-#255 live-consumer convergence)
 
 - Runtime lifecycle and consultation action payloads resolve executable code
@@ -177,7 +199,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 
 ### Changed (portable-runtime-messaging-adapters — bounded runtime internals)
 
-- Split the three stable runtime compatibility facades (`runtime-consultation.cjs`, `runtime-role-lifecycle.cjs`, `runtime-bridge-codex.cjs`) into 208 cohesive internal CommonJS modules (57 + 67 + 84) covering consultation protocol/durability/transactions, lifecycle authority/grants/root-source contract, and Codex process isolation/credentials/recovery/app-server connection/supervisor-engine/turn-execution/Context7 evidence. Public CLI/CommonJS ABIs remain closed (69 / 275 / 52 & 81-under-test-capability keys); every internal module is capped at 500 lines and 320 chars/line, no function body exceeds 500 lines, none imports upward, and all three trees are recursively included in L1/L2 consumer inventories with symlink rejection and deterministic digests. See [runtime-messaging-adapters § Architecture Map](docs/agents/runtime-messaging-adapters.md#architecture-map) for the current per-tree breakdown.
+- Split the three stable runtime compatibility facades (`runtime-consultation.cjs`, `runtime-role-lifecycle.cjs`, `runtime-bridge-codex.cjs`) into 209 cohesive internal CommonJS modules (58 + 67 + 84) covering consultation protocol/durability/transactions, lifecycle authority/grants/root-source contract, and Codex process isolation/credentials/recovery/app-server connection/supervisor-engine/turn-execution/Context7 evidence. Public CLI/CommonJS ABIs remain closed (69 / 275 / 52 & 81-under-test-capability keys); every internal module is capped at 500 lines and 320 chars/line, no function body exceeds 500 lines, none imports upward, and all three trees are recursively included in L1/L2 consumer inventories with symlink rejection and deterministic digests. See [runtime-messaging-adapters § Architecture Map](docs/agents/runtime-messaging-adapters.md#architecture-map) for the current per-tree breakdown.
 
 ### Fixed (portable-runtime-messaging-adapters — Windows drive-letter path confinement gaps)
 

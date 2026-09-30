@@ -5199,3 +5199,161 @@ const HARNESS_SUFFIX_NEGATIVE_TABLE = [
     );
   });
 }
+
+// ═════════════════════════════════════════════════════════════════════════
+// BL-CONS-P1-08: consumer consult launcher form. A consumer cannot name the
+// toolkit's absolute consultation CLI, so its requester subagents invoke the
+// installed launcher operation; this hook is the only place the requester
+// grant is minted and maps that exact argv onto the canonical toolkit target.
+// Toolkit root (this checkout) and consumer root are physically distinct.
+// ═════════════════════════════════════════════════════════════════════════
+{
+  const { test: consultLauncherTest } = require('node:test');
+  const { installConsumerFixture } = require('./lib/consumer-runtime-fixture.cjs');
+  const DRAFT_MARKER = 'STATUS: DRAFT-CONTEXT-PENDING';
+
+  function consultFixture(slug, planText) {
+    const fixture = installConsumerFixture('L2');
+    assert.notStrictEqual(fixture.consumerRoot, fixture.toolkitRoot, 'toolkit and consumer roots must differ');
+    const waveDir = path.join(fixture.consumerRoot, '.planning', 'wave-' + slug);
+    fs.mkdirSync(waveDir, { recursive: true });
+    fs.writeFileSync(path.join(waveDir, 'PLAN.md'), planText);
+    return fixture;
+  }
+
+  function cleanupConsultFixture(fixture) {
+    try { fs.rmSync(rll.registryRepoDir(fixture.consumerRoot), { recursive: true, force: true }); } catch { /* best effort */ }
+    fs.rmSync(fixture.consumerRoot, { recursive: true, force: true });
+  }
+
+  function launcherConsultCommand(consumerRoot, subcommand, extra, projectRootOverride) {
+    return rll.renderPosixDirect([
+      'node', '.claude/runtime/l0-toolkit-launcher.cjs', 'run', 'runtime-consult',
+      '--project-root', projectRootOverride || consumerRoot, '--', subcommand,
+    ].concat(extra || []));
+  }
+
+  function consultArgs(consumerRoot) {
+    return ['--coordination-root', path.join(consumerRoot, '.planning', 'coordination'), '--question', 'Which source set owns expect/actual?'];
+  }
+
+  function runRewrittenIn(consumerRoot, command) {
+    const tokens = rll.parsePosixDirect(command);
+    const result = spawnSync(tokens[0], ['--require', CLAUDE_SESSION_IDENTITY_PRELOAD, ...tokens.slice(1)], {
+      cwd: consumerRoot, encoding: 'utf8', env: Object.assign({}, process.env, { CLAUDE_PROJECT_DIR: consumerRoot }),
+    });
+    return { exit: result.status, stdout: result.stdout, stderr: result.stderr };
+  }
+
+  function rewrittenOf(r, label) {
+    const body = parseHookJSON(r.stdout, label);
+    const rewritten = body.hookSpecificOutput && body.hookSpecificOutput.updatedInput && body.hookSpecificOutput.updatedInput.command;
+    assert.ok(rewritten, label + ': expected an updatedInput rewrite: ' + r.stdout);
+    return rewritten;
+  }
+
+  function initCoordinationRoot(fixture, role, session) {
+    const cmd = rll.renderPosixDirect(['node', IMPL_RC, 'root-init', '--coordination-root', path.join(fixture.consumerRoot, '.planning', 'coordination')]);
+    const r = runNonMainBash(cmd, fixture.consumerRoot, role, session);
+    const out = runRewrittenIn(fixture.consumerRoot, rewrittenOf(r, 'consult root-init'));
+    assert.strictEqual(out.exit, 0, 'consult fixture root-init must succeed: ' + out.stdout + out.stderr);
+  }
+
+  consultLauncherTest('CONSULT-LAUNCHER-1: a consumer arch-* requester consults context-provider through the installed launcher', () => {
+    const fixture = consultFixture('consult-l1', '# plan\n');
+    try {
+      primeClaudeId01Trace(fixture.consumerRoot, 'arch-testing', 'consult-l1-session', 'arch-testing');
+      initCoordinationRoot(fixture, 'arch-testing', 'consult-l1-session');
+      const cmd = launcherConsultCommand(fixture.consumerRoot, 'consult', consultArgs(fixture.consumerRoot));
+      const r = runNonMainBash(cmd, fixture.consumerRoot, 'arch-testing', 'consult-l1-session');
+      assert.strictEqual(r.exit, 0, JSON.stringify(r));
+      const rewritten = rewrittenOf(r, 'CONSULT-LAUNCHER-1');
+      const tokens = rll.parsePosixDirect(rewritten);
+      assert.strictEqual(tokens[1], IMPL_RC, 'the launcher form must map to the canonical toolkit target');
+      assert.strictEqual(tokens[2], 'consult');
+      assert.ok(tokens.includes('--requester-binding'), 'the hook mints the requester binding');
+      const out = runRewrittenIn(fixture.consumerRoot, rewritten);
+      const envelope = JSON.parse(out.stdout.trim().split('\n').pop());
+      assert.strictEqual(envelope.status, 'SUCCESS', out.stdout + out.stderr);
+      const request = JSON.parse(fs.readFileSync(envelope.artifact_ref, 'utf8'));
+      assert.strictEqual(request.source_role, 'arch-testing');
+      assert.strictEqual(request.target_role, 'context-provider');
+      assert.ok(envelope.artifact_ref.startsWith(fixture.consumerRoot), 'coordination evidence stays under the consumer root');
+    } finally { cleanupConsultFixture(fixture); }
+  });
+
+  consultLauncherTest('CONSULT-LAUNCHER-2: the planner consults in Pass B only while the PLAN carries the draft marker', () => {
+    const draft = consultFixture('consult-l2-draft', DRAFT_MARKER + '\n\n## Execution Plan: probe\n');
+    try {
+      primeClaudeId01Trace(draft.consumerRoot, 'planner', 'consult-l2-session', 'planner');
+      initCoordinationRoot(draft, 'planner', 'consult-l2-session');
+      const r = runNonMainBash(launcherConsultCommand(draft.consumerRoot, 'consult', consultArgs(draft.consumerRoot)), draft.consumerRoot, 'planner', 'consult-l2-session');
+      const out = runRewrittenIn(draft.consumerRoot, rewrittenOf(r, 'CONSULT-LAUNCHER-2 draft'));
+      assert.strictEqual(JSON.parse(out.stdout.trim().split('\n').pop()).status, 'SUCCESS', out.stdout + out.stderr);
+    } finally { cleanupConsultFixture(draft); }
+    const final = consultFixture('consult-l2-final', '## Execution Plan: probe\n');
+    try {
+      primeClaudeId01Trace(final.consumerRoot, 'planner', 'consult-l2b-session', 'planner');
+      initCoordinationRoot(final, 'planner', 'consult-l2b-session');
+      const r = runNonMainBash(launcherConsultCommand(final.consumerRoot, 'consult', consultArgs(final.consumerRoot)), final.consumerRoot, 'planner', 'consult-l2b-session');
+      const out = runRewrittenIn(final.consumerRoot, rewrittenOf(r, 'CONSULT-LAUNCHER-2 final'));
+      const envelope = JSON.parse(out.stdout.trim().split('\n').pop());
+      assert.strictEqual(envelope.status, 'INVALID', out.stdout);
+      assert.strictEqual(envelope.detail_code, 'AUTHORITY_INVALID');
+    } finally { cleanupConsultFixture(final); }
+  });
+
+  consultLauncherTest('CONSULT-LAUNCHER-3: negatives — non-allowlisted argv, foreign root, direct toolkit path, main orchestrator, forged binding, non-requester role', () => {
+    const fixture = consultFixture('consult-l3', '# plan\n');
+    try {
+      primeClaudeId01Trace(fixture.consumerRoot, 'arch-testing', 'consult-l3-session', 'arch-testing');
+      const root = fixture.consumerRoot;
+      const session = 'consult-l3-session';
+      assertPreToolUseDeny(runNonMainBash(launcherConsultCommand(root, 'root-init', consultArgs(root)), root, 'arch-testing', session), 'non-allowlisted launcher subcommand');
+      assertPreToolUseDeny(runNonMainBash(launcherConsultCommand(root, 'consult', consultArgs(root), fixture.toolkitRoot), root, 'arch-testing', session), 'foreign --project-root');
+      assertPreToolUseDeny(runNonMainBash(launcherConsultCommand(root, 'consult', consultArgs(root).concat(['--requester-binding', REQUESTER_FORGED_BINDING])), root, 'arch-testing', session), 'forged binding');
+      const direct = rll.renderPosixDirect(['node', IMPL_RC, 'consult'].concat(consultArgs(root)));
+      assertPreToolUseDeny(runNonMainBash(direct, root, 'arch-testing', session), 'a consumer must not invoke the toolkit consult target directly');
+      const main = runHook({
+        tool_name: 'Bash', tool_input: { command: launcherConsultCommand(root, 'consult', consultArgs(root)) },
+        session_id: 'consult-l3-main', agent_type: '', agent_id: '',
+      }, { CLAUDE_PROJECT_DIR: root, CLAUDE_WAVE_SLUG: '' });
+      assertPreToolUseDeny(main, 'the main orchestrator can never run consult');
+      primeClaudeId01Trace(root, 'toolkit-specialist', 'consult-l3-spec', 'toolkit-specialist');
+      initCoordinationRoot(fixture, 'arch-testing', session);
+      const spec = runNonMainBash(launcherConsultCommand(root, 'consult', consultArgs(root)), root, 'toolkit-specialist', 'consult-l3-spec');
+      const out = runRewrittenIn(root, rewrittenOf(spec, 'non-requester role'));
+      const envelope = JSON.parse(out.stdout.trim().split('\n').pop());
+      assert.strictEqual(envelope.status, 'INVALID', out.stdout);
+      assert.strictEqual(envelope.detail_code, 'AUTHORITY_INVALID');
+    } finally { cleanupConsultFixture(fixture); }
+  });
+}
+
+// BL-CONS-P1-08 (same root cause): quality-gater is a phase-scoped verifier that cannot consult context-provider
+// (only arch-* may, via the mediated chain), so the pattern-discovery gate must not wait for a consult it can never make.
+{
+  const { test: qualityGaterTest } = require('node:test');
+  const searchCommand = 'grep -rn "registry" scripts/lib | head -5';
+
+  function runSearchAs(agentType) {
+    return runHook({
+      tool_name: 'Bash', tool_input: { command: searchCommand },
+      session_id: 'qg-exempt-' + agentType, agent_type: agentType, agent_id: agentType,
+    }, { CLAUDE_PROJECT_DIR: '', CLAUDE_WAVE_SLUG: '' });
+  }
+
+  qualityGaterTest('QG-EXEMPT-1: quality-gater (and its harness-suffixed instance) is not blocked on a search-shaped command', () => {
+    for (const agentType of ['quality-gater', 'quality-gater-2']) {
+      const r = runSearchAs(agentType);
+      assert.strictEqual(r.exit, 0, agentType + ': ' + JSON.stringify(r));
+      assert.ok(!/"permissionDecision":"deny"/.test(r.stdout || ''), agentType + ' must not be denied: ' + r.stdout);
+    }
+  });
+
+  qualityGaterTest('QG-EXEMPT-2: the exemption is exact — other non-consulting roles stay blocked', () => {
+    for (const agentType of ['verifier', 'quality-gate-orchestrator', 'quality-gaterx-imposter', 'doc-updater']) {
+      assertPreToolUseDeny(runSearchAs(agentType), 'QG-EXEMPT-2 ' + agentType);
+    }
+  });
+}

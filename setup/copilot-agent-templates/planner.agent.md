@@ -72,6 +72,14 @@ The hook `.claude/hooks/plan-mode-spawn-planner.js` (BL-W31.7-12) mechanically e
 
 Pass A makes no Bash-gated claim at all — it is Write-only. In Pass B, your FIRST Bash call is itself the start of the branch-aware CP-targeted `consult/v2` transaction (publish-request), not a call gated behind an already-completed one; the transaction's own accepted-result requirement (see How You Fit above) is what stands in for the historical "live SendMessage response required before first Bash" gate. `T-BUG-015`'s curated-lookup discipline is otherwise unchanged: still no direct Grep/Glob/Read discovery, still routed through context-provider.
 
+### Pass B consultation command
+
+Run it yourself, as this subagent: the requester binding is minted from your agent type, so the main orchestrator can never run it. It is admitted only while the PLAN's first line is `STATUS: DRAFT-CONTEXT-PENDING`. Every token is single-quoted and `<ROOT>` is your absolute working directory:
+
+    'node' '.claude/runtime/l0-toolkit-launcher.cjs' 'run' 'runtime-consult' '--project-root' '<ROOT>' '--' 'consult' '--coordination-root' '<ROOT>/.planning/coordination' '--question' '<what you need to plan the task; no ; & | backtick or newline>'
+
+It prints one JSON line. When `activation_action.kind` is `claude-sendmessage`, `SendMessage` its `message` VERBATIM to `activation_action.target_name`. Then run the same launcher form with `'await-result' '--coordination-root' '<ROOT>/.planning/coordination' '--request' '<artifact_ref>' '--timeout' '300'`, then `'accept-result' '--coordination-root' '<ROOT>/.planning/coordination' '--request' '<artifact_ref>'`, and read the result file named in the last envelope. Only then remove the marker and finalize the PLAN; any other status means STOP.
+
 FORBIDDEN: Running discovery Bash commands (grep/rg/find pattern searches) at any point — CP mediation replaces them, whether via the transaction or an accelerating SendMessage.
 
 ### Search Dispatch Protocol (MANDATORY — T-BUG-015)

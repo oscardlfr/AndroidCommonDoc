@@ -208,7 +208,10 @@ function computeRuntimeToolkitInventory(toolkitRoot) {
     ...CONSUMER_FILES,
     ...ROLE_TEMPLATES.map((role) => `.claude/agents/${role}.md`),
     ...['init-session', 'resume-work', 'work', 'ingest-content', 'monitor-docs'].map((skill) => `skills/${skill}/SKILL.md`),
-    ...['init-session', 'resume-work', 'work', 'ingest-content', 'monitor-docs'].map((command) => `.claude/commands/${command}.md`),
+    // init-session is exposed to sessions only as a skill: a legacy command of the same name reached consumers
+    // through an added L0 directory and made /init-session appear twice.
+    '.claude/skills/init-session/SKILL.md',
+    ...['resume-work', 'work', 'ingest-content', 'monitor-docs'].map((command) => `.claude/commands/${command}.md`),
   ];
   try {
     collectPlatformHostContracts(root, files);

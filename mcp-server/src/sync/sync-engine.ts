@@ -827,6 +827,13 @@ export function getGitCommit(dirPath: string): string | undefined {
   }
 }
 
+/** Consumer CI reads the top-level l0Commit; advance it to the synced L0 commit only when the consumer already carries it. */
+function advanceL0Commit(manifest: Manifest, l0Root: string): void {
+  if (manifest.l0Commit === undefined) return;
+  const head = getGitCommit(l0Root);
+  if (head !== undefined && /^[0-9a-f]{40}$/.test(head)) manifest.l0Commit = head;
+}
+
 // ---------------------------------------------------------------------------
 // Materialization
 // ---------------------------------------------------------------------------
@@ -1496,7 +1503,9 @@ export async function computeRuntimeToolkitInventory(toolkitRoot: string): Promi
     ...RUNTIME_CONSUMER_FILES,
     ...RUNTIME_ROLE_TEMPLATES.map((role) => `.claude/agents/${role}.md`),
     ...["init-session", "resume-work", "work", "ingest-content", "monitor-docs"].map((skill) => `skills/${skill}/SKILL.md`),
-    ...["init-session", "resume-work", "work", "ingest-content", "monitor-docs"].map((command) => `.claude/commands/${command}.md`),
+    // init-session is exposed to sessions only as a skill (a same-named command doubled /init-session in a consumer).
+    ".claude/skills/init-session/SKILL.md",
+    ...["resume-work", "work", "ingest-content", "monitor-docs"].map((command) => `.claude/commands/${command}.md`),
   ];
   await collectPlatformHostContracts(canonicalRoot, files);
   await collectInventoryDirectory(canonicalRoot, "scripts/lib/runtime-consultation", files);
@@ -1741,6 +1750,7 @@ export async function installRuntimeConsumer(
         await writeSettingsAtomically(settingsPath, nextSettings);
       }
       manifest.consumer_layer = consumerLayer;
+      if (manifest.l0Commit !== undefined) manifest.l0Commit = toolkitCommit;
       manifest.runtime = {
         schema: "runtime-consumer/v1", enabled: true, consumer_layer: consumerLayer,
         toolkit_commit: toolkitCommit, toolkit_content_sha256: inventory.digest,
@@ -2618,6 +2628,7 @@ export async function syncMultiSource(
     }
 
     if (report.errors.length === 0) {
+      advanceL0Commit(manifest, msL0Root);
       manifest.checksums = newChecksums;
       if (manifestStateWithoutTimestamp(manifest) !== manifestStateBefore) {
         manifest.last_synced = new Date().toISOString();
@@ -3028,6 +3039,7 @@ export async function syncL0(
     }
 
     if (report.errors.length === 0) {
+      advanceL0Commit(manifest, l0Root);
       manifest.checksums = newChecksums;
       if (manifestStateWithoutTimestamp(manifest) !== manifestStateBefore) {
         manifest.last_synced = new Date().toISOString();

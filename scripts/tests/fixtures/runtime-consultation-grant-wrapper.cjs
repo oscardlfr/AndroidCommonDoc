@@ -210,7 +210,7 @@ function establishRetainedCodexSupportPlane(projectRoot, mainBinding) {
 // (no single transaction) still resolves to null/null/null, exactly like
 // the admin subcommands.
 const REQUESTER_GATED = new Set([
-  'root-init', 'root-validate', 'publish-blob', 'publish-request', 'dispatch',
+  'root-init', 'root-validate', 'publish-blob', 'publish-request', 'consult', 'dispatch',
   'record-delivery', 'takeover', 'await-result', 'accept-result',
   'transaction-ack', 'cancel', 'worker-stop', 'cleanup', 'validate',
 ]);

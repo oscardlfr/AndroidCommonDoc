@@ -812,6 +812,30 @@ const ENTRYPOINT_BARE_COMMAND_RE = /^[A-Za-z0-9_.\/:@+-]+(?: [A-Za-z0-9_.\/:@+-]
 const ENTRYPOINT_WINDOWS_TOKEN_RE = /(?:"([A-Za-z]:[\\/][A-Za-z0-9_.\\\/:@+ -]*)"|([A-Za-z0-9_.\/:@+-]+))(?: |$)/gy;
 const ENTRYPOINT_RELATIVE_CLI_PATH = 'scripts/lib/runtime-collaboration-entrypoints.cjs';
 
+/**
+ * Desktop Code-tab sessions run in a managed linked worktree while CLAUDE_PROJECT_DIR names the main checkout. A
+ * consumer root is accepted when it equals CLAUDE_PROJECT_DIR, or is a worktree root REGISTERED by git for the SAME
+ * repository (equal common dir); an unrelated repo, unregistered directory or other repository's worktree is foreign.
+ */
+function projectRootMatchesEnvironment(projectRoot) {
+  const declared = process.env.CLAUDE_PROJECT_DIR;
+  if (!declared) return true;
+  const declaredRoot = fs.realpathSync(declared);
+  if (declaredRoot === projectRoot) return true;
+  const git = (cwd, args) => {
+    const r = spawnSync('git', args, { cwd, encoding: 'utf8', timeout: 10000 });
+    if (r.status !== 0) throw new Error('git-unavailable');
+    return r.stdout.trim();
+  };
+  const commonOf = (cwd) => fs.realpathSync(git(cwd, ['rev-parse', '--path-format=absolute', '--git-common-dir']));
+  if (commonOf(declaredRoot) !== commonOf(projectRoot)) return false;
+  if (fs.realpathSync(git(projectRoot, ['rev-parse', '--show-toplevel'])) !== projectRoot) return false;
+  return git(declaredRoot, ['worktree', 'list', '--porcelain']).split('\n').some((line) => {
+    if (!line.startsWith('worktree ')) return false;
+    try { return fs.realpathSync(line.slice('worktree '.length)) === projectRoot; } catch { return false; }
+  });
+}
+
 // Claude must not have to discover an absolute consumer root, resolve Node, or
 // synthesize a base64url intent before it can start the runtime.  Keep the
 // public init-session surface deliberately tiny; this trusted hook derives all
@@ -861,10 +885,7 @@ function normalizeInitSessionShorthand(command, event) {
     if (!fs.statSync(projectRoot).isDirectory() || projectRoot !== path.resolve(event.cwd)) {
       throw new Error('unsafe-cwd');
     }
-    if (process.env.CLAUDE_PROJECT_DIR
-        && fs.realpathSync(process.env.CLAUDE_PROJECT_DIR) !== projectRoot) {
-      throw new Error('foreign-cwd');
-    }
+    if (!projectRootMatchesEnvironment(projectRoot)) throw new Error('foreign-cwd');
   } catch {
     return {
       recognized: true,
@@ -968,10 +989,7 @@ function canonicalizeInstalledEntrypointSurface(tokens, event) {
     if (projectRoot !== path.resolve(values['--project-root']) || !fs.statSync(projectRoot).isDirectory()) {
       throw new Error('unsafe-project-root');
     }
-    if (process.env.CLAUDE_PROJECT_DIR
-        && fs.realpathSync(process.env.CLAUDE_PROJECT_DIR) !== projectRoot) {
-      throw new Error('foreign-project-root');
-    }
+    if (!projectRootMatchesEnvironment(projectRoot)) throw new Error('foreign-project-root');
   } catch {
     return { recognized: true, tokens: null, reason: 'collaboration entrypoint project root is unresolved or foreign' };
   }
@@ -1605,7 +1623,7 @@ const REQUESTER_BINDING_TTL_SECONDS = 3600; // Mirrors MAIN_ORCHESTRATOR_BINDING
 // (runtime-consultation.cjs's ROLE_COMMAND_GRANT_AUTHORITY_FOR_COMMAND) is
 // extended in the same pass -- see that file's own matching comment.
 const REQUESTER_ADMIN_SUBCOMMANDS = Object.freeze([
-  'root-init', 'root-validate', 'publish-blob', 'publish-request', 'dispatch',
+  'root-init', 'root-validate', 'publish-blob', 'publish-request', 'consult', 'dispatch',
   'record-delivery', 'takeover', 'await-result', 'accept-result',
   'transaction-ack', 'cancel', 'worker-stop', 'cleanup', 'validate',
 ]);
@@ -1639,6 +1657,50 @@ function harnessSuffixCandidateRole(name) {
   return m[1];
 }
 
+// BL-CONS-P1-08: a consumer cannot name the toolkit's absolute consultation CLI, so it invokes its own installed
+// launcher operation. The exact argv is mapped to the canonical toolkit target here -- the only place the requester
+// grant is minted -- mirroring the entrypoint-launcher branch above. Every deviation is an explicit deny.
+const CONSULT_LAUNCHER_RELATIVE_PATH = '.claude/runtime/l0-toolkit-launcher.cjs';
+const CONSULT_LAUNCHER_SUBCOMMANDS = Object.freeze(['consult', 'record-delivery', 'await-result', 'accept-result']);
+
+/** @returns {null|{deny:string}|{tokens:string[]}} null when the command is not the consult launcher form. */
+function canonicalizeConsultLauncher(tokens) {
+  if (tokens.length < 4 || !isRecognizedNodeToken(tokens[0])) return null;
+  const script = String(tokens[1]).replace(/\\/g, '/');
+  const isLauncher = script === CONSULT_LAUNCHER_RELATIVE_PATH
+    || (path.isAbsolute(String(tokens[1])) && script.endsWith('/' + CONSULT_LAUNCHER_RELATIVE_PATH));
+  if (!isLauncher || tokens[2] !== 'run' || tokens[3] !== 'runtime-consult') return null;
+  if (tokens.length < 9 || tokens[4] !== '--project-root' || tokens[6] !== '--'
+      || !CONSULT_LAUNCHER_SUBCOMMANDS.includes(tokens[7])) {
+    return { deny: 'the consult launcher form is closed: run runtime-consult --project-root <root> -- <consult|record-delivery|await-result|accept-result> ...' };
+  }
+  if (!runtimeProjectContext) return { deny: 'runtime project context is unavailable for the consult launcher form' };
+  let projectRoot;
+  try {
+    projectRoot = fs.realpathSync(process.env.CLAUDE_PROJECT_DIR || process.cwd());
+    const expectedLauncher = path.join(projectRoot, CONSULT_LAUNCHER_RELATIVE_PATH);
+    const supplied = path.isAbsolute(String(tokens[1])) ? path.resolve(tokens[1]) : path.resolve(projectRoot, tokens[1]);
+    const info = fs.lstatSync(expectedLauncher);
+    if (path.resolve(tokens[5]) !== projectRoot || supplied !== expectedLauncher
+        || !info.isFile() || info.isSymbolicLink() || fs.realpathSync(expectedLauncher) !== expectedLauncher) {
+      throw new Error('foreign-launcher-or-root');
+    }
+  } catch {
+    return { deny: 'the consult launcher or project root is missing, foreign or unsafe' };
+  }
+  const toolkitRoot = fs.realpathSync(path.resolve(__dirname, '../..'));
+  const context = runtimeProjectContext.resolveRuntimeProjectContext(projectRoot);
+  const l0SelfUse = context && context.ok === true && context.consumerLayer === 'L0' && projectRoot === toolkitRoot;
+  if (!l0SelfUse) {
+    const qualification = runtimeProjectContext.verifyRuntimeConsumerInstallation(projectRoot, { verifyContent: true });
+    if (!qualification || qualification.ok !== true || qualification.consumerRoot !== projectRoot
+        || qualification.toolkitRoot !== toolkitRoot) {
+      return { deny: 'the installed L0 runtime is not qualified for the consult launcher form' };
+    }
+  }
+  return { tokens: [tokens[0], CANONICAL_CONSULTATION_CLI_PATH].concat(tokens.slice(7)) };
+}
+
 /**
  * Requester-authority counterpart to tryInjectLifecycleGrant, mirroring its
  * exact recognized/not-applicable/recognized-but-failed discipline. Returns
@@ -1657,12 +1719,25 @@ function tryInjectRequesterGrant(toolInput, sessionId, agentType, agentId) {
   if (!runtimeRoleLifecycle || !runtimeConsultationLib) return null; // not applicable: mechanism itself unavailable.
   if (/[;&|`\n]|\$\(/.test(command)) return null; // not applicable.
 
-  const tokens = runtimeRoleLifecycle.parsePosixDirect(command);
+  let tokens = runtimeRoleLifecycle.parsePosixDirect(command);
   if (!tokens) return null; // not applicable.
+  const launcherForm = canonicalizeConsultLauncher(tokens);
+  if (launcherForm) {
+    if (launcherForm.deny) return m7DenyResult('[BL-CONS-P1-08] ' + launcherForm.deny);
+    tokens = launcherForm.tokens;
+  }
   const cliIdx = findConsultationCliInvocation(tokens);
   if (cliIdx === -1 || cliIdx + 1 >= tokens.length) return null; // not applicable.
   const subcommand = tokens[cliIdx + 1];
   if (!REQUESTER_ADMIN_SUBCOMMANDS.includes(subcommand)) return null; // not applicable.
+
+  // A consumer names no toolkit path: `consult` from a consumer is admitted only through its installed launcher.
+  if (subcommand === 'consult' && !launcherForm && runtimeProjectContext) {
+    const direct = runtimeProjectContext.resolveRuntimeProjectContext(process.env.CLAUDE_PROJECT_DIR || process.cwd());
+    if (!direct || direct.ok !== true || direct.consumerLayer !== 'L0') {
+      return m7DenyResult('[BL-CONS-P1-08] a consumer must invoke consult through its installed launcher, never the toolkit target directly.');
+    }
+  }
 
   // ── RECOGNIZED from here on: every path below is an explicit decision. ──
 
@@ -2343,6 +2418,9 @@ process.stdin.on('end', () => {
     // team-lead exemption removed: main is now caught by empty agent_type check above
     const EXEMPT_TYPES = ['context-provider', 'project-manager'];
     if (EXEMPT_TYPES.some(e => agentType === e || agentType.startsWith(e))) process.exit(0);
+    // quality-gater verifies the committed HEAD and can never consult context-provider (only arch-* may), so the
+    // pattern-discovery gate would wait forever for a consult it cannot make. Exact role or harness-suffixed instance only.
+    if (agentType === 'quality-gater' || harnessSuffixCandidateRole(agentType) === 'quality-gater') process.exit(0);
 
     // 2a. Read on pattern-discovery paths requires CP consultation (T-BUG-015)
     try {

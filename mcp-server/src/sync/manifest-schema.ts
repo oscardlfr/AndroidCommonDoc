@@ -32,6 +32,10 @@ export const LayerSourceSchema = z.object({
   role: z.enum(["tooling", "ecosystem", "application"]).default("tooling"),
   /** Remote git URL for cloning when path doesn't exist locally */
   remote: z.string().url().optional(),
+  /** Upstream repository slug read by consumer CI (e.g. l0-auto-sync.yml); never used to resolve the source. */
+  repository: z.string().min(1).optional(),
+  /** Upstream ref read by consumer CI; never used to resolve the source. */
+  ref: z.string().min(1).optional(),
 });
 
 export type LayerSource = z.infer<typeof LayerSourceSchema>;
@@ -101,6 +105,8 @@ export const ManifestSchemaV2 = z.object({
   migrations_applied: z.array(z.string()).optional().default([]),
   /** Explicit opt-in and immutable compatibility pin for the L0 runtime. */
   runtime: RuntimeConsumerSchema.optional(),
+  /** L0 commit of the last sync, read by consumer CI. Advanced by sync only when the consumer already carries it. */
+  l0Commit: z.string().regex(/^[0-9a-f]{40}$/).optional(),
 });
 
 export type ManifestV2 = z.infer<typeof ManifestSchemaV2>;

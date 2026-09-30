@@ -35,6 +35,7 @@ const TOOL_SPECS = Object.freeze({
   'qg-report-freshness': { relative: 'scripts/sh/lib/qg-report-freshness.sh', executor: 'bash' },
   'readme-audit': { relative: 'scripts/sh/readme-audit.sh', windowsRelative: 'scripts/ps1/readme-audit.ps1', executor: 'bash', injectProjectRoot: true, windowsArgumentStyle: 'gnu' },
   'run-app': { relative: 'scripts/sh/build-run-app.sh', windowsRelative: 'scripts/ps1/build-run-app.ps1', executor: 'bash', injectProjectRoot: true, windowsPackArguments: true },
+  'runtime-consult': { relative: 'scripts/lib/runtime-consultation.cjs', executor: 'node', allowedSubcommands: Object.freeze(['consult', 'record-delivery', 'await-result', 'accept-result']) },
   'runtime-consumer-qg': { relative: 'scripts/lib/runtime-consumer-quality-gate.cjs', executor: 'node', prependProjectRoot: true },
   'sbom-analyze': { relative: 'scripts/sh/analyze-sbom.sh', windowsRelative: 'scripts/ps1/analyze-sbom.ps1', executor: 'bash', injectProjectRoot: true, windowsPositionalFlag: '-Module' },
   'sbom-scan': { relative: 'scripts/sh/scan-sbom.sh', windowsRelative: 'scripts/ps1/scan-sbom.ps1', executor: 'bash', injectProjectRoot: true, windowsPositionalFlag: '-Module' },
@@ -241,6 +242,7 @@ function runOperation(projectRoot, rootAsGiven, id, callerArgs) {
   const { toolkitRoot, consumerLayer } = qualify(projectRoot, rootAsGiven);
   if (spec.l0Only && consumerLayer !== 'L0') fail(`operation is L0-source-only: ${id}`);
   rejectRootOverrides(callerArgs);
+  if (spec.allowedSubcommands && !spec.allowedSubcommands.includes(callerArgs[0])) fail(`subcommand is not admitted for ${id}`);
   let invocation;
   try { invocation = selectToolInvocation(spec); }
   catch (error) { fail(`${error.message}: ${id}`); }

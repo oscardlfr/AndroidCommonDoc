@@ -535,6 +535,85 @@ assert.strictEqual(passed, 19);
   passed += 1;
 }
 
-assert.strictEqual(passed, 20);
+// Desktop Code-tab sessions run in a managed linked worktree while CLAUDE_PROJECT_DIR names the main checkout.
+// The consumer root stays cwd; only a registered linked worktree of the SAME repository is additionally admitted.
+function runShorthandFrom(cwd, projectDirEnv, hookPath, sessionId) {
+  const event = baseEvent('node .claude/runtime/l0-entrypoint-launcher.cjs init-session', cwd, sessionId);
+  return spawnSync(process.execPath, [hookPath], {
+    input: JSON.stringify(event), encoding: 'utf8', cwd,
+    env: Object.assign({}, process.env, { CLAUDE_PROJECT_DIR: projectDirEnv }),
+  });
+}
 
-console.log('20/20 PASS');
+function gitIn(cwd, args) {
+  const result = spawnSync('git', args, { cwd, encoding: 'utf8' });
+  assert.strictEqual(result.status, 0, 'git ' + args.join(' ') + ': ' + result.stderr);
+  return result.stdout.trim();
+}
+
+function makeScratchRepo() {
+  const dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'r131-worktree-repo-')));
+  gitIn(dir, ['init', '-q']);
+  gitIn(dir, ['config', 'user.email', 'wt@test.local']);
+  gitIn(dir, ['config', 'user.name', 'WT']);
+  gitIn(dir, ['commit', '-q', '--allow-empty', '-m', 'init']);
+  return dir;
+}
+
+function assertForeignShorthand(label, cwd, projectDirEnv) {
+  const result = runShorthandFrom(cwd, projectDirEnv, HOOK_PATH, uniqueSessionId());
+  assert.strictEqual(result.status, 0, label + ': hook exit code');
+  const body = JSON.parse(result.stdout);
+  assert.strictEqual(body.hookSpecificOutput.permissionDecision, 'deny', label + ': must be denied: ' + result.stdout);
+  assert.match(body.hookSpecificOutput.permissionDecisionReason, /project root is unresolved or foreign/, label);
+  console.log('PASS: ' + label);
+}
+
+{
+  const sessionId = uniqueSessionId();
+  const minted = recordManagedSystemInit(sessionId);
+  try {
+    const ctx = buildWorktreeContext(minted.worktreeRoot);
+    const result = runShorthandFrom(ctx.worktreeRoot, REPO_ROOT, ctx.hookPath, sessionId);
+    assert.strictEqual(result.status, 0, 'case-10-managed-worktree-shorthand: hook exit code');
+    const body = JSON.parse(result.stdout);
+    assert.strictEqual(body.hookSpecificOutput.permissionDecision, 'allow',
+      'case-10-managed-worktree-shorthand: a registered linked worktree of the same repository is admitted: ' + result.stdout);
+    const parsed = runtimeRoleLifecycle.parsePosixDirect(extractRewrittenCommand(result.stdout));
+    assert.strictEqual(extractFlag(parsed, '--project-root'), ctx.worktreeRoot,
+      'case-10-managed-worktree-shorthand: the consumer root stays cwd, never CLAUDE_PROJECT_DIR');
+    console.log('PASS: case-10-managed-worktree-shorthand');
+    passed += 1;
+  } finally {
+    minted.cleanup();
+  }
+}
+
+{
+  const other = makeScratchRepo();
+  const unregistered = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'r131-unregistered-')));
+  const foreignWorktree = path.join(other + '-wt');
+  try {
+    assertForeignShorthand('case-11-unrelated-repo-cwd-is-rejected', other, REPO_ROOT);
+    passed += 1;
+    assertForeignShorthand('case-12-unregistered-directory-is-rejected', unregistered, REPO_ROOT);
+    passed += 1;
+    gitIn(other, ['worktree', 'add', '-q', '--detach', foreignWorktree]);
+    assertForeignShorthand('case-13-worktree-of-a-different-repository-is-rejected', fs.realpathSync(foreignWorktree), REPO_ROOT);
+    passed += 1;
+    const link = path.join(os.tmpdir(), 'r131-symlinked-cwd-' + crypto.randomBytes(4).toString('hex'));
+    fs.symlinkSync(REPO_ROOT, link, process.platform === 'win32' ? 'junction' : 'dir');
+    try {
+      assertForeignShorthand('case-14-symlinked-cwd-is-rejected', link, REPO_ROOT);
+      passed += 1;
+    } finally { fs.rmSync(link, { force: true }); }
+  } finally {
+    fs.rmSync(unregistered, { recursive: true, force: true });
+    try { gitIn(other, ['worktree', 'remove', '--force', foreignWorktree]); } catch { /* best effort */ }
+    fs.rmSync(other, { recursive: true, force: true });
+  }
+}
+
+assert.strictEqual(passed, 25);
+
+console.log('25/25 PASS');

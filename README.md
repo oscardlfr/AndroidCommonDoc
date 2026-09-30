@@ -166,7 +166,7 @@ When you run `/sync-l0` or merge an auto-sync PR, these assets are materialized 
 |------|-------------|-------|
 | Skills | `.claude/skills/*/SKILL.md` | 62 |
 | Agents | `.claude/agents/*.md` | 39 |
-| Commands | `.claude/commands/*.md` | 60 |
+| Commands | `.claude/commands/*.md` | 59 |
 | **Total** | | **161 entries** |
 
 **Not synced:** scripts (invoked at runtime from L0 path), Detekt rules (consumed via JAR), docs (reference only), MCP tools (server runs from L0).
@@ -515,7 +515,7 @@ Real-time pattern enforcement and context injection during AI-assisted developme
 
 ## Skills Reference
 
-62 canonical skills in `skills/`, surfaced as user-invocable slash commands (60 total under `.claude/commands/`). Invoke via Claude Code (`/skill-name` placeholder — substitute the actual skill slug) or Copilot Chat. All skills are synced to downstream projects via `/sync-l0`.
+62 canonical skills in `skills/`, surfaced as user-invocable slash commands (59 total under `.claude/commands/`). Invoke via Claude Code (`/skill-name` placeholder — substitute the actual skill slug) or Copilot Chat. All skills are synced to downstream projects via `/sync-l0`.
 
 > Skills marked **[KMP only]** are not useful for Android-only projects and are deselected by default in the `/setup` wizard when an Android-only project is detected.
 
@@ -1153,7 +1153,7 @@ Layer 3: ENFORCEMENT (quality gate Step 0.5)
 ```
 AndroidCommonDoc/
 +-- .claude/
-|   +-- commands/           # 60 Claude Code slash commands
+|   +-- commands/           # 59 Claude Code slash commands
 |   +-- agents/             # 39 specialized agents
 |   +-- hooks/              # 39 real-time enforcement hook files
 |   +-- model-profiles.json # Agent model tier config (budget/balanced/advanced/quality)

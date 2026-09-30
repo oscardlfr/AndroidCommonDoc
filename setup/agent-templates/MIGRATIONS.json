@@ -136,6 +136,12 @@
       }
     },
     "planner": {
+      "1.22.3": {
+        "date": "2026-09-30",
+        "breaking": false,
+        "summary": "Consult context-provider from a consumer through the single documented launcher command (runtime-consult consult / await-result / accept-result) run by the requester subagent itself, replacing the SendMessage-only consult instruction. The planner edge is valid only while the PLAN's first line is STATUS: DRAFT-CONTEXT-PENDING.",
+        "migration_hint": "Run plain /sync-l0; runtime-enabled consumers refresh the managed agents and the toolkit launcher atomically."
+      },
       "1.22.2": {
         "date": "2026-09-30",
         "breaking": false,
@@ -445,6 +451,12 @@
       }
     },
     "arch-testing": {
+      "1.41.2": {
+        "date": "2026-09-30",
+        "breaking": false,
+        "summary": "Consult context-provider from a consumer through the single documented launcher command (runtime-consult consult / await-result / accept-result) run by the requester subagent itself, replacing the SendMessage-only consult instruction.",
+        "migration_hint": "Run plain /sync-l0; runtime-enabled consumers refresh the managed agents and the toolkit launcher atomically."
+      },
       "1.41.1": {
         "date": "2026-09-29",
         "breaking": false,
@@ -631,6 +643,12 @@
       }
     },
     "arch-platform": {
+      "1.36.2": {
+        "date": "2026-09-30",
+        "breaking": false,
+        "summary": "Consult context-provider from a consumer through the single documented launcher command (runtime-consult consult / await-result / accept-result) run by the requester subagent itself, replacing the SendMessage-only consult instruction.",
+        "migration_hint": "Run plain /sync-l0; runtime-enabled consumers refresh the managed agents and the toolkit launcher atomically."
+      },
       "1.36.1": {
         "date": "2026-09-29",
         "breaking": false,
@@ -797,6 +815,12 @@
       }
     },
     "arch-integration": {
+      "1.32.2": {
+        "date": "2026-09-30",
+        "breaking": false,
+        "summary": "Consult context-provider from a consumer through the single documented launcher command (runtime-consult consult / await-result / accept-result) run by the requester subagent itself, replacing the SendMessage-only consult instruction.",
+        "migration_hint": "Run plain /sync-l0; runtime-enabled consumers refresh the managed agents and the toolkit launcher atomically."
+      },
       "1.32.1": {
         "date": "2026-09-29",
         "breaking": false,

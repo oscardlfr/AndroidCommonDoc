@@ -40,7 +40,7 @@ function createRootSourceGrantBoundary({
 // at all; every other requester subcommand binds the exact request and its
 // CURRENT authoritative attempt/epoch.
 const REQUESTER_GRANT_NULL_SCOPE_SUBCOMMANDS = new Set([
-  'root-init', 'root-validate', 'validate', 'publish-blob', 'publish-request',
+  'root-init', 'root-validate', 'validate', 'publish-blob', 'publish-request', 'consult',
 ]);
 const REQUESTER_GRANT_TRANSACTIONAL_SUBCOMMANDS = new Set([
   'dispatch', 'takeover', 'await-result', 'accept-result', 'transaction-ack',

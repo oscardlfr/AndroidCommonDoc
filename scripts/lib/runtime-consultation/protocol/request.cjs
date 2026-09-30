@@ -73,8 +73,32 @@ function resolveContentRefOrThrow(planRoot, handle) {
 // Role policy -- mediated-chain guard (PLAN.md ~L668, ~L671)
 // ─────────────────────────────────────────────────────────────────────────────
 
-function assertRolePolicy(sourceRole, targetRole) {
-  if (targetRole === 'context-provider' && !String(sourceRole).startsWith('arch-')) {
+const DRAFT_CONTEXT_PENDING_MARKER = 'STATUS: DRAFT-CONTEXT-PENDING';
+
+/** True only when the PLAN's first line is exactly the Pass A draft marker (never quoted text deeper in the file). */
+function planIsDraftContextPending(planPath) {
+  if (typeof planPath !== 'string' || planPath.length === 0) return false;
+  let fd;
+  try {
+    fd = fs.openSync(planPath, 'r');
+    const buf = Buffer.alloc(128);
+    const n = fs.readSync(fd, buf, 0, buf.length, 0);
+    return buf.toString('utf8', 0, n).split('\n', 1)[0].replace(/\r$/, '') === DRAFT_CONTEXT_PENDING_MARKER;
+  } catch (err) {
+    return false;
+  } finally {
+    if (fd !== undefined) fs.closeSync(fd);
+  }
+}
+
+/**
+ * `ctx.planPath` is supplied at publish time; `ctx.persisted` by read-side revalidation of an already-published request
+ * (the draft condition was proven when it was published, and the PLAN legitimately loses the marker once Pass B finishes).
+ */
+function assertRolePolicy(sourceRole, targetRole, ctx) {
+  if (targetRole !== 'context-provider' || String(sourceRole).startsWith('arch-')) return;
+  const draftPlanner = sourceRole === 'planner' && ctx && (ctx.persisted === true || planIsDraftContextPending(ctx.planPath));
+  if (!draftPlanner) {
     throw new CliError('INVALID', 'AUTHORITY_INVALID', 'direct specialist -> context-provider is rejected (mediated chain)');
   }
 }
@@ -181,7 +205,7 @@ function validateConsultV2Fields(obj, planRoot) {
   if (obj.depth > obj.max_depth) {
     throw new CliError('INVALID', 'CORRELATION_INVALID', 'depth exceeds max_depth');
   }
-  assertRolePolicy(obj.source_role, obj.target_role);
+  assertRolePolicy(obj.source_role, obj.target_role, { persisted: true });
 }
 
 /** Full `validate --kind consult-v2` pipeline: shape -> durability -> graph -> role-policy -> content_ref. */

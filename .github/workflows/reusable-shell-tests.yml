@@ -264,6 +264,9 @@ jobs:
             'r33-provider-child.test.js'
             'r33-wire-protocol.test.js'
           )
+          # BL-CONS-P1-09: one failing file must not hide every later one. Run them all,
+          # list every failure at the end, and fail the step.
+          FAILED_FILES=()
           for f in scripts/tests/*.test.js; do
             skip=0
             for pat in "${SKIP_PATTERNS[@]}"; do
@@ -271,5 +274,13 @@ jobs:
             done
             if [[ $skip -eq 1 ]]; then echo "SKIP $f (PLAN §13 DEFERRED)"; continue; fi
             echo "Running $f..."
-            node "$f"
+            if ! node "$f"; then
+              echo "::error file=$f::Node hook test failed"
+              FAILED_FILES+=("$f")
+            fi
           done
+          if [[ ${#FAILED_FILES[@]} -gt 0 ]]; then
+            echo "${#FAILED_FILES[@]} Node hook test file(s) failed:"
+            for f in "${FAILED_FILES[@]}"; do echo "FAILED: $f"; done
+            exit 1
+          fi

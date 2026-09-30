@@ -951,6 +951,21 @@ const {
 });
 COMMANDS.dispatch = cmdDispatch;
 
+const { createConsultCommand } = require('./runtime-consultation/commands/consult.cjs');
+COMMANDS.consult = createConsultCommand({
+  CliError,
+  cmdPublishRequest,
+  computeWorktreeId,
+  dispatchCanonical,
+  fs,
+  getRuntimeRoleLifecycle: () => require('./runtime-role-lifecycle.cjs'),
+  isoPlusSeconds,
+  nowIso,
+  path,
+  requireFlags,
+  resolveAbsolute,
+}).cmdConsult;
+
 const { createActivationResolutionCommands } = require('./runtime-consultation/commands/activation-resolution.cjs');
 const activationResolutionModule = createActivationResolutionCommands({
   ACTIVATION_V1_FIELDS,
