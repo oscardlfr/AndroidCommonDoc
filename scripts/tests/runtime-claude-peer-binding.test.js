@@ -1094,3 +1094,35 @@ test('RED TTL: a persistent RoleActorBinding accepts the new 3600-second ceiling
     );
   });
 });
+
+// L2 physical acceptance: after an explicit terminal shutdown, the next ensure
+// creates a replacement RoleActorBinding in the SAME generation while the
+// terminated actor's binding remains immutable evidence. The terminated binding
+// must never compete with its live replacement; two live bindings stay INVALID.
+test('a terminated RoleActorBinding never competes with its live replacement', () => {
+  withProject((project) => {
+    const base = setupBase(project);
+    const event = { sessionId: base.sessionId, agentId: 'terminated-actor', agentType: 'arch-testing' };
+    const first = primeCompleteProof(
+      project, base.sessionId, base.worktreeId, base.planDigest, base.generationId,
+      event.agentId, event.agentType,
+    );
+    const repoDescriptor = { repoId: rll.computeRepoId(project) };
+    const fenced = rll.publishClaudeAuthorityFence(
+      repoDescriptor, rll.computeClaudeAuthorityIdentityId(repoDescriptor, 'claude-hook', base.sessionId, event.agentId),
+    );
+    assert.strictEqual(fenced.ok, true, JSON.stringify(fenced));
+    const terminal = rll.publishClaudeSupportRoleTerminal(project, event);
+    assert.strictEqual(terminal.ok, true, JSON.stringify(terminal));
+    assert.strictEqual(terminal.skipped, undefined, 'setup: the terminal must really be published: ' + JSON.stringify(terminal));
+    const replacement = rll.createRoleActorBinding(project, 'arch-testing', base.worktreeId, base.planDigest, base.generationId, 120);
+    assert.strictEqual(replacement.ok, true);
+    const expected = {
+      generationId: base.generationId, planDigest: base.planDigest, role: 'arch-testing',
+      runtimeSessionKey: base.sessionId, worktreeId: base.worktreeId,
+    };
+    const liveness = rll.classifyClaudeSupportRoleLiveness(project, expected);
+    assert.notStrictEqual(liveness.reason, 'actor-binding-invalid', 'the replacement must resolve as the unique live actor: ' + JSON.stringify(liveness));
+    assert.notStrictEqual(liveness.actorBindingId, first.binding_id, 'the terminated actor must not be selected: ' + JSON.stringify(liveness));
+  });
+});

@@ -6,7 +6,7 @@ function createClaudePeerBinding(deps) {
     actionPathFor, canonicalJSONStringify, checkClaudeId01ProofComplete, computeClaudeAuthorityIdentityId,
     computeRepoId, computeWorktreeId, currentClockMsForRegistry, discoverPlan, ensureSecureRegistryDir, fs,
     generateActionId, hasExactKeys, isCanonicalIsoUtc, isHexActionId, isHexCsprng32, isHexDigest64,
-    isoPlusSecondsForRegistry, isoToMsForRegistry, nowIsoForRegistry, path, peekSessionGeneration,
+    isClaudeRoleActorTerminal, isoPlusSecondsForRegistry, isoToMsForRegistry, nowIsoForRegistry, path, peekSessionGeneration,
     publishNoClobber, readClaudeAuthorityFence, readRegistryRecord, registryRepoDir, roleActorBindingPathFor,
     sha256String, validateRoleActorBindingFor, withRegistryLock,
   } = deps;
@@ -134,8 +134,9 @@ function findUniqueClaudePeerRoleActorBinding(projectRoot, expected) {
       matches.push(binding);
     }
     if (matches.length === 0) return { ok: false, reason: 'UNAVAILABLE' };
-    if (matches.length !== 1) return { ok: false, reason: 'INVALID' };
-    return { ok: true, binding: matches[0] };
+    const live = matches.length > 1 ? matches.filter((binding) => !isClaudeRoleActorTerminal(projectRoot, binding)) : matches;
+    if (live.length !== 1) return { ok: false, reason: 'INVALID' };
+    return { ok: true, binding: live[0] };
   } catch (err) {
     return { ok: false, reason: 'INVALID' };
   }

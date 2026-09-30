@@ -785,7 +785,7 @@ const claudePeerBinding = createClaudePeerBinding({
   fs, generateActionId, hasExactKeys, isCanonicalIsoUtc, isHexActionId,
   isHexCsprng32, isHexDigest64, isoPlusSecondsForRegistry, isoToMsForRegistry,
   nowIsoForRegistry, path, peekSessionGeneration, publishNoClobber,
-  readClaudeAuthorityFence, readRegistryRecord, registryRepoDir,
+  isClaudeRoleActorTerminal, readClaudeAuthorityFence, readRegistryRecord, registryRepoDir,
   roleActorBindingPathFor, sha256String, validateRoleActorBindingFor, withRegistryLock,
 });
 const {
@@ -801,12 +801,8 @@ const {
   CLAUDE_PEER_ACTION_KEYS,
   CLAUDE_PEER_SPAWN_PAYLOAD_KEYS,
   CLAUDE_PEER_REBIND_PAYLOAD_KEYS,
-  validateClaudePeerExpected,
-  scanClaudePeerBindingsForExpected,
-  findUniqueLiveClaudePeerAction,
-  validateClaudePeerBindingFor,
-  findUniqueClaudePeerBindingForTarget,
-  ensureClaudePeerBindingForObservedActor,
+  validateClaudePeerExpected, scanClaudePeerBindingsForExpected, findUniqueLiveClaudePeerAction,
+  validateClaudePeerBindingFor, findUniqueClaudePeerBindingForTarget, ensureClaudePeerBindingForObservedActor,
 } = claudePeerBinding;
 const claudeResumeRecord = createClaudeResumeRecord({
   CANONICAL_ROLES, canonicalJSONStringify, CLAUDE_STARTUP_ACTOR_KEYS, CLAUDE_STARTUP_ACTOR_SCHEMA,
@@ -832,6 +828,10 @@ const {
   classifyClaudeSupportRoleLiveness,
   publishClaudeSupportRoleTerminal,
 } = claudeResumeRecord;
+// A terminated actor's immutable RoleActorBinding never competes with its live replacement.
+function isClaudeRoleActorTerminal(root, actor) {
+  return fs.existsSync(claudeResumeRecord.claudeSupportRoleTerminalPathFor(root, { sessionGenerationId: actor.session_generation_id, worktreeId: actor.worktree_id, planDigest: actor.plan_digest, role: actor.role, actorBindingId: actor.binding_id }));
+}
 const claudeLivenessProbe = createClaudeLivenessProbe({
   actionPathFor, canonicalJSONStringify, currentClockMsForRegistry,
   ensureSecureRegistryDir, fs, hasExactKeys, isCanonicalIsoUtc, isHexActionId,
