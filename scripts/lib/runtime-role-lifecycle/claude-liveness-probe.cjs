@@ -216,8 +216,13 @@ function createClaudeLivenessProbe(deps) {
         const legacyResumeShape = response && hasExactKeys(response, ['resumedAgentId', 'success']);
         const pinnedResumeShape = response && hasExactKeys(response, ['message', 'pin', 'success'])
           && response.pin && hasExactKeys(response.pin, ['id', 'name', 'ref']);
+        const combinedResumeShape = response
+          && hasExactKeys(response, ['message', 'pin', 'resumedAgentId', 'success'])
+          && response.pin && hasExactKeys(response.pin, ['id', 'name', 'ref'])
+          && response.pin.id === response.resumedAgentId;
         const identityReceipt = response && response.success === true
-          && (legacyResumeShape || pinnedResumeShape) && typeof observedAgentId === 'string'
+          && (legacyResumeShape || pinnedResumeShape || combinedResumeShape)
+          && typeof observedAgentId === 'string'
           && sha256String(observedAgentId) === pending.actor_digest
           && (!response.pin || response.pin.name === pending.recipient);
         // An already-running teammate is not resumed.  Claude instead returns

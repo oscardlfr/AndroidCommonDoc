@@ -281,13 +281,18 @@ function settleNativeLivenessProbe(event) {
     : (typeof process.env.CLAUDE_PROJECT_DIR === 'string' && path.isAbsolute(process.env.CLAUDE_PROJECT_DIR)
       ? process.env.CLAUDE_PROJECT_DIR : null);
   const actionId = actionIdFromNativeEvent(event);
+  const recipient = typeof event.tool_input.recipient === 'string'
+    ? event.tool_input.recipient
+    : event.tool_input.to;
   if (!projectRoot || !actionId || typeof event.session_id !== 'string'
-      || typeof event.tool_use_id !== 'string') return { ok: false, ignored: true };
+      || typeof event.tool_use_id !== 'string' || typeof recipient !== 'string') {
+    return { ok: false, ignored: true };
+  }
   try {
     const lifecycle = require('../../scripts/lib/runtime-role-lifecycle.cjs');
     return lifecycle.settleClaudeLivenessProbeOutcome(projectRoot, {
       actionId, sessionId: event.session_id, toolUseId: event.tool_use_id,
-      recipient: event.tool_input.recipient, message: event.tool_input.message,
+      recipient, message: event.tool_input.message,
       success: event.hook_event_name === 'PostToolUse', response: event.tool_response,
     });
   } catch { return { ok: false }; }

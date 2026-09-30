@@ -290,6 +290,34 @@ test('active probe accepts the closed pin and inbox receipts emitted by supporte
   assert.deepStrictEqual(complete.envelope.actions, []);
 });
 
+test('active probe accepts Claude 2.1.285 combined resume receipt and PostToolUse to-alias', (t) => {
+  const root = makeProject();
+  t.after(() => cleanup(root));
+  const sessionId = 'active-probe-combined-receipt';
+  const seeded = seedFiveReadyActors(root, sessionId);
+  const actions = expectFiveProbeActions(runEnsure(root, sessionId), seeded.actors);
+  const combined = actions[0];
+  const pre = preEvent(root, sessionId, combined, 'probe-combined-receipt');
+  runBoundary(pre);
+  const agentId = seeded.actors.get(combined.role).agentId;
+  const settled = runtimeHostBoundary.settleNativeLivenessProbe(Object.assign({}, pre, {
+    hook_event_name: 'PostToolUse',
+    tool_input: { to: combined.role, message: combined.payload.message },
+    tool_response: {
+      success: true,
+      message: `Resuming agent ${combined.role}`,
+      resumedAgentId: agentId,
+      pin: { id: agentId, name: combined.role, ref: 'agent-ref' },
+    },
+  }));
+  assert.strictEqual(settled.ok, true, JSON.stringify(settled));
+  assert.strictEqual(settled.status, 'LIVE', JSON.stringify(settled));
+  for (let index = 1; index < actions.length; index += 1) {
+    settleExactProbe(root, sessionId, seeded, actions[index], 'probe-combined-legacy-' + index);
+  }
+  assert.strictEqual(runEnsure(root, sessionId).envelope.status, 'READY');
+});
+
 function roleState(root, seeded, role) {
   const actor = seeded.actors.get(role);
   return rll.readRoleBindingState(
