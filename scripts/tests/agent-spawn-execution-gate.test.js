@@ -2588,6 +2588,68 @@ runPositiveOwningNameAbsent();
   }
 }
 
+// RB-TERMINAL-REPLACEMENT (L2 physical acceptance): after an explicit
+// terminal shutdown the next ensure mints a replacement role-spawn action in
+// the SAME generation while the original spawn action, already fulfilled
+// (claim consumed), is still unexpired. The RoleBinding names the replacement
+// as its pending action, so the fulfilled history must not make ownership
+// ambiguous. An extra action that was never consumed still fails closed.
+function rbTerminalReplacementFixture(proj, sessionKey) {
+  const original = mintFullyEligibleRoleSpawnAction(proj, RB_ROLE, sessionKey);
+  const first = runMainOrchestratorAgentCall({ subagent_type: RB_ROLE, name: RB_ROLE, prompt: original.bootstrapMessage }, proj, sessionKey);
+  assert.strictEqual(parseHookJSON(first.stdout, 'RB-TERMINAL-REPLACEMENT setup').hookSpecificOutput.permissionDecision, 'allow', 'setup: original spawn must be allowed: ' + JSON.stringify(first));
+  const originalClaim = rll.roleSpawnExecutionClaimPathFor(proj, original.roleSpawnActionId);
+  assert.strictEqual(fs.existsSync(originalClaim), true, 'setup: original spawn must hold its execution claim');
+  const pair = rll.resolvePolicyPair(proj);
+  const policyDigest = rc.sha256String(rc.canonicalJSONStringify(pair.routing));
+  const replacementId = rll.generateActionId();
+  const payload = rll.buildRoleSpawnPayload('team-replacement', RB_ROLE, RB_ROLE, 'fixture-artifact-ref-replacement', 'fixture replacement bootstrap');
+  const expiresAt = new Date(Date.now() + 60000).toISOString().replace(/\.\d{3}Z$/, 'Z');
+  const minted = rll.mintRoleLifecycleAction(proj, replacementId, 'role-spawn', 'claude-native', original.repoDescriptor.repoId, original.worktreeId, original.planDigest, policyDigest, original.generationId, RB_ROLE, payload, expiresAt);
+  assert.strictEqual(minted.ok, true, 'setup: replacement action must mint: ' + JSON.stringify(minted));
+  return { original, originalClaim, replacementId, payload };
+}
+function rbPointBindingAt(proj, fixture, pendingActionId, state) {
+  const { original } = fixture;
+  const bindingPath = rll.roleBindingPathFor(proj, original.worktreeId, original.planDigest, rll.roleProfileDigestFor(RB_ROLE), original.generationId, RB_ROLE);
+  const current = rll.readRoleBindingState(proj, original.worktreeId, original.planDigest, rll.roleProfileDigestFor(RB_ROLE), original.generationId, RB_ROLE);
+  assert.strictEqual(current.ok, true, 'setup: binding must be readable');
+  const next = Object.assign({}, current.record, { state, pending_action_id: pendingActionId });
+  assert.strictEqual(rll.writeRegistryRecordReplace(bindingPath, Buffer.from(rc.canonicalJSONStringify(next), 'utf8')).ok, true, 'setup: binding rewrite must succeed');
+  assert.strictEqual(rll.readRoleBindingState(proj, original.worktreeId, original.planDigest, rll.roleProfileDigestFor(RB_ROLE), original.generationId, RB_ROLE).state, state, 'setup: rewritten binding must stay valid');
+}
+{
+  const proj = makeGitProject();
+  try {
+    writePlanFixture(proj, 'rb-terminal-replacement');
+    const fixture = rbTerminalReplacementFixture(proj, 'rb-terminal-session');
+    fs.writeFileSync(fixture.originalClaim.replace(/\.json$/, '.consumed'), '{}');
+    rbPointBindingAt(proj, fixture, fixture.replacementId, 'REHYDRATING');
+    const r = runMainOrchestratorAgentCall({ subagent_type: RB_ROLE, name: RB_ROLE, prompt: fixture.payload.bootstrap_message }, proj, 'rb-terminal-session');
+    const body = parseHookJSON(r.stdout, 'RB-TERMINAL-REPLACEMENT');
+    assert.strictEqual(body.hookSpecificOutput && body.hookSpecificOutput.permissionDecision, 'allow', 'RB-TERMINAL-REPLACEMENT: the replacement spawn must not be blocked by fulfilled spawn history: ' + JSON.stringify(r));
+    assert.strictEqual(fs.existsSync(rll.roleSpawnExecutionClaimPathFor(proj, fixture.replacementId)), true, 'RB-TERMINAL-REPLACEMENT: the replacement action must be the reserved owner');
+    console.log('RB-TERMINAL-REPLACEMENT fulfilled spawn history does not block the pending replacement: PASS');
+  } finally {
+    cleanup(proj);
+  }
+}
+{
+  const proj = makeGitProject();
+  try {
+    writePlanFixture(proj, 'rb-terminal-replacement-unconsumed');
+    const fixture = rbTerminalReplacementFixture(proj, 'rb-terminal-unconsumed');
+    rbPointBindingAt(proj, fixture, fixture.replacementId, 'REHYDRATING');
+    const r = runMainOrchestratorAgentCall({ subagent_type: RB_ROLE, name: RB_ROLE, prompt: fixture.payload.bootstrap_message }, proj, 'rb-terminal-unconsumed');
+    const body = parseHookJSON(r.stdout, 'RB-TERMINAL-REPLACEMENT-UNCONSUMED');
+    assert.strictEqual(body.hookSpecificOutput && body.hookSpecificOutput.permissionDecision, 'deny', 'RB-TERMINAL-REPLACEMENT-UNCONSUMED: an unconsumed extra spawn action must still fail closed: ' + JSON.stringify(r));
+    assert.match(body.hookSpecificOutput.permissionDecisionReason, /ambiguous/, 'RB-TERMINAL-REPLACEMENT-UNCONSUMED: denial must be the ownership ambiguity');
+    console.log('RB-TERMINAL-REPLACEMENT-UNCONSUMED an unconsumed extra spawn action still fails closed: PASS');
+  } finally {
+    cleanup(proj);
+  }
+}
+
 // RB-MISSING-SESSION-OWNING (Fix 4a): a genuinely owning candidate exists
 // for this role, but session_id is missing -- must DENY (explicit block),
 // never silently pass through as if non-owning. pre-fix the session_id
