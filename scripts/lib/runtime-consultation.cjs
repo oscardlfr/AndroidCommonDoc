@@ -955,6 +955,7 @@ const { createConsultCommand } = require('./runtime-consultation/commands/consul
 COMMANDS.consult = createConsultCommand({
   CliError,
   cmdPublishRequest,
+  cmdRootInit,
   computeWorktreeId,
   dispatchCanonical,
   fs,

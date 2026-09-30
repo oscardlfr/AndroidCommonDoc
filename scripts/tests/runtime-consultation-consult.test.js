@@ -43,7 +43,7 @@ function git(dir, args) {
   return r.stdout.trim();
 }
 
-function withWave({ slug, plan }, fn) {
+function withWave({ slug, plan, initRoot = true }, fn) {
   const proj = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'rcc-consult-')));
   try {
     git(proj, ['init', '-q']);
@@ -55,8 +55,10 @@ function withWave({ slug, plan }, fn) {
     const planPath = path.join(waveDir, 'PLAN.md');
     fs.writeFileSync(planPath, plan);
     const coordRoot = path.join(proj, '.planning', 'coordination');
-    const init = spawnCli(proj, 'arch-testing', ['root-init', '--coordination-root', coordRoot]);
-    assert.strictEqual(init.status, 0, init.stdout + init.stderr);
+    if (initRoot) {
+      const init = spawnCli(proj, 'arch-testing', ['root-init', '--coordination-root', coordRoot]);
+      assert.strictEqual(init.status, 0, init.stdout + init.stderr);
+    }
     return fn({ proj, coordRoot, planPath });
   } finally {
     fs.rmSync(proj, { recursive: true, force: true });
@@ -100,6 +102,27 @@ test('consult (arch-testing): publishes a context-provider request from the PLAN
     assert.ok(fs.existsSync(path.dirname(out.artifact_ref)), 'transaction directory exists');
     assert.ok(out.activation_action === null || typeof out.activation_action === 'object');
     void dispatched;
+  });
+});
+
+test('consult bootstraps a missing coordination root (a requester never runs root-init first)', () => {
+  withWave({ slug: 'consult-fresh', plan: MARKER + '\n', initRoot: false }, (ctx) => {
+    assert.strictEqual(fs.existsSync(ctx.coordRoot), false, 'fixture starts without a coordination root');
+    const out = envelope(consult(ctx, 'planner'));
+    assert.strictEqual(out.status, 'SUCCESS', JSON.stringify(out));
+    assert.ok(fs.existsSync(ctx.coordRoot), 'consult created the coordination root');
+    assert.ok(out.artifact_ref.startsWith(ctx.coordRoot));
+  });
+});
+
+test('consult does not create a coordination root for a foreign worktree', () => {
+  withWave({ slug: 'consult-fresh-home', plan: '# plan\n', initRoot: false }, (home) => {
+    withWave({ slug: 'consult-fresh-foreign', plan: '# plan\n', initRoot: false }, (foreign) => {
+      const result = spawnCli(home.proj, 'arch-testing', ['consult', '--coordination-root', foreign.coordRoot, '--question', 'foreign?']);
+      const out = envelope(result);
+      assert.strictEqual(out.status, 'INVALID', JSON.stringify(out));
+      assert.strictEqual(fs.existsSync(foreign.coordRoot), false, 'nothing was created under the foreign worktree');
+    });
   });
 });
 

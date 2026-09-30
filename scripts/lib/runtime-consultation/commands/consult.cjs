@@ -12,6 +12,7 @@ const MAX_QUESTION_BYTES = 8192;
 function createConsultCommand({
   CliError,
   cmdPublishRequest,
+  cmdRootInit,
   computeWorktreeId,
   dispatchCanonical,
   fs,
@@ -22,6 +23,17 @@ function createConsultCommand({
   requireFlags,
   resolveAbsolute,
 }) {
+  /** Nearest existing directory at or above `target`; a requester never runs root-init first, so the root may not exist yet. */
+  function nearestExistingDirectory(target) {
+    let current = target;
+    while (!fs.existsSync(current)) {
+      const parent = path.dirname(current);
+      if (parent === current) throw new CliError('INVALID', 'AUTHORITY_INVALID', 'consult coordination root has no existing ancestor');
+      current = parent;
+    }
+    return current;
+  }
+
   /** The project root is the hook/launcher-owned environment, never a caller flag; it must own the coordination root. */
   function resolveProjectRoot(coordRoot) {
     const declared = process.env.CLAUDE_PROJECT_DIR || process.cwd();
@@ -31,7 +43,14 @@ function createConsultCommand({
     } catch (err) {
       throw new CliError('INVALID', 'AUTHORITY_INVALID', 'consult project root is unresolved');
     }
-    if (computeWorktreeId(coordRoot) !== computeWorktreeId(projectRoot)) {
+    let owner;
+    try {
+      owner = computeWorktreeId(nearestExistingDirectory(coordRoot));
+    } catch (err) {
+      if (err instanceof CliError) throw err;
+      throw new CliError('INVALID', 'AUTHORITY_INVALID', 'consult coordination root is not inside a git worktree');
+    }
+    if (owner !== computeWorktreeId(projectRoot)) {
       throw new CliError('INVALID', 'AUTHORITY_INVALID', 'consult coordination root belongs to a foreign worktree');
     }
     return projectRoot;
@@ -68,6 +87,7 @@ function createConsultCommand({
     const coordRoot = resolveAbsolute(flags['coordination-root']);
     const projectRoot = resolveProjectRoot(coordRoot);
     const planPath = discoverWavePlan(projectRoot);
+    if (!fs.existsSync(coordRoot)) cmdRootInit({ 'coordination-root': coordRoot }, grantContext);
     const intent = {
       target_role: CONSULT_TARGET_ROLE,
       question: flags.question,

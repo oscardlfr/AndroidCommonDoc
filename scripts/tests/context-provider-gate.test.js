@@ -5263,7 +5263,7 @@ const HARNESS_SUFFIX_NEGATIVE_TABLE = [
     const fixture = consultFixture('consult-l1', '# plan\n');
     try {
       primeClaudeId01Trace(fixture.consumerRoot, 'arch-testing', 'consult-l1-session', 'arch-testing');
-      initCoordinationRoot(fixture, 'arch-testing', 'consult-l1-session');
+      // No root-init first: a requester's first and only command is consult, which bootstraps the coordination root.
       const cmd = launcherConsultCommand(fixture.consumerRoot, 'consult', consultArgs(fixture.consumerRoot));
       const r = runNonMainBash(cmd, fixture.consumerRoot, 'arch-testing', 'consult-l1-session');
       assert.strictEqual(r.exit, 0, JSON.stringify(r));
