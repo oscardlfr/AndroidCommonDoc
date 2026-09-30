@@ -329,6 +329,14 @@ function reserveNativeShutdownTerminal(event) {
   } catch { return { ok: false }; }
 }
 
+function admitNativeShutdownReservation(event) {
+  if (!shutdownRequestFromEvent(event)) return { admitted: true, owning: false };
+  const reserved = reserveNativeShutdownTerminal(event);
+  return reserved.ok
+    ? { admitted: true, owning: true }
+    : { admitted: false, owning: true, reason: 'native-shutdown-reservation-failed' };
+}
+
 function settleNativeShutdownTerminal(event) {
   const shutdown = shutdownRequestFromEvent(event);
   const projectRoot = projectRootFromEvent(event);
@@ -584,6 +592,7 @@ module.exports = {
   settleNativeResumeFailure,
   settleNativeLivenessProbe,
   reserveNativeShutdownTerminal,
+  admitNativeShutdownReservation,
   settleNativeShutdownTerminal,
   recordStartupReadyOutcome,
   admitEntrypointPreToolUse,
@@ -602,7 +611,17 @@ if (require.main === module) {
       const event = JSON.parse(input);
       if (event && event.hook_event_name === 'PreToolUse') {
         admitEntrypointPreToolUse(event);
-        reserveNativeShutdownTerminal(event);
+        const shutdownReservation = admitNativeShutdownReservation(event);
+        if (shutdownReservation.owning && !shutdownReservation.admitted) {
+          process.stdout.write(JSON.stringify({
+            hookSpecificOutput: {
+              hookEventName: 'PreToolUse',
+              permissionDecision: 'deny',
+              permissionDecisionReason: '[runtime-host-boundary] native shutdown reservation failed closed.',
+            },
+          }));
+          return;
+        }
         const nativeAction = admitNativeActionEvent(event);
         if (nativeAction.owning && !nativeAction.admitted) {
           process.stdout.write(JSON.stringify({

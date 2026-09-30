@@ -647,6 +647,7 @@ function handleSubagentStop(data) {
       blockStop('[subagent-start-context-bundle] SubagentStop: explicit shutdown request is still awaiting its correlated host outcome -- retry after PostToolUse/PostToolUseFailure settles it.');
       return;
     }
+    if (shutdownTerminal.status === 'CONSUMED') process.exit(0);
   }
 
   // P4 Windows native-Claude persistence correction: a first ordinary stop

@@ -169,11 +169,15 @@ function createClaudeShutdownTerminal(deps) {
   }
 
   function findClaudeShutdownTerminalForRole(projectRoot, event) {
+    // This lookup is an optional overlay on the established SubagentStop
+    // classifier. If no shutdown namespace exists for this exact canonical
+    // role, it must be observationally inert: one-shot, root-source, custom
+    // and malformed-identity handling still belongs to the pre-existing stop
+    // path below the caller. Validate the owning actor only after durable
+    // shutdown evidence establishes that this overlay owns the event.
     if (!validIdentity(projectRoot) || !path.isAbsolute(projectRoot) || !event
         || !validIdentity(event.sessionId) || !validIdentity(event.agentId)
-        || !validRole(event.agentType)) return { ok: false, reason: 'INVALID' };
-    const target = currentTarget(projectRoot, event.sessionId, event.agentType);
-    if (!target.ok) return target;
+        || !validRole(event.agentType)) return { ok: true, status: 'NONE' };
     const sessionDigest = sha256String(event.sessionId);
     const dir = path.join(registryRepoDir(projectRoot), 'claude-shutdown-terminal', sessionDigest, event.agentType);
     let entries;
@@ -189,6 +193,31 @@ function createClaudeShutdownTerminal(deps) {
       stems.add(match[1]);
     }
     if (stems.size > SCAN_CAP) return { ok: false, reason: 'INVALID' };
+    let consumedMatch = null;
+    for (const toolUseDigest of stems) {
+      const stem = path.join(dir, toolUseDigest);
+      const expected = { recipient: event.agentType, sessionDigest, toolUseDigest };
+      const pending = readExact(stem + '.pending.json', SCHEMA_PENDING, pendingKeys, expected);
+      const confirmed = readExact(stem + '.confirmed.json', SCHEMA_CONFIRMED, confirmedKeys, expected);
+      const failed = readExact(stem + '.failed.json', SCHEMA_FAILED, failedKeys, expected);
+      const consumed = readRegistryRecord(stem + '.consumed.json');
+      if (!pending.ok || !confirmed.ok || !failed.ok || !consumed.ok
+          || (confirmed.record && failed.record)) return { ok: false, reason: 'INVALID' };
+      if (!consumed.absent) {
+        if (!pending.record || !confirmed.record || !consumed.obj
+            || !hasExactKeys(consumed.obj, ['consumed_at', 'request_id', 'schema'])
+            || consumed.obj.schema !== SCHEMA_CONSUMED
+            || !isCanonicalIsoUtc(consumed.obj.consumed_at)
+            || consumed.obj.request_id !== confirmed.record.request_id) return { ok: false, reason: 'INVALID' };
+        if (pending.record.agent_digest === sha256String(event.agentId)) {
+          if (consumedMatch) return { ok: false, reason: 'INVALID' };
+          consumedMatch = { record: confirmed.record, stem };
+        }
+      }
+    }
+    if (consumedMatch) return { ok: true, status: 'CONSUMED', ...consumedMatch };
+    const target = currentTarget(projectRoot, event.sessionId, event.agentType);
+    if (!target.ok) return target;
     const candidates = [];
     let pendingOnly = false;
     for (const toolUseDigest of stems) {
@@ -206,7 +235,8 @@ function createClaudeShutdownTerminal(deps) {
           || !hasExactKeys(consumed.obj, ['consumed_at', 'request_id', 'schema'])
           || consumed.obj.schema !== SCHEMA_CONSUMED
           || !isCanonicalIsoUtc(consumed.obj.consumed_at)
-          || typeof consumed.obj.request_id !== 'string')) return { ok: false, reason: 'INVALID' };
+          || typeof consumed.obj.request_id !== 'string'
+          || !confirmed.record || consumed.obj.request_id !== confirmed.record.request_id)) return { ok: false, reason: 'INVALID' };
       if (confirmed.record && failed.record) return { ok: false, reason: 'INVALID' };
       if (!pending.record || consumed.obj || currentClockMsForRegistry() >= isoToMsForRegistry(pending.record.expiry)) continue;
       if (pending.record.actor_binding_id !== target.startup.actor_binding_id
@@ -228,6 +258,21 @@ function createClaudeShutdownTerminal(deps) {
   function consumeClaudeShutdownTerminal(projectRoot, candidate) {
     if (!candidate || candidate.status !== 'CONFIRMED' || typeof candidate.stem !== 'string'
         || !candidate.record) return { ok: false, reason: 'INVALID' };
+    const record = candidate.record;
+    if (!hasExactKeys(record, confirmedKeys) || record.schema !== SCHEMA_CONFIRMED
+        || !validRole(record.recipient) || !isHexDigest64(record.session_digest)
+        || !isHexDigest64(record.tool_use_digest) || !isHexActionId(record.actor_binding_id)
+        || !isHexDigest64(record.agent_digest) || !isHexDigest64(record.plan_digest)
+        || !isHexDigest64(record.worktree_id) || typeof record.session_generation_id !== 'string'
+        || typeof record.request_id !== 'string' || record.request_id.length === 0
+        || !isCanonicalIsoUtc(record.created_at) || !isCanonicalIsoUtc(record.expiry)) {
+      return { ok: false, reason: 'INVALID' };
+    }
+    const expectedStem = path.join(
+      registryRepoDir(projectRoot), 'claude-shutdown-terminal', record.session_digest,
+      record.recipient, record.tool_use_digest,
+    );
+    if (candidate.stem !== expectedStem) return { ok: false, reason: 'INVALID' };
     const consumedAt = nowIsoForRegistry();
     return publishExact(candidate.stem + '.consumed.json', {
       consumed_at: consumedAt,

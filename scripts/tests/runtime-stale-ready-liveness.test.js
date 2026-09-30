@@ -424,11 +424,73 @@ test('explicit successful shutdown is terminal and never parks toxic history for
   }
   shutdownEvent(root, sessionId, 'shutdown-tool-success', 'confirmed');
   assert.strictEqual(runSubagentStop(root, sessionId, agentId), '');
+  assert.strictEqual(runSubagentStop(root, sessionId, agentId), '',
+    'a repeated stop after terminal cleanup must be an idempotent no-op');
   const fenceId = rll.computeClaudeAuthorityIdentityId(root, 'claude-hook', sessionId, agentId);
   assert.strictEqual(rll.readClaudeAuthorityFence(root, fenceId).absent, false);
   const next = runEnsure(root, sessionId, seeded.plan.planDigest);
   assert.strictEqual(next.status, 'ACTION_REQUIRED', JSON.stringify(next));
   assert.ok(next.actions.some((action) => action.kind === 'role-spawn'), JSON.stringify(next));
+});
+
+test('shutdown consumption rejects a caller-supplied foreign stem', (t) => {
+  const root = makeCliProject();
+  t.after(() => cleanupCliProject(root));
+  const sessionId = 'foreign-stem-session';
+  const agentId = 'foreign-stem-agent';
+  seedReadyClaudeActor(root, sessionId, agentId);
+  shutdownEvent(root, sessionId, 'foreign-stem-tool', 'confirmed');
+  const candidate = rll.findClaudeShutdownTerminalForRole(root, {
+    sessionId, agentId, agentType: CLI_ROLE,
+  });
+  assert.strictEqual(candidate.status, 'CONFIRMED');
+  assert.deepStrictEqual(rll.consumeClaudeShutdownTerminal(root, {
+    ...candidate, stem: path.join(root, 'foreign-stem'),
+  }), { ok: false, reason: 'INVALID' });
+  const forged = { ...candidate.record, recipient: '../escape' };
+  assert.deepStrictEqual(rll.consumeClaudeShutdownTerminal(root, {
+    ...candidate,
+    record: forged,
+    stem: path.join(rll.registryRepoDir(root), 'claude-shutdown-terminal',
+      forged.session_digest, forged.recipient, forged.tool_use_digest),
+  }), { ok: false, reason: 'INVALID' });
+});
+
+test('consumed shutdown replay rejects conflicting terminal state and request id', (t) => {
+  const conflictRoot = makeCliProject();
+  t.after(() => cleanupCliProject(conflictRoot));
+  const conflictSession = 'consumed-conflict-session';
+  const conflictAgent = 'consumed-conflict-agent';
+  seedReadyClaudeActor(conflictRoot, conflictSession, conflictAgent);
+  shutdownEvent(conflictRoot, conflictSession, 'consumed-conflict-tool', 'confirmed');
+  assert.strictEqual(runSubagentStop(conflictRoot, conflictSession, conflictAgent), '');
+  const conflictDir = path.join(rll.registryRepoDir(conflictRoot), 'claude-shutdown-terminal',
+    sha(conflictSession), CLI_ROLE);
+  const conflictStem = path.join(conflictDir, sha('consumed-conflict-tool'));
+  const confirmed = JSON.parse(fs.readFileSync(conflictStem + '.confirmed.json', 'utf8'));
+  const { request_id: _requestId, ...failed } = confirmed;
+  failed.schema = 'runtime/claude-shutdown-terminal-failed/v1';
+  failed.reason = 'host-sendmessage-failed';
+  fs.writeFileSync(conflictStem + '.failed.json', rc.canonicalJSONStringify(failed));
+  const conflictBlocked = JSON.parse(runSubagentStop(conflictRoot, conflictSession, conflictAgent));
+  assert.strictEqual(conflictBlocked.decision, 'block');
+  assert.match(conflictBlocked.reason, /explicit shutdown correlation FAILED/);
+
+  const root = makeCliProject();
+  t.after(() => cleanupCliProject(root));
+  const sessionId = 'consumed-tamper-session';
+  const agentId = 'consumed-tamper-agent';
+  seedReadyClaudeActor(root, sessionId, agentId);
+  shutdownEvent(root, sessionId, 'consumed-tamper-tool', 'confirmed');
+  assert.strictEqual(runSubagentStop(root, sessionId, agentId), '');
+  const dir = path.join(rll.registryRepoDir(root), 'claude-shutdown-terminal', sha(sessionId), CLI_ROLE);
+  const consumedPath = path.join(dir, sha('consumed-tamper-tool') + '.consumed.json');
+  const consumed = JSON.parse(fs.readFileSync(consumedPath, 'utf8'));
+  consumed.request_id = 'foreign-request';
+  fs.writeFileSync(consumedPath, rc.canonicalJSONStringify(consumed));
+  const blocked = JSON.parse(runSubagentStop(root, sessionId, agentId));
+  assert.strictEqual(blocked.decision, 'block');
+  assert.match(blocked.reason, /explicit shutdown correlation FAILED/);
 });
 
 test('failed shutdown request preserves ordinary resumable parking', (t) => {
@@ -442,6 +504,18 @@ test('failed shutdown request preserves ordinary resumable parking', (t) => {
   assert.strictEqual(currentRoleState(root, seeded).state, 'WAITING');
   const fenceId = rll.computeClaudeAuthorityIdentityId(root, 'claude-hook', sessionId, agentId);
   assert.strictEqual(rll.readClaudeAuthorityFence(root, fenceId).absent, true);
+});
+
+test('absent shutdown evidence is inert for non-persistent SubagentStop identities', (t) => {
+  const root = makeCliProject();
+  t.after(() => cleanupCliProject(root));
+  assert.deepStrictEqual(rll.findClaudeShutdownTerminalForRole(root, {
+    sessionId: 'ordinary-one-shot-session', agentId: 'ordinary-one-shot-agent',
+    agentType: 'toolkit-specialist',
+  }), { ok: true, status: 'NONE' });
+  assert.deepStrictEqual(rll.findClaudeShutdownTerminalForRole(root, {
+    sessionId: 'custom-session', agentId: 'custom-agent', agentType: 'custom-agent-name',
+  }), { ok: true, status: 'NONE' });
 });
 
 test('pending shutdown race blocks SubagentStop instead of incorrectly parking', (t) => {

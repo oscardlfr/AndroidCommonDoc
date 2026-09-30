@@ -1135,6 +1135,25 @@ test('R131-BOUNDARY-RESUME-SENDMESSAGE-27b: role-notify forces SendMessage and c
   }
 });
 
+test('R131-BOUNDARY-SHUTDOWN-RESERVATION-FAILS-CLOSED: an owning shutdown request is denied when durable reservation fails', () => {
+  const lib = requireBoundaryLib();
+  const rll = require('../lib/runtime-role-lifecycle.cjs');
+  const saved = rll.reserveClaudeShutdownTerminal;
+  rll.reserveClaudeShutdownTerminal = () => ({ ok: false, reason: 'test-failure' });
+  try {
+    const event = {
+      hook_event_name: 'PreToolUse', tool_name: 'SendMessage', cwd: PROJECT_ROOT,
+      session_id: 'shutdown-session', tool_use_id: 'shutdown-tool',
+      tool_input: { to: 'arch-platform', message: { type: 'shutdown_request', reason: 'done' } },
+    };
+    assert.deepStrictEqual(lib.admitNativeShutdownReservation(event), {
+      admitted: false, owning: true, reason: 'native-shutdown-reservation-failed',
+    });
+  } finally {
+    rll.reserveClaudeShutdownTerminal = saved;
+  }
+});
+
 test('R131-BOUNDARY-RESUME-FAILURE-27c: only PostToolUseFailure settles the exact resume SendMessage', () => {
   const lib = requireBoundaryLib();
   const rll = require('../lib/runtime-role-lifecycle.cjs');

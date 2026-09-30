@@ -239,13 +239,7 @@ Mode distinctions:
 
 ## Claude 2.1.x compatibility
 
-The runtime supports the Claude Code `2.1.x` protocol family as one compatibility
-contract. Updating between `2.1` patches does not require editing,
-deleting, regenerating, or committing a certificate; restart and launch normally.
-The runtime binds host-owned version/model evidence to the live session and worktree
-and requires the running executable to carry Anthropic's valid platform signature
-(Developer ID on macOS or Authenticode on Windows). An executable SHA-256 may be
-retained as diagnostic evidence, but it is not a per-patch compatibility gate.
+The runtime supports the Claude Code `2.1.x` protocol family as one compatibility contract. Updating between `2.1` patches does not require editing, deleting, regenerating, or committing a certificate; restart and launch normally. The runtime binds host-owned version/model evidence to the live session and worktree and requires the running executable to carry Anthropic's valid platform signature (Developer ID on macOS or Authenticode on Windows). An executable SHA-256 may be retained as diagnostic evidence, but it is not a per-patch compatibility gate.
 
 `SessionStart.model` is optional in Claude Code 2.1.x. When omitted, PreToolUse
 returns a signed pending composition bound to the exact session, tool, input and
