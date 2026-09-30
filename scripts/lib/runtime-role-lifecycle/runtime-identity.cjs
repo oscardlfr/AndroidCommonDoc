@@ -19,14 +19,34 @@ function createRuntimeIdentityModule({
     return 'user-' + sha256String(os.userInfo().username);
   }
 
+  // Registry path helpers resolve the repo identity once per record, so a
+  // single hook event over an accumulated registry used to spawn hundreds of
+  // `git rev-parse` processes and exceed the host hook timeout. Identities are
+  // memoized per process, keyed by the on-disk identity of `<root>/.git`, so a
+  // repository recreated at the same path is never answered from a stale entry.
+  const identityCache = new Map();
+  function cachedGitIdentity(kind, projectRoot, compute) {
+    let key = null;
+    try {
+      const st = fs.statSync(path.join(projectRoot, '.git'));
+      key = [kind, projectRoot, st.dev, st.ino, st.mtimeMs].join('\0');
+    } catch { return compute(); }
+    if (!identityCache.has(key)) identityCache.set(key, compute());
+    return identityCache.get(key);
+  }
+
   function computeRepoId(projectRoot) {
-    const commonDir = gitRevParse(projectRoot, ['rev-parse', '--path-format=absolute', '--git-common-dir']);
-    return sha256String(realpathOrSelf(commonDir));
+    return cachedGitIdentity('repo', projectRoot, () => {
+      const commonDir = gitRevParse(projectRoot, ['rev-parse', '--path-format=absolute', '--git-common-dir']);
+      return sha256String(realpathOrSelf(commonDir));
+    });
   }
 
   function computeWorktreeId(projectRoot) {
-    const toplevel = gitRevParse(projectRoot, ['rev-parse', '--show-toplevel']);
-    return sha256String(realpathOrSelf(toplevel));
+    return cachedGitIdentity('worktree', projectRoot, () => {
+      const toplevel = gitRevParse(projectRoot, ['rev-parse', '--show-toplevel']);
+      return sha256String(realpathOrSelf(toplevel));
+    });
   }
 
   /**
