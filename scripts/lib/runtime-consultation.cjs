@@ -226,13 +226,13 @@ authorityProtocol = createAuthorityProtocol({
   readJsonDurable, readJsonDurableOptional, readClosedRecord, withLock,
   assertLockedScopeIdentity, readCanonicalRequestRecord, validateTakeoverBinding,
   assertClosedShape, isHexId, isHex64, isNonEmptyString,
-  isNonNegativeInteger, isIsoTimestamp, isEnum, orNull, isBoolean, CliError,
+  isNonNegativeInteger, isIsoTimestamp, isEnum, orNull, isBoolean, isoToMs, CliError,
 });
 const {
   ACTIVATION_V1_FIELDS, validateActivationV1,
   readRequestForTxnOrCorrelationInvalid, readTakeoverIfValid,
   resolveAuthoritativeAttempt, CLAIM_V1_FIELDS, validateClaimV1,
-  ACTIVE_LEASE_V1_FIELDS, validateActiveLeaseV1,
+  ACTIVE_LEASE_V1_FIELDS, validateActiveLeaseV1, leaseHeldByClaim, leaseIsLive,
   ACTIVATION_INTENT_V1_FIELDS, validateActivationIntentV1,
   DELIVERY_V1_FIELDS, validateDeliveryV1,
 } = authorityProtocol;
@@ -847,6 +847,7 @@ const {
 // Transaction commands are composed in the original registration order. Each
 // factory closes over this facade load's own Sets, clocks and poison authority.
 const { minIso, cmdClaim, cmdLeaseHeartbeat } = createClaimLeaseTransaction({
+  leaseHeldByClaim, leaseIsLive,
   ACCEPTED_RESULT_V1_FIELDS, ACTIVE_LEASE_V1_FIELDS, CLAIM_V1_FIELDS, CliError, DURABLE_ABSENT, DURABLE_PENDING, acceptedResultPathFor, accreditCanonicalRequest, activeLeasePathFor,
   assertAcceptedResultCorrelates, assertArtifactMatchesReceipt, assertClosedShape, assertLockedScopeIdentity, assertRequestIdentityMatches, cancelPathFor, canonicalJSONStringify, claimPathFor,
   classifyDurableRead, computeWorktreeId, isHexId, isPoisoned, isoPlusSeconds, isoToMs, markPoisoned, nowIso, path, publishNoClobber, publishReplace, readCanonicalCancelRecordOptional,
@@ -971,6 +972,13 @@ COMMANDS.consult = createConsultCommand({
 const { createActivationResolutionCommands } = require('./runtime-consultation/commands/activation-resolution.cjs');
 const activationResolutionModule = createActivationResolutionCommands({
   ACTIVATION_V1_FIELDS,
+  CLAIM_V1_FIELDS,
+  activeLeasePathFor,
+  claimPathFor,
+  leaseHeldByClaim,
+  leaseIsLive,
+  readClosedRecord,
+  validateActiveLeaseV1,
   DURABLE_PENDING,
   DURABLE_PRESENT,
   activationLivenessDeadline,
