@@ -84,6 +84,9 @@ test('RLDI-01 empirical: ordinary sibling creation inside a directory moves ctim
   const root = mkroot();
   const before = fs.lstatSync(root, { bigint: true });
 
+  // Kernel file timestamps tick coarsely (1 to 10 ms), so a file created in the same tick as the directory leaves its
+  // ctime and mtime unchanged. Let the clock advance first; otherwise this fails on fast filesystems.
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 30);
   fs.writeFileSync(path.join(root, 'sibling-file.txt'), 'x');
   const afterFile = fs.lstatSync(root, { bigint: true });
   assert.notEqual(afterFile.ctimeNs, before.ctimeNs, 'creating a file inside the root must move its ctime -- if this now fails, the exclusion below needs re-deriving, not deleting');

@@ -5,6 +5,14 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 
 ## [Unreleased]
 
+### Added (local CI validation)
+
+- `scripts/sh/local-ci.sh` and its PowerShell twin run the CI shell and hook tests before a push, with the engine chosen in `.androidcommondoc/local-ci.json`: `act` runs the Linux jobs of `reusable-shell-tests.yml` in Docker, one container per Bats shard in parallel (own action cache and artifact port per shard); `native` runs the sharded runner and the Node hook roster on the host with a temporary `HOME` and no global or system git config; `none` disables it. The shard list and the hook skip roster are read from the workflow, which stays the only definition of the jobs. See [local-ci-validation](docs/guides/local-ci-validation.md).
+
+### Changed (CI speed)
+
+- `reusable-shell-tests.yml` runs 8 Bats shards instead of 4, and the hook job no longer waits for the shards (`needs: bats` removed, it installs its own mcp-server and bats), so the critical path is the slowest shard instead of shard plus hooks. `ci-bats-parity.bats` and the shard-planner reality checks now follow the matrix size.
+
 ### Changed (portable agent and memory contract)
 
 - `AGENTS.md` is now the concise cross-runtime authority; `CLAUDE.md` is a thin

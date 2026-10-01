@@ -11,10 +11,10 @@ bats_require_minimum_version 1.5.0
 #   #CP4  Workflow drives bats from the planner's explicit file list, not a
 #         bare directory target or a fragile shell glob
 #   #CP5  Explicit glob count equals directory count for the current suite
-#   #CP6  Workflow declares the required 4-shard bats matrix
+#   #CP6  Workflow declares one bats shard matrix and plans with the same shard count
 #   #CP7  Per-shard artifact upload name includes the matrix shard id (never collides)
 #   #CP8  Hook-install/Node-hook-test steps run exactly once, in a post-shard
-#         job (needs: bats), never inside the matrix job body
+#         job (independent of the shards), never inside the matrix job body
 #   #CP9  Failure-artifact upload is scoped to the shard's log + manifest,
 #         never the whole scripts/tests/ tree
 #   #CP10 Any shard whose files need mcp-server (per the planner's own
@@ -131,14 +131,20 @@ README_WORKFLOW="$REPO_ROOT/.github/workflows/readme-audit.yml"
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
-# #CP6  Workflow declares the required 4-shard bats matrix
+# #CP6  Workflow declares one bats shard matrix and plans with the same shard count
 # ─────────────────────────────────────────────────────────────────────────────
-@test "#CP6 PARITY: workflow declares a 4-shard bats matrix (do not use Bats --jobs)" {
+@test "#CP6 PARITY: the shard matrix and the planner's --shard-count are the same number (do not use Bats --jobs)" {
     [ -f "$WORKFLOW" ] || {
         echo "WORKFLOW not found: $WORKFLOW" >&2
         return 1
     }
-    grep -qE 'shard:[[:space:]]*\[0,[[:space:]]*1,[[:space:]]*2,[[:space:]]*3\]' "$WORKFLOW"
+    local matrix_line matrix_count planned
+    matrix_line="$(grep -E '^[[:space:]]*shard:[[:space:]]*\[' "$WORKFLOW" | head -n 1)"
+    [ -n "$matrix_line" ]
+    matrix_count="$(printf '%s' "$matrix_line" | sed -e 's/.*\[//' -e 's/\].*//' | tr ',' '\n' | grep -c .)"
+    planned="$(grep -oE -- '--shard-count [0-9]+' "$WORKFLOW" | head -n 1 | awk '{print $2}')"
+    [ "$matrix_count" -ge 4 ]
+    [ "$matrix_count" = "$planned" ]
     ! grep -qE -- '--jobs' "$WORKFLOW"
 }
 
@@ -163,9 +169,10 @@ README_WORKFLOW="$REPO_ROOT/.github/workflows/readme-audit.yml"
 # Splits the workflow source at the `bats-post:` job marker: the matrix
 # `bats:` job body (everything before the marker) must not itself install
 # hooks or run the Node test roster; the post-shard job (after the marker)
-# must, and must declare `needs: bats` so it waits for all four shards.
+# must, and must NOT declare `needs: bats`: it installs its own mcp-server and bats, so it runs beside the shards
+# instead of after them (the critical path is the slowest shard, not shard + hooks).
 # ─────────────────────────────────────────────────────────────────────────────
-@test "#CP8 PARITY: hook-install and Node.js hook-test steps run once, in a post-shard job with needs: bats" {
+@test "#CP8 PARITY: hook-install and Node.js hook-test steps run once, in a post-shard job that does not wait for the shards" {
     [ -f "$WORKFLOW" ] || {
         echo "WORKFLOW not found: $WORKFLOW" >&2
         return 1
@@ -183,7 +190,7 @@ README_WORKFLOW="$REPO_ROOT/.github/workflows/readme-audit.yml"
     grep -qF 'Install and verify git hooks' <<< "$after_post"
     grep -qF 'Run Node.js hook tests' <<< "$after_post"
     # POSIX [[:space:]], not \s (a GNU/PCRE extension BSD/macOS grep -E rejects).
-    grep -qE '^[[:space:]]*needs:[[:space:]]*bats[[:space:]]*$' <<< "$after_post"
+    ! grep -qE '^[[:space:]]*needs:' <<< "$after_post"
 }
 
 # ─────────────────────────────────────────────────────────────────────────────

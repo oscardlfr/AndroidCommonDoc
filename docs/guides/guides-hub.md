@@ -22,6 +22,7 @@ Setup, configuration, and authoring guides for the L0/L1/L2 ecosystem.
 | Document | Description |
 |----------|-------------|
 | [getting-started](getting-started.md) | **Full L0/L1/L2 setup from scratch** — manifest, Detekt, MCP, CI (EN + ES) |
+| [local-ci-validation](local-ci-validation.md) | Run the CI shell and hook tests locally with act or natively before pushing |
 | [runtime-consumer-operations](runtime-consumer-operations.md) | Exact L1/L2 runtime install, launch, worktree, recovery, and Claude recertification procedure |
 | [runtime-consumer-research-mode](runtime-consumer-research-mode.md) | Bounded authenticated Context7 profile; distinct from safe-mode recovery |
 | [detekt-config](detekt-config.md) | Detekt L0/L1 config hierarchy, rule catalog, and how to add rules |

@@ -51,6 +51,8 @@ bash adapters/generate-all.sh
 
 # MCP server tests
 cd mcp-server && npm test
+
+bash scripts/sh/local-ci.sh   # CI shell and hook tests locally before a push: docs/guides/local-ci-validation.md
 ```
 
 Prefix shell commands with `rtk` when it is installed. The complete RTK command catalog is tool documentation, not startup context.

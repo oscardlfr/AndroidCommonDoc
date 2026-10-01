@@ -16,6 +16,14 @@ const {
 const PLANNER_PATH = path.join(__dirname, '..', 'tools', 'plan-bats-shards.cjs');
 const REPO_ROOT = path.resolve(__dirname, '..', '..');
 
+// The workflow matrix is the one definition of the shard count; the REALITY checks plan with the same number.
+const CI_SHARD_COUNT = (() => {
+  const workflow = fs.readFileSync(path.join(REPO_ROOT, '.github', 'workflows', 'reusable-shell-tests.yml'), 'utf8');
+  const matrix = workflow.match(/^\s*shard:\s*\[([^\]]*)\]/m);
+  assert.ok(matrix, 'the workflow must declare a shard matrix');
+  return matrix[1].split(',').length;
+})();
+
 function makeFixture(nameToBytes) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'plan-bats-shards-fixture-'));
   for (const [name, bytes] of Object.entries(nameToBytes)) {
@@ -461,10 +469,10 @@ test('formatPlanReport exposes needsMcpServer per shard', () => {
 
 // ── reality check against the real suite ────────────────────────────────
 
-test('REALITY: the real scripts/tests suite plans into 4 shards, exhaustively, with the largest file whole in exactly one shard', () => {
+test('REALITY: the real scripts/tests suite plans into the CI shard count, exhaustively, with the largest file whole in exactly one shard', () => {
   const realTestsDir = path.join(REPO_ROOT, 'scripts', 'tests');
   const inventory = discoverInventory(realTestsDir);
-  const plan = buildPlan(inventory, 4);
+  const plan = buildPlan(inventory, CI_SHARD_COUNT);
   const assigned = allFiles(plan);
   assert.strictEqual(new Set(assigned).size, inventory.length);
   assert.deepStrictEqual(new Set(assigned), new Set(inventory.map((f) => f.relPath)));
@@ -494,7 +502,7 @@ test('REALITY: the real scripts/tests suite plans into 4 shards, exhaustively, w
 // grant-mechanics tests that never touch a live plane). The current hot set
 // is therefore FOUR files, known by name here (not a display-name/
 // description regex) and expected in four DIFFERENT shards now that
-// shardCount also happens to be four.
+// the CI shard count is at least four.
 const HOT_BASENAMES = Object.freeze([
   'runtime-consultation-bridge.bats',
   'runtime-consultation-role-gate-plane.bats',
@@ -513,7 +521,7 @@ test('REALITY WEIGHT: bridge/role-gate-plane/role-gate-evidence/e2e (the only fi
     assert.ok(found, `expected suite file missing: ${name}`);
     return found;
   });
-  const plan = buildPlan(inventory, 4);
+  const plan = buildPlan(inventory, CI_SHARD_COUNT);
   const shardOf = (relPath) => plan.find((s) => s.files.some((f) => f.relPath === relPath)).index;
   const shardIndices = hotEntries.map((f) => shardOf(f.relPath));
   assert.strictEqual(
@@ -553,9 +561,13 @@ const MCP_PREREQUISITE_BASENAMES = Object.freeze([
   'runtime-consultation-role-gate-plane.bats',
   'runtime-consultation-role-gate-evidence.bats',
   'runtime-consultation-e2e.bats',
+  // They load the yaml parser from mcp-server/node_modules. With four shards every shard held a hot file and so built
+  // mcp-server, which hid the dependency; with more shards the ones without it must declare it.
+  'wave-phase-gate.bats',
+  'resolve-required-roles.bats',
 ]);
 
-test('REALITY MCP: exactly the four known files need mcp-server (including the split role-gate siblings); every other suite file, including role-gate-core.bats, does not', () => {
+test('REALITY MCP: exactly the known files need mcp-server (including the split role-gate siblings); every other suite file, including role-gate-core.bats, does not', () => {
   const realTestsDir = path.join(REPO_ROOT, 'scripts', 'tests');
   const inventory = discoverInventory(realTestsDir);
   const isMcpHot = (relPath) => MCP_PREREQUISITE_BASENAMES.some((name) => relPath.endsWith('/' + name));
@@ -566,10 +578,10 @@ test('REALITY MCP: exactly the four known files need mcp-server (including the s
   );
 });
 
-test('REALITY MCP: in the real 4-shard plan, every shard needsMcpServer exactly iff it holds an mcp-prerequisite file', () => {
+test('REALITY MCP: in the real CI-shard-count plan, every shard needsMcpServer exactly iff it holds an mcp-prerequisite file', () => {
   const realTestsDir = path.join(REPO_ROOT, 'scripts', 'tests');
   const inventory = discoverInventory(realTestsDir);
-  const plan = buildPlan(inventory, 4);
+  const plan = buildPlan(inventory, CI_SHARD_COUNT);
   const isMcpHot = (relPath) => MCP_PREREQUISITE_BASENAMES.some((name) => relPath.endsWith('/' + name));
   const mcpShardIndices = new Set(
     plan.filter((s) => s.files.some((f) => isMcpHot(f.relPath))).map((s) => s.index),
