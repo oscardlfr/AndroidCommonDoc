@@ -78,4 +78,14 @@ function installConsumerFixture(layer) {
   return { consumerRoot, toolkitRoot: ROOT, launcher: path.join(consumerRoot, '.claude/runtime/l0-toolkit-launcher.cjs') };
 }
 
-module.exports = { installConsumerFixture };
+// A consumer's host composition reads the signed Claude host contract from its toolkit (this checkout), never from
+// the consumer, so consumer-root host-composition tests can only run where the toolkit ships one for this platform.
+function toolkitHostContractAvailable() {
+  if (fs.existsSync(path.join(ROOT, 'setup', `claude-host-contract.${process.platform}.json`))) return true;
+  try {
+    const legacy = JSON.parse(fs.readFileSync(path.join(ROOT, 'setup', 'claude-host-contract.json'), 'utf8'));
+    return Boolean(legacy && legacy.certificate && legacy.certificate.os === process.platform);
+  } catch { return false; }
+}
+
+module.exports = { installConsumerFixture, toolkitHostContractAvailable };

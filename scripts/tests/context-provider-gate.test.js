@@ -5208,8 +5208,13 @@ const HARNESS_SUFFIX_NEGATIVE_TABLE = [
 // Toolkit root (this checkout) and consumer root are physically distinct.
 // ═════════════════════════════════════════════════════════════════════════
 {
-  const { test: consultLauncherTest } = require('node:test');
-  const { installConsumerFixture } = require('./lib/consumer-runtime-fixture.cjs');
+  const { test } = require('node:test');
+  const { installConsumerFixture, toolkitHostContractAvailable } = require('./lib/consumer-runtime-fixture.cjs');
+  // Consumer host composition needs the toolkit's signed host contract for this platform (darwin and win32 ship one).
+  const consultLauncherSkip = toolkitHostContractAvailable()
+    ? false
+    : `no signed Claude host contract for ${process.platform} in this toolkit; consumer host composition is unavailable here by design`;
+  const consultLauncherTest = (name, fn) => test(name, { skip: consultLauncherSkip }, fn);
   const DRAFT_MARKER = 'STATUS: DRAFT-CONTEXT-PENDING';
 
   function consultFixture(slug, planText) {
