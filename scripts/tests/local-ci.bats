@@ -55,7 +55,11 @@ write_config() { printf '%s\n' "$1" > "$PROJECT/.androidcommondoc/local-ci.json"
   local_ci
   [ "$status" -eq 2 ]
   [[ "$output" == *"needs Docker"* ]]
-  [[ "$output" == *"install"* ]]
+  case "$(uname -s)" in
+    Darwin) [[ "$output" == *"brew install colima docker act"* ]] ;;
+    MINGW*|MSYS*|CYGWIN*) [[ "$output" == *"winget install nektos.act"* ]] ;;
+    *) [[ "$output" == *"Install: Docker Engine"* ]] ;;
+  esac
 }
 
 @test "engine act with Docker but without act fails naming act and exit 2" {
@@ -64,6 +68,16 @@ write_config() { printf '%s\n' "$1" > "$PROJECT/.androidcommondoc/local-ci.json"
   local_ci
   [ "$status" -eq 2 ]
   [[ "$output" == *"needs act"* ]]
+  [[ "$output" == *"Install:"* ]]
+}
+
+@test "engine act with a stopped Docker daemon fails before running anything, exit 2" {
+  write_config '{"engine": "act"}'
+  with_docker_and_act
+  printf '#!/bin/sh\nexit 1\n' > "$FAKEBIN/docker"
+  local_ci
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"daemon is not running"* ]]
 }
 
 @test "engine act runs one container per shard of the workflow matrix plus the hooks job" {
@@ -76,6 +90,9 @@ write_config() { printf '%s\n' "$1" > "$PROJECT/.androidcommondoc/local-ci.json"
   [[ "$output" == *"-j bats-post"* ]]
   [[ "$output" == *"ubuntu-latest=catthehacker/ubuntu:act-latest"* ]]
   [[ "$output" == *"androidcommondoc_path=."* ]]
+  # act runs a clean clone of the committed HEAD, never the (possibly linked-worktree) checkout itself.
+  [[ "$output" == *"-C CLONE_OF_HEAD"* ]]
+  [[ "$output" == *"-W .github/workflows/reusable-shell-tests.yml"* ]]
 }
 
 @test "engine act runs the containers as a non-root user with an init and a writable HOME, like a GitHub runner" {
@@ -98,6 +115,20 @@ write_config() { printf '%s\n' "$1" > "$PROJECT/.androidcommondoc/local-ci.json"
   local_ci --dry-run --shards "9"
   [ "$status" -eq 2 ]
   [[ "$output" == *"not a shard of the workflow matrix"* ]]
+}
+
+@test "--shards is an act option: with engine native it is a usage error" {
+  local_ci --dry-run --shards "1"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"--shards needs engine act"* ]]
+}
+
+@test "native refuses to start without the built mcp-server and names the command, exit 2" {
+  mkdir -p "$PROJECT/mcp-server"
+  : > "$PROJECT/mcp-server/package-lock.json"
+  local_ci --job hooks
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"npm ci && npm run build"* ]]
 }
 
 @test "the engine flag wins over the config file" {
@@ -126,10 +157,20 @@ write_config() { printf '%s\n' "$1" > "$PROJECT/.androidcommondoc/local-ci.json"
   rm "$PROJECT/.androidcommondoc/local-ci.json"
   local_ci --dry-run --job everything
   [ "$status" -eq 2 ]
+  local_ci --dry-run --engine
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"--engine needs a value"* ]]
   rm "$PROJECT/.github/workflows/reusable-shell-tests.yml"
   local_ci --dry-run
   [ "$status" -eq 2 ]
   [[ "$output" == *"workflow not found"* ]]
+}
+
+@test "--help prints the usage header only, exit 0" {
+  local_ci --help
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Exit codes:"* ]]
+  [[ "$output" != *"WORKFLOW_RELATIVE="* ]]
 }
 
 @test "the PowerShell twin forwards to the same bash script" {

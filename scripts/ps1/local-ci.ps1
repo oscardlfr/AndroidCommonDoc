@@ -4,7 +4,7 @@
 # (scripts/sh/ <-> scripts/ps1/). Requires bash on PATH (Git for Windows provides it).
 #
 # Runs what GitHub CI runs for the shell and hook tests, with the engine chosen in .androidcommondoc/local-ci.json
-# (act, native or none). Accepts --project-root, --engine, --job, --max-parallel, --dry-run, all forwarded verbatim.
+# (act, native or none). Accepts --project-root, --engine, --job, --shards, --max-parallel, --dry-run, -h/--help, all forwarded verbatim.
 # Exit codes: 0 passed, 1 a test job failed, 2 usage/configuration/precondition error.
 
 [CmdletBinding()]

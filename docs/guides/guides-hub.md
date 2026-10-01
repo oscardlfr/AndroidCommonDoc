@@ -8,7 +8,7 @@ layer: L0
 category: guides
 description: "Guides hub: getting started, Detekt configuration, doc authoring templates"
 version: 2
-last_updated: "2026-09-26"
+last_updated: "2026-10-01"
 ---
 
 # Guides
