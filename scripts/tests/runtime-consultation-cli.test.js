@@ -7054,3 +7054,134 @@ test('a BUSY persistent target with a live, unconsumed resume handle is selected
     assert.strictEqual(authenticated.native_target_binding_id, reparked.binding_id);
   });
 });
+
+// ═════════════════════════════════════════════════════════════════════
+// The activation liveness window (about five minutes) only gives a worker time to CLAIM. A worker that claimed in time
+// and keeps renewing its lease must still be able to renew and publish after that window: the lease is the authority.
+// Each CLI step runs under the injectable fake clock (--fixed-clock + RUNTIME_CONSULTATION_FAKE_CLOCK); the in-process
+// resolver reads the real clock, so "now" is the real time and the earlier steps sit in the past:
+//   now-400s publish and dispatch -> activation window ends now-100s
+//   now-390s claim                -> lease ends now-90s
+//   now-100s heartbeat            -> lease ends now+200s (only in the live-lease scenario)
+// ═════════════════════════════════════════════════════════════════════
+function leaseAuthorityScenario(ctx, { heartbeat }) {
+  const atOffset = (seconds) => new Date(Date.now() + seconds * 1000).toISOString().replace(/\.\d{3}Z$/, 'Z');
+  const step = (offsetSeconds, args) => spawnCli(args.concat('--fixed-clock'), {
+    NODE_ENV: 'test',
+    RUNTIME_CONSULTATION_TEST_CAPABILITY: TEST_CAPABILITY,
+    RUNTIME_CONSULTATION_FAKE_CLOCK: atOffset(offsetSeconds),
+  });
+  const intentB64 = base64urlIntent({
+    target_role: 'arch-testing',
+    question: 'lease-authority fixture ' + crypto.randomBytes(4).toString('hex'),
+    expected_result_kind: 'TEST_RESULT',
+    expiry: isoInFuture(1800000),
+  });
+  const published = step(-400, [
+    'publish-request', '--coordination-root', ctx.coordRoot, '--plan', ctx.planPath,
+    '--subject-bundle', ctx.subjectBundlePath, '--intent', intentB64,
+  ]);
+  const publishedData = assertCliResult(published, { command: 'publish-request', status: 'SUCCESS', detail_code: 'NONE' });
+  assertCliResult(step(-400, ['dispatch', '--coordination-root', ctx.coordRoot, '--request', publishedData.artifact_ref]),
+    { command: 'dispatch', status: 'SUCCESS', detail_code: 'NONE' });
+  const claimed = assertCliResult(step(-390, [
+    'claim', '--coordination-root', ctx.coordRoot, '--request', publishedData.artifact_ref, '--role', 'arch-testing',
+  ]), { command: 'claim', status: 'SUCCESS', detail_code: 'NONE' });
+  if (heartbeat) {
+    assertCliResult(step(-100, [
+      'lease-heartbeat', '--coordination-root', ctx.coordRoot, '--request', publishedData.artifact_ref, '--claim', claimed.artifact_ref,
+    ]), { command: 'lease-heartbeat', status: 'SUCCESS', detail_code: 'NONE' });
+  }
+  return { requestPath: publishedData.artifact_ref, claimPath: claimed.artifact_ref, coordRoot: ctx.coordRoot };
+}
+
+test('lease authority: after the activation window, a live lease backed by its own claim still resolves the activation; without the option it does not', () => {
+  withProject('rcc-node-lease-authority-live-wave', (ctx) => {
+    const s = leaseAuthorityScenario(ctx, { heartbeat: true });
+    assert.strictEqual(rc.resolveActivationForRequestPath(s.requestPath).ok, false,
+      'the activation window is over, so the strict form (what claim keeps using) refuses');
+    const backed = rc.resolveActivationForRequestPath(s.requestPath, { leaseAuthority: { claimPath: s.claimPath, coordRoot: s.coordRoot } });
+    assert.strictEqual(backed.ok, true, JSON.stringify(backed));
+    assert.ok(backed.activation, 'the correlated activation is returned');
+  });
+});
+
+test('lease authority: an expired lease is refused even with the option', () => {
+  withProject('rcc-node-lease-authority-expired-wave', (ctx) => {
+    const s = leaseAuthorityScenario(ctx, { heartbeat: false });
+    const backed = rc.resolveActivationForRequestPath(s.requestPath, { leaseAuthority: { claimPath: s.claimPath, coordRoot: s.coordRoot } });
+    assert.strictEqual(backed.ok, false, 'the lease ended 90s ago and was never renewed');
+  });
+});
+
+test('lease authority: a claim that is not the lease holder, a missing claim and a claim outside its canonical path are refused', () => {
+  withProject('rcc-node-lease-authority-foreign-wave', (ctx) => {
+    const s = leaseAuthorityScenario(ctx, { heartbeat: true });
+    const option = (claimPath) => ({ leaseAuthority: { claimPath, coordRoot: s.coordRoot } });
+    assert.strictEqual(rc.resolveActivationForRequestPath(s.requestPath, option(s.claimPath)).ok, true, 'control: the real claim passes');
+
+    assert.strictEqual(rc.resolveActivationForRequestPath(s.requestPath, option(path.join(path.dirname(s.claimPath), 'no-such-claim.json'))).ok, false,
+      'a claim file that does not exist');
+    const copy = path.join(path.dirname(s.claimPath), 'copy-of-claim.json');
+    fs.copyFileSync(s.claimPath, copy);
+    assert.strictEqual(rc.resolveActivationForRequestPath(s.requestPath, option(copy)).ok, false,
+      'a copy of the claim is not stored at its own canonical path');
+    fs.rmSync(copy);
+
+    // The lease is held by a different claim: another worker's lease must never back this claim.
+    const txnDir = path.dirname(s.requestPath);
+    const leasePath = path.join(txnDir, 'active-leases', JSON.parse(fs.readFileSync(s.claimPath, 'utf8')).attempt_id + '.json');
+    const lease = JSON.parse(fs.readFileSync(leasePath, 'utf8'));
+    fs.writeFileSync(leasePath, JSON.stringify(Object.assign({}, lease, { claim_digest: 'f'.repeat(64) })));
+    assert.strictEqual(rc.resolveActivationForRequestPath(s.requestPath, option(s.claimPath)).ok, false,
+      'a lease whose claim_digest is another claim');
+  });
+});
+
+// Every CLI step the wrapper authorizes mints its own live RoleActorBinding for the same role and scope, while the gate
+// demands exactly one. A real worker has one, so keep a single binding (the newest) before driving the gate.
+function keepOneActorBinding(ctx) {
+  const dir = path.join(rll.registryRepoDir(ctx.projDir), 'role-actor-bindings');
+  const files = fs.readdirSync(dir).map((name) => ({ name, mtime: fs.statSync(path.join(dir, name)).mtimeMs }))
+    .sort((a, b) => b.mtime - a.mtime);
+  for (const stale of files.slice(1)) fs.rmSync(path.join(dir, stale.name));
+}
+
+test('lease authority at the target gate: lease-heartbeat and publish-result past the activation window get their grant while the lease is live, claim keeps the strict window, an expired lease is denied', () => {
+  const gate = path.resolve(__dirname, '..', '..', '.claude', 'hooks', 'runtime-consultation-target-gate.js');
+  const run = (ctx, subcommand, s, extra) => {
+    const argv = [subcommand, '--coordination-root', s.coordRoot, '--request', s.requestPath].concat(extra);
+    const command = rll.renderPosixDirect(['node', IMPL].concat(argv));
+    const result = spawnSync(process.execPath, [gate], {
+      encoding: 'utf8',
+      env: Object.assign({}, process.env, { CLAUDE_PROJECT_DIR: ctx.projDir }),
+      input: JSON.stringify({
+        tool_name: 'Bash', tool_input: { command }, agent_type: 'arch-testing',
+        session_id: 'lease-authority-session', agent_id: 'lease-authority-agent',
+      }),
+    });
+    assert.strictEqual(result.status, 0, result.stderr);
+    return result.stdout ? JSON.parse(result.stdout).hookSpecificOutput : null;
+  };
+  // The CLI wrapper that ran the claim above already minted the calling role's live RoleActorBinding for this scope.
+
+  withProject('rcc-node-lease-authority-gate-live-wave', (ctx) => {
+    const s = leaseAuthorityScenario(ctx, { heartbeat: true });
+    keepOneActorBinding(ctx);
+    for (const subcommand of ['lease-heartbeat', 'publish-result']) {
+      const out = run(ctx, subcommand, s, ['--claim', s.claimPath]);
+      assert.ok(out && out.permissionDecision === 'allow' && /--target-binding/.test(out.updatedInput.command),
+        subcommand + ' with a live lease past the window must be granted: ' + JSON.stringify(out));
+    }
+    const claim = run(ctx, 'claim', s, ['--role', 'arch-testing']);
+    assert.strictEqual(claim && claim.permissionDecision, 'deny', 'claim keeps the strict activation window: ' + JSON.stringify(claim));
+  });
+
+  withProject('rcc-node-lease-authority-gate-expired-wave', (ctx) => {
+    const s = leaseAuthorityScenario(ctx, { heartbeat: false });
+    for (const subcommand of ['lease-heartbeat', 'publish-result']) {
+      const out = run(ctx, subcommand, s, ['--claim', s.claimPath]);
+      assert.strictEqual(out && out.permissionDecision, 'deny', subcommand + ' with an expired lease is denied: ' + JSON.stringify(out));
+    }
+  });
+});

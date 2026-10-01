@@ -12,6 +12,9 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 ### Changed (CI speed)
 
 - `reusable-shell-tests.yml` runs 8 Bats shards instead of 4, and the hook job no longer waits for the shards (`needs: bats` removed, it installs its own mcp-server and bats), so the critical path is the slowest shard instead of shard plus hooks. `ci-bats-parity.bats` and the shard-planner reality checks now follow the matrix size.
+### Fixed (consult lease authority)
+
+- A consultation worker that claimed in time and keeps its lease alive can renew (`lease-heartbeat`) and publish (`publish-result`) after the activation liveness window (about five minutes) instead of being denied with `request activation is not resolvable` and ending in `WORKER_LEASE_EXPIRED`. `resolveActivationForRequestPath` takes an explicit `leaseAuthority` option that the target gate passes only for those two subcommands; the activation is then accepted past its window only while the presented claim is the current attempt's canonical claim, the active lease is held by exactly that claim (`leaseHeldByClaim`, now shared with the heartbeat) and the lease and the request are live (`leaseIsLive`). `claim` keeps the strict window; the window and takeover are unchanged.
 
 ### Changed (portable agent and memory contract)
 

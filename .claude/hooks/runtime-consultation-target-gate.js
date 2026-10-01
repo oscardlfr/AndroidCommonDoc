@@ -414,7 +414,17 @@ function handleConsultationTargetOwning(tokens, cliIdx, toolInput, data) {
   if (requestPathForSubcommand) {
     let resolved;
     try {
-      resolved = rc.resolveActivationForRequestPath(requestPathForSubcommand);
+      // The activation window only lets a worker claim in time. Once it holds a claim, the lease is the authority, so
+      // a renewal or a result may outlive that window while its own live lease backs it (resolver checks the claim,
+      // the lease holder and both expiries). `claim` itself keeps the strict window.
+      const claimFlag = values['--claim'];
+      const coordRootFlag = values['--coordination-root'];
+      const leaseBacked = (subcommand === 'lease-heartbeat' || subcommand === 'publish-result')
+        && typeof claimFlag === 'string' && claimFlag.length > 0
+        && typeof coordRootFlag === 'string' && coordRootFlag.length > 0;
+      resolved = leaseBacked
+        ? rc.resolveActivationForRequestPath(requestPathForSubcommand, { leaseAuthority: { claimPath: claimFlag, coordRoot: coordRootFlag } })
+        : rc.resolveActivationForRequestPath(requestPathForSubcommand);
     } catch {
       resolved = { ok: false };
     }

@@ -4,6 +4,13 @@
 
 function createActivationResolutionCommands({
   ACTIVATION_V1_FIELDS,
+  CLAIM_V1_FIELDS,
+  activeLeasePathFor,
+  claimPathFor,
+  leaseHeldByClaim,
+  leaseIsLive,
+  readClosedRecord,
+  validateActiveLeaseV1,
   DURABLE_PENDING,
   DURABLE_PRESENT,
   activationLivenessDeadline,
@@ -20,6 +27,29 @@ function createActivationResolutionCommands({
   readCanonicalRequestRecord,
   resolveAuthoritativeAttempt,
 }) {
+/**
+ * Read-only: true when the claim at `options.leaseAuthority.claimPath` is stored at its own canonical path for the
+ * current attempt, the active lease is held by exactly that claim, and the lease and the request are still live.
+ */
+function leaseHoldsPastWindow(options, txnDir, reqObj, auth, nowMs) {
+  const authority = options && options.leaseAuthority;
+  if (!authority || typeof authority.claimPath !== 'string' || typeof authority.coordRoot !== 'string') return false;
+  try {
+    const claimPath = path.resolve(authority.claimPath);
+    const claimRec = readClosedRecord(claimPath, CLAIM_V1_FIELDS, {
+      absentDetail: 'CORRELATION_INVALID',
+      absentMessage: 'claim file does not resolve',
+    });
+    if (claimPath !== path.resolve(claimPathFor(txnDir, claimRec.obj.attempt_id))) return false;
+    if (claimRec.obj.attempt_id !== auth.attemptId || claimRec.obj.lease_epoch !== auth.leaseEpoch) return false;
+    if (claimRec.obj.request_id !== reqObj.request_id || claimRec.obj.claimant_role !== reqObj.target_role) return false;
+    const lease = validateActiveLeaseV1(activeLeasePathFor(txnDir, auth.attemptId), authority.coordRoot);
+    return leaseHeldByClaim(lease, claimRec, auth) && leaseIsLive(lease, reqObj, nowMs);
+  } catch (err) {
+    return false;
+  }
+}
+
 /**
  * M7 completeness Part C follow-up (2026-08-09, PLAN.md §15d, user Block 3
  * point 4): reads the request at `requestPath`, resolves its CURRENT
@@ -39,10 +69,16 @@ function createActivationResolutionCommands({
  * RoleActorBinding path. Returns `{ok:false}` only for a genuinely
  * malformed/absent/non-durable REQUEST -- the caller must reject the
  * command outright in that case, never guess.
+ * The activation liveness window only gives a worker time to CLAIM. After a valid claim the lease is the authority,
+ * so a caller that renews or publishes may pass `options.leaseAuthority = {claimPath, coordRoot}`: an activation past
+ * its window is then still resolved, but only while the presented claim is this attempt's current claim and its
+ * active lease is held by that claim and is live. Every other check stays; without the option an expired activation
+ * is refused as before.
  * @param {string} requestPath
+ * @param {{leaseAuthority?: {claimPath: string, coordRoot: string}}} [options]
  * @returns {{ok:true,requestId:string,attemptId:string,leaseEpoch:number,activation:object|null}|{ok:false}}
  */
-function resolveActivationForRequestPath(requestPath) {
+function resolveActivationForRequestPath(requestPath, options) {
   const txnDir = path.dirname(requestPath);
   let reqObj;
   let reqDigest;
@@ -108,7 +144,7 @@ function resolveActivationForRequestPath(requestPath) {
       if (
         createdAtMs > nowMs || createdAtMs > expiryMs
         || a.activation_liveness_expiry !== activationLivenessDeadline(reqObj)
-        || nowMs >= expiryMs
+        || (nowMs >= expiryMs && !leaseHoldsPastWindow(options, txnDir, reqObj, auth, nowMs))
       ) {
         // R5 lineage: present, correlated, but EXPIRED (or a canonical-time
         // violation) -- never treated as still valid, never folded into

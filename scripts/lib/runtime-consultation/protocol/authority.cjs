@@ -23,6 +23,7 @@ function createAuthorityProtocol(deps) {
     isEnum,
     orNull,
     isBoolean,
+    isoToMs,
     CliError,
   } = deps;
 
@@ -192,6 +193,24 @@ function validateActiveLeaseV1(artifactPath, coordRoot) {
   });
 }
 
+/**
+ * True when `lease` is the active lease of exactly this claim for the current attempt: same attempt and epoch, same
+ * holder, same claimant instance and worker session, and the digest of the claim that created it. Identity only.
+ */
+function leaseHeldByClaim(lease, claimRec, auth) {
+  return lease.attempt_id === auth.attemptId
+    && lease.lease_epoch === auth.leaseEpoch
+    && lease.holder_role === claimRec.obj.claimant_role
+    && lease.claimant_instance_id === claimRec.obj.claimant_instance_id
+    && (lease.worker_session_id || null) === (claimRec.obj.worker_session_id || null)
+    && lease.claim_digest === claimRec.digest;
+}
+
+/** True while `now` is strictly before both the lease expiry and the request expiry (equality is expired). */
+function leaseIsLive(lease, reqObj, nowMs) {
+  return nowMs < isoToMs(lease.lease_expiry) && nowMs < isoToMs(reqObj.expiry);
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // `activation-intent` WAL (record #5b) -- field table PLAN.md ~L394-408
 // ─────────────────────────────────────────────────────────────────────────────
@@ -249,6 +268,8 @@ function validateDeliveryV1(artifactPath) {
     validateClaimV1,
     ACTIVE_LEASE_V1_FIELDS,
     validateActiveLeaseV1,
+    leaseHeldByClaim,
+    leaseIsLive,
     ACTIVATION_INTENT_V1_FIELDS,
     validateActivationIntentV1,
     DELIVERY_V1_FIELDS,

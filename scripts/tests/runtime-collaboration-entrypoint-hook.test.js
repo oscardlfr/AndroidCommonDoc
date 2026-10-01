@@ -681,13 +681,15 @@ for (const [code, mutate, guidance] of CLASS_DENIALS) {
 
 // A wave whose HEAD, PLAN or state moved after it was bound must say how to recover, not hit the generic scope error.
 {
+  // Fixtures here are linked worktrees of this repository: nothing may leak an identity into its shared .git/config.
+  const localIdentity = () => ['user.name', 'user.email'].map((key) => spawnSync('git', ['config', '--local', '--get', key], { cwd: REPO_ROOT, encoding: 'utf8' }).stdout.trim());
+  const identityBefore = localIdentity();
   const DRIFT_DENIALS = [
     ['wave-control-state-drift', { initialize: true }, ({ plan }) => {
-      // The fixture repository has no identity of its own and CI has no global one: set it where the commit is made.
+      // CI has no global git identity, and the fixture root is a linked worktree of THIS repository, whose `git config`
+      // writes to the shared .git/config. Give the identity to this one commit only (-c), never to the config.
       const fixtureRoot = path.dirname(path.dirname(path.dirname(plan)));
-      gitIn(fixtureRoot, ['config', 'user.email', 'fixture@test.local']);
-      gitIn(fixtureRoot, ['config', 'user.name', 'Fixture']);
-      gitIn(fixtureRoot, ['commit', '-q', '--allow-empty', '-m', 'test: move head']);
+      gitIn(fixtureRoot, ['-c', 'user.email=fixture@test.local', '-c', 'user.name=Fixture', 'commit', '-q', '--allow-empty', '-m', 'test: move head']);
     }, /start a new wave slug/],
     ['wave-control-plan-drift', { initialize: true }, ({ plan }) => fs.appendFileSync(plan, '\nA line added after the wave was initialized.\n'), /start a new wave slug for the changed PLAN/],
     ['wave-control-state-missing', { entrypoint: 'work' }, () => {}, /wave-control init command/],
@@ -700,6 +702,7 @@ for (const [code, mutate, guidance] of CLASS_DENIALS) {
     console.log('PASS: case-17-' + code);
     passed += 1;
   }
+  assert.deepStrictEqual(localIdentity(), identityBefore, 'case-17 must not write a git identity into the real repository config');
 }
 
 assert.strictEqual(passed, 36);

@@ -4,6 +4,8 @@
 // upward facade import; every authority, clock and durability seam is injected.
 function createClaimLeaseTransaction(deps) {
   const {
+    leaseHeldByClaim,
+    leaseIsLive,
     ACCEPTED_RESULT_V1_FIELDS,
     ACTIVE_LEASE_V1_FIELDS,
     CLAIM_V1_FIELDS,
@@ -343,14 +345,7 @@ function createClaimLeaseTransaction(deps) {
 
       // Never revive a superseded or foreign lease: the existing lease must itself match
       // the current attempt/epoch AND the presenting claim's own identity fields.
-      if (
-        existing.attempt_id !== auth.attemptId
-        || existing.lease_epoch !== auth.leaseEpoch
-        || existing.holder_role !== claimRec.obj.claimant_role
-        || existing.claimant_instance_id !== claimRec.obj.claimant_instance_id
-        || (existing.worker_session_id || null) !== (claimRec.obj.worker_session_id || null)
-        || existing.claim_digest !== claimRec.digest
-      ) {
+      if (!leaseHeldByClaim(existing, claimRec, auth)) {
         throw new CliError('INVALID', 'AUTHORITY_INVALID', 'existing active-lease does not match the current attempt/claimant -- refusing to refresh a stale or foreign lease');
       }
 
@@ -358,7 +353,7 @@ function createClaimLeaseTransaction(deps) {
       // is already expired. Never revive an expired lease.
       const now = nowIso();
       const nowMs = isoToMs(now);
-      if (!(nowMs < isoToMs(existing.lease_expiry)) || !(nowMs < isoToMs(reqObj.expiry))) {
+      if (!leaseIsLive(existing, reqObj, nowMs)) {
         throw new CliError('INVALID', 'AUTHORITY_INVALID', 'active-lease or request has already expired; heartbeat rejected');
       }
 
