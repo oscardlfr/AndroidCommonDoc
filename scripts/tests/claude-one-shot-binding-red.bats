@@ -1228,6 +1228,46 @@ _cosb_target_gate_claim_with_identity() {
   rm -rf "$proj"
 }
 
+@test "COSB-ONESHOT-RECIPE-CLAIM-ADMITTED: the claim command a one-shot derives from its bootstrap recipe (canonical CLI, request path, --role) is admitted by the target gate with a --target-binding grant injected, and its chained form is denied with the standalone recovery" {
+  local proj; proj="$(_cosb_e2e_make_project)"
+  local chain; chain="$(_cosb_e2e_happy_path_to_binding "$proj")"
+  local binding_id coord_root artifact_ref; read -r binding_id coord_root artifact_ref <<< "$chain"
+  [ -n "$binding_id" ]
+
+  local input_file; input_file="$(mktemp)"
+  node -e '
+    const fs = require("fs");
+    const path = require("path");
+    const rll = require(process.argv[1]);
+    const recipe = require(process.argv[2]).createConsultationTargetRecipe().oneShotConsultationRecipe({
+      role: "arch-testing", projectRoot: process.argv[3], coordinationRoot: process.argv[4],
+      consultationCliPath: path.resolve(process.argv[5]), requestPath: process.argv[6],
+    });
+    // Read the recipe the way the one-shot does: A, C and Q name the request, the CLI and the coordination root.
+    const pick = (key) => JSON.parse(recipe.match(new RegExp(key + "=(\"[^\"]*\")"))[1]);
+    const receiver = JSON.parse(recipe.split("\n")[0]);
+    const argv = [receiver.n, pick("C"), "claim", "--coordination-root", pick("Q"), "--request", pick("A"), "--role", receiver.r];
+    fs.writeFileSync(process.argv[7], JSON.stringify({
+      tool_name: "Bash", tool_input: { command: rll.renderPosixDirect(argv) },
+      agent_type: "arch-testing", session_id: "cosb-e2e-orchestrator-session", agent_id: "cosb-e2e-spawned-agent-id",
+    }));
+    fs.writeFileSync(process.argv[7] + ".chained", JSON.stringify({
+      tool_name: "Bash", tool_input: { command: "cat > /tmp/x <<'"'"'EOF'"'"'\nresult\nEOF\n" + rll.renderPosixDirect(argv) },
+      agent_type: "arch-testing", session_id: "cosb-e2e-orchestrator-session", agent_id: "cosb-e2e-spawned-agent-id",
+    }));
+  ' "$RLL_IMPL" "$(dirname "$RLL_IMPL")/runtime-role-lifecycle/consultation-target-recipe.cjs" "$proj" "$coord_root" "$RC_IMPL" "$artifact_ref" "$input_file"
+
+  local out; out="$(cat "$input_file" | CLAUDE_PROJECT_DIR="$proj" node "$TARGET_GATE_HOOK" 2>/dev/null)"
+  [[ "$out" == *'"permissionDecision":"allow"'* ]]
+  [[ "$out" == *"--target-binding"* ]]
+
+  local chained; chained="$(cat "$input_file.chained" | CLAUDE_PROJECT_DIR="$proj" node "$TARGET_GATE_HOOK" 2>/dev/null)"
+  [[ "$chained" == *'"permissionDecision":"deny"'* ]]
+  [[ "$chained" == *"[RC-TARGET-GATE] run claim as ONE standalone command"* ]]
+  rm -f "$input_file" "$input_file.chained"
+  rm -rf "$proj"
+}
+
 @test "COSB-FENCE-THEN-REPLAY-REJECTED: a binding whose identity is fenced fails closed on any subsequent use with 'authority-fenced' -- proves spec point 7's 'retired binding' AND 'replayed binding' together (replaying a binding IS attempting to use it after its authority was cut in this design), corrected for M7 (fence replaces the removed .retired marker/writer)" {
   local proj; proj="$(_cosb_make_project)"
   local out binding_id worktree_id plan_digest
@@ -2476,9 +2516,17 @@ _cosb_e2e_pretooluse_agent() {
     const planResult = rll.discoverPlan(projectRoot);
     const found = rc.findLiveClaudeAgentActivations(coordRoot, repoId, process.argv[6], planResult.planDigest, process.argv[4]);
     if (found.length !== 1) { process.stderr.write("expected exactly 1 live activation, got " + found.length); process.exit(1); }
-    process.stdout.write(rll.claudeAgentBootstrapMessageFor(process.argv[4], process.argv[5], found[0].activation.attempt_id));
-  ' "$RLL_IMPL" "$RC_IMPL" "$proj" "test-specialist" "$request_id" "$COSB_E2E_WAVE_SLUG")"
+    const cp = require(process.argv[7]);
+    const recipe = require(process.argv[8]).createConsultationTargetRecipe().oneShotConsultationRecipe({
+      role: process.argv[4], projectRoot, coordinationRoot: coordRoot,
+      consultationCliPath: require("path").resolve(process.argv[9]),
+      requestPath: cp.requestPathFor(cp.planRootPath(coordRoot, repoId, process.argv[6], planResult.planDigest), process.argv[5]),
+    });
+    process.stdout.write(rll.claudeAgentBootstrapMessageFor(process.argv[4], process.argv[5], found[0].activation.attempt_id, recipe));
+  ' "$RLL_IMPL" "$RC_IMPL" "$proj" "test-specialist" "$request_id" "$COSB_E2E_WAVE_SLUG" "$(dirname "$RC_IMPL")/runtime-consultation/coordination-paths.cjs" "$(dirname "$RLL_IMPL")/runtime-role-lifecycle/consultation-target-recipe.cjs" "$RC_IMPL")"
   [ -n "$real_prompt" ]
+  # the one-shot is told how to claim: canonical CLI, request path and the claim / lease-heartbeat / publish-result commands
+  [[ "$real_prompt" == *"runtime-consultation.cjs"* && "$real_prompt" == *'["claim"]'* && "$real_prompt" == *'["lease-heartbeat"]'* && "$real_prompt" == *'["publish-result"]'* && "$real_prompt" == *"request.json"* ]]
 
   local result; result="$(_cosb_e2e_pretooluse_agent "$proj" "test-specialist" "test-specialist" "a hand-copied bootstrap with a typo" "cosb-e2e-orchestrator-session")"
   local out; out="$(printf '%s' "$result" | tail -n +2)"
@@ -2487,7 +2535,7 @@ _cosb_e2e_pretooluse_agent() {
     let s = ""; process.stdin.on("data", (c) => { s += c; }).on("end", () => {
       const h = JSON.parse(s).hookSpecificOutput;
       if (h.permissionDecision !== "allow") { process.stderr.write("not allowed: " + s); process.exit(1); }
-      if (h.updatedInput.prompt !== process.argv[1]) { process.stderr.write("prompt was not rewritten: " + s); process.exit(1); }
+      if (h.updatedInput.prompt !== process.argv[1]) { process.stderr.write("prompt was not rewritten: " + s + "\nEXPECTED: " + process.argv[1]); process.exit(1); }
       if (h.updatedInput.name !== "test-specialist" || h.updatedInput.subagent_type !== "test-specialist") process.exit(1);
     });
   ' "$real_prompt"

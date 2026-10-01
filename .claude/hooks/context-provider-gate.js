@@ -969,6 +969,9 @@ const WAVE_CLASS_RECOVERY = Object.freeze({
   INVALID_WAVE_CLASS: 'the declared class is not one of HARNESS, DOC or FAST-PATH.',
   WAVE_CLASS_SENTINEL_MISSING: 'write .planning/wave-<slug>/CLASS with the PLAN class (the planner writes it in Pass A).',
   INVALID_WAVE_CLASS_SENTINEL: 'CLASS must contain exactly HARNESS, DOC or FAST-PATH and match the PLAN class.',
+  'wave-control-state-drift': 'the branch HEAD moved after the wave phase was bound (a merge or a commit changes it); a PLAN cannot be re-bound before EXECUTE, so start a new wave slug on this HEAD.',
+  'wave-control-plan-drift': 'the PLAN changed after the wave was initialized; keep the PLAN as it was initialized, or start a new wave slug for the changed PLAN.',
+  'wave-control-state-missing': 'this wave has no control-plane state yet; initialize it with the wave-control init command for this slug, then retry.',
 });
 
 function canonicalizeInstalledEntrypointSurface(tokens, event) {

@@ -81,13 +81,17 @@ function claudeAgentSpawnReservationConsumedMarkerPathFor(projectRootOrRepoId, n
  * @param {string} role
  * @param {string} requestId
  * @param {string} attemptId
+ * @param {string} [recipe] - the deterministic target recipe appended after the base message.
  * @returns {string}
  */
-function claudeAgentBootstrapMessageFor(role, requestId, attemptId) {
-  return 'You are being activated as ' + role + ' to handle consultation request '
+function claudeAgentBootstrapMessageFor(role, requestId, attemptId, recipe) {
+  const base = 'You are being activated as ' + role + ' to handle consultation request '
     + requestId + ' (attempt ' + attemptId + '). Read the request and its referenced '
     + 'subject bundle under the coordination root, then respond via the '
     + 'runtime-consultation.cjs CLI.';
+  // The recipe (oneShotConsultationRecipe) names the canonical CLI, the request and the claim, lease-heartbeat and
+  // publish-result commands, the same grammar a persistent role gets. Without it a one-shot has no way to claim.
+  return typeof recipe === 'string' && recipe.length > 0 ? base + '\n' + recipe : base;
 }
 
 /**
@@ -115,9 +119,10 @@ function claudeAgentBootstrapMessageFor(role, requestId, attemptId) {
  * @param {string} mainBindingId
  * @param {string} toolInputDigest - sha256(canonicalJSONStringify({subagent_type,name})) of the ACTUAL Agent-tool call this reservation covers.
  * @param {number} readyTimeoutSeconds
+ * @param {string} [bootstrapRecipe] - recipe the stored bootstrap message embeds; the gate recomputes the same message.
  * @returns {{ok:true,reservationPath:string,record:object}|{ok:false,reason:string}}
  */
-function mintClaudeAgentSpawnReservation(repoDescriptor, activation, requestId, role, worktreeId, planDigest, sessionGenerationId, mainBindingId, toolInputDigest, readyTimeoutSeconds) {
+function mintClaudeAgentSpawnReservation(repoDescriptor, activation, requestId, role, worktreeId, planDigest, sessionGenerationId, mainBindingId, toolInputDigest, readyTimeoutSeconds, bootstrapRecipe) {
   if (!activation || activation.schema !== 'coordination/activation/v1' || activation.selected_driver !== 'claude-agent') {
     return { ok: false, reason: 'wrong-activation-kind' };
   }
@@ -157,7 +162,7 @@ function mintClaudeAgentSpawnReservation(repoDescriptor, activation, requestId, 
     role,
     worktree_id: worktreeId,
     plan_digest: planDigest,
-    bootstrap_message: claudeAgentBootstrapMessageFor(role, requestId, activation.attempt_id),
+    bootstrap_message: claudeAgentBootstrapMessageFor(role, requestId, activation.attempt_id, bootstrapRecipe),
     tool_input_digest: toolInputDigest,
     created_at: nowIsoForRegistry(),
     expiry: new Date(expiryMs).toISOString().replace(/\.\d{3}Z$/, 'Z'),

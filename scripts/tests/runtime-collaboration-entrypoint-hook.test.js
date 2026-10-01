@@ -112,6 +112,7 @@ function recordManagedSystemInit(sessionId) {
     'scripts/lib/runtime-host-claude.cjs',
     'scripts/lib/runtime-project-context.cjs',
     'scripts/lib/runtime-role-lifecycle/cli-rootsource-handlers.cjs',
+    'scripts/lib/runtime-role-lifecycle/consultation-target-recipe.cjs',
     'scripts/lib/runtime-role-lifecycle/ensure-handler.cjs',
     'scripts/lib/runtime-role-lifecycle/lifecycle-action-payloads.cjs',
     'scripts/lib/runtime-role-lifecycle/lifecycle-argv.cjs',
@@ -616,15 +617,28 @@ function assertForeignShorthand(label, cwd, projectDirEnv) {
 
 // A class/sentinel defect in the wave must tell the operator what to fix instead of the generic scope error, while every
 // other exception stays generic (no paths or host details).
-function orchestrateDenialAfter(label, mutate) {
+function orchestrateDenialAfter(label, mutate, { initialize = false, entrypoint = 'init-session' } = {}) {
   const sessionId = uniqueSessionId();
   const minted = recordManagedSystemInit(sessionId);
   try {
     const ctx = buildWorktreeContext(minted.worktreeRoot);
     const slug = minted.waveSlug;
+    if (initialize || entrypoint !== 'init-session') {
+      fs.symlinkSync(
+        path.join(REPO_ROOT, 'mcp-server', 'node_modules'),
+        path.join(ctx.worktreeRoot, 'mcp-server', 'node_modules'),
+        process.platform === 'win32' ? 'junction' : 'dir',
+      );
+    }
+    if (initialize) waveControlPlane.initialize(ctx.worktreeRoot, slug);
     const waveDir = path.join(ctx.worktreeRoot, '.planning', 'wave-' + slug);
     mutate({ waveDir, plan: path.join(waveDir, 'PLAN.md'), sentinel: path.join(waveDir, 'CLASS') });
-    const command = 'node .claude/runtime/l0-entrypoint-launcher.cjs init-session --orchestrate ' + slug;
+    const command = entrypoint === 'init-session'
+      ? 'node .claude/runtime/l0-entrypoint-launcher.cjs init-session --orchestrate ' + slug
+      : runtimeRoleLifecycle.renderPosixDirect([
+        process.execPath, ctx.canonicalEntrypointPath, 'execute',
+        '--entrypoint', entrypoint, '--project-root', ctx.worktreeRoot, '--intent', workIntent(slug),
+      ]);
     const result = runHookAt(baseEvent(command, ctx.worktreeRoot, sessionId), ctx.hookPath, ctx.worktreeRoot);
     assert.strictEqual(result.status, 0, label + ': hook exit code');
     const body = JSON.parse(result.stdout);
@@ -665,6 +679,23 @@ for (const [code, mutate, guidance] of CLASS_DENIALS) {
   passed += 1;
 }
 
-assert.strictEqual(passed, 33);
+// A wave whose HEAD, PLAN or state moved after it was bound must say how to recover, not hit the generic scope error.
+{
+  const DRIFT_DENIALS = [
+    ['wave-control-state-drift', { initialize: true }, ({ plan }) => gitIn(path.dirname(path.dirname(path.dirname(plan))), ['commit', '-q', '--allow-empty', '-m', 'test: move head']), /start a new wave slug/],
+    ['wave-control-plan-drift', { initialize: true }, ({ plan }) => fs.appendFileSync(plan, '\nA line added after the wave was initialized.\n'), /start a new wave slug for the changed PLAN/],
+    ['wave-control-state-missing', { entrypoint: 'work' }, () => {}, /wave-control init command/],
+  ];
+  for (const [code, options, mutate, guidance] of DRIFT_DENIALS) {
+    const reason = orchestrateDenialAfter('case-17-' + code, mutate, options);
+    assert.ok(reason.includes(code), code + ' must be named: ' + reason);
+    assert.match(reason, guidance, code + ' must say how to recover: ' + reason);
+    assert.ok(!reason.includes('intent or scope is invalid'), code + ' must not be the generic message: ' + reason);
+    console.log('PASS: case-17-' + code);
+    passed += 1;
+  }
+}
 
-console.log('33/33 PASS');
+assert.strictEqual(passed, 36);
+
+console.log('36/36 PASS');

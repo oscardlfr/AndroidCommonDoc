@@ -108,7 +108,7 @@ function createConsultCommand({
     const dispatched = dispatchCanonical({
       'coordination-root': coordRoot,
       request: published.artifact_ref,
-    }, { rootSourceDispatch: false });
+    }, { rootSourceDispatch: false, requesterAuthenticated: true });
     return {
       request_id: published.request_id,
       artifact_ref: published.artifact_ref,

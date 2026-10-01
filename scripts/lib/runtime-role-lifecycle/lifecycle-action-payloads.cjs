@@ -1,5 +1,7 @@
 'use strict';
 
+const { consultationTargetCommandLine } = require('./consultation-target-recipe.cjs').createConsultationTargetRecipe();
+
 function createLifecycleActionPayloads(deps) {
   const {
     fs, path, process, facadeDirname, CANONICAL_ROLES, canonicalJSONStringify, computeRepoId, computeWorktreeId, coordinationRootPathFor, discoverPlan, hasExactKeys, isCanonicalIsoUtc, isHexActionId,
@@ -91,7 +93,7 @@ function claudeReadyBootstrapMessageFor(actionId, role, projectRoot) {
     'Only COORDINATION_CONSULT/v1\\nJSON exact{artifact_path,kind,request_id,role,target_role};kind=consult;target_role=r;A=artifact_path;'
       + consultationAssignment
       + ';Q=p+"/.planning/coordination";X=[n,C];Y=["--coordination-root",Q,"--request",A].',
-    'Bash=single-quote tokens;no chain.Before reads:X+["claim"]+Y+["--role",r];need SUCCESS;K=artifact_ref;60s:X+["lease-heartbeat"]+Y+["--claim",K];X+["publish-result"]+Y+["--claim",K,"--content",B];B=b64url(result);Invalid=>no tool',
+    consultationTargetCommandLine(),
   ].join('\n');
 }
 

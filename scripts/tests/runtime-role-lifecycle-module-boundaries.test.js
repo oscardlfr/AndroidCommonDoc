@@ -64,6 +64,7 @@ const modulePaths = Object.freeze({
   roleSpawnExecutionClaim: path.join(moduleDir, 'role-spawn-execution-claim.cjs'),
   directRoleHostAdmission: path.join(moduleDir, 'direct-role-host-admission.cjs'),
   claudeAgentSpawnReservation: path.join(moduleDir, 'claude-agent-spawn-reservation.cjs'),
+  consultationTargetRecipe: path.join(moduleDir, 'consultation-target-recipe.cjs'),
   rootConsultRecords: path.join(moduleDir, 'root-consult-records.cjs'),
   s16ContextResolution: path.join(moduleDir, 's16-context-resolution.cjs'),
   p2SubjectBundle: path.join(moduleDir, 'p2-subject-bundle.cjs'),
