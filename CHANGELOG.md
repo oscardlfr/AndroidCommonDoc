@@ -37,6 +37,8 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 
 ### Fixed (consumer readiness)
 
+- A chained consultation target command (heredoc, pipe, `&&`, `;`, `$(...)` around `claim`, `lease-heartbeat`, `publish-result` or `worker-stop-ack`) is denied by `runtime-consultation-target-gate.js` with the standalone recovery instead of reaching the CLI without a grant and failing with an opaque `AUTHORITY_INVALID`.
+- An owning `claude-agent` spawn whose type and name match but whose prompt differs is allowed and rewritten to the deterministic bootstrap through `updatedInput`, as the role-lifecycle path does; a diverging name is still denied.
 - `quality-gater` is no longer blocked by the pattern-discovery gate, which waited for a consult it can never make.
 - Desktop Code-tab sessions: a registered linked worktree of the same repository is accepted as the consumer root for the
   init-session shorthand; a session whose model differs from the profile reports `host-model-mismatch` with a one-line fix;

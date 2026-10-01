@@ -525,10 +525,12 @@ process.stdin.on('end', () => {
       // from tool_input.prompt as ground truth (user point 2: "Ningun campo
       // se deriva de prompt/prosa/model output").
       const expectedBootstrapMessage = rll.claudeAgentBootstrapMessageFor(subagentType, requestId, activation.attempt_id);
-      if (toolInput.prompt !== expectedBootstrapMessage) {
-        emit(denyResponse('[agent-spawn-execution-gate] tool_input.prompt does not match the deterministic bootstrap message for the claude-agent activation targeting "' + subagentType + '".'));
-        return;
-      }
+      // Ownership is established (type and name matched above), so a prompt
+      // that differs from the deterministic bootstrap is rewritten to it, as
+      // the role-lifecycle path does, instead of denied: hand-copying a
+      // literal bootstrap per relay is fragile and the message is derived,
+      // never accepted from the proposal.
+      const canonicalClaudeAgentInput = Object.assign({}, toolInput, { prompt: expectedBootstrapMessage });
       const pairForClaudeAgent = rll.resolvePolicyPair(projectRoot);
       if (!pairForClaudeAgent.ok) {
         emit(denyResponse('[agent-spawn-execution-gate] policy/routing pair invalid.'));
@@ -582,7 +584,7 @@ process.stdin.on('end', () => {
           hookSpecificOutput: {
             hookEventName: 'PreToolUse',
             permissionDecision: 'allow',
-            updatedInput: Object.assign({}, toolInput),
+            updatedInput: canonicalClaudeAgentInput,
           },
         },
       });

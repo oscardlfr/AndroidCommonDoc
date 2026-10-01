@@ -554,7 +554,23 @@ process.stdin.on('end', () => {
     // carrying shell operators (chaining/piping/substitution) is never
     // recognized, mirroring context-provider-gate.js's own
     // tryInjectLifecycleGrant pre-check exactly.
-    if (/[;&|`\n]|\$\(/.test(command)) process.exit(0);
+    if (/[;&|`\n]|\$\(/.test(command)) {
+      // A chained form that still invokes a target subcommand would reach the
+      // CLI without an injected grant and fail with an opaque
+      // AUTHORITY_INVALID, so it is denied here with the recovery.
+      const normalized = command.replace(/\\/g, '/');
+      const canonicalCli = CANONICAL_CONSULTATION_CLI_PATH.replace(/\\/g, '/');
+      const at = normalized.indexOf(canonicalCli);
+      if (at !== -1) {
+        const after = normalized.slice(at + canonicalCli.length);
+        const sub = CONSULTATION_TARGET_SUBCOMMANDS.find((s) => new RegExp('^["\']?\\s+["\']?' + s + '["\']?(?![\\w-])').test(after));
+        if (sub) {
+          block('[RC-TARGET-GATE] run ' + sub + ' as ONE standalone command (no heredoc, pipe, &&, ;, $(...)): write the result with the Write tool, compute base64url in a separate Bash call, then pass the literal value to --content.');
+          return;
+        }
+      }
+      process.exit(0);
+    }
 
     const tokens = rll.parsePosixDirect(command);
     const projectRoot = process.env.CLAUDE_PROJECT_DIR || process.cwd();
