@@ -682,7 +682,13 @@ for (const [code, mutate, guidance] of CLASS_DENIALS) {
 // A wave whose HEAD, PLAN or state moved after it was bound must say how to recover, not hit the generic scope error.
 {
   const DRIFT_DENIALS = [
-    ['wave-control-state-drift', { initialize: true }, ({ plan }) => gitIn(path.dirname(path.dirname(path.dirname(plan))), ['commit', '-q', '--allow-empty', '-m', 'test: move head']), /start a new wave slug/],
+    ['wave-control-state-drift', { initialize: true }, ({ plan }) => {
+      // The fixture repository has no identity of its own and CI has no global one: set it where the commit is made.
+      const fixtureRoot = path.dirname(path.dirname(path.dirname(plan)));
+      gitIn(fixtureRoot, ['config', 'user.email', 'fixture@test.local']);
+      gitIn(fixtureRoot, ['config', 'user.name', 'Fixture']);
+      gitIn(fixtureRoot, ['commit', '-q', '--allow-empty', '-m', 'test: move head']);
+    }, /start a new wave slug/],
     ['wave-control-plan-drift', { initialize: true }, ({ plan }) => fs.appendFileSync(plan, '\nA line added after the wave was initialized.\n'), /start a new wave slug for the changed PLAN/],
     ['wave-control-state-missing', { entrypoint: 'work' }, () => {}, /wave-control init command/],
   ];
