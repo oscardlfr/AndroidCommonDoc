@@ -342,6 +342,31 @@ describe("source-referenced runtime installation", () => {
     expect(isHistoricalToolkitFile(toolkit, "../tool-use-logger.js", "historical logger\n")).toBe(false);
   });
 
+  it("preserves consumer CI metadata through runtime sync and advances l0Commit to the pinned toolkit commit", async () => {
+    const manifestPath = join(projectRoot, "l0-manifest.json");
+    const seeded = JSON.parse(await readFile(manifestPath, "utf8"));
+    seeded.sources[0].repository = "example/AndroidCommonDoc";
+    seeded.sources[0].ref = "develop";
+    seeded.l0Commit = "0".repeat(40);
+    await writeFile(manifestPath, JSON.stringify(seeded, null, 2) + "\n");
+
+    const installed = await installRuntimeConsumer(projectRoot, REAL_L0_ROOT);
+    expect(installed.ok).toBe(true);
+
+    const after = JSON.parse(await readFile(manifestPath, "utf8"));
+    expect(after.sources[0]).toMatchObject({ repository: "example/AndroidCommonDoc", ref: "develop" });
+    expect(after.l0Commit).toBe(installed.toolkitCommit);
+    expect(after.runtime.toolkit_commit).toBe(installed.toolkitCommit);
+    expect(after.sources[0].remote).toBeUndefined();
+  });
+
+  it("does not add l0Commit to a runtime manifest that never carried one", async () => {
+    const installed = await installRuntimeConsumer(projectRoot, REAL_L0_ROOT);
+    expect(installed.ok).toBe(true);
+    const after = JSON.parse(await readFile(join(projectRoot, "l0-manifest.json"), "utf8"));
+    expect(Object.prototype.hasOwnProperty.call(after, "l0Commit")).toBe(false);
+  });
+
   it("removes known retired-agent manifest provenance during runtime installation", async () => {
     const manifestPath = join(projectRoot, "l0-manifest.json");
     const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
@@ -521,7 +546,7 @@ describe("source-referenced runtime installation", () => {
     const first = await installRuntimeConsumer(projectRoot, REAL_L0_ROOT);
     expect(first.ok).toBe(true);
     expect(first.consumerLayer).toBe("L2");
-    expect(first.registrations).toBe(17);
+    expect(first.registrations).toBe(18);
     expect(first.toolkitContentDigest).toMatch(/^[0-9a-f]{64}$/);
     const inventoryPaths = new Set(first.inventory?.map((entry) => entry.relative_path));
     expect(inventoryPaths.has("scripts/lib/runtime-consultation.cjs")).toBe(true);

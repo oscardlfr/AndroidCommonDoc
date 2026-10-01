@@ -82,6 +82,7 @@ const SEQ14_PATHS = [
   ['routing-policy.cjs', 'createRoutingPolicy'],
   ['canonical-request-build.cjs', 'createCanonicalRequestBuild'],
   ['commands/publish-request.cjs', 'createPublishRequestCommand'],
+  ['commands/consult.cjs', 'createConsultCommand'],
   ['root-source-publish.cjs', 'createRootSourcePublish'],
   ['dispatch/dispatch-driver-selection.cjs', 'createDispatchDriverSelection'],
   ['dispatch/dispatch-canonical.cjs', 'createDispatchCanonical'],

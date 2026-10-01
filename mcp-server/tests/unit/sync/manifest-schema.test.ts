@@ -502,3 +502,46 @@ describe("generateExampleManifests", () => {
     expect(sharedLibs.selection.exclude_categories).toContain("product");
   });
 });
+
+// ---------------------------------------------------------------------------
+// Consumer CI metadata: repository, ref and l0Commit survive a read/write round trip
+// ---------------------------------------------------------------------------
+
+describe("consumer manifest metadata (repository, ref, l0Commit)", () => {
+  const COMMIT = "5d87d4b26da321d13e49a18aa46b8853e9f9d47b";
+  let tmp: string;
+  afterEach(async () => { if (tmp) await rm(tmp, { recursive: true, force: true }); });
+
+  it("keeps sources[0].repository, sources[0].ref and top-level l0Commit through validate, write and read", async () => {
+    const manifest = makeV2Manifest({
+      sources: [{ layer: "L0", path: "../AndroidCommonDoc", role: "tooling", repository: "example/AndroidCommonDoc", ref: "develop" }],
+      l0Commit: COMMIT,
+    });
+    tmp = await mkdtemp(join(tmpdir(), "manifest-metadata-"));
+    const file = join(tmp, "l0-manifest.json");
+    await writeManifest(file, validateManifest(manifest));
+    const onDisk = JSON.parse(await readFile(file, "utf-8"));
+    expect(onDisk.sources[0]).toMatchObject({ repository: "example/AndroidCommonDoc", ref: "develop" });
+    expect(onDisk.l0Commit).toBe(COMMIT);
+    const reread = await readManifest(file);
+    expect(reread.sources[0].repository).toBe("example/AndroidCommonDoc");
+    expect(reread.sources[0].ref).toBe("develop");
+    expect(reread.l0Commit).toBe(COMMIT);
+  });
+
+  it("does not invent the metadata when a manifest never carried it", () => {
+    const parsed = validateManifest(makeV2Manifest());
+    expect(parsed.l0Commit).toBeUndefined();
+    expect(parsed.sources[0].repository).toBeUndefined();
+    expect(parsed.sources[0].ref).toBeUndefined();
+  });
+
+  it("rejects a malformed l0Commit, an empty repository/ref and still validates remote as a URL", () => {
+    expect(ManifestSchemaV2.safeParse(makeV2Manifest({ l0Commit: "not-a-commit" })).success).toBe(false);
+    expect(ManifestSchemaV2.safeParse(makeV2Manifest({ l0Commit: COMMIT.toUpperCase() })).success).toBe(false);
+    const bad = makeV2Manifest({ sources: [{ layer: "L0", path: "../x", role: "tooling", repository: "", ref: "" }] });
+    expect(ManifestSchemaV2.safeParse(bad).success).toBe(false);
+    const remote = makeV2Manifest({ sources: [{ layer: "L0", path: "../x", role: "tooling", remote: "not a url" }] });
+    expect(ManifestSchemaV2.safeParse(remote).success).toBe(false);
+  });
+});

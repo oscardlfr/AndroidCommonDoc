@@ -15,12 +15,12 @@ const CORE_HOOK_FILES = Object.freeze([
   'subagent-start-context-bundle.js', 'runtime-host-boundary.js',
   'runtime-host-session-start.js', 'bash-cli-spawn-gate.js',
   'premature-execution-gate.js', 'plan-md-write-gate.js',
-  'hook-control-plane-utils.js', 'tool-use-logger.js',
+  'hook-control-plane-utils.js', 'tool-use-logger.js', 'context-provider-consulted.js',
 ]);
 const SOURCE_REFERENCED_HOOK_FILES = new Set([
   'agent-spawn-execution-gate.js', 'context-provider-gate.js',
   'bash-cli-spawn-gate.js',
-  'hook-control-plane-utils.js',
+  'hook-control-plane-utils.js', 'context-provider-consulted.js',
   'premature-execution-gate.js', 'plan-md-write-gate.js',
   'runtime-consultation-target-gate.js',
   'runtime-host-boundary.js', 'runtime-host-session-start.js',
@@ -61,6 +61,7 @@ const HOOK_MATRIX = Object.freeze([
   ['PreToolUse', 'Bash|Task|Agent|SendMessage', 'runtime-host-boundary.js', 5],
   ['PostToolUse', '.*', 'tool-use-logger.js', 5],
   ['PostToolUse', 'Bash|Task|Agent|SendMessage', 'runtime-host-boundary.js', 5],
+  ['PostToolUse', 'SendMessage', 'context-provider-consulted.js', 5],
   ['PostToolUseFailure', 'Agent|SendMessage', 'tool-use-logger.js', 5],
   ['PostToolUseFailure', 'Bash|Task|Agent|SendMessage', 'runtime-host-boundary.js', 5],
   ['SubagentStart', '.*', 'subagent-start-context-bundle.js', 10],
@@ -208,7 +209,10 @@ function computeRuntimeToolkitInventory(toolkitRoot) {
     ...CONSUMER_FILES,
     ...ROLE_TEMPLATES.map((role) => `.claude/agents/${role}.md`),
     ...['init-session', 'resume-work', 'work', 'ingest-content', 'monitor-docs'].map((skill) => `skills/${skill}/SKILL.md`),
-    ...['init-session', 'resume-work', 'work', 'ingest-content', 'monitor-docs'].map((command) => `.claude/commands/${command}.md`),
+    // init-session is exposed to sessions only as a skill: a legacy command of the same name reached consumers
+    // through an added L0 directory and made /init-session appear twice.
+    '.claude/skills/init-session/SKILL.md',
+    ...['resume-work', 'work', 'ingest-content', 'monitor-docs'].map((command) => `.claude/commands/${command}.md`),
   ];
   try {
     collectPlatformHostContracts(root, files);

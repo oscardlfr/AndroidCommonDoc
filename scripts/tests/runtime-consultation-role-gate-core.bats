@@ -1540,13 +1540,15 @@ _assert_pretooluse_deny() {
   [ -z "$output" ]
 }
 
-@test "TG-CHAINED: a chained 'claim' command (';' operator) is never recognized as owning -- no injection, never a security bypass via chaining, EMPTY stdout" {
+@test "TG-CHAINED: a chained 'claim' command (';' operator) is never recognized as owning -- no injection, never a security bypass via chaining; it is denied with the standalone recovery" {
   local base; base="$(_render_posix_direct node "$CONSULTATION_CLI" claim --coordination-root "$PROJ/.planning/coordination" --request "$PROJ/.planning/coordination/txn/request.json" --role arch-testing --worker-session tg-chained-worker-session)"
   local cmd="$base; echo pwned"
   _make_input "$cmd" arch-testing tg-chained-caller
   _run_hook
   [ "$status" -eq 0 ]
-  [ -z "$output" ]
+  [[ "$output" == *'"permissionDecision":"deny"'* ]]
+  [[ "$output" == *"[RC-TARGET-GATE] run claim as ONE standalone command"* ]]
+  [[ "$output" != *updatedInput* ]]
 }
 
 @test "TG-UNRELATED PASS: an unrelated Bash command (not a target-surface subcommand at all) is allowed, zero side effects" {

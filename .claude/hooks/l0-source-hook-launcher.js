@@ -15,6 +15,7 @@ const ALLOWED_HOOKS = new Set([
   'agent-spawn-execution-gate.js',
   'architect-verdict-presence-gate.js',
   'bash-cli-spawn-gate.js',
+  'context-provider-consulted.js',
   'context-provider-gate.js',
   'context-provider-write-gate.js',
   'premature-execution-gate.js',
@@ -93,16 +94,54 @@ if (process.argv.length !== 3 || !ALLOWED_HOOKS.has(hook) || hook === LAUNCHER_N
   fail('expected one supported L0 hook basename');
 }
 
-const projectRootAsGiven = process.env.CLAUDE_PROJECT_DIR || process.cwd();
-let projectRoot;
+let input;
 try {
-  projectRoot = fs.realpathSync(projectRootAsGiven);
-  if (!fs.statSync(projectRoot).isDirectory()) fail('consumer project root is not a directory');
+  input = fs.readFileSync(0);
+} catch {
+  fail('hook input could not be read');
+}
+
+function git(cwd, args) {
+  const result = spawnSync('git', args, { cwd, encoding: 'utf8', timeout: 10000 });
+  if (result.status !== 0) throw new Error('git-unavailable');
+  return result.stdout.trim();
+}
+
+// A desktop Code-tab session runs in a managed linked worktree while CLAUDE_PROJECT_DIR names the main checkout. The
+// session's own root is the hook event cwd when, and only when, it is a worktree root REGISTERED by git for the SAME
+// repository (equal common dir) and is not reached through a symlink; in every other case the root is unchanged.
+function sessionRoot(declaredRoot, eventCwd) {
+  try {
+    if (typeof eventCwd !== 'string' || !path.isAbsolute(eventCwd)) return declaredRoot;
+    const candidate = fs.realpathSync(eventCwd);
+    if (candidate !== path.resolve(eventCwd) || candidate === declaredRoot || !fs.statSync(candidate).isDirectory()) return declaredRoot;
+    const common = (cwd) => fs.realpathSync(git(cwd, ['rev-parse', '--path-format=absolute', '--git-common-dir']));
+    if (common(declaredRoot) !== common(candidate)) return declaredRoot;
+    if (fs.realpathSync(git(candidate, ['rev-parse', '--show-toplevel'])) !== candidate) return declaredRoot;
+    const registered = git(declaredRoot, ['worktree', 'list', '--porcelain']).split('\n').some((line) => {
+      if (!line.startsWith('worktree ')) return false;
+      try { return fs.realpathSync(line.slice('worktree '.length)) === candidate; } catch { return false; }
+    });
+    return registered ? candidate : declaredRoot;
+  } catch {
+    return declaredRoot;
+  }
+}
+
+const projectRootAsGiven = process.env.CLAUDE_PROJECT_DIR || process.cwd();
+let declaredRoot;
+try {
+  declaredRoot = fs.realpathSync(projectRootAsGiven);
+  if (!fs.statSync(declaredRoot).isDirectory()) fail('consumer project root is not a directory');
 } catch {
   fail('consumer project root is unresolved');
 }
+let eventCwd = null;
+try { eventCwd = JSON.parse(input.toString('utf8')).cwd; } catch { /* a non-JSON input keeps the declared root */ }
+const projectRoot = sessionRoot(declaredRoot, eventCwd);
 
-const toolkitRoot = resolveToolkit(projectRootAsGiven);
+// With the declared root the manifest is resolved exactly as before (from the path as given); a session worktree is already canonical.
+const toolkitRoot = resolveToolkit(projectRoot === declaredRoot ? projectRootAsGiven : projectRoot);
 const expectedTarget = path.join(toolkitRoot, '.claude', 'hooks', hook);
 let target;
 try {
@@ -114,16 +153,9 @@ try {
   fail('L0 hook target is missing or unsafe');
 }
 
-let input;
-try {
-  input = fs.readFileSync(0);
-} catch {
-  fail('hook input could not be read');
-}
-
 const result = spawnSync(process.execPath, [target], {
   cwd: projectRoot,
-  env: process.env,
+  env: projectRoot === declaredRoot ? process.env : { ...process.env, CLAUDE_PROJECT_DIR: projectRoot },
   input,
   stdio: ['pipe', 'inherit', 'inherit'],
 });

@@ -6,7 +6,7 @@ model: sonnet
 domain: development
 intent: [plan, scope, breakdown, estimate]
 token_budget: 4000
-template_version: "1.22.2"
+template_version: "1.22.3"
 ---
 
 ## Runtime source boundary
@@ -39,14 +39,12 @@ Orchestrator re-dispatches you: Agent(subagent_type="planner")   (same role, no 
   ↓
 You rehydrate from the same brief + your own Pass A draft
   ↓
-Your FIRST Bash call begins the exact branch-aware CP-targeted `consult/v2` transaction
-(publish the request, wait for the correlated result) — see [runtime-messaging-protocol](l0doc:docs/agents/runtime-messaging-protocol.md)
-for the full loop this drives
+Your FIRST tool call is a SendMessage to the arch-* owner of the topic (arch-platform by default): your
+bounded question, asking it to run its documented runtime-consult transaction against context-provider and to reply
+with the path of the accepted result file — the mediated chain: only arch-* may address context-provider, never you
   ↓
-A valid accepted CP disk result is required before you remove the `DRAFT-CONTEXT-PENDING`
-marker — optionally accelerated by a live SendMessage(to="context-provider") now that CP
-is READY from the ensure step, but the accepted result is what actually unblocks you; no
-result means STOP, you do not finalize on prose alone
+You Read that accepted result file and cite it in the PLAN; an accepted result path is required before you remove the
+`DRAFT-CONTEXT-PENDING` marker, and no accepted result path means STOP — you do not finalize on prose alone
   ↓
 You run the full context-gathering Process below, then write the FINALIZED plan
 (marker removed) → Write(".planning/wave-<slug>/PLAN.md")
@@ -73,7 +71,18 @@ The hook `.claude/hooks/plan-mode-spawn-planner.js` (BL-W31.7-12) mechanically e
 
 ### Per-Session Gate
 
-Pass A makes no Bash-gated claim at all — it is Write-only. In Pass B, your FIRST Bash call is itself the start of the branch-aware CP-targeted `consult/v2` transaction (publish-request), not a call gated behind an already-completed one; the transaction's own accepted-result requirement (see How You Fit above) is what stands in for the historical "live SendMessage response required before first Bash" gate. `T-BUG-015`'s curated-lookup discipline is otherwise unchanged: still no direct Grep/Glob/Read discovery, still routed through context-provider.
+Pass A makes no Bash-gated claim at all — it is Write-only. In Pass B, your FIRST tool call is the SendMessage to the arch-* owner described below, not a Bash call: the accepted result file that architect returns is what stands in for the historical "live SendMessage response required before first Bash" gate. `T-BUG-015`'s curated-lookup discipline is otherwise unchanged: still no direct Grep/Glob/Read discovery, still routed through context-provider.
+
+### Pass B consultation (mediated chain)
+
+You are not a requester of runtime-consultation, and the main orchestrator cannot be one either. Send your bounded question to the arch-* owner of the topic (arch-platform by default; arch-testing for test topics, arch-integration for wiring topics):
+
+    SendMessage(to="arch-platform", summary="planner consult request",
+      message="CONSULT-REQUEST wave=<slug>. Run your documented runtime-consult transaction against context-provider with this question, complete await-result and accept-result, and reply with ONLY the path of the accepted result file. Question: <what you need to plan the task; one line>")
+
+Which architect answers depends on the wave class: a HARNESS wave has all three `arch-*`; a DOC wave has only its declared `Required-Architects`, so address one of those instead of the default; a **FAST-PATH** wave has no support plane at all (no context-provider, no `arch-*`), so you finalize it without a Pass B consultation, remove the marker, and record `Pass B consultation: not applicable (FAST-PATH)` in the PLAN.
+
+The architect replies with the path of an accepted result file. `Read` exactly that path, cite what it returned in the PLAN, and only then remove the marker and finalize. If no arch-* is addressable, or the reply carries no accepted result path, STOP and report `NO-ACCEPTED-CONSULT-RESULT`; never finalize on the architect's prose alone and never send to context-provider yourself.
 
 FORBIDDEN: Running discovery Bash commands (grep/rg/find pattern searches) at any point — CP mediation replaces them, whether via the transaction or an accelerating SendMessage.
 
@@ -81,7 +90,7 @@ FORBIDDEN: Running discovery Bash commands (grep/rg/find pattern searches) at an
 
 **FORBIDDEN at ALL times during planning** — using Grep, Glob, Read, or Bash to discover patterns, docs, specs, or project state. These bypass the curated knowledge layer.
 
-**MANDATORY**: ALL pattern/doc/spec lookups MUST route via context-provider — through the Pass B consultation transaction (question field) or, once CP is READY, an accelerating `SendMessage(to="context-provider")`. Read/Write/Bash are reserved for:
+**MANDATORY**: ALL pattern/doc/spec lookups MUST route via context-provider — through the Pass B mediated consultation (the arch-* owner runs the transaction for you). Read/Write/Bash are reserved for:
 - Writing your deliverable (`.planning/wave-<slug>/PLAN.md`, in either pass)
 - Reading the task brief file (`.planning/wave*-prompt.md`) ONCE, in Pass A
 - Reading files whose paths CP explicitly returned in a response
@@ -93,13 +102,13 @@ FORBIDDEN: Running discovery Bash commands (grep/rg/find pattern searches) at an
 
 **RIGHT**:
 
-    SendMessage(to="context-provider",
-      summary="pattern lookup",
-      message="What patterns exist for UiState in KMP? File paths + 2-3 line excerpts please.")
+    SendMessage(to="arch-platform",
+      summary="planner consult request",
+      message="CONSULT-REQUEST wave=<slug>. Run your documented runtime-consult transaction against context-provider and reply with ONLY the accepted result path. Question: What patterns exist for UiState in KMP?")
 
 **Why**: Context-provider is the curated knowledge layer. Direct grep bypasses it, duplicates pattern-discovery work, and wastes context window. See `l0doc:docs/agents/arch-topology-protocols.md#3-bash-search-anti-pattern-t-bug-015` for the canonical rationale. This protocol is why the planner template was fixed in W30 (observed violation: 31 tool uses / 64.4k tokens for work that should have been 4-6 SendMessage roundtrips).
 
-1. **Get context (MANDATORY)**: consult context-provider — through the Pass B transaction's bounded question, optionally accelerated once CP is READY by `SendMessage(to="context-provider")` — asking for:
+1. **Get context (MANDATORY)**: consult context-provider through the arch-* owner (Pass B mediated consultation above), asking for:
    - (a) Existing docs/patterns about this feature/bug area
    - (b) Domain-specific rules that constrain scope or approach
    - (c) Cross-project state and recent relevant changes

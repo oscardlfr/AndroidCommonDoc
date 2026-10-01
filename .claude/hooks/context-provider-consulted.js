@@ -14,6 +14,7 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const { ARCH_SENDER_PREFIXES, MEDIATED_RECIPIENT_ROLES } = require('./hook-control-plane-utils.js');
 
 function sanitizeId(id) {
   return String(id).replace(/[^a-zA-Z0-9_-]/g, '-');
@@ -42,15 +43,10 @@ process.stdin.on('end', () => {
       fs.writeFileSync(flagPath, payload);
     }
 
-    // BL-W35-06: per-agent-type arch-response flag — written when arch → specialist
-    const ARCH_PREFIXES = ['arch-platform', 'arch-testing', 'arch-integration'];
-    const SPECIALIST_NAMES = [
-      'test-specialist', 'toolkit-specialist', 'ui-specialist',
-      'domain-model-specialist', 'data-layer-specialist'
-    ];
+    // BL-W35-06: per-agent-type arch-response flag — written when arch → specialist or planner (mediated recipients)
     const senderType = data.agent_type || '';
-    const isArchSender = ARCH_PREFIXES.some(p => senderType === p || senderType.startsWith(p));
-    const isSpecialistRecipient = SPECIALIST_NAMES.some(s => to === s || to.startsWith(s));
+    const isArchSender = ARCH_SENDER_PREFIXES.some(p => senderType === p || senderType.startsWith(p));
+    const isSpecialistRecipient = MEDIATED_RECIPIENT_ROLES.some(s => to === s || to.startsWith(s));
     if (isArchSender && isSpecialistRecipient) {
       const agentFlag = path.join(os.tmpdir(),
         `claude-arch-responded-${sessionId}-${sanitizeId(to)}.flag`);

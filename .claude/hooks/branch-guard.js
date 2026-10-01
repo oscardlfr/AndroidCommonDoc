@@ -5,22 +5,37 @@
 // Emergency escape: CLAUDE_BRANCH_GUARD_DISABLED=1 (fail-open).
 // Fail open on any error.
 
-const { execSync } = require('child_process');
+const fs = require('fs');
+const path = require('path');
+const { execFileSync } = require('child_process');
 
 const PROTECTED_BRANCHES = ['develop', 'master'];
 const BLOCKED_SUBCOMMANDS = ['commit', 'merge', 'rebase', 'cherry-pick', 'revert'];
 
-function findSubcommand(tokens) {
+// Returns the git subcommand and the directory git would run in: a `-C <path>` that exists wins, otherwise the
+// session's own working directory (`baseDir`).
+function findSubcommand(tokens, baseDir) {
+  let workDir = baseDir;
   for (let i = 1; i < tokens.length; i++) {
     const t = tokens[i];
-    if (t === '-C' || t === '--work-tree' || t === '--git-dir') {
+    if (t === '-C') {
+      const candidate = tokens[i + 1] ? path.resolve(baseDir, tokens[i + 1]) : null;
+      if (candidate && isDirectory(candidate)) workDir = candidate;
+      i++; // skip the path argument that follows
+      continue;
+    }
+    if (t === '--work-tree' || t === '--git-dir') {
       i++; // skip the path argument that follows
       continue;
     }
     if (t.startsWith('-')) continue;
-    return t;
+    return { subCmd: t, workDir };
   }
-  return null;
+  return { subCmd: null, workDir };
+}
+
+function isDirectory(candidate) {
+  try { return fs.statSync(candidate).isDirectory(); } catch { return false; }
 }
 
 let input = '';
@@ -36,7 +51,12 @@ process.stdin.on('end', () => {
     const cmd = data.tool_input?.command || '';
     // Split on compound-command separators: &&, ||, ;, single |
     const segments = cmd.split(/&&|\|\||;(?!=)|(?<![|])\|(?![|])/);
+    // The branch that matters is the one of the session's own worktree. The hook process cwd is the project
+    // directory, which for a desktop managed linked worktree is the MAIN checkout (often on develop).
+    const baseDir = typeof data.cwd === 'string' && path.isAbsolute(data.cwd) && isDirectory(data.cwd)
+      ? data.cwd : process.cwd();
     let subCmd = null;
+    let workDir = baseDir;
     for (const rawSeg of segments) {
       let seg = rawSeg.trim();
       // Strip leading ( for subshells
@@ -49,16 +69,17 @@ process.stdin.on('end', () => {
       seg = seg.replace(/^command\s+/, '').trim();
       const tokens = seg.split(/\s+/);
       if (tokens[0] !== 'git') continue;
-      const found = findSubcommand(tokens);
-      if (found && BLOCKED_SUBCOMMANDS.includes(found)) {
-        subCmd = found;
+      const found = findSubcommand(tokens, baseDir);
+      if (found.subCmd && BLOCKED_SUBCOMMANDS.includes(found.subCmd)) {
+        subCmd = found.subCmd;
+        workDir = found.workDir;
         break;
       }
     }
     if (!subCmd) process.exit(0);
     let branch;
     try {
-      branch = execSync('git rev-parse --abbrev-ref HEAD', { encoding: 'utf8', timeout: 2000 }).trim();
+      branch = execFileSync('git', ['rev-parse', '--abbrev-ref', 'HEAD'], { cwd: workDir, encoding: 'utf8', timeout: 2000, stdio: ['ignore', 'pipe', 'ignore'] }).trim();
     } catch { process.exit(0); }
     if (!PROTECTED_BRANCHES.includes(branch)) process.exit(0);
     process.stdout.write(JSON.stringify({

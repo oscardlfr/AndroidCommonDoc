@@ -25,7 +25,7 @@ const path = require('path');
 const crypto = require('crypto');
 const { spawnSync } = require('child_process');
 const coordinationArtifact = require('./coordination-artifact.js');
-const { getWaveSlug } = require('./hook-control-plane-utils.js');
+const { getWaveSlug, MEDIATED_RECIPIENT_ROLES } = require('./hook-control-plane-utils.js');
 
 // M7/WP4 (P0-2, lifecycle-grant injection, below): lazily-tolerant of either
 // sibling module failing to load -- a corrupt/missing file must never turn
@@ -412,7 +412,7 @@ function isAcceptedConsultationTransactionValid(txnDir, requestId, repoId, expec
     ) {
       return false;
     }
-    if (expectedProfileDigest && reqObj.target_role_profile_digest !== expectedProfileDigest) return false;
+    if (Array.isArray(expectedProfileDigest) && !expectedProfileDigest.includes(reqObj.target_role_profile_digest)) return false;
     if (!validateViaConsultationCli(coordRootForValidate, ctx.projectRoot, 'consult-v2', requestPath, ctx, callerIdentity)) return false;
 
     const acceptedClassified = runtimeConsultationLib.classifyDurableRead(path.join(txnDir, 'accepted-result.json'), { parse: true });
@@ -594,7 +594,12 @@ function hasCurrentAcceptedConsultation(ctx, architectIdentity, callerIdentity) 
   try {
     repoId = runtimeRoleLifecycle.computeRepoId(ctx.projectRoot);
     if (typeof repoId !== 'string' || repoId.length === 0) return false;
-    expectedProfileDigest = runtimeRoleLifecycle.roleProfileDigestFor('context-provider');
+    // A request published by the consultation CLI carries the deterministic target-role profile digest; fixtures and the
+    // role-lifecycle carry the role template digest. Both name the same context-provider profile and both are accepted.
+    expectedProfileDigest = [runtimeRoleLifecycle.roleProfileDigestFor('context-provider')];
+    if (typeof runtimeConsultationLib.targetRoleProfileDigestFor === 'function') {
+      expectedProfileDigest.push(runtimeConsultationLib.targetRoleProfileDigestFor('context-provider'));
+    }
     transactionsDirPath = path.join(coordRootForValidate, repoId, ctx.waveSlug, ctx.planSha256, 'transactions');
   } catch {
     return false;
@@ -812,6 +817,30 @@ const ENTRYPOINT_BARE_COMMAND_RE = /^[A-Za-z0-9_.\/:@+-]+(?: [A-Za-z0-9_.\/:@+-]
 const ENTRYPOINT_WINDOWS_TOKEN_RE = /(?:"([A-Za-z]:[\\/][A-Za-z0-9_.\\\/:@+ -]*)"|([A-Za-z0-9_.\/:@+-]+))(?: |$)/gy;
 const ENTRYPOINT_RELATIVE_CLI_PATH = 'scripts/lib/runtime-collaboration-entrypoints.cjs';
 
+/**
+ * Desktop Code-tab sessions run in a managed linked worktree while CLAUDE_PROJECT_DIR names the main checkout. A
+ * consumer root is accepted when it equals CLAUDE_PROJECT_DIR, or is a worktree root REGISTERED by git for the SAME
+ * repository (equal common dir); an unrelated repo, unregistered directory or other repository's worktree is foreign.
+ */
+function projectRootMatchesEnvironment(projectRoot) {
+  const declared = process.env.CLAUDE_PROJECT_DIR;
+  if (!declared) return true;
+  const declaredRoot = fs.realpathSync(declared);
+  if (declaredRoot === projectRoot) return true;
+  const git = (cwd, args) => {
+    const r = spawnSync('git', args, { cwd, encoding: 'utf8', timeout: 10000 });
+    if (r.status !== 0) throw new Error('git-unavailable');
+    return r.stdout.trim();
+  };
+  const commonOf = (cwd) => fs.realpathSync(git(cwd, ['rev-parse', '--path-format=absolute', '--git-common-dir']));
+  if (commonOf(declaredRoot) !== commonOf(projectRoot)) return false;
+  if (fs.realpathSync(git(projectRoot, ['rev-parse', '--show-toplevel'])) !== projectRoot) return false;
+  return git(declaredRoot, ['worktree', 'list', '--porcelain']).split('\n').some((line) => {
+    if (!line.startsWith('worktree ')) return false;
+    try { return fs.realpathSync(line.slice('worktree '.length)) === projectRoot; } catch { return false; }
+  });
+}
+
 // Claude must not have to discover an absolute consumer root, resolve Node, or
 // synthesize a base64url intent before it can start the runtime.  Keep the
 // public init-session surface deliberately tiny; this trusted hook derives all
@@ -861,10 +890,7 @@ function normalizeInitSessionShorthand(command, event) {
     if (!fs.statSync(projectRoot).isDirectory() || projectRoot !== path.resolve(event.cwd)) {
       throw new Error('unsafe-cwd');
     }
-    if (process.env.CLAUDE_PROJECT_DIR
-        && fs.realpathSync(process.env.CLAUDE_PROJECT_DIR) !== projectRoot) {
-      throw new Error('foreign-cwd');
-    }
+    if (!projectRootMatchesEnvironment(projectRoot)) throw new Error('foreign-cwd');
   } catch {
     return {
       recognized: true,
@@ -935,6 +961,16 @@ function parseEntrypointCliCommand(command, event) {
   return tokens;
 }
 
+const WAVE_CLASS_RECOVERY = Object.freeze({
+  WAVE_CLASS_SECTION_MISSING: "the PLAN has no '### Wave Class' section; add it with a '- **Class**: HARNESS|DOC|FAST-PATH' line (the planner writes it in Pass A).",
+  WAVE_CLASS_SECTION_AMBIGUOUS: "the PLAN has more than one '### Wave Class' section; keep exactly one.",
+  PLAN_WAVE_CLASS_MISSING: "the Wave Class section declares no class; add a '- **Class**: HARNESS|DOC|FAST-PATH' line.",
+  PLAN_WAVE_CLASS_AMBIGUOUS: "the Wave Class section declares more than one '**Class**:' line; keep exactly one.",
+  INVALID_WAVE_CLASS: 'the declared class is not one of HARNESS, DOC or FAST-PATH.',
+  WAVE_CLASS_SENTINEL_MISSING: 'write .planning/wave-<slug>/CLASS with the PLAN class (the planner writes it in Pass A).',
+  INVALID_WAVE_CLASS_SENTINEL: 'CLASS must contain exactly HARNESS, DOC or FAST-PATH and match the PLAN class.',
+});
+
 function canonicalizeInstalledEntrypointSurface(tokens, event) {
   if (!runtimeProjectContext || tokens.length < 3 || tokens[2] !== 'execute') {
     return { recognized: false, tokens: null, reason: null };
@@ -968,10 +1004,7 @@ function canonicalizeInstalledEntrypointSurface(tokens, event) {
     if (projectRoot !== path.resolve(values['--project-root']) || !fs.statSync(projectRoot).isDirectory()) {
       throw new Error('unsafe-project-root');
     }
-    if (process.env.CLAUDE_PROJECT_DIR
-        && fs.realpathSync(process.env.CLAUDE_PROJECT_DIR) !== projectRoot) {
-      throw new Error('foreign-project-root');
-    }
+    if (!projectRootMatchesEnvironment(projectRoot)) throw new Error('foreign-project-root');
   } catch {
     return { recognized: true, tokens: null, reason: 'collaboration entrypoint project root is unresolved or foreign' };
   }
@@ -1532,6 +1565,10 @@ function tryInjectEntrypointComposition(toolInput, event) {
     if (error && error.message === 'wave-control-work-outside-execute') {
       return m7DenyResult('[R131/P3] wave-control-work-outside-execute: /work is available only during EXECUTE.');
     }
+    // Exact, closed set of wave class/sentinel codes: each names the file to fix and never echoes paths or host details.
+    if (error && typeof error.message === 'string' && Object.prototype.hasOwnProperty.call(WAVE_CLASS_RECOVERY, error.message)) {
+      return m7DenyResult('[R131/P3] ' + error.message + ': ' + WAVE_CLASS_RECOVERY[error.message]);
+    }
     return m7DenyResult('[R131/P3] collaboration entrypoint intent or scope is invalid.');
   }
   // mintProductionHostComposition is the single authority boundary: it
@@ -1605,7 +1642,7 @@ const REQUESTER_BINDING_TTL_SECONDS = 3600; // Mirrors MAIN_ORCHESTRATOR_BINDING
 // (runtime-consultation.cjs's ROLE_COMMAND_GRANT_AUTHORITY_FOR_COMMAND) is
 // extended in the same pass -- see that file's own matching comment.
 const REQUESTER_ADMIN_SUBCOMMANDS = Object.freeze([
-  'root-init', 'root-validate', 'publish-blob', 'publish-request', 'dispatch',
+  'root-init', 'root-validate', 'publish-blob', 'publish-request', 'consult', 'dispatch',
   'record-delivery', 'takeover', 'await-result', 'accept-result',
   'transaction-ack', 'cancel', 'worker-stop', 'cleanup', 'validate',
 ]);
@@ -1639,6 +1676,51 @@ function harnessSuffixCandidateRole(name) {
   return m[1];
 }
 
+// BL-CONS-P1-08: a consumer cannot name the toolkit's absolute consultation CLI, so it invokes its own installed
+// launcher operation. The exact argv is mapped to the canonical toolkit target here -- the only place the requester
+// grant is minted -- mirroring the entrypoint-launcher branch above. Every deviation is an explicit deny.
+const CONSULT_LAUNCHER_RELATIVE_PATH = '.claude/runtime/l0-toolkit-launcher.cjs';
+const CONSULT_LAUNCHER_INTENT_RE = /^\S+\s+'?\.claude\/runtime\/l0-toolkit-launcher\.cjs'?\s+'?run'?\s+'?runtime-consult'?(?:\s|$)/;
+const CONSULT_LAUNCHER_SUBCOMMANDS = Object.freeze(['consult', 'record-delivery', 'await-result', 'accept-result']);
+
+/** @returns {null|{deny:string}|{tokens:string[]}} null when the command is not the consult launcher form. */
+function canonicalizeConsultLauncher(tokens) {
+  if (tokens.length < 4 || !isRecognizedNodeToken(tokens[0])) return null;
+  const script = String(tokens[1]).replace(/\\/g, '/');
+  const isLauncher = script === CONSULT_LAUNCHER_RELATIVE_PATH
+    || (path.isAbsolute(String(tokens[1])) && script.endsWith('/' + CONSULT_LAUNCHER_RELATIVE_PATH));
+  if (!isLauncher || tokens[2] !== 'run' || tokens[3] !== 'runtime-consult') return null;
+  if (tokens.length < 9 || tokens[4] !== '--project-root' || tokens[6] !== '--'
+      || !CONSULT_LAUNCHER_SUBCOMMANDS.includes(tokens[7])) {
+    return { deny: 'the consult launcher form is closed: run runtime-consult --project-root <root> -- <consult|record-delivery|await-result|accept-result> ...' };
+  }
+  if (!runtimeProjectContext) return { deny: 'runtime project context is unavailable for the consult launcher form' };
+  let projectRoot;
+  try {
+    projectRoot = fs.realpathSync(process.env.CLAUDE_PROJECT_DIR || process.cwd());
+    const expectedLauncher = path.join(projectRoot, CONSULT_LAUNCHER_RELATIVE_PATH);
+    const supplied = path.isAbsolute(String(tokens[1])) ? path.resolve(tokens[1]) : path.resolve(projectRoot, tokens[1]);
+    const info = fs.lstatSync(expectedLauncher);
+    if (path.resolve(tokens[5]) !== projectRoot || supplied !== expectedLauncher
+        || !info.isFile() || info.isSymbolicLink() || fs.realpathSync(expectedLauncher) !== expectedLauncher) {
+      throw new Error('foreign-launcher-or-root');
+    }
+  } catch {
+    return { deny: 'the consult launcher or project root is missing, foreign or unsafe' };
+  }
+  const toolkitRoot = fs.realpathSync(path.resolve(__dirname, '../..'));
+  const context = runtimeProjectContext.resolveRuntimeProjectContext(projectRoot);
+  const l0SelfUse = context && context.ok === true && context.consumerLayer === 'L0' && projectRoot === toolkitRoot;
+  if (!l0SelfUse) {
+    const qualification = runtimeProjectContext.verifyRuntimeConsumerInstallation(projectRoot, { verifyContent: true });
+    if (!qualification || qualification.ok !== true || qualification.consumerRoot !== projectRoot
+        || qualification.toolkitRoot !== toolkitRoot) {
+      return { deny: 'the installed L0 runtime is not qualified for the consult launcher form' };
+    }
+  }
+  return { tokens: [tokens[0], CANONICAL_CONSULTATION_CLI_PATH].concat(tokens.slice(7)) };
+}
+
 /**
  * Requester-authority counterpart to tryInjectLifecycleGrant, mirroring its
  * exact recognized/not-applicable/recognized-but-failed discipline. Returns
@@ -1655,14 +1737,37 @@ function tryInjectRequesterGrant(toolInput, sessionId, agentType, agentId) {
   const command = toolInput && toolInput.command;
   if (typeof command !== 'string' || command.length === 0) return null; // not applicable.
   if (!runtimeRoleLifecycle || !runtimeConsultationLib) return null; // not applicable: mechanism itself unavailable.
-  if (/[;&|`\n]|\$\(/.test(command)) return null; // not applicable.
+  // Shell metacharacters make a command not applicable, except inside the closed launcher form below, whose strict
+  // every-token-single-quoted grammar proves they are data (a chained command never parses and stays not applicable).
+  const hasShellMetacharacters = /[;&|`\n]|\$\(/.test(command);
 
-  const tokens = runtimeRoleLifecycle.parsePosixDirect(command);
-  if (!tokens) return null; // not applicable.
+  let tokens = runtimeRoleLifecycle.parsePosixDirect(command);
+  if (!tokens) {
+    // The consult launcher form must never fall through silently: an unbound command only fails later with an opaque
+    // AUTHORITY_INVALID, so a recognizable-but-malformed form is denied with the rule it broke.
+    if (CONSULT_LAUNCHER_INTENT_RE.test(command)) {
+      return m7DenyResult('[BL-CONS-P1-08] the consult command must be exactly the documented form: every token single-quoted, single spaces between tokens, no newline and nothing chained after it.');
+    }
+    return null; // not applicable.
+  }
+  const launcherForm = canonicalizeConsultLauncher(tokens);
+  if (hasShellMetacharacters && !launcherForm) return null; // not applicable.
+  if (launcherForm) {
+    if (launcherForm.deny) return m7DenyResult('[BL-CONS-P1-08] ' + launcherForm.deny);
+    tokens = launcherForm.tokens;
+  }
   const cliIdx = findConsultationCliInvocation(tokens);
   if (cliIdx === -1 || cliIdx + 1 >= tokens.length) return null; // not applicable.
   const subcommand = tokens[cliIdx + 1];
   if (!REQUESTER_ADMIN_SUBCOMMANDS.includes(subcommand)) return null; // not applicable.
+
+  // A consumer names no toolkit path: `consult` from a consumer is admitted only through its installed launcher.
+  if (subcommand === 'consult' && !launcherForm && runtimeProjectContext) {
+    const direct = runtimeProjectContext.resolveRuntimeProjectContext(process.env.CLAUDE_PROJECT_DIR || process.cwd());
+    if (!direct || direct.ok !== true || direct.consumerLayer !== 'L0') {
+      return m7DenyResult('[BL-CONS-P1-08] a consumer must invoke consult through its installed launcher, never the toolkit target directly.');
+    }
+  }
 
   // ── RECOGNIZED from here on: every path below is an explicit decision. ──
 
@@ -2334,15 +2439,18 @@ process.stdin.on('end', () => {
       }
       process.exit(0);
     }
-    const SPECIALIST_NAMES = [
-      'test-specialist', 'toolkit-specialist', 'ui-specialist',
-      'domain-model-specialist', 'data-layer-specialist'
-    ];
-    const isSpecialist = SPECIALIST_NAMES.some(s => agentType === s || agentType.startsWith(s));
+    // Mediated recipients (specialists and the planner) rely on an arch-* answer, not on a consult of their own.
+    const isSpecialist = MEDIATED_RECIPIENT_ROLES.some(s => agentType === s || agentType.startsWith(s));
     const tmpDir = process.env.TMPDIR || process.env.TMP || os.tmpdir();
     // team-lead exemption removed: main is now caught by empty agent_type check above
     const EXEMPT_TYPES = ['context-provider', 'project-manager'];
     if (EXEMPT_TYPES.some(e => agentType === e || agentType.startsWith(e))) process.exit(0);
+    // quality-gater verifies the committed HEAD and can never consult context-provider (only arch-* may), so the
+    // pattern-discovery gate would wait forever for a consult it cannot make. Exact role or harness-suffixed instance only.
+    // doc-updater is exempt for the same reason: it cannot consult (only arch-* may) and its input arrives pre-consulted.
+    for (const preConsulted of ['quality-gater', 'doc-updater']) {
+      if (agentType === preConsulted || harnessSuffixCandidateRole(agentType) === preConsulted) process.exit(0);
+    }
 
     // 2a. Read on pattern-discovery paths requires CP consultation (T-BUG-015)
     try {

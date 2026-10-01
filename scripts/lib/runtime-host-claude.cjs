@@ -1095,17 +1095,17 @@ function parseDarwinTextExecutable(output, expectedPid) {
   return null;
 }
 
-function queryDarwinTextExecutable(processId, timeoutMs) {
-  const result = spawnSync('/usr/sbin/lsof', ['-a', '-p', String(processId), '-d', 'txt', '-Fn'], {
+function queryDarwinTextExecutable(processId, timeoutMs, run = spawnSync) {
+  const result = run('/usr/sbin/lsof', ['-a', '-p', String(processId), '-d', 'txt', '-Fn'], {
     encoding: 'utf8', timeout: timeoutMs, maxBuffer: 1 << 20,
   });
   if (result.status !== 0 || result.error) return null;
   return parseDarwinTextExecutable(result.stdout, processId);
 }
 
-function queryDarwinParentChain(startingPid, timeoutMs) {
+function queryDarwinParentChain(startingPid, timeoutMs, run = spawnSync) {
   const startedMs = Date.now();
-  const result = spawnSync('/bin/ps', ['-Awwo', 'pid=,ppid=,lstart=,comm='], {
+  const result = run('/bin/ps', ['-Awwo', 'pid=,ppid=,lstart=,comm='], {
     encoding: 'utf8', timeout: timeoutMs, maxBuffer: 1 << 24,
   });
   if (result.status !== 0 || result.error || typeof result.stdout !== 'string' || result.stdout.trim().length === 0) return null;
@@ -1132,10 +1132,12 @@ function queryDarwinParentChain(startingPid, timeoutMs) {
     const row = byPid.get(current);
     const remainingMs = timeoutMs - (Date.now() - startedMs);
     if (remainingMs <= 0) return null;
+    // A terminal starts the shell through the root-owned /usr/bin/login, whose image lsof cannot read (exit 1).
+    // An ancestor whose executable cannot be resolved is kept as its non-absolute name: the observe loop never
+    // treats such a row as a provable Claude binary, so one unreadable ancestor no longer voids the whole chain.
     const executablePath = path.isAbsolute(row.executable_path)
       ? row.executable_path
-      : queryDarwinTextExecutable(row.process_id, remainingMs);
-    if (executablePath === null) return null;
+      : queryDarwinTextExecutable(row.process_id, remainingMs, run) || row.executable_path;
     rows.push({ ...row, executable_path: executablePath });
     current = row.parent_process_id;
   }
@@ -1185,7 +1187,9 @@ function observeClaudeExecutablePin(options) {
   if (!contract.ok || contract.certificate.os !== process.platform) {
     return { ok: false, reason: 'HOST_PIN_UNPROVEN', detail: 'HOST_PIN_CONTRACT_INVALID' };
   }
-  const before = queryHostParentChain(startingPid, 10000);
+  const probes = isTestCapability() && options.__testProbes ? options.__testProbes : null;
+  const chainOf = (timeoutMs) => (probes ? probes.chain(startingPid, timeoutMs) : queryHostParentChain(startingPid, timeoutMs));
+  const before = chainOf(10000);
   if (!before || Date.now() - startedMs >= 15000) {
     return { ok: false, reason: 'HOST_PIN_UNPROVEN', detail: 'HOST_PIN_PARENT_CHAIN_UNAVAILABLE' };
   }
@@ -1202,8 +1206,8 @@ function observeClaudeExecutablePin(options) {
     try {
       const resolved = fs.realpathSync(row.executable_path);
       const stat = fs.statSync(resolved);
-      const signatureTrusted = stat.isFile() && trustedClaudeVendorSignature(resolved);
-      const cliVersion = signatureTrusted ? observedClaudeVersion(resolved) : null;
+      const signatureTrusted = stat.isFile() && (probes ? probes.trustedSignature(resolved) : trustedClaudeVendorSignature(resolved));
+      const cliVersion = signatureTrusted ? (probes ? probes.version(resolved) : observedClaudeVersion(resolved)) : null;
       if (cliVersion && claudeVersionFamily(cliVersion) === SUPPORTED_CLAUDE_FAMILY) {
         matches.push({ row, resolved, cliVersion });
       }
@@ -1217,7 +1221,7 @@ function observeClaudeExecutablePin(options) {
   }
   const remainingMs = 15000 - (Date.now() - startedMs);
   if (remainingMs <= 0) return { ok: false, reason: 'HOST_PIN_UNPROVEN', detail: 'HOST_PIN_OBSERVATION_TIMEOUT' };
-  const after = queryHostParentChain(startingPid, Math.min(10000, remainingMs));
+  const after = chainOf(Math.min(10000, remainingMs));
   if (!after || Date.now() - startedMs > 15000) {
     return { ok: false, reason: 'HOST_PIN_UNPROVEN', detail: 'HOST_PIN_PARENT_CHAIN_RECHECK_UNAVAILABLE' };
   }
@@ -2300,6 +2304,9 @@ function mintManagedSupervisorStartAuthority(options) {
 
 const ENTRYPOINT_NAME_RE = /^(init-session|resume-work|work|ingest-content|monitor-docs)$/;
 
+// Distinguishes "the session runs another model than the profile requires" from every other unprovable state.
+const MODEL_MISMATCH = Object.freeze({ modelMismatch: true });
+
 function resolvePendingCompositionModel(projectRoot, record) {
   if (record.model_evidence_state !== 'pending-transcript-tool-use') return record;
   const profile = resolveRequestedModelProfile(projectRoot, null);
@@ -2334,7 +2341,7 @@ function resolvePendingCompositionModel(projectRoot, record) {
       if (matches.length > 1) return null;
       if (matches.length === 1) {
         const actualModel = matches[0].message.model;
-        if (!actualModelMatchesRequestedAlias(actualModel, profile.requestedModel)) return null;
+        if (!actualModelMatchesRequestedAlias(actualModel, profile.requestedModel)) return MODEL_MISMATCH;
         return { ...record, actual_model: actualModel, model_evidence_state: 'transcript-finalized' };
       }
     }
@@ -2348,6 +2355,7 @@ function consumeProductionHostComposition(projectRoot, compositionId, expected) 
   const record = readJsonFile(compositionRecordPath(projectRoot, compositionId));
   if (!verifyProductionRecord(projectRoot, record, expected)) return { ok: false };
   const resolvedRecord = resolvePendingCompositionModel(projectRoot, record);
+  if (resolvedRecord === MODEL_MISMATCH) return { ok: false, reason: 'HOST_MODEL_PROFILE_MISMATCH' };
   if (!resolvedRecord) return { ok: false };
   const keys = loadOrCreateProductionKey(projectRoot);
   const consumedAt = new Date();
@@ -2430,6 +2438,7 @@ module.exports = {
   operationForAction,
   COMPOSITION_OPERATIONS,
   __TEST_ONLY__queryHostParentChain: queryHostParentChain,
+__TEST_ONLY__queryDarwinParentChain: queryDarwinParentChain,
   __TEST_ONLY__parseDarwinTextExecutable: parseDarwinTextExecutable,
   __TEST_ONLY__pinObservationSourceFor: pinObservationSourceFor,
   __TEST_ONLY__trustedClaudeVendorSignature: trustedClaudeVendorSignature,

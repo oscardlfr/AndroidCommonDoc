@@ -22,6 +22,38 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 - Agent templates now treat memory as durable-only advisory context, keep the
   quality gate phase-scoped, and reject retired orchestrators or dated model pins.
 
+### Added (consumer readiness)
+
+- `runtime-consultation.cjs consult`: one requester command (`commands/consult.cjs`) that derives plan reference, intent and
+  subject bundle from the active wave PLAN and publishes and dispatches a context-provider consult. Consumers reach it only
+  through the installed launcher operation `runtime-consult` (closed subcommand allowlist: `consult`, `record-delivery`,
+  `await-result`, `accept-result`); the hook maps that exact argv to the canonical target and mints the requester binding,
+  and denies a direct toolkit path, a forged binding, a foreign root, the main orchestrator and every non-`arch-*` role
+  before anything is written. The three architect templates document the exact command; in Pass B the planner asks the
+  `arch-*` owner by SendMessage (the existing mediated chain, no planner edge) and reads the accepted result path it
+  returns.
+- Consumer manifests keep `sources[0].repository`, `sources[0].ref` and top-level `l0Commit` through sync; `l0Commit` advances
+  to the synced commit only when the consumer already carries it.
+
+### Fixed (consumer readiness)
+
+- A chained consultation target command (heredoc, pipe, `&&`, `;`, `$(...)` around `claim`, `lease-heartbeat`, `publish-result` or `worker-stop-ack`) is denied by `runtime-consultation-target-gate.js` with the standalone recovery instead of reaching the CLI without a grant and failing with an opaque `AUTHORITY_INVALID`.
+- An owning `claude-agent` spawn whose type and name match but whose prompt differs is allowed and rewritten to the deterministic bootstrap through `updatedInput`, as the role-lifecycle path does; a diverging name is still denied.
+- `quality-gater` is no longer blocked by the pattern-discovery gate, which waited for a consult it can never make.
+- Desktop Code-tab sessions: a registered linked worktree of the same repository is accepted as the consumer root for the
+  init-session shorthand; a session whose model differs from the profile reports `host-model-mismatch` with a one-line fix;
+  L0's legacy `init-session` command was retired in favor of its skill so a consumer with L0 added lists one entry; a
+  root-owned `login` ancestor no longer invalidates the macOS parent chain (still exactly one signed Claude ancestor).
+- CI: the Node hook-test step runs every non-skipped file, lists every failure and then fails.
+- Entrypoint admission names the wave class/sentinel defect (`WAVE_CLASS_SECTION_MISSING`, `WAVE_CLASS_SECTION_AMBIGUOUS`, `PLAN_WAVE_CLASS_MISSING`, `PLAN_WAVE_CLASS_AMBIGUOUS`, `INVALID_WAVE_CLASS`, `WAVE_CLASS_SENTINEL_MISSING`, `INVALID_WAVE_CLASS_SENTINEL`) with how to recover; any other error stays generic.
+- `discoverPlan` without a digest resolves several `.planning/wave-*` directories to the wave named by the current branch, through the existing branch resolver (`<prefix>/<slug>`, no environment, no alias), for every caller: requester authority, `consult`, the target gate and the runtime libraries no longer fail with "no discoverable PLAN" in a consumer that accumulated waves. A single wave is unchanged, a branch that names no wave still fails, and a digest still selects its own wave.
+- A DOC wave now starts its declared `Required-Architects` through the lifecycle together with `context-provider` and `doc-updater`, so Pass B and PREP consultations have an architect peer; a DOC wave without the declaration fails as before. The planner template states that a FAST-PATH wave finalizes without a Pass B consultation.
+- `tl-session-start.md` documents the orchestrator's consumer PREP recipe (`wave-control init`, `verdict-request-write`, `verdict-write`, `wave-control transition`), run by a test against a consumer with a distinct toolkit.
+- The single-use planner is a mediated recipient like the specialists (one shared `MEDIATED_RECIPIENT_ROLES` list used by `context-provider-consulted.js` and `context-provider-gate.js`): once the PLAN exists it searches only after an arch-* answered it with an accepted consultation. `context-provider-consulted.js` is now installed in consumers, so that answer is recorded there too. `doc-updater` is exempt from the pattern-discovery gate on the same terms as `quality-gater`: it cannot consult and its input arrives pre-consulted.
+- Consumer hooks run in the session's own root: `l0-source-hook-launcher.js` uses the hook event cwd when it is a registered linked worktree of the same repository as `CLAUDE_PROJECT_DIR` (desktop Code tab), and keeps the declared root for an unrelated repository, an unregistered directory, a symlink or another repository's worktree.
+- `branch-guard` resolves the branch of the session's own worktree (hook event cwd or `git -C`), so commits in a desktop managed linked worktree on a feature branch are no longer denied because the main checkout is on `develop`.
+- The entrypoint launcher reports "/init-session runs only from Claude Code ... Codex is not a supported entrypoint host" when the bare shorthand reaches it unrewritten, instead of the opaque closed-argv error.
+
 ### Fixed (post-#255 live-consumer convergence)
 
 - Runtime lifecycle and consultation action payloads resolve executable code
@@ -177,7 +209,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 
 ### Changed (portable-runtime-messaging-adapters — bounded runtime internals)
 
-- Split the three stable runtime compatibility facades (`runtime-consultation.cjs`, `runtime-role-lifecycle.cjs`, `runtime-bridge-codex.cjs`) into 208 cohesive internal CommonJS modules (57 + 67 + 84) covering consultation protocol/durability/transactions, lifecycle authority/grants/root-source contract, and Codex process isolation/credentials/recovery/app-server connection/supervisor-engine/turn-execution/Context7 evidence. Public CLI/CommonJS ABIs remain closed (69 / 275 / 52 & 81-under-test-capability keys); every internal module is capped at 500 lines and 320 chars/line, no function body exceeds 500 lines, none imports upward, and all three trees are recursively included in L1/L2 consumer inventories with symlink rejection and deterministic digests. See [runtime-messaging-adapters § Architecture Map](docs/agents/runtime-messaging-adapters.md#architecture-map) for the current per-tree breakdown.
+- Split the three stable runtime compatibility facades (`runtime-consultation.cjs`, `runtime-role-lifecycle.cjs`, `runtime-bridge-codex.cjs`) into 209 cohesive internal CommonJS modules (58 + 67 + 84) covering consultation protocol/durability/transactions, lifecycle authority/grants/root-source contract, and Codex process isolation/credentials/recovery/app-server connection/supervisor-engine/turn-execution/Context7 evidence. Public CLI/CommonJS ABIs remain closed (69 / 275 / 52 & 81-under-test-capability keys); every internal module is capped at 500 lines and 320 chars/line, no function body exceeds 500 lines, none imports upward, and all three trees are recursively included in L1/L2 consumer inventories with symlink rejection and deterministic digests. See [runtime-messaging-adapters § Architecture Map](docs/agents/runtime-messaging-adapters.md#architecture-map) for the current per-tree breakdown.
 
 ### Fixed (portable-runtime-messaging-adapters — Windows drive-letter path confinement gaps)
 

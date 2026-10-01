@@ -119,8 +119,8 @@ agents:
   arch-platform:
     canonical_name: arch-platform
     subagent_type: arch-platform
-    template_version: "1.36.1"
-    template_frontmatter_sha256: 46022a4b687113a2a723946a3ca57b20962881b5d3ee77fdf465b4e29a34c3d9
+    template_version: "1.36.2"
+    template_frontmatter_sha256: b22282116a16d9adbc4a4cd29d00e561c593e318966892a50bfca87aea3ee0b5
     category: architect
     lifecycle: ephemeral
     description: "Platform architecture architect. Mini-orchestrator: verifies KMP patterns via MCP tools, fixes violations directly or via delegation, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict."
@@ -174,8 +174,8 @@ agents:
   arch-testing:
     canonical_name: arch-testing
     subagent_type: arch-testing
-    template_version: "1.41.1"
-    template_frontmatter_sha256: 17d985b4ceedc660cc2a2c002e6230d1a6a1565eca0dc7aa755acc1f1fc9284c
+    template_version: "1.41.2"
+    template_frontmatter_sha256: bcd51f7c30a42306f7f831b8238f83d6c55de36190240a83a1b8164325b706e5
     category: architect
     lifecycle: ephemeral
     description: "Test quality architect. Mini-orchestrator: verifies TDD compliance, detects test gaps, delegates fixes to test-specialist, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict."
@@ -226,8 +226,8 @@ agents:
   arch-integration:
     canonical_name: arch-integration
     subagent_type: arch-integration
-    template_version: "1.32.1"
-    template_frontmatter_sha256: 96ad1186e4621d36d9036d427090d0b478eed387e1bb3d2eb1b0b79d88f7de72
+    template_version: "1.32.2"
+    template_frontmatter_sha256: 268ebac42854afe0429b36fdb6fe13593ea26bbb98de493c235b51e2e61bc2f8
     category: architect
     lifecycle: ephemeral
     description: "Integration architect. Mini-orchestrator: verifies compilation, DI wiring, navigation via MCP tools. Fixes wiring gaps, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict."
@@ -1618,8 +1618,8 @@ agents:
   planner:
     canonical_name: planner
     subagent_type: planner
-    template_version: "1.22.2"
-    template_frontmatter_sha256: 928a67593fe6a5b6ef7c8072be3e456a82b10431d2a646e44554cb62e8f998ca
+    template_version: "1.22.3"
+    template_frontmatter_sha256: 1db8ec2107fdecde71d58a1852e518dcac36955a453109599e9af35aad5183bb
     category: orchestrator
     lifecycle: ephemeral
     description: "Single-use planning subagent. Reads context, specs, architecture to produce structured execution plans. Spawned without team_name; results land as PLAN.md on disk. Works alongside context-provider via SendMessage."

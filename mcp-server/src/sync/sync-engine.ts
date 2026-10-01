@@ -827,6 +827,13 @@ export function getGitCommit(dirPath: string): string | undefined {
   }
 }
 
+/** Consumer CI reads the top-level l0Commit; advance it to the synced L0 commit only when the consumer already carries it. */
+function advanceL0Commit(manifest: Manifest, l0Root: string): void {
+  if (manifest.l0Commit === undefined) return;
+  const head = getGitCommit(l0Root);
+  if (head !== undefined && /^[0-9a-f]{40}$/.test(head)) manifest.l0Commit = head;
+}
+
 // ---------------------------------------------------------------------------
 // Materialization
 // ---------------------------------------------------------------------------
@@ -1232,6 +1239,7 @@ const SOURCE_REFERENCED_HOOK_FILES = new Set([
   "architect-verdict-presence-gate.js",
   "bash-cli-spawn-gate.js",
   "context-provider-gate.js",
+  "context-provider-consulted.js",
   "hook-control-plane-utils.js",
   "premature-execution-gate.js",
   "plan-md-write-gate.js",
@@ -1408,7 +1416,7 @@ const RUNTIME_CORE_HOOK_FILES = [
   "subagent-start-context-bundle.js", "runtime-host-boundary.js",
   "runtime-host-session-start.js", "bash-cli-spawn-gate.js",
   "premature-execution-gate.js", "plan-md-write-gate.js",
-  "hook-control-plane-utils.js", "tool-use-logger.js",
+  "hook-control-plane-utils.js", "tool-use-logger.js", "context-provider-consulted.js",
 ] as const;
 
 const RUNTIME_ROLE_TEMPLATES = [
@@ -1431,6 +1439,7 @@ const RUNTIME_HOOK_REGISTRATIONS: readonly (HookRegistrationEntry & { timeout: n
   { event: "PreToolUse", matcher: "Bash|Task|Agent|SendMessage", file: "runtime-host-boundary.js", timeout: 5 },
   { event: "PostToolUse", matcher: ".*", file: "tool-use-logger.js", timeout: 5 },
   { event: "PostToolUse", matcher: "Bash|Task|Agent|SendMessage", file: "runtime-host-boundary.js", timeout: 5 },
+  { event: "PostToolUse", matcher: "SendMessage", file: "context-provider-consulted.js", timeout: 5 },
   { event: "PostToolUseFailure", matcher: "Agent|SendMessage", file: "tool-use-logger.js", timeout: 5 },
   { event: "PostToolUseFailure", matcher: "Bash|Task|Agent|SendMessage", file: "runtime-host-boundary.js", timeout: 5 },
   { event: "SubagentStart", matcher: ".*", file: "subagent-start-context-bundle.js", timeout: HOOK_TIMEOUT_SECONDS.subagentLifecycle },
@@ -1496,7 +1505,9 @@ export async function computeRuntimeToolkitInventory(toolkitRoot: string): Promi
     ...RUNTIME_CONSUMER_FILES,
     ...RUNTIME_ROLE_TEMPLATES.map((role) => `.claude/agents/${role}.md`),
     ...["init-session", "resume-work", "work", "ingest-content", "monitor-docs"].map((skill) => `skills/${skill}/SKILL.md`),
-    ...["init-session", "resume-work", "work", "ingest-content", "monitor-docs"].map((command) => `.claude/commands/${command}.md`),
+    // init-session is exposed to sessions only as a skill (a same-named command doubled /init-session in a consumer).
+    ".claude/skills/init-session/SKILL.md",
+    ...["resume-work", "work", "ingest-content", "monitor-docs"].map((command) => `.claude/commands/${command}.md`),
   ];
   await collectPlatformHostContracts(canonicalRoot, files);
   await collectInventoryDirectory(canonicalRoot, "scripts/lib/runtime-consultation", files);
@@ -1741,6 +1752,7 @@ export async function installRuntimeConsumer(
         await writeSettingsAtomically(settingsPath, nextSettings);
       }
       manifest.consumer_layer = consumerLayer;
+      if (manifest.l0Commit !== undefined) manifest.l0Commit = toolkitCommit;
       manifest.runtime = {
         schema: "runtime-consumer/v1", enabled: true, consumer_layer: consumerLayer,
         toolkit_commit: toolkitCommit, toolkit_content_sha256: inventory.digest,
@@ -2618,6 +2630,7 @@ export async function syncMultiSource(
     }
 
     if (report.errors.length === 0) {
+      advanceL0Commit(manifest, msL0Root);
       manifest.checksums = newChecksums;
       if (manifestStateWithoutTimestamp(manifest) !== manifestStateBefore) {
         manifest.last_synced = new Date().toISOString();
@@ -3028,6 +3041,7 @@ export async function syncL0(
     }
 
     if (report.errors.length === 0) {
+      advanceL0Commit(manifest, l0Root);
       manifest.checksums = newChecksums;
       if (manifestStateWithoutTimestamp(manifest) !== manifestStateBefore) {
         manifest.last_synced = new Date().toISOString();

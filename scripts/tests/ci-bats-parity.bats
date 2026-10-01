@@ -365,3 +365,51 @@ NAMES
     grep -qE '^[[:space:]]*-[[:space:]]*shell-tests[[:space:]]*$' <<< "$ci_gate"
     grep -qF '${{ needs.shell-tests.result }}' <<< "$ci_gate"
 }
+
+# ─────────────────────────────────────────────────────────────────────────────
+# #CP14  BL-CONS-P1-09: bats-post's Node-hook loop must not stop at the first failing file
+#
+# A `set -e` loop hid every later failure and forced one push per defect (PR #259 had
+# 21 files never executed). The exact step body is run here against a sandbox roster:
+# every non-skipped file executes, every failure is listed, and the step still fails.
+# ─────────────────────────────────────────────────────────────────────────────
+@test "#CP14 BEHAVIOR: bats-post runs every non-skipped Node hook test, lists all failures and exits non-zero" {
+    [ -f "$WORKFLOW" ] || return 1
+    local sandbox step
+    sandbox="$(mktemp -d)"
+    step="$sandbox/step.sh"
+    awk '/- name: Run Node.js hook tests/{f=1;next} f&&/^      - name:/{exit} f&&/^        run: \|/{r=1;next} f&&r{sub(/^          /,"");print}' "$WORKFLOW" > "$step"
+    [ -s "$step" ] || { echo "could not extract the Node hook test step" >&2; return 1; }
+
+    mkdir -p "$sandbox/scripts/tests"
+    printf 'process.exit(0)\n' > "$sandbox/scripts/tests/a-pass.test.js"
+    printf 'console.log("b fails");process.exit(1)\n' > "$sandbox/scripts/tests/b-fail.test.js"
+    printf 'process.exit(0)\n' > "$sandbox/scripts/tests/c-pass-after-failure.test.js"
+    printf 'process.exit(3)\n' > "$sandbox/scripts/tests/d-fail-too.test.js"
+    printf 'console.log("must never run");process.exit(1)\n' > "$sandbox/scripts/tests/r33-wire-protocol.test.js"
+
+    run bash -c "cd '$sandbox' && bash '$step'"
+    local status_code="$status"
+    rm -rf "$sandbox"
+
+    [ "$status_code" -ne 0 ] || { echo "the step must fail when any test fails" >&2; return 1; }
+    [[ "$output" == *"Running scripts/tests/c-pass-after-failure.test.js"* ]] || { echo "a file after the first failure never ran: $output" >&2; return 1; }
+    [[ "$output" == *"Running scripts/tests/d-fail-too.test.js"* ]] || { echo "$output" >&2; return 1; }
+    [[ "$output" == *"SKIP scripts/tests/r33-wire-protocol.test.js"* ]] || { echo "$output" >&2; return 1; }
+    [[ "$output" != *"must never run"* ]] || { echo "a skipped sentinel executed" >&2; return 1; }
+    [[ "$output" == *"FAILED: scripts/tests/b-fail.test.js"* && "$output" == *"FAILED: scripts/tests/d-fail-too.test.js"* ]] || { echo "failures were not all listed: $output" >&2; return 1; }
+}
+
+@test "#CP14b BEHAVIOR: bats-post exits zero when every non-skipped Node hook test passes" {
+    local sandbox step
+    sandbox="$(mktemp -d)"
+    step="$sandbox/step.sh"
+    awk '/- name: Run Node.js hook tests/{f=1;next} f&&/^      - name:/{exit} f&&/^        run: \|/{r=1;next} f&&r{sub(/^          /,"");print}' "$WORKFLOW" > "$step"
+    mkdir -p "$sandbox/scripts/tests"
+    printf 'process.exit(0)\n' > "$sandbox/scripts/tests/a-pass.test.js"
+    printf 'process.exit(1)\n' > "$sandbox/scripts/tests/r33-native-abi.test.js"
+    run bash -c "cd '$sandbox' && bash '$step'"
+    local status_code="$status"
+    rm -rf "$sandbox"
+    [ "$status_code" -eq 0 ] || { echo "$output" >&2; return 1; }
+}

@@ -6,7 +6,7 @@ model: sonnet
 domain: architecture
 intent: [platform, KMP, source-sets, encoding]
 token_budget: 4000
-template_version: "1.36.1"
+template_version: "1.36.2"
 skills:
   - verify-kmp
   - validate-patterns
@@ -52,10 +52,16 @@ The orchestrator's dispatch is source-of-truth. `scope_doc_path` is the static r
 ### PRE-TASK Protocol (MANDATORY — after activation, per task)
 
 Before investigating or speccing work for a specialist:
-1. `SendMessage(to="context-provider", summary="context for {area}", message="Existing docs/patterns for {area}? Specific rules that apply?")`
-2. Wait for response. Include the context-provider's answer in your verdict's fix request so the specialist starts with full context.
+1. Consult context-provider through the runtime consultation transaction. Run it yourself, as this subagent: the requester binding is minted from your agent type, so the main orchestrator can never run it. Every token is single-quoted and `<ROOT>` is your absolute working directory:
+   `'node' '.claude/runtime/l0-toolkit-launcher.cjs' 'run' 'runtime-consult' '--project-root' '<ROOT>' '--' 'consult' '--coordination-root' '<ROOT>/.planning/coordination' '--question' '<question for {area}: existing docs/patterns and the rules that apply; one line, no newline>'`
+   It prints one JSON line. When `activation_action.kind` is `claude-sendmessage`, `SendMessage` its `message` VERBATIM to `activation_action.target_name`. Then run the same launcher form with `'await-result' '--coordination-root' '<ROOT>/.planning/coordination' '--request' '<artifact_ref>' '--timeout' '300'`, then `'accept-result' '--coordination-root' '<ROOT>/.planning/coordination' '--request' '<artifact_ref>'`, and read the result file named in the last envelope.
+2. Include the accepted context-provider answer in your verdict's fix request so the specialist starts with full context.
 
 **Skip only if**: context-provider already answered this exact query earlier in the same session.
+
+### Serving a planner's consult request (Pass B)
+
+The single-use planner may not address context-provider; you are its mediated requester. When it SendMessages `CONSULT-REQUEST wave=<slug>. ... Question: <text>`: run the consult command above yourself with that question on one line (collapse any newline), complete `await-result` and `accept-result`, and reply to the planner with ONLY the path of the accepted result file. Never relay an answer that has no accepted result file, never answer from your own knowledge in its place, and do nothing else for that request.
 
 ### Per-Session Gate
 

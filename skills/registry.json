@@ -783,7 +783,7 @@
       "description": "Show the canonical runtime readiness dashboard. Optionally ensures the persistent support plane with --orchestrate <slug>.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:2c0774a9f1eb9bf6ef288c10d889d2c023f76be7bf558b5226a9dd9e1dfd66ce",
+      "hash": "sha256:0088021bd73eff7b580bf12cf6a9d10e15f2f374fa648dafcf4660c32ddcbeb9",
       "dependencies": [],
       "frontmatter": {
         "name": "init-session",
@@ -1923,7 +1923,7 @@
       "description": "Integration architect. Mini-orchestrator: verifies compilation, DI wiring, navigation via MCP tools. Fixes wiring gaps, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:e2855327f132a582f12912cf373be296b34dde11886ac523bcdeaef57119c3fc",
+      "hash": "sha256:e96797927d346f607685b629a88fea0b0353f8d210b80f544f62c003a925e913",
       "dependencies": [],
       "frontmatter": {
         "name": "arch-integration",
@@ -1939,7 +1939,7 @@
           "compilation"
         ],
         "token_budget": 4000,
-        "template_version": "1.32.1",
+        "template_version": "1.32.2",
         "skills": [
           "test",
           "extract-errors"
@@ -1953,7 +1953,7 @@
       "description": "Platform architecture architect. Mini-orchestrator: verifies KMP patterns via MCP tools, fixes violations directly or via delegation, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:4290bc89b30e9e2a3914e2a0571f124b6ed2f18f2678579a69cbff58ef67c55f",
+      "hash": "sha256:a69ddeef586043d5baec0945d263b6f622710de614b6a96d27821a222119e82e",
       "dependencies": [],
       "frontmatter": {
         "name": "arch-platform",
@@ -1968,7 +1968,7 @@
           "encoding"
         ],
         "token_budget": 4000,
-        "template_version": "1.36.1",
+        "template_version": "1.36.2",
         "skills": [
           "verify-kmp",
           "validate-patterns"
@@ -1982,7 +1982,7 @@
       "description": "Test quality architect. Mini-orchestrator: verifies TDD compliance, detects test gaps, delegates fixes to test-specialist, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict.",
       "category": "testing",
       "tier": "core",
-      "hash": "sha256:03499ff70d0e974a14878e88dbfc7ae42f8b6c9b7a69690609ee54d3e655922b",
+      "hash": "sha256:3beb36792175dd818eed9880d998d6bbef9797fe955b6834a9d3c804c462c576",
       "dependencies": [],
       "frontmatter": {
         "name": "arch-testing",
@@ -1997,7 +1997,7 @@
           "test-quality"
         ],
         "token_budget": 4000,
-        "template_version": "1.41.1",
+        "template_version": "1.41.2",
         "skills": [
           "test",
           "test-full-parallel",
@@ -2538,7 +2538,7 @@
       "description": "Single-use planning subagent. Reads context, specs, architecture to produce structured execution plans. Spawned without team_name; results land as PLAN.md on disk. Works alongside context-provider via SendMessage.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:7d10e374e049151ba209dcc020e1c15287c659f282d887853b40678b3836fb48",
+      "hash": "sha256:31f79b188b50b9409f3340cc134abcc2e4b6a64f932ed0352022a9db0942d0ec",
       "dependencies": [],
       "frontmatter": {
         "name": "planner",
@@ -2553,7 +2553,7 @@
           "estimate"
         ],
         "token_budget": 4000,
-        "template_version": "1.22.2"
+        "template_version": "1.22.3"
       }
     },
     {
@@ -3247,19 +3247,6 @@
       "frontmatter": {
         "description": "Analyze external content and extract patterns for routing to docs. Use when asked to ingest an artic",
         "intent": "ingest-content"
-      }
-    },
-    {
-      "name": "init-session",
-      "type": "command",
-      "path": ".claude/commands/init-session.md",
-      "description": "Show canonical runtime readiness and optionally ensure the support plane.",
-      "category": "domain",
-      "tier": "extended",
-      "hash": "sha256:4d8eddcc8a80fd6f41dba58b08088c4f50525fc8b603df4660fb98a268e8510c",
-      "dependencies": [],
-      "frontmatter": {
-        "description": "Show canonical runtime readiness and optionally ensure the support plane."
       }
     },
     {

@@ -1099,7 +1099,8 @@ assert d['profiles']['advanced']['overrides'].get('debugger') == 'opus', 'debugg
 
 @test "skills: /init-session skill exists" {
     [ -f "$L0_ROOT/skills/init-session/SKILL.md" ]
-    [ -f "$L0_ROOT/.claude/commands/init-session.md" ]
+    [ -f "$L0_ROOT/.claude/skills/init-session/SKILL.md" ]
+    [ ! -e "$L0_ROOT/.claude/commands/init-session.md" ]
 }
 
 @test "skills: /resume-work skill exists" {
@@ -1126,7 +1127,7 @@ assert d['profiles']['advanced']['overrides'].get('debugger') == 'opus', 'debugg
 }
 
 @test "skills: command stubs have description frontmatter" {
-    for cmd in test coverage benchmark verify-kmp validate-patterns sync-l0 audit-docs work init-session resume-work; do
+    for cmd in test coverage benchmark verify-kmp validate-patterns sync-l0 audit-docs work resume-work; do
         grep -q "^description:" "$L0_ROOT/.claude/commands/$cmd.md"
     done
 }

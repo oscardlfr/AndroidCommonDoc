@@ -853,6 +853,11 @@ function exitCode(status) {
   return 7;
 }
 
+/** A model/profile mismatch is actionable by the user; every other composition failure stays deliberately opaque. */
+function hostCompositionFailureDetail(consumed) {
+  return consumed && consumed.reason === 'HOST_MODEL_PROFILE_MISMATCH' ? 'host-model-mismatch' : 'host-composition-unavailable';
+}
+
 async function main(argv) {
   try {
     const parsed = parseCli(argv);
@@ -870,7 +875,7 @@ async function main(argv) {
     });
     let envelope;
     if (!consumed.ok) {
-      envelope = makeEnvelope(parsed.entrypoint, 'UNAVAILABLE', 'host-composition-unavailable', null);
+      envelope = makeEnvelope(parsed.entrypoint, 'UNAVAILABLE', hostCompositionFailureDetail(consumed), null);
     } else {
       if (waveScope && waveScope.initializeAfterAdmission) {
         const initialized = waveControl.initialize(parsed.projectRoot, waveScope.waveSlug, waveScope.planDigest);
@@ -896,7 +901,7 @@ async function main(argv) {
   }
 }
 
-module.exports = { ENTRYPOINTS, RESULT_STATUSES, executeEntrypoint, planEntrypointStep,
+module.exports = { ENTRYPOINTS, RESULT_STATUSES, executeEntrypoint, hostCompositionFailureDetail, planEntrypointStep,
   plannedEntrypointCommandArgument, plannedEntrypointWaveScope };
 if (process.env.NODE_ENV === 'test'
     && process.env.RUNTIME_COLLABORATION_ENTRYPOINTS_TEST_CAPABILITY === 'p3-entrypoints-v1') {

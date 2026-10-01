@@ -535,6 +535,136 @@ assert.strictEqual(passed, 19);
   passed += 1;
 }
 
-assert.strictEqual(passed, 20);
+// Desktop Code-tab sessions run in a managed linked worktree while CLAUDE_PROJECT_DIR names the main checkout.
+// The consumer root stays cwd; only a registered linked worktree of the SAME repository is additionally admitted.
+function runShorthandFrom(cwd, projectDirEnv, hookPath, sessionId) {
+  const event = baseEvent('node .claude/runtime/l0-entrypoint-launcher.cjs init-session', cwd, sessionId);
+  return spawnSync(process.execPath, [hookPath], {
+    input: JSON.stringify(event), encoding: 'utf8', cwd,
+    env: Object.assign({}, process.env, { CLAUDE_PROJECT_DIR: projectDirEnv }),
+  });
+}
 
-console.log('20/20 PASS');
+function gitIn(cwd, args) {
+  const result = spawnSync('git', args, { cwd, encoding: 'utf8' });
+  assert.strictEqual(result.status, 0, 'git ' + args.join(' ') + ': ' + result.stderr);
+  return result.stdout.trim();
+}
+
+function makeScratchRepo() {
+  const dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'r131-worktree-repo-')));
+  gitIn(dir, ['init', '-q']);
+  gitIn(dir, ['config', 'user.email', 'wt@test.local']);
+  gitIn(dir, ['config', 'user.name', 'WT']);
+  gitIn(dir, ['commit', '-q', '--allow-empty', '-m', 'init']);
+  return dir;
+}
+
+function assertForeignShorthand(label, cwd, projectDirEnv) {
+  const result = runShorthandFrom(cwd, projectDirEnv, HOOK_PATH, uniqueSessionId());
+  assert.strictEqual(result.status, 0, label + ': hook exit code');
+  const body = JSON.parse(result.stdout);
+  assert.strictEqual(body.hookSpecificOutput.permissionDecision, 'deny', label + ': must be denied: ' + result.stdout);
+  assert.match(body.hookSpecificOutput.permissionDecisionReason, /project root is unresolved or foreign/, label);
+  console.log('PASS: ' + label);
+}
+
+{
+  const sessionId = uniqueSessionId();
+  const minted = recordManagedSystemInit(sessionId);
+  try {
+    const ctx = buildWorktreeContext(minted.worktreeRoot);
+    const result = runShorthandFrom(ctx.worktreeRoot, REPO_ROOT, ctx.hookPath, sessionId);
+    assert.strictEqual(result.status, 0, 'case-10-managed-worktree-shorthand: hook exit code');
+    const body = JSON.parse(result.stdout);
+    assert.strictEqual(body.hookSpecificOutput.permissionDecision, 'allow',
+      'case-10-managed-worktree-shorthand: a registered linked worktree of the same repository is admitted: ' + result.stdout);
+    const parsed = runtimeRoleLifecycle.parsePosixDirect(extractRewrittenCommand(result.stdout));
+    assert.strictEqual(extractFlag(parsed, '--project-root'), ctx.worktreeRoot,
+      'case-10-managed-worktree-shorthand: the consumer root stays cwd, never CLAUDE_PROJECT_DIR');
+    console.log('PASS: case-10-managed-worktree-shorthand');
+    passed += 1;
+  } finally {
+    minted.cleanup();
+  }
+}
+
+{
+  const other = makeScratchRepo();
+  const unregistered = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'r131-unregistered-')));
+  const foreignWorktree = path.join(other + '-wt');
+  try {
+    assertForeignShorthand('case-11-unrelated-repo-cwd-is-rejected', other, REPO_ROOT);
+    passed += 1;
+    assertForeignShorthand('case-12-unregistered-directory-is-rejected', unregistered, REPO_ROOT);
+    passed += 1;
+    gitIn(other, ['worktree', 'add', '-q', '--detach', foreignWorktree]);
+    assertForeignShorthand('case-13-worktree-of-a-different-repository-is-rejected', fs.realpathSync(foreignWorktree), REPO_ROOT);
+    passed += 1;
+    const link = path.join(os.tmpdir(), 'r131-symlinked-cwd-' + crypto.randomBytes(4).toString('hex'));
+    fs.symlinkSync(REPO_ROOT, link, process.platform === 'win32' ? 'junction' : 'dir');
+    try {
+      assertForeignShorthand('case-14-symlinked-cwd-is-rejected', link, REPO_ROOT);
+      passed += 1;
+    } finally { fs.rmSync(link, { force: true }); }
+  } finally {
+    fs.rmSync(unregistered, { recursive: true, force: true });
+    try { gitIn(other, ['worktree', 'remove', '--force', foreignWorktree]); } catch { /* best effort */ }
+    fs.rmSync(other, { recursive: true, force: true });
+  }
+}
+
+// A class/sentinel defect in the wave must tell the operator what to fix instead of the generic scope error, while every
+// other exception stays generic (no paths or host details).
+function orchestrateDenialAfter(label, mutate) {
+  const sessionId = uniqueSessionId();
+  const minted = recordManagedSystemInit(sessionId);
+  try {
+    const ctx = buildWorktreeContext(minted.worktreeRoot);
+    const slug = minted.waveSlug;
+    const waveDir = path.join(ctx.worktreeRoot, '.planning', 'wave-' + slug);
+    mutate({ waveDir, plan: path.join(waveDir, 'PLAN.md'), sentinel: path.join(waveDir, 'CLASS') });
+    const command = 'node .claude/runtime/l0-entrypoint-launcher.cjs init-session --orchestrate ' + slug;
+    const result = runHookAt(baseEvent(command, ctx.worktreeRoot, sessionId), ctx.hookPath, ctx.worktreeRoot);
+    assert.strictEqual(result.status, 0, label + ': hook exit code');
+    const body = JSON.parse(result.stdout);
+    assert.strictEqual(body.hookSpecificOutput.permissionDecision, 'deny', label + ': ' + result.stdout);
+    return body.hookSpecificOutput.permissionDecisionReason;
+  } finally {
+    minted.cleanup();
+  }
+}
+
+const rewritePlan = (transform) => ({ plan }) => fs.writeFileSync(plan, transform(fs.readFileSync(plan, 'utf8')));
+const CLASS_LINE = /^[ \t]*(?:-[ \t]+)?\*\*Class\*\*:.*$/m;
+const CLASS_DENIALS = [
+  ['WAVE_CLASS_SECTION_MISSING', rewritePlan((t) => t.replace(/^#{2,3}[ \t]+Wave[ \t]+Class[ \t]*$/m, '### Wave Klass')), /Wave Class.*section/i],
+  ['WAVE_CLASS_SECTION_AMBIGUOUS', rewritePlan((t) => t + '\n### Wave Class\n- **Class**: HARNESS\n'), /more than one.*Wave Class/i],
+  ['PLAN_WAVE_CLASS_MISSING', rewritePlan((t) => t.replace(CLASS_LINE, '')), /\*\*Class\*\*/],
+  ['PLAN_WAVE_CLASS_AMBIGUOUS', rewritePlan((t) => t.replace(CLASS_LINE, (m) => m + '\n' + m)), /more than one.*\*\*Class\*\*/i],
+  ['INVALID_WAVE_CLASS', rewritePlan((t) => t.replace(CLASS_LINE, '- **Class**: BOGUS')), /HARNESS, DOC or FAST-PATH/],
+  ['WAVE_CLASS_SENTINEL_MISSING', ({ sentinel }) => fs.rmSync(sentinel), /write \.planning\/wave-<slug>\/CLASS/],
+  ['INVALID_WAVE_CLASS_SENTINEL', ({ sentinel }) => fs.writeFileSync(sentinel, 'BOGUS\n'), /CLASS must contain/],
+];
+for (const [code, mutate, guidance] of CLASS_DENIALS) {
+  const reason = orchestrateDenialAfter('case-15-' + code, mutate);
+  assert.ok(reason.includes(code), code + ' must be named: ' + reason);
+  assert.match(reason, guidance, code + ' must say how to recover: ' + reason);
+  assert.ok(!reason.includes('intent or scope is invalid'), code + ' must not be the generic message: ' + reason);
+  console.log('PASS: case-15-' + code);
+  passed += 1;
+}
+{
+  const reason = orchestrateDenialAfter('case-16-unknown-exception-stays-generic', ({ plan }) => {
+    fs.rmSync(plan);
+    fs.mkdirSync(plan); // reading a directory throws EISDIR, which is not an allowlisted code
+  });
+  assert.match(reason, /collaboration entrypoint intent or scope is invalid/, reason);
+  assert.ok(!/EISDIR|illegal operation|\.planning|\/tmp|\/private/.test(reason), 'no host detail may leak: ' + reason);
+  console.log('PASS: case-16-unknown-exception-stays-generic');
+  passed += 1;
+}
+
+assert.strictEqual(passed, 33);
+
+console.log('33/33 PASS');

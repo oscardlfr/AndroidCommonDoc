@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { writeFile, readFile, mkdtemp, rm, mkdir, access, realpath, symlink } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import type { SkillRegistry, SkillRegistryEntry } from "../../../src/registry/skill-registry.js";
 import type { Manifest } from "../../../src/sync/manifest-schema.js";
 
@@ -467,6 +467,42 @@ Run instructions
     await expect(access(join(projectRoot, ".claude", "skills", "test", "SKILL.md"))).rejects.toThrow();
     await expect(access(join(projectRoot, ".claude", "agents", "test-specialist.md"))).rejects.toThrow();
     await expect(access(join(projectRoot, ".claude", "commands", "run.md"))).rejects.toThrow();
+  });
+
+  it("preserves consumer CI metadata through an ordinary sync and advances l0Commit to the synced L0 commit", async () => {
+    const git = (...args: string[]) => {
+      const result = spawnSync("git", args, { cwd: l0Root, encoding: "utf8" });
+      expect(result.status, result.stderr).toBe(0);
+      return result.stdout.trim();
+    };
+    git("init", "--quiet");
+    git("config", "user.email", "sync-test@example.invalid");
+    git("config", "user.name", "Sync Test");
+    git("add", "-A");
+    git("commit", "--quiet", "-m", "l0 fixture");
+    const head = git("rev-parse", "HEAD");
+
+    const manifest = {
+      ...makeManifest({ sources: [{ layer: "L0", path: l0Root, role: "tooling", repository: "example/AndroidCommonDoc", ref: "develop" }] }),
+      l0Commit: "0".repeat(40),
+    };
+    const manifestPath = join(projectRoot, "l0-manifest.json");
+    await writeFile(manifestPath, JSON.stringify(manifest, null, 2));
+
+    await syncL0(projectRoot, l0Root);
+
+    const after = JSON.parse(await readFile(manifestPath, "utf-8"));
+    expect(after.sources[0]).toMatchObject({ repository: "example/AndroidCommonDoc", ref: "develop" });
+    expect(after.l0Commit).toBe(head);
+  });
+
+  it("leaves a manifest without l0Commit without one after an ordinary sync", async () => {
+    const manifest = makeManifest({ sources: [{ layer: "L0", path: l0Root, role: "tooling" }] });
+    const manifestPath = join(projectRoot, "l0-manifest.json");
+    await writeFile(manifestPath, JSON.stringify(manifest, null, 2));
+    await syncL0(projectRoot, l0Root);
+    const after = JSON.parse(await readFile(manifestPath, "utf-8"));
+    expect(Object.prototype.hasOwnProperty.call(after, "l0Commit")).toBe(false);
   });
 
   it("creates directories if missing (skills/name/, .claude/agents/, .claude/commands/)", async () => {

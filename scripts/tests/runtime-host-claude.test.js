@@ -1392,7 +1392,12 @@ test('missing SessionStart model is finalized from the exact post-hook transcrip
     const expected = { entrypoint: options.entrypoint, argvDigest: options.argvDigest, roleScope: options.roleScope,
       waveSlug: options.waveSlug, planDigest: options.planDigest, worktreeId: options.worktreeId };
     fs.writeFileSync(transcriptPath, transcript('claude-opus-5'));
-    assert.strictEqual(mod.consumeProductionHostComposition(fixture.projectRoot, minted.compositionId, expected).ok, false);
+    const mismatched = mod.consumeProductionHostComposition(fixture.projectRoot, minted.compositionId, expected);
+    assert.deepStrictEqual(mismatched, { ok: false, reason: 'HOST_MODEL_PROFILE_MISMATCH' },
+      'a transcript model that differs from the profile is reported as a model mismatch, not an opaque failure');
+    fs.writeFileSync(transcriptPath, '');
+    assert.deepStrictEqual(mod.consumeProductionHostComposition(fixture.projectRoot, minted.compositionId, expected), { ok: false },
+      'an unflushed transcript (no model evidence yet) stays an unqualified failure');
     fs.writeFileSync(transcriptPath, transcript('claude-sonnet-5'));
     const consumed = mod.consumeProductionHostComposition(fixture.projectRoot, minted.compositionId, expected);
     assert.strictEqual(consumed.ok, true, JSON.stringify(consumed));
@@ -2607,3 +2612,110 @@ test('MACOS-PUBINIT-01 a multi-turn probe with repeated system/init still publis
     if (typeof minted.cleanup === 'function') minted.cleanup();
   }
 });
+
+// --- Terminal.app / iTerm: a root-owned `login` ancestor must not invalidate the whole parent chain ---
+//
+// macOS terminals start the shell through /usr/bin/login. lsof cannot read that root-owned image (exit 1), which used
+// to make queryDarwinParentChain return null and HOST_PIN_PARENT_CHAIN_UNAVAILABLE. An ancestor whose executable
+// cannot be resolved is now kept as a non-absolute, never-provable row; the exactly-one-signed-Claude rule is unchanged.
+const DARWIN_LSTART = 'Wed Sep 30 10:00:00 2026';
+const psRow = (pid, ppid, comm) => `${pid} ${ppid} ${DARWIN_LSTART} ${comm}`;
+
+function fakeDarwinRunner(psRows, lsofByPid) {
+  return (command, args) => {
+    if (command === '/bin/ps') return { status: 0, stdout: psRows.join('\n') + '\n', stderr: '' };
+    assert.equal(command, '/usr/sbin/lsof', 'only ps and lsof may be consulted');
+    const pid = Number(args[args.indexOf('-p') + 1]);
+    return Object.prototype.hasOwnProperty.call(lsofByPid, pid)
+      ? { status: 0, stdout: `p${pid}\nftxt\nn${lsofByPid[pid]}\n`, stderr: '' }
+      : { status: 1, stdout: '', stderr: '' };
+  };
+}
+
+const TERMINAL_CHAIN = [
+  psRow(400, 300, '/Applications/Claude/claude'),
+  psRow(300, 200, '/bin/zsh'),
+  psRow(200, 100, 'login'),
+  psRow(100, 1, '/System/Applications/Utilities/Terminal.app/Contents/MacOS/Terminal'),
+];
+
+test('MACOS-PIN-06 an unresolvable login ancestor is kept as a never-provable row', () => {
+  const chain = hostClaude.__TEST_ONLY__queryDarwinParentChain(400, 10000, fakeDarwinRunner(TERMINAL_CHAIN, {}));
+  assert.ok(chain, 'the chain must not be invalidated by one unresolvable ancestor');
+  assert.deepEqual(chain.map((row) => row.process_id), [400, 300, 200, 100]);
+  const login = chain.find((row) => row.process_id === 200);
+  assert.equal(path.isAbsolute(login.executable_path), false, 'login stays a non-absolute row');
+  assert.equal(chain.find((row) => row.process_id === 400).executable_path, '/Applications/Claude/claude');
+});
+
+test('MACOS-PIN-06a a bare-name ancestor that lsof can resolve is still completed to its kernel image', () => {
+  const chain = hostClaude.__TEST_ONLY__queryDarwinParentChain(400, 10000, fakeDarwinRunner(TERMINAL_CHAIN, { 200: '/usr/bin/login' }));
+  assert.equal(chain.find((row) => row.process_id === 200).executable_path, '/usr/bin/login');
+});
+
+test('MACOS-PIN-06b the 8-ancestor bound and an empty process table are unchanged', () => {
+  const deep = [];
+  for (let pid = 20; pid >= 1; pid -= 1) deep.push(psRow(pid, pid - 1, `/bin/p${pid}`));
+  const chain = hostClaude.__TEST_ONLY__queryDarwinParentChain(20, 10000, fakeDarwinRunner(deep, {}));
+  assert.equal(chain.length, 8);
+  assert.equal(hostClaude.__TEST_ONLY__queryDarwinParentChain(20, 10000, () => ({ status: 0, stdout: '', stderr: '' })), null);
+  assert.equal(hostClaude.__TEST_ONLY__queryDarwinParentChain(20, 10000, () => ({ status: 1, stdout: '', stderr: '' })), null);
+});
+
+function observeWithProbes(label, chainRows, signedPaths) {
+  const fixture = writeHostContractFixture(label);
+  const binaries = [];
+  try {
+    const published = hostClaude.publishClaudeHostContractPackage({
+      projectRoot: fixture.projectRoot, qualificationPath: fixture.qualificationPath,
+      evidenceRoot: fixture.evidenceRoot, observerPath: fixture.observerPath,
+    });
+    assert.equal(published.ok, true, JSON.stringify(published));
+    const resolved = chainRows.map((row) => {
+      if (!row.image) return row;
+      const file = path.join(fixture.projectRoot, row.image);
+      fs.writeFileSync(file, 'fake claude ' + row.image + '\n', { mode: 0o755 });
+      binaries.push(file);
+      return { ...row, executable_path: file };
+    });
+    const signed = new Set(signedPaths.map((name) => path.join(fixture.projectRoot, name)));
+    return withCapabilityEnv(() => hostClaude.observeClaudeExecutablePin({
+      projectRoot: fixture.projectRoot, startingPid: resolved[0].process_id,
+      __testProbes: {
+        chain: () => resolved.map((row) => ({ ...row })),
+        trustedSignature: (file) => signed.has(file),
+        version: () => '2.1.283',
+      },
+    }));
+  } finally { cleanupHostContractFixture(fixture); }
+}
+
+const chainRow = (pid, ppid, executable, image) => ({
+  process_id: pid, parent_process_id: ppid, creation_time: DARWIN_LSTART, executable_path: executable, image,
+});
+
+test('MACOS-PIN-07 claude → zsh → login(unresolvable) → Terminal is admitted with exactly one signed Claude',
+  { skip: process.platform !== 'darwin' }, () => {
+    const observed = observeWithProbes('terminal-login', [
+      chainRow(400, 300, 'claude-a', 'claude-a'), chainRow(300, 200, '/bin/zsh'),
+      chainRow(200, 100, 'login'), chainRow(100, 1, '/System/Applications/Utilities/Terminal.app/Contents/MacOS/Terminal'),
+    ], ['claude-a']);
+    assert.equal(observed.ok, true, JSON.stringify(observed));
+    assert.equal(observed.processId, 400);
+  });
+
+test('MACOS-PIN-08 two signed Claude ancestors, zero Claude ancestors and an unresolvable Claude row are rejected',
+  { skip: process.platform !== 'darwin' }, () => {
+    const two = observeWithProbes('two-claude', [
+      chainRow(400, 300, 'claude-a', 'claude-a'), chainRow(300, 200, 'claude-b', 'claude-b'), chainRow(200, 1, 'login'),
+    ], ['claude-a', 'claude-b']);
+    assert.deepEqual([two.ok, two.detail], [false, 'HOST_PIN_VENDOR_MATCH_COUNT_2']);
+    const zero = observeWithProbes('zero-claude', [
+      chainRow(400, 300, '/bin/zsh'), chainRow(300, 200, 'login'), chainRow(200, 1, '/usr/bin/tmux'),
+    ], []);
+    assert.deepEqual([zero.ok, zero.detail], [false, 'HOST_PIN_VENDOR_MATCH_COUNT_0']);
+    const unresolvable = observeWithProbes('unresolvable-claude', [
+      chainRow(400, 300, 'claude'), chainRow(300, 200, '/bin/zsh'), chainRow(200, 1, 'login'),
+    ], []);
+    assert.deepEqual([unresolvable.ok, unresolvable.detail], [false, 'HOST_PIN_VENDOR_MATCH_COUNT_0']);
+  });

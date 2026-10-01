@@ -204,3 +204,84 @@ sys.stdout.write(json.dumps({'tool_name': '$tool', 'tool_input': {'command': '$c
   run env "PATH=$FAKE_PATH" FAKE_GIT_BRANCH="develop" bash -c "cat '$INPUT_FILE' | node '$HOOK'"
   [ "$status" -eq 0 ]
 }
+
+# ── Managed linked worktrees (desktop Code tab) ─────────────────────────────────
+# The hook process runs in the project directory, which for a managed linked worktree is the MAIN checkout (often on
+# develop), while the session works in the linked worktree. The branch that matters is the session's own
+# (event.cwd, or `git -C <path>`). These cases use real repositories, never the PATH stub.
+
+make_worktree_fixture() {
+  REAL_GIT=/usr/bin/git
+  MAIN="$BATS_TEST_TMPDIR/main-checkout"
+  FEATURE_WT="$BATS_TEST_TMPDIR/feature-worktree"
+  PROTECTED_WT="$BATS_TEST_TMPDIR/protected-worktree"
+  mkdir -p "$MAIN"
+  $REAL_GIT -C "$MAIN" init -q -b develop
+  $REAL_GIT -C "$MAIN" config user.email guard@test.local
+  $REAL_GIT -C "$MAIN" config user.name Guard
+  $REAL_GIT -C "$MAIN" commit -q --allow-empty -m init
+  $REAL_GIT -C "$MAIN" worktree add -q -b feature/l0-consumer-readiness "$FEATURE_WT"
+  $REAL_GIT -C "$MAIN" worktree add -q -b master "$PROTECTED_WT"
+  MAIN="$(cd "$MAIN" && pwd -P)"; FEATURE_WT="$(cd "$FEATURE_WT" && pwd -P)"; PROTECTED_WT="$(cd "$PROTECTED_WT" && pwd -P)"
+}
+
+# run_guard <hook-process-cwd> <event-cwd-or-empty> <command>
+run_guard() {
+  local proc_cwd="$1" event_cwd="$2" cmd="$3"
+  python3 - "$event_cwd" "$cmd" > "$INPUT_FILE" <<'PY'
+import json, sys
+event = {'tool_name': 'Bash', 'tool_input': {'command': sys.argv[2]}, 'session_id': 'test'}
+if sys.argv[1]:
+    event['cwd'] = sys.argv[1]
+sys.stdout.write(json.dumps(event))
+PY
+  run bash -c "cd '$proc_cwd' && cat '$INPUT_FILE' | node '$HOOK'"
+}
+
+@test "worktree: allows a commit in a linked worktree on a feature branch although the hook runs in the develop checkout" {
+  make_worktree_fixture
+  run_guard "$MAIN" "$FEATURE_WT" 'git commit -m msg'
+  [ "$status" -eq 0 ]
+}
+
+@test "worktree: blocks a commit in the main checkout on develop even when the hook runs elsewhere" {
+  make_worktree_fixture
+  run_guard "$FEATURE_WT" "$MAIN" 'git commit -m msg'
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"protected branch \`develop\`"* ]]
+}
+
+@test "worktree: blocks a commit in a linked worktree that is itself on master" {
+  make_worktree_fixture
+  run_guard "$MAIN" "$PROTECTED_WT" 'git commit -m msg'
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"protected branch \`master\`"* ]]
+}
+
+@test "worktree: git -C resolves the target worktree, not the session's" {
+  make_worktree_fixture
+  run_guard "$MAIN" "$MAIN" "git -C $FEATURE_WT commit -m msg"
+  [ "$status" -eq 0 ]
+  run_guard "$FEATURE_WT" "$FEATURE_WT" "git -C $MAIN commit -m msg"
+  [ "$status" -eq 2 ]
+}
+
+@test "worktree: merge and compound commands follow the same session worktree" {
+  make_worktree_fixture
+  run_guard "$MAIN" "$FEATURE_WT" 'git merge main'
+  [ "$status" -eq 0 ]
+  run_guard "$FEATURE_WT" "$MAIN" 'git add -A && git merge main'
+  [ "$status" -eq 2 ]
+}
+
+@test "worktree: a missing, relative or nonexistent event cwd falls back to the hook process cwd" {
+  make_worktree_fixture
+  run_guard "$MAIN" "" 'git commit -m msg'
+  [ "$status" -eq 2 ]
+  run_guard "$FEATURE_WT" "" 'git commit -m msg'
+  [ "$status" -eq 0 ]
+  run_guard "$MAIN" "relative/path" 'git commit -m msg'
+  [ "$status" -eq 2 ]
+  run_guard "$MAIN" "$BATS_TEST_TMPDIR/does-not-exist" 'git commit -m msg'
+  [ "$status" -eq 2 ]
+}

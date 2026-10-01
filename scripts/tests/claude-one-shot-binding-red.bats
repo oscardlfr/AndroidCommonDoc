@@ -2461,6 +2461,40 @@ _cosb_e2e_pretooluse_agent() {
   rm -rf "$proj"
 }
 
+@test "COSB-GATE-REWRITES-DIVERGING-PROMPT-FOR-OWNING-SPAWN: an owning claude-agent spawn whose type and name match but whose prompt was hand-copied wrongly is allowed with the deterministic bootstrap in updatedInput; the diverging-name denial is covered by the test above" {
+  local proj; proj="$(_cosb_e2e_make_project)"
+  local pub; pub="$(_cosb_e2e_publish_request "$proj" "test-specialist")"
+  local request_id artifact_ref; read -r request_id artifact_ref <<< "$pub"
+  _cosb_e2e_construct_claude_agent_activation "$proj" "$artifact_ref" >/dev/null
+
+  local real_prompt; real_prompt="$(node -e '
+    const rll = require(process.argv[1]);
+    const rc = require(process.argv[2]);
+    const projectRoot = process.argv[3];
+    const coordRoot = rll.coordinationRootPathFor(projectRoot);
+    const repoId = rll.computeRepoId(projectRoot);
+    const planResult = rll.discoverPlan(projectRoot);
+    const found = rc.findLiveClaudeAgentActivations(coordRoot, repoId, process.argv[6], planResult.planDigest, process.argv[4]);
+    if (found.length !== 1) { process.stderr.write("expected exactly 1 live activation, got " + found.length); process.exit(1); }
+    process.stdout.write(rll.claudeAgentBootstrapMessageFor(process.argv[4], process.argv[5], found[0].activation.attempt_id));
+  ' "$RLL_IMPL" "$RC_IMPL" "$proj" "test-specialist" "$request_id" "$COSB_E2E_WAVE_SLUG")"
+  [ -n "$real_prompt" ]
+
+  local result; result="$(_cosb_e2e_pretooluse_agent "$proj" "test-specialist" "test-specialist" "a hand-copied bootstrap with a typo" "cosb-e2e-orchestrator-session")"
+  local out; out="$(printf '%s' "$result" | tail -n +2)"
+  [ "$(printf '%s' "$result" | head -1)" = "0" ]
+  printf '%s' "$out" | node -e '
+    let s = ""; process.stdin.on("data", (c) => { s += c; }).on("end", () => {
+      const h = JSON.parse(s).hookSpecificOutput;
+      if (h.permissionDecision !== "allow") { process.stderr.write("not allowed: " + s); process.exit(1); }
+      if (h.updatedInput.prompt !== process.argv[1]) { process.stderr.write("prompt was not rewritten: " + s); process.exit(1); }
+      if (h.updatedInput.name !== "test-specialist" || h.updatedInput.subagent_type !== "test-specialist") process.exit(1);
+    });
+  ' "$real_prompt"
+
+  rm -rf "$proj"
+}
+
 @test "COSB-SUBAGENTSTOP-ONESHOT-LOOKUP-ERROR-BLOCKS: RED-C. A genuine read error scanning claude-one-shot-bindings/ (the directory replaced by a non-directory file -> ENOTDIR, deliberately never ENOENT, which stays the ordinary 'ok:true, zero candidates' case identical to every other scanner in this codebase) BLOCKS the stop -- HARD NO-GO correction item 3: an error must never silently degrade to 'absent', which would let the stop proceed while the durable binding stays live and unretired" {
   local proj; proj="$(_cosb_make_project)"
   local out binding_id worktree_id plan_digest

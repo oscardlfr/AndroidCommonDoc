@@ -159,6 +159,33 @@ If this session is **resuming** an existing wave rather than starting one, do no
 
 For non-trivial new work, continue directly to the Planning Phase below — Planner Pass A is the next action, not a separate eager support-plane dispatch.
 
+### Consumer Consultation + Supported Surfaces
+
+In an L1/L2 consumer, only an **`arch-*` subagent itself** (PREP/EXECUTE, never the main orchestrator, whose binding cannot be minted) consults context-provider, through the installed launcher. The single-use planner has no edge of its own: in Pass B it sends its bounded question by SendMessage to the `arch-*` owner of the topic (`arch-platform` by default), which runs the transaction as the mediated requester and replies with the path of the accepted result file; the planner reads it, cites it in the PLAN and only then removes the marker. Every token is single-quoted and `<ROOT>` is the subagent's absolute working directory:
+
+```
+'node' '.claude/runtime/l0-toolkit-launcher.cjs' 'run' 'runtime-consult' '--project-root' '<ROOT>' '--' 'consult' '--coordination-root' '<ROOT>/.planning/coordination' '--question' '<question>'
+```
+
+`consult` derives the plan reference, intent and subject bundle from the active wave PLAN, publishes the request and dispatches it. When the printed `activation_action.kind` is `claude-sendmessage`, send its `message` verbatim to its `target_name`, then run the same launcher form with `await-result` (`--request <artifact_ref> --timeout 300`) and `accept-result`. The launcher admits exactly `consult`, `record-delivery`, `await-result` and `accept-result`; a consumer never invokes the toolkit path directly.
+
+**PREP in an L1/L2 consumer (orchestrator).** Before dispatching each architect, the main agent creates its immutable `verdict-request/v1` through the launcher, never by hand, and binds the approved verdicts at the transition (`<slug>` is the wave, `<arch-*>` is `arch-platform`, `arch-testing` or `arch-integration`):
+
+```
+node .claude/runtime/l0-toolkit-launcher.cjs run wave-control --project-root "$PWD" -- init --slug <slug>
+node .claude/runtime/l0-toolkit-launcher.cjs run verdict-request-write --project-root "$PWD" -- --role <arch-*> --phase prep --slug <slug>
+```
+
+`verdict-request-write` prints `<absolute-request-path> <sha256>`; pass both to the architect. The architect records its decision with `node .claude/runtime/l0-toolkit-launcher.cjs run verdict-write --project-root "$PWD" -- --role <arch-*> --phase prep --slug <slug> --request <absolute-request-path> --request-sha256 <sha256> --decision <approve|escalate>` (rationale on stdin). Then:
+
+```
+node .claude/runtime/l0-toolkit-launcher.cjs run wave-control --project-root "$PWD" -- transition --slug <slug> --to EXECUTE --verdict <arch-*>=<verdict-path>
+```
+
+A **DOC** wave starts its `Required-Architects` together with `context-provider` and `doc-updater`, so Pass B and PREP consultations have an architect to ask. A **FAST-PATH** wave has no support plane by design: the planner finalizes it without a Pass B consultation and records that in the PLAN.
+
+Supported surfaces: the Claude Code CLI and the Claude desktop app, both with **Sonnet 5.5 and effort High**. A model/profile mismatch reports `host-model-mismatch`; switch the session model and effort, then run `/init-session` again. A desktop Code-tab session runs in a managed linked worktree of the same repository and is admitted as the consumer root.
+
 ### Phase 2 Core Specialists (dispatched when Phase 2 starts, NOT at session start)
 
 ```

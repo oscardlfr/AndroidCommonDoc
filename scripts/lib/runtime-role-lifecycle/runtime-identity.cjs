@@ -155,6 +155,9 @@ function createRuntimeIdentityModule({
     return { ok: true, planPath: candidate, planDigest, waveSlug };
   }
 
+  // Without a digest, several wave directories holding a PLAN resolve to the wave named by the current branch through the
+  // existing hook resolver (`<prefix>/<slug>`; no environment, no planning alias); a single wave is unchanged and a branch
+  // that names no wave leaves the ambiguity fatal.
   function discoverPlan(projectRoot, expected = null) {
     if (expected && typeof expected === 'object' && !Array.isArray(expected)) {
       const keys = Object.keys(expected).sort();
@@ -180,6 +183,12 @@ function createRuntimeIdentityModule({
           try { if (sha256File(candidate) === expectedDigest) matches.push(candidate); } catch { return { ok: false }; }
         }
       }
+    }
+    if (matches.length > 1 && expectedDigest === null) {
+      const { getWaveSlug } = require('../../../.claude/hooks/hook-control-plane-utils.js');
+      const slug = getWaveSlug(projectRoot, { useEnv: false, useAlias: false, gitTimeoutMs: 3000 });
+      const named = slug ? path.join(planningDir, 'wave-' + slug, 'PLAN.md') : null;
+      if (named && matches.includes(named)) matches.splice(0, matches.length, named);
     }
     if (matches.length !== 1) return { ok: false };
     let planDigest;

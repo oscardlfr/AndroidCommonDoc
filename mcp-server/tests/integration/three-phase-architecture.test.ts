@@ -318,8 +318,8 @@ describe('arch-platform + arch-integration — caller grep rule', () => {
     expect(platformContent).toMatch(/template_version:\s*"\d+\.\d+\.\d+"/);
   });
 
-  it('arch-integration has template version 1.32.1', () => {
-    expect(integrationContent).toContain('template_version: "1.32.1"');
+  it('arch-integration has template version 1.32.2', () => {
+    expect(integrationContent).toContain('template_version: "1.32.2"');
   });
 });
 
@@ -917,8 +917,8 @@ describe('architect templates — PRE-TASK protocol', () => {
     expect(plannerContent).toMatch(/context-provider/);
   });
 
-  it('planner version 1.22.2', () => {
-    expect(plannerContent).toContain('template_version: "1.22.2"');
+  it('planner version 1.22.3', () => {
+    expect(plannerContent).toContain('template_version: "1.22.3"');
   });
 
   it('arch-testing has template_version field in frontmatter', () => {

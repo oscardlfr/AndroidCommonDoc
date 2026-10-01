@@ -844,12 +844,12 @@ describe("P3 runtime-collaboration-entrypoints (RED)", () => {
       }
     }
 
-    const initCommand = fs.readFileSync(path.join(ROOT, ".claude/commands/init-session.md"), "utf8");
-    expect(initCommand).toContain("node .claude/runtime/l0-entrypoint-launcher.cjs init-session\n");
-    expect(initCommand).toContain("node .claude/runtime/l0-entrypoint-launcher.cjs init-session --orchestrate <slug>");
-    expect(initCommand).toContain("never construct a replacement dashboard");
-    expect(initCommand).not.toContain("$SKILL_DIR/init-session/SKILL.md");
-    expect(initCommand).not.toContain("Read the skill file");
+    expect(fs.existsSync(path.join(ROOT, ".claude/commands/init-session.md"))).toBe(false);
+    const initSkill = fs.readFileSync(path.join(ROOT, ".claude/skills/init-session/SKILL.md"), "utf8");
+    expect(initSkill).toContain("node .claude/runtime/l0-entrypoint-launcher.cjs init-session\n");
+    expect(initSkill).toContain("node .claude/runtime/l0-entrypoint-launcher.cjs init-session --orchestrate <slug>");
+    expect(initSkill).toMatch(/hand-built\s+dashboard as a fallback/);
+    expect(initSkill).not.toContain("$SKILL_DIR/init-session/SKILL.md");
 
     const source = fs.readFileSync(ENTRYPOINT_MODULE, "utf8");
     const importPattern = /require\(\s*['"]([^'"]+)['"]\s*\)/g;

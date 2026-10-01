@@ -16,7 +16,7 @@ const TOOLKIT_ROOT = fs.realpathSync(path.resolve(__dirname, '../..'));
 const PIN = { schema: 'runtime-consumer/v1', enabled: true, consumer_layer: 'L2',
   toolkit_commit: 'a'.repeat(40), toolkit_content_sha256: 'b'.repeat(64) };
 const SOURCE_REFERENCED_HOOK_FILES = new Set([
-  'agent-spawn-execution-gate.js', 'context-provider-gate.js',
+  'agent-spawn-execution-gate.js', 'context-provider-consulted.js', 'context-provider-gate.js',
   'bash-cli-spawn-gate.js',
   'premature-execution-gate.js', 'plan-md-write-gate.js',
   'runtime-consultation-target-gate.js',
