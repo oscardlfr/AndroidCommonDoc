@@ -37,6 +37,8 @@ const rll = require('../../scripts/lib/runtime-role-lifecycle.cjs');
 const rc = require('../../scripts/lib/runtime-consultation.cjs');
 const hostClaude = require('../../scripts/lib/runtime-host-claude.cjs');
 const { getWaveSlug } = require('./hook-control-plane-utils');
+const coordinationPaths = require('../../scripts/lib/runtime-consultation/coordination-paths.cjs');
+const { oneShotConsultationRecipe } = require('../../scripts/lib/runtime-role-lifecycle/consultation-target-recipe.cjs').createConsultationTargetRecipe();
 
 // Mirrors context-provider-gate.js's own MAIN_ORCHESTRATOR_BINDING_TTL_SECONDS
 // constant/rationale: sized so it is never the limiting factor for the claim's
@@ -524,7 +526,25 @@ process.stdin.on('end', () => {
       // this hook is about to store on the reservation -- never accepted
       // from tool_input.prompt as ground truth (user point 2: "Ningun campo
       // se deriva de prompt/prosa/model output").
-      const expectedBootstrapMessage = rll.claudeAgentBootstrapMessageFor(subagentType, requestId, activation.attempt_id);
+      let oneShotRecipe;
+      try {
+        const coordRootForRecipe = rll.coordinationRootPathFor(projectRoot);
+        const waveSlugForRecipe = getWaveSlug(projectRoot, { useEnv: false, useAlias: false, gitTimeoutMs: 3000 });
+        oneShotRecipe = oneShotConsultationRecipe({
+          role: subagentType,
+          projectRoot,
+          consultationCliPath: path.resolve(__dirname, '../../scripts/lib/runtime-consultation.cjs'),
+          coordinationRoot: coordRootForRecipe,
+          requestPath: coordinationPaths.requestPathFor(
+            coordinationPaths.planRootPath(coordRootForRecipe, rll.computeRepoId(projectRoot), waveSlugForRecipe, planResult.planDigest),
+            requestId,
+          ),
+        });
+      } catch {
+        emit(denyResponse('[agent-spawn-execution-gate] unable to derive the consultation recipe for the claude-agent activation targeting "' + subagentType + '".'));
+        return;
+      }
+      const expectedBootstrapMessage = rll.claudeAgentBootstrapMessageFor(subagentType, requestId, activation.attempt_id, oneShotRecipe);
       // Ownership is established (type and name matched above), so a prompt
       // that differs from the deterministic bootstrap is rewritten to it, as
       // the role-lifecycle path does, instead of denied: hand-copying a
@@ -566,7 +586,7 @@ process.stdin.on('end', () => {
         mintResultForClaudeAgent = rll.mintClaudeAgentSpawnReservation(
           repoDescriptorForClaudeAgent, activation, requestId, subagentType, worktreeId, planResult.planDigest,
           sessionGenerationIdForClaudeAgent, mainBindingIdForClaudeAgent, toolInputDigestForClaudeAgent,
-          pairForClaudeAgent.policy.ready_timeout_seconds,
+          pairForClaudeAgent.policy.ready_timeout_seconds, oneShotRecipe,
         );
       } catch {
         mintResultForClaudeAgent = { ok: false, reason: 'internal-error' };

@@ -41,7 +41,7 @@ function claudeAgentCapabilityProjectRoot() {
   return path.resolve(facadeDirname, '..', '..');
 }
 
-function selectDispatchDriver({ allowedDrivers, rootSourceDispatch, requiredDriver, excludedDriver, coordRoot, reqObj }) {
+function selectDispatchDriver({ allowedDrivers, rootSourceDispatch, requesterAuthenticated, requiredDriver, excludedDriver, coordRoot, reqObj }) {
   let selectedDriver = 'noop';
   let selectedClaudePeerBinding = null;
   // P4 Windows native-Claude persistence correction: the bootstrap fallback
@@ -83,7 +83,11 @@ function selectDispatchDriver({ allowedDrivers, rootSourceDispatch, requiredDriv
         // the exact live peer/resume-handle checks below are the current
         // target capability proof; requiring the expired generic advert as a
         // second proof makes valid multi-turn work structurally time out.
-        if (!rootSourceDispatch) {
+        // An arch-* requester that reached dispatch through `consult` was authenticated by the grant its hook minted
+        // and by assertRolePolicy, and its consult takes the minutes an architect needs to start, read its bundle and
+        // call the launcher: the same reason as above. The expired two-minute advertisement would otherwise send
+        // every real consult to a one-shot claude-agent that is not told how to claim.
+        if (!rootSourceDispatch && requesterAuthenticated !== true) {
           const manifest = rll.getCapabilityManifest(projectRoot);
           if (!manifest || manifest.ok !== true
               || !Array.isArray(manifest.availableDrivers)

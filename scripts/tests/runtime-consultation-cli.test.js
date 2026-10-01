@@ -6962,3 +6962,95 @@ test('RED dispatch: wrong session, wrong role, wrong worktree, wrong plan, an ex
     }
   }
 });
+
+// ═════════════════════════════════════════════════════════════════════
+// A consult by an authenticated arch-* requester reaches dispatch minutes after the two-minute host composition was
+// minted (the architect has to start, read its bundle and call the launcher). The advertisement has then expired, so
+// getCapabilityManifest lists no driver, and claude-sendmessage used to be skipped even though the persistent target
+// was alive: the consult fell to a one-shot claude-agent. `requesterAuthenticated` (set only by `consult`) skips just
+// that advertisement; the live MainOrchestratorBinding and the exact peer/resume-handle checks stay mandatory.
+// No RUNTIME_ROLE_LIFECYCLE_FAKE_CAPABILITIES here: the production manifest is empty because no composition is live.
+// ═════════════════════════════════════════════════════════════════════
+function consultDispatchFixture(ctx, role, label) {
+  const intentB64 = base64urlIntent({
+    target_role: role,
+    question: 'expired-composition ' + label + ' ' + crypto.randomBytes(4).toString('hex'),
+    expected_result_kind: 'TEST_RESULT',
+    expiry: isoInFuture(1800000),
+  });
+  const published = runTestCli([
+    'publish-request', '--coordination-root', ctx.coordRoot, '--plan', ctx.planPath,
+    '--subject-bundle', ctx.subjectBundlePath, '--intent', intentB64,
+  ]);
+  return assertCliResult(published, { command: 'publish-request', status: 'SUCCESS', detail_code: 'NONE' });
+}
+
+function dispatchedDriver(ctx, publishedData, options) {
+  const dispatched = rc.dispatchCanonical({ 'coordination-root': ctx.coordRoot, request: publishedData.artifact_ref }, options);
+  return JSON.parse(fs.readFileSync(dispatched.artifact_ref, 'utf8'));
+}
+
+test('expired host composition: an authenticated requester still selects the live persistent target through its resume handle; an ordinary requester does not', () => {
+  withProject('rcc-node-dispatch-expired-composition-wave', (ctx) => {
+    const sessionKey = 'expired-composition-session-' + crypto.randomBytes(4).toString('hex');
+    assert.strictEqual(rll.createMainOrchestratorBinding(
+      ctx.projDir, { ok: true, provider: 'claude-hook', runtime_session_key: sessionKey }, ctx.worktreeId, ctx.planDigest, 3600,
+    ).ok, true, 'fixture: MainOrchestratorBinding must mint');
+    const handle = writeResumeHandleFixture(buildResumeHandleFixture(ctx, sessionKey, 'arch-testing'));
+    assert.deepStrictEqual(rll.getCapabilityManifest(ctx.projDir), { ok: true, availableDrivers: [] },
+      'fixture: with no live host composition the production manifest must list no driver');
+
+    const ordinary = dispatchedDriver(ctx, consultDispatchFixture(ctx, 'arch-testing', 'ordinary'), {});
+    assert.notStrictEqual(ordinary.selected_driver, 'claude-sendmessage',
+      'negative control: without the exemption the expired advertisement skips claude-sendmessage: ' + JSON.stringify(ordinary));
+
+    const authenticated = dispatchedDriver(ctx, consultDispatchFixture(ctx, 'arch-testing', 'authenticated'), { requesterAuthenticated: true });
+    assert.strictEqual(authenticated.selected_driver, 'claude-sendmessage', JSON.stringify(authenticated));
+    assert.strictEqual(authenticated.native_target_binding_id, handle.binding_id);
+  });
+});
+
+test('expired host composition: the exemption never replaces the live binding or the unique handle', () => {
+  withProject('rcc-node-dispatch-expired-composition-negatives-wave', (ctx) => {
+    // No MainOrchestratorBinding at all: the exemption must not select anything.
+    const noMain = dispatchedDriver(ctx, consultDispatchFixture(ctx, 'arch-testing', 'no-main-binding'), { requesterAuthenticated: true });
+    assert.notStrictEqual(noMain.selected_driver, 'claude-sendmessage', 'no live main binding: ' + JSON.stringify(noMain));
+
+    // A live main binding but no peer binding and no resume handle for the target.
+    const sessionKey = 'expired-composition-neg-session-' + crypto.randomBytes(4).toString('hex');
+    assert.strictEqual(rll.createMainOrchestratorBinding(
+      ctx.projDir, { ok: true, provider: 'claude-hook', runtime_session_key: sessionKey }, ctx.worktreeId, ctx.planDigest, 3600,
+    ).ok, true, 'fixture: MainOrchestratorBinding must mint');
+    const noHandle = dispatchedDriver(ctx, consultDispatchFixture(ctx, 'arch-testing', 'no-handle'), { requesterAuthenticated: true });
+    assert.notStrictEqual(noHandle.selected_driver, 'claude-sendmessage', 'no resume handle: ' + JSON.stringify(noHandle));
+
+    // Two live handles for the same target are ambiguous and fail closed.
+    const first = buildResumeHandleFixture(ctx, sessionKey, 'arch-testing');
+    writeResumeHandleFixture(first);
+    writeResumeHandleFixture(first, { binding_id: crypto.randomBytes(16).toString('hex') });
+    const ambiguous = dispatchedDriver(ctx, consultDispatchFixture(ctx, 'arch-testing', 'two-handles'), { requesterAuthenticated: true });
+    assert.notStrictEqual(ambiguous.selected_driver, 'claude-sendmessage', 'two live handles are ambiguous: ' + JSON.stringify(ambiguous));
+  });
+});
+
+test('a BUSY persistent target with a live, unconsumed resume handle is selected through that handle (no WAITING requirement)', () => {
+  withProject('rcc-node-dispatch-busy-live-handle-wave', (ctx) => {
+    const sessionKey = 'busy-live-handle-session-' + crypto.randomBytes(4).toString('hex');
+    assert.strictEqual(rll.createMainOrchestratorBinding(
+      ctx.projDir, { ok: true, provider: 'claude-hook', runtime_session_key: sessionKey }, ctx.worktreeId, ctx.planDigest, 3600,
+    ).ok, true, 'fixture: MainOrchestratorBinding must mint');
+    const target = buildConsumedBusyResumeHandleFixture(ctx, sessionKey, 'arch-platform');
+    // The persistent actor re-parks after its first answer: a new live handle exists while the role binding is BUSY.
+    const reparked = writeResumeHandleFixture({
+      handleDir: path.join(rll.registryRepoDir(ctx.projDir), 'claude-resume-handles'),
+      handleRecord: Object.assign({}, target.consumed, {
+        binding_id: crypto.randomBytes(16).toString('hex'),
+        created_at: new Date().toISOString().replace(/\.\d{3}Z$/, 'Z'),
+        expiry: new Date(Date.now() + 3600000).toISOString().replace(/\.\d{3}Z$/, 'Z'),
+      }),
+    });
+    const authenticated = dispatchedDriver(ctx, consultDispatchFixture(ctx, 'arch-platform', 'busy-reparked'), { requesterAuthenticated: true });
+    assert.strictEqual(authenticated.selected_driver, 'claude-sendmessage', JSON.stringify(authenticated));
+    assert.strictEqual(authenticated.native_target_binding_id, reparked.binding_id);
+  });
+});

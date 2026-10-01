@@ -66,6 +66,8 @@ function dispatchCanonical(flags, options) {
   const reqObj = reqRec.obj;
   const planRoot = planRootFromArtifact(coordRoot, requestPath);
   const rootSourceDispatch = !!(options && options.rootSourceDispatch === true);
+  // Set only by `consult`, after its requester grant was validated and its role policy checked in-process.
+  const requesterAuthenticated = !!(options && options.requesterAuthenticated === true);
 
   // Routing policy must already be materialized at this EXACT immutable snapshot
   // (Ordered Runtime Loop step 2, PLAN.md ~L803) before any driver can be
@@ -166,7 +168,7 @@ function dispatchCanonical(flags, options) {
   }
 
   const { selectedDriver, selectedClaudePeerBinding, selectedClaudeResumeHandle } = selectDispatchDriver({
-    allowedDrivers, rootSourceDispatch, requiredDriver, excludedDriver, coordRoot, reqObj,
+    allowedDrivers, rootSourceDispatch, requesterAuthenticated, requiredDriver, excludedDriver, coordRoot, reqObj,
   });
 
   if (rootSourceDispatch && !ROOT_SOURCE_DISPATCH_DRIVERS.includes(selectedDriver)) {
