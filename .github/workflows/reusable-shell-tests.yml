@@ -16,7 +16,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [0, 1, 2, 3]
+        shard: [0, 1, 2, 3, 4, 5, 6, 7]
     steps:
       - uses: actions/checkout@v5
         with:
@@ -79,7 +79,7 @@ jobs:
             echo "::error::planner script not found at $PLANNER_SCRIPT (neither target checkout nor toolkit fallback has it)"
             exit 1
           fi
-          node "$PLANNER_SCRIPT" --suite-root scripts/tests --shard-count 4 --json \
+          node "$PLANNER_SCRIPT" --suite-root scripts/tests --shard-count 8 --json \
             > "$RUNNER_TEMP/bats-shard-plan.json"
           # One planner invocation drives both this shard's file list AND its
           # mcp-server prerequisite flag from the SAME plan object -- never
@@ -163,9 +163,9 @@ jobs:
             ${{ runner.temp }}/bats-shard-manifest.txt
           retention-days: 7
 
+  # Independent of the shards (it installs its own mcp-server and bats), so it runs beside them instead of after them.
   bats-post:
     name: bats post-shard checks (hooks, once)
-    needs: bats
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5

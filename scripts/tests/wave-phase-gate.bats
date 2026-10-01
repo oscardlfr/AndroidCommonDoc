@@ -1,4 +1,6 @@
 #!/usr/bin/env bats
+# These tests load the yaml parser from mcp-server/node_modules, so the shard that runs them builds mcp-server.
+# ci-prerequisite: mcp-server
 
 HOOK="$BATS_TEST_DIRNAME/../../.claude/hooks/wave-phase-gate.js"
 

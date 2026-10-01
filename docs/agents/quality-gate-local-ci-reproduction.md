@@ -31,8 +31,8 @@ Use this profile when predicting `.github/workflows/reusable-shell-tests.yml`:
 3. Use Node major 24, install Bats inside the container with the same workflow
    operation (`npm install bats`), and record `node --version` plus
    `npx bats --version` in the evidence.
-4. Reproduce the workflow's four-shard plan with
-   `scripts/tools/plan-bats-shards.cjs --suite-root scripts/tests --shard-count 4`.
+4. Reproduce the workflow's eight-shard plan with
+   `scripts/tools/plan-bats-shards.cjs --suite-root scripts/tests --shard-count 8`.
    For each shard, consume that one plan object for both its NUL-delimited file list
    and `needsMcpServer`. When the flag is true, run `npm ci` and `npm run build`
    inside `mcp-server` before Bats. Then execute the shard with `npx bats` and apply
