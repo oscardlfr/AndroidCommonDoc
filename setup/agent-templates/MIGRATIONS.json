@@ -281,6 +281,12 @@
       }
     },
     "quality-gater": {
+      "2.28.3": {
+        "date": "2026-10-02",
+        "breaking": false,
+        "summary": "A failing check is never reclassified as pre-existing to reach PASS; in L1/L2 a failure of the project's own validator records pre-pr --project-gate FAIL and stops the QG with the reason.",
+        "migration_hint": "Run plain /sync-l0; runtime-enabled consumers refresh the managed agents and the toolkit launcher atomically."
+      },
       "2.28.2": {
         "date": "2026-10-02",
         "breaking": false,
@@ -1105,6 +1111,12 @@
       }
     },
     "doc-updater": {
+      "2.13.2": {
+        "date": "2026-10-02",
+        "breaking": false,
+        "summary": "In L1/L2 the doc-updater no longer consults context-provider or escalates to the orchestrator: its context is the accepted consult result cited in the dispatch by the arch-* owner, and a missing citation or an impossible Edit precondition is reported to the dispatching architect.",
+        "migration_hint": "Run plain /sync-l0; runtime-enabled consumers refresh the managed agents and the toolkit launcher atomically."
+      },
       "2.13.1": {
         "date": "2026-09-29",
         "breaking": false,

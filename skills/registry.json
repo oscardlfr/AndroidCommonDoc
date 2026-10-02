@@ -2302,7 +2302,7 @@
       "description": "Documentation updater. Updates roadmap, memory, CHANGELOG, specs after work. Ingests approved external patterns via MCP. Follows L0 patterns (frontmatter, line limits, hub structure).",
       "category": "guides",
       "tier": "extended",
-      "hash": "sha256:65c317f1526101b688a46c9e4c6629f7b1aba19f97cc0ebf6a3271dafdab68cf",
+      "hash": "sha256:eba28aa8be500bd4dfb691f13a88ad3de862b09a7e4ecf37cd390065f8ad7216",
       "dependencies": [],
       "frontmatter": {
         "name": "doc-updater",
@@ -2705,7 +2705,7 @@
       "description": "QG owner (Phase 3). Runs sequential verification on the final committed HEAD after VERIFY-FINAL architect approval. Reports structured PASS/FAIL.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:55bfeee2a63babc0e4e3278d4fa9fc9141e3cfc89c4c5a4b27d327b0247a7c62",
+      "hash": "sha256:4e7864fb73a32afd613a03d347042df0294ff63be4ce7e0b49726116e5b4c083",
       "dependencies": [],
       "frontmatter": {
         "name": "quality-gater",

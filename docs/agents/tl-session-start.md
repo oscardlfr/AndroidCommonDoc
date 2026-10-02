@@ -182,6 +182,8 @@ node .claude/runtime/l0-toolkit-launcher.cjs run verdict-request-write --project
 node .claude/runtime/l0-toolkit-launcher.cjs run wave-control --project-root "$PWD" -- transition --slug <slug> --to EXECUTE --verdict <arch-*>=<verdict-path>
 ```
 
+**Specialist dispatch in an L1/L2 consumer.** Before a specialist edits, its architect writes the dispatch artifact with `node .claude/runtime/l0-toolkit-launcher.cjs run specialist-dispatch-write --project-root "$PWD" -- --architect <arch-*> --specialist <specialist> --file <path> --slug <slug>` (the task text on stdin). Documentation waves, whose implementer is `doc-updater`, do not use it: `doc-updater` is exempt from the dispatch gate (D4).
+
 **VERIFY_FINAL and QG in an L1/L2 consumer (orchestrator).** `--phase` accepts exactly `prep` or `verify-final`. After the final commit, freeze HEAD and request fresh verdicts:
 
 ```
@@ -189,7 +191,7 @@ node .claude/runtime/l0-toolkit-launcher.cjs run wave-control --project-root "$P
 node .claude/runtime/l0-toolkit-launcher.cjs run verdict-request-write --project-root "$PWD" -- --role <arch-*> --phase verify-final --slug <slug>
 ```
 
-Each architect approves with `node .claude/runtime/l0-toolkit-launcher.cjs run verdict-write --project-root "$PWD" -- --role <arch-*> --phase verify-final --slug <slug> --request <absolute-request-path> --request-sha256 <sha256> --decision approve --evidence-text "<concise evidence>"`. A VERIFY_FINAL approve requires evidence; `--evidence-text` makes the writer store it in the wave directory as `<arch-*>-verify-final-evidence.md`, so a role without a Write tool never creates a file (`--evidence-file` still takes an absolute path inside `.planning/wave-<slug>/`). Then, in this order:
+Each architect approves with `printf '%s\n' "<rationale>" | node .claude/runtime/l0-toolkit-launcher.cjs run verdict-write --project-root "$PWD" -- --role <arch-*> --phase verify-final --slug <slug> --request <absolute-request-path> --request-sha256 <sha256> --decision approve --evidence-text "<concise evidence>"` (the rationale arrives on stdin and is required, 1 to 8192 bytes; every input is validated before anything is written, so a failed call leaves nothing behind and the same call can be retried). A VERIFY_FINAL approve requires evidence; `--evidence-text` makes the writer store it in the wave directory as `<arch-*>-verify-final-evidence.md`, so a role without a Write tool never creates a file (`--evidence-file` still takes an absolute path inside `.planning/wave-<slug>/`). Before transitioning to QG the tracked working tree must be clean and everything committed: `pre-pr` requires it. Then, in this order:
 
 ```
 node .claude/runtime/l0-toolkit-launcher.cjs run wave-control --project-root "$PWD" -- transition --slug <slug> --to QG --verdict <arch-*>=<verdict-path>

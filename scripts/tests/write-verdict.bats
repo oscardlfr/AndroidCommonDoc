@@ -888,3 +888,33 @@ process.exit(r.wellFormed === false && r.authorizes === false ? 0 : 1);
   [ ! -e "$PROJ/.planning/wave-$WAVE_SLUG/arch-testing-verdict.md" ] || return 1
   [ ! -e "$PROJ/.planning/wave-$WAVE_SLUG/arch-testing-verdict-prep.json" ] || return 1
 }
+
+# ── Atomic: every input is validated before anything is written ─────────────────────────────────────
+
+@test "WV-EV-ATOMIC FAIL: --evidence-text without the rationale on stdin writes nothing, and a valid retry with another text succeeds" {
+  _prep_verdict_for_inline
+  local req req_sha256
+  req="$(_seed_request verify-final)"; req_sha256="$(_real_sha256 "$req")"
+  local stored="$PROJ/.planning/wave-$WAVE_SLUG/arch-testing-verify-final-evidence.md"
+  run bash -c "cd '$PROJ' && CLAUDE_WAVE_SLUG='$WAVE_SLUG' bash '$SCRIPT' --role arch-testing --phase verify-final --slug '$WAVE_SLUG' \
+    --request '$req' --request-sha256 '$req_sha256' --decision approve --evidence-text 'first attempt' < /dev/null"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"rationale"* ]]
+  [ ! -e "$stored" ]
+  [ ! -f "$PROJ/.planning/wave-$WAVE_SLUG/arch-testing-verdict-verify-final.json" ]
+  run bash -c "cd '$PROJ' && printf 'final body\n' | CLAUDE_WAVE_SLUG='$WAVE_SLUG' bash '$SCRIPT' --role arch-testing --phase verify-final --slug '$WAVE_SLUG' \
+    --request '$req' --request-sha256 '$req_sha256' --decision approve --evidence-text 'second, different attempt'"
+  [ "$status" -eq 0 ]
+  [ "$(cat "$stored")" = "second, different attempt" ]
+}
+
+@test "WV-EV-ATOMIC FAIL: a rationale over 8192 bytes is refused before the evidence file is created" {
+  _prep_verdict_for_inline
+  local req req_sha256
+  req="$(_seed_request verify-final)"; req_sha256="$(_real_sha256 "$req")"
+  local stored="$PROJ/.planning/wave-$WAVE_SLUG/arch-testing-verify-final-evidence.md"
+  run bash -c "cd '$PROJ' && head -c 9000 /dev/zero | tr '\\0' 'x' | CLAUDE_WAVE_SLUG='$WAVE_SLUG' bash '$SCRIPT' --role arch-testing --phase verify-final --slug '$WAVE_SLUG' \
+    --request '$req' --request-sha256 '$req_sha256' --decision approve --evidence-text 'text'"
+  [ "$status" -eq 1 ]
+  [ ! -e "$stored" ]
+}

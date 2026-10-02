@@ -88,6 +88,7 @@ EVIDENCE_FILES=()
 EVIDENCE_SCHEMAS=()
 EVIDENCE_TEXT=""
 EVIDENCE_TEXT_SET=0
+EVIDENCE_TEXT_CREATED=0
 PUBLICATION_NONCE=""
 PUBLICATION_NONCE_SET=0
 
@@ -439,6 +440,14 @@ if [[ ! -t 0 ]]; then
   RATIONALE="$(cat)"
 fi
 
+# Validate every input BEFORE anything is written: the verdict contract takes a rationale of 1..8192 bytes, so a missing or
+# oversized one is refused here, not after the inline evidence file has already been created.
+RATIONALE_BYTES="$(printf '%s' "$RATIONALE" | wc -c | tr -d ' \t\r\n')"
+if [[ "$RATIONALE_BYTES" -lt 1 || "$RATIONALE_BYTES" -gt 8192 ]]; then
+  echo "[write-verdict] ERROR: the rationale (stdin) must be 1..8192 bytes, got $RATIONALE_BYTES; pipe it in, for example: printf '%s\\n' 'approved after reading the plan' | ..." >&2
+  exit 1
+fi
+
 # ── Evidence (WV: this script computes each file's real sha256 itself) ───────
 
 # Inline evidence: written here, confined to the wave directory, under its canonical name.
@@ -452,6 +461,8 @@ if [[ "$EVIDENCE_TEXT_SET" -eq 1 ]]; then
     echo "[write-verdict] ERROR: $EVIDENCE_TEXT_FILE already holds different evidence for this role and phase" >&2
     exit 2
   fi
+  EVIDENCE_TEXT_CREATED=0
+  [[ -f "$EVIDENCE_TEXT_FILE" ]] || EVIDENCE_TEXT_CREATED=1
   mv -f "$EVIDENCE_TEXT_TMP" "$EVIDENCE_TEXT_FILE"
   EVIDENCE_FILES+=("$EVIDENCE_TEXT_FILE")
   EVIDENCE_SCHEMAS+=("")
@@ -546,6 +557,11 @@ if decision == "escalate":
 
 json.dump(payload, sys.stdout, separators=(",", ":"))
 sys.stdout.write("\n")
-' | node "$CLI" "${PUBLISH_ARGS[@]}"
+' | node "$CLI" "${PUBLISH_ARGS[@]}" || {
+  publish_status=$?
+  # The verdict was not published: leave no evidence file this invocation created, so a valid retry starts clean.
+  if [[ "${EVIDENCE_TEXT_CREATED:-0}" -eq 1 ]]; then rm -f "$EVIDENCE_TEXT_FILE"; fi
+  exit "$publish_status"
+}
 
 echo "[write-verdict] $PHASE written: $VERDICT_FILE" >&2

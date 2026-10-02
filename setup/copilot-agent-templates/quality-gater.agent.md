@@ -350,7 +350,7 @@ else
 fi
 ```
 
-If ANY step FAILED: do NOT mint (L0: no run-qg; L1/L2: only the `pre-pr … --project-gate FAIL` record). **The proof is your PASS/FAIL signal to the enforcement layer.** Without it, no push and no COMPLETE.
+If ANY step FAILED: do NOT mint (L0: no run-qg; L1/L2: only the `pre-pr … --project-gate FAIL` record). **The proof is your PASS/FAIL signal to the enforcement layer.** Without it, no push and no COMPLETE. A failing check is never reclassified as "pre-existing" or "unrelated" to reach PASS; in L1/L2 a failure of the project's own validator sets `PROJECT_GATE=FAIL`, records the FAIL stamp and stops the QG with that reason.
 
 ### Step 11: Emit QG result signal
 

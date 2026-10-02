@@ -630,8 +630,8 @@ agents:
   doc-updater:
     canonical_name: doc-updater
     subagent_type: doc-updater
-    template_version: "2.13.1"
-    template_frontmatter_sha256: 3e5bb5112f70c1a74b95f3176e8392959cdd66b2bef8de7e21aa849401ec9875
+    template_version: "2.13.2"
+    template_frontmatter_sha256: 41d3a8b180322ac4055f7b13455990dc4ebbc192e49f6e5acffb453315b6f74e
     category: doc-owner
     lifecycle: persistent
     description: "Documentation updater. Updates roadmap, memory, CHANGELOG, specs after work. Ingests approved external patterns via MCP. Follows L0 patterns (frontmatter, line limits, hub structure)."
@@ -904,8 +904,8 @@ agents:
   quality-gater:
     canonical_name: quality-gater
     subagent_type: quality-gater
-    template_version: "2.28.2"
-    template_frontmatter_sha256: 5f5979321c2ac6f1e30cae18d9bfc316ce1db8c9a09cca4101788c10e1c273f7
+    template_version: "2.28.3"
+    template_frontmatter_sha256: cdd665b86beef296aa8319154899e5c9460b33b0cda73519635942383fac916f
     category: orchestrator
     lifecycle: ephemeral
     description: "QG owner (Phase 3). Runs sequential verification on the final committed HEAD after VERIFY-FINAL architect approval. Reports structured PASS/FAIL."
