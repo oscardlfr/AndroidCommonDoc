@@ -381,7 +381,7 @@ PLANEOF
   [[ "$output" == *"out-of-manifest"* ]] || return 1
 }
 
-@test "PA-17 PASS: an annotated Class line compares only the canonical class token" {
+@test "PA-17 ERROR: an annotated Class line is rejected by the canonical grammar" {
   write_class "HARNESS"
   cat > "$WAVE_DIR/PLAN.md" <<'PLANEOF'
 ### Wave Class
@@ -399,7 +399,8 @@ PLANEOF
   touch_file "scripts/sh/pre-commit-hook.sh"
 
   run bash "$SCRIPT" --wave-dir "$WAVE_DIR" --plan "$WAVE_DIR/PLAN.md" --base "$BASE"
-  [ "$status" -eq 0 ]
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"INVALID_WAVE_CLASS"* ]] || return 1
 }
 
 @test "PA-18 ERROR: a git diff enumeration failure cannot pass as zero touched files" {

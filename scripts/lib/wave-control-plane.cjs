@@ -5,6 +5,7 @@ const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
 const runtimeProjectContext = require('./runtime-project-context.cjs');
+const wavePlanClass = require('./wave-plan-class.cjs');
 
 const SCHEMA = 'wave-phase-state/v1';
 const PHASES = Object.freeze(['PREP', 'EXECUTE', 'VERIFY_FINAL', 'QG', 'COMPLETE']);
@@ -21,7 +22,7 @@ const STATE_KEYS_WITH_DRAFT = Object.freeze(STATE_KEYS.concat(['plan_draft']).so
 const DRAFT_PLAN_MARKER = 'STATUS: DRAFT-CONTEXT-PENDING';
 const TRANSITION_KEYS = Object.freeze(['at', 'evidence', 'from', 'from_head', 'to', 'to_head']);
 const LOCK_WAIT_MS = 2000;
-const WAVE_CLASSES = Object.freeze(['HARNESS', 'DOC', 'FAST-PATH']);
+const WAVE_CLASSES = wavePlanClass.WAVE_CLASSES;
 
 function sha256(bytes) { return crypto.createHash('sha256').update(bytes).digest('hex'); }
 function canonicalRoot(root) { return fs.realpathSync(path.resolve(root)); }
@@ -174,31 +175,7 @@ function isDraftPlan(planText) {
   const structural = structuralLineFlags(lines);
   return lines.some((line, index) => structural[index] && line.trim() === DRAFT_PLAN_MARKER);
 }
-function parsePlanClass(planText) {
-  const lines = planText.split(/\r?\n/);
-  const structural = structuralLineFlags(lines);
-
-  const headings = [];
-  for (let index = 0; index < lines.length; index += 1) {
-    if (structural[index] && /^#{2,3}[ \t]+Wave[ \t]+Class[ \t]*$/.test(lines[index])) headings.push(index);
-  }
-  if (headings.length === 0) throw new Error('WAVE_CLASS_SECTION_MISSING');
-  if (headings.length !== 1) throw new Error('WAVE_CLASS_SECTION_AMBIGUOUS');
-
-  const declarations = [];
-  for (let index = headings[0] + 1; index < lines.length; index += 1) {
-    if (!structural[index]) continue;
-    if (/^#{1,6}[ \t]+/.test(lines[index])) break;
-    if (/^[ \t]*(?:-[ \t]+)?\*\*Class\*\*:/.test(lines[index])) declarations.push(lines[index]);
-  }
-  if (declarations.length === 0) throw new Error('PLAN_WAVE_CLASS_MISSING');
-  if (declarations.length !== 1) throw new Error('PLAN_WAVE_CLASS_AMBIGUOUS');
-
-  const match = /^[ \t]*(?:-[ \t]+)?\*\*Class\*\*:[ \t]*(?:`([A-Za-z0-9][A-Za-z0-9_-]*)`|([A-Za-z0-9][A-Za-z0-9_-]*))[ \t]*[.,;:!?]?[ \t]*$/.exec(declarations[0]);
-  const className = match && (match[1] || match[2]);
-  if (!className || !WAVE_CLASSES.includes(className)) throw new Error('INVALID_WAVE_CLASS');
-  return className;
-}
+const parsePlanClass = wavePlanClass.parsePlanClass;
 function readClassSentinel(root, sentinelPath) {
   if (!fs.existsSync(sentinelPath)) throw new Error('WAVE_CLASS_SENTINEL_MISSING');
   let value;
@@ -261,7 +238,7 @@ function lifecycleRoles(root, className, declaredArchitects) {
 function currentInputs(root, slug) {
   const p = pathsFor(root, slug);
   const planBytes = readRootFile(p.root, p.plan);
-  const planText = planBytes.toString('utf8');
+  const planText = wavePlanClass.decodePlanBytes(planBytes);
   const planClass = parsePlanClass(planText);
   const sentinelClass = readClassSentinel(p.root, p.classSentinel);
   if (sentinelClass !== planClass) {

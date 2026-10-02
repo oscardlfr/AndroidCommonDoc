@@ -5,20 +5,16 @@
 // (via context-provider-gate.js). Matches Search Dispatch Protocol intent.
 // Use os.tmpdir() — never hardcode /tmp/ (Windows).
 //
-// BL-W35-06 fix: also writes per-agent arch-response flag when arch → specialist.
-// Dual-flag behavior: global CP flag (arch-tier) + per-agent flag (specialists).
+// BL-W35-06 successor: arch → mediated-recipient handoffs are recorded as
+// durable actor authorizations. They are keyed by the exact session_id +
+// agent_id and current wave/PLAN, never by SendMessage.to or agent_type.
 // Emergency escape:
 //   rm "$(node -e "console.log(require('os').tmpdir())")/claude-cp-consulted-*.flag"
-//   rm "$(node -e "console.log(require('os').tmpdir())")/claude-arch-responded-*.flag"
 
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { ARCH_SENDER_PREFIXES, MEDIATED_RECIPIENT_ROLES } = require('./hook-control-plane-utils.js');
-
-function sanitizeId(id) {
-  return String(id).replace(/[^a-zA-Z0-9_-]/g, '-');
-}
+const actorAuthorization = require('../../scripts/lib/context-provider-actor-authorization.cjs');
 
 let input = '';
 const t = setTimeout(() => process.exit(0), 5000);
@@ -43,21 +39,14 @@ process.stdin.on('end', () => {
       fs.writeFileSync(flagPath, payload);
     }
 
-    // BL-W35-06: per-agent-type arch-response flag — written when arch → specialist or planner (mediated recipients)
-    const senderType = data.agent_type || '';
-    const isArchSender = ARCH_SENDER_PREFIXES.some(p => senderType === p || senderType.startsWith(p));
-    const isSpecialistRecipient = MEDIATED_RECIPIENT_ROLES.some(s => to === s || to.startsWith(s));
-    if (isArchSender && isSpecialistRecipient) {
-      const agentFlag = path.join(os.tmpdir(),
-        `claude-arch-responded-${sessionId}-${sanitizeId(to)}.flag`);
-      const archPayload = JSON.stringify({
-        written_by: senderType,
-        agent_id: data.agent_id || 'unknown',
-        session_id: sessionId,
-        ts: new Date().toISOString()
-      });
-      fs.writeFileSync(agentFlag, archPayload);
-    }
+    // The SendMessage host outcome carries the resumed actor's stable ID.
+    // recordMediatedAuthorization resolves both actors through the durable
+    // authority registry and rejects absent/ambiguous/foreign identities.
+    // The presentation route (`to`) is intentionally not an input.
+    actorAuthorization.recordMediatedAuthorization(
+      process.env.CLAUDE_PROJECT_DIR || process.cwd(),
+      data,
+    );
   } catch (e) {
     // Silent — PostToolUse, never block
   }
