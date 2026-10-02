@@ -4,8 +4,9 @@
 // identity is known. Nothing is renewed unless the identity proof passes first:
 //   - a subagent (agentId present): its full CLAUDE-ID-01 startup proof for the current PLAN (the check the gates use: fence,
 //     binding, generation, capability); then its actor binding, its requester binding and the session generation slide;
-//   - a policy-defined phase/wave actor: the trusted native hook tuple, signed host scope, live generation and unfenced
-//     authority classification suffice to slide only the generation. These actors do not own persistent startup bindings.
+//   - a policy-defined phase/wave actor without startup proof: the trusted native hook tuple, signed host scope, live
+//     generation and unfenced authority classification suffice to slide only the generation. With valid startup proof,
+//     its existing actor/requester bindings follow the full-proof path above.
 //   - the top-level session (no agentId): the session generation slides if it is still live.
 // Only an `expires_at`/`expiry` field is rewritten (atomic replace under the record's own lock), to now + idle TTL capped at
 // created_at + absolute TTL, and only when less than the cadence threshold remains. An expired, fenced, foreign or
@@ -396,16 +397,21 @@ function renewSessionActivityForHook(projectRoot, { sessionId, agentId, agentTyp
     const role = canonicalObservedRole(agentType);
     if (!role) return { renewed: false, reason: 'actor-role-invalid' };
     const phase = checkPhaseActorSessionActivity(projectRoot, sessionId, agentId, role, worktreeId, plan.planDigest);
-    if (phase.ok) {
+    if (!phase.ok && phase.reason !== 'phase-actor-role-invalid') return { renewed: false, reason: phase.reason };
+    const proof = rll.checkClaudeId01ProofComplete(projectRoot, sessionId, worktreeId, plan.planDigest, role, agentId);
+    if (!proof.ok || !proof.binding) {
+      if (!phase.ok) return { renewed: false, reason: proof.reason || 'identity-proof-failed' };
+      // No persistent proof is required for a native phase actor, but an
+      // existing expired binding is never renewed or replaced by this path.
       const generation = renewSessionGeneration(projectRoot, sessionId, () =>
         checkPhaseActorSessionActivity(projectRoot, sessionId, agentId, role, worktreeId, plan.planDigest));
       return { renewed: generation.renewed, reason: generation.reason };
     }
-    if (phase.reason !== 'phase-actor-role-invalid') return { renewed: false, reason: phase.reason };
-    const proof = rll.checkClaudeId01ProofComplete(projectRoot, sessionId, worktreeId, plan.planDigest, role, agentId);
-    if (!proof.ok || !proof.binding) return { renewed: false, reason: proof.reason || 'identity-proof-failed' };
+    // A phase role can also own a genuine startup capability. Preserve all
+    // of its existing sliding records rather than taking the phase-only path.
     const binding = renewRoleActorBinding(projectRoot, proof.binding.binding_id, role, worktreeId, plan.planDigest);
-    const generation = renewSessionGeneration(projectRoot, sessionId);
+    const generation = renewSessionGeneration(projectRoot, sessionId, phase.ok ? () =>
+      checkPhaseActorSessionActivity(projectRoot, sessionId, agentId, role, worktreeId, plan.planDigest) : undefined);
     const requester = renewRequesterBinding(projectRoot, sessionId, agentId, role, worktreeId, plan.planDigest);
     return {
       renewed: Boolean(binding.renewed || generation.renewed || requester.renewed),

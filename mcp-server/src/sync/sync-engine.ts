@@ -1492,6 +1492,8 @@ export async function computeRuntimeToolkitInventory(toolkitRoot: string): Promi
   const files = [
     "scripts/lib/runtime-role-lifecycle.cjs", "scripts/lib/runtime-host-claude.cjs",
     "scripts/lib/runtime-consultation.cjs", "scripts/lib/runtime-collaboration-entrypoints.cjs",
+    "scripts/lib/runtime-session-renewal.cjs", "scripts/lib/runtime-session-lifetime.cjs",
+    "scripts/lib/shell-command-intent.cjs",
     "scripts/lib/runtime-consumer-quality-gate.cjs",
     "scripts/lib/context-provider-actor-authorization.cjs",
     "scripts/tools/wave-control-plane.cjs",

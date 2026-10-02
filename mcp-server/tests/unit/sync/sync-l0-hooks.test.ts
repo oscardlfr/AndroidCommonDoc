@@ -550,6 +550,9 @@ describe("source-referenced runtime installation", () => {
     expect(first.toolkitContentDigest).toMatch(/^[0-9a-f]{64}$/);
     const inventoryPaths = new Set(first.inventory?.map((entry) => entry.relative_path));
     expect(inventoryPaths.has("scripts/lib/runtime-consultation.cjs")).toBe(true);
+    expect(inventoryPaths.has("scripts/lib/runtime-session-renewal.cjs")).toBe(true);
+    expect(inventoryPaths.has("scripts/lib/runtime-session-lifetime.cjs")).toBe(true);
+    expect(inventoryPaths.has("scripts/lib/shell-command-intent.cjs")).toBe(true);
     expect(inventoryPaths.has("scripts/lib/runtime-consultation/primitives.cjs")).toBe(true);
     expect(inventoryPaths.has("scripts/lib/runtime-consultation/cli-argv.cjs")).toBe(true);
     expect(inventoryPaths.has("scripts/lib/runtime-consultation/git-identity.cjs")).toBe(true);

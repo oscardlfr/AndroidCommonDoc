@@ -1,4 +1,5 @@
 'use strict';
+require('./lib/private-registry-tmpdir-preload.cjs');
 
 // Sliding session: the session generation and an actor's binding expire after ONE HOUR OF INACTIVITY (idle timeout) and never
 // live beyond TWELVE HOURS from their creation (absolute timeout). Only a hook renews, after the identity proof has passed.
@@ -44,27 +45,27 @@ function project() {
   return root;
 }
 
-function actor(root, agentId) {
+function actor(root, agentId, role = ROLE) {
   const generation = rll.resolveSessionGeneration(root, { ok: true, provider: 'claude-hook', runtime_session_key: SESSION });
   const plan = rll.discoverPlan(root);
   const mint = (suffix) => {
     const id = rll.generateActionId();
     const minted = rll.mintRoleLifecycleAction(root, id, 'role-spawn', 'claude-native', rll.computeRepoId(root), rll.computeWorktreeId(root),
-      plan.planDigest, crypto.createHash('sha256').update('sliding:' + suffix).digest('hex'), generation.generationId, ROLE,
-      rll.buildRoleSpawnPayload('claude-id01-probe', ROLE, ROLE, 'fixture', 'fixture'),
+      plan.planDigest, crypto.createHash('sha256').update('sliding:' + suffix).digest('hex'), generation.generationId, role,
+      rll.buildRoleSpawnPayload('claude-id01-probe', role, role, 'fixture', 'fixture'),
       new Date(Date.now() + 600000).toISOString().replace(/\.\d{3}Z$/, 'Z'));
     assert.strictEqual(minted.ok, true, JSON.stringify(minted));
     return id;
   };
   const a = mint('a-' + agentId); const b = mint('b-' + agentId);
-  const o = { sessionId: SESSION, agentId, agentType: ROLE };
+  const o = { sessionId: SESSION, agentId, agentType: role };
   rll.recordClaudeId01SubagentStartObservation(root, { ...o, actionId: a });
   rll.recordClaudeId01PreToolUseObservation(root, { ...o, toolUseId: 't1' + agentId });
   rll.recordClaudeId01PreToolUseObservation(root, { ...o, toolUseId: 't2' + agentId });
   rll.recordClaudeId01SubagentStartObservation(root, { ...o, actionId: a });
   rll.recordClaudeId01PreToolUseObservation(root, { ...o, toolUseId: 't3' + agentId });
-  rll.recordClaudeId01SubagentStartObservation(root, { sessionId: SESSION, agentId: agentId + '-b', agentType: ROLE, actionId: b });
-  primeClaudeId01V2ActorProof({ projectRoot: root, agentType: ROLE, sessionId: SESSION, agentId, actionId: a, prefix: 'sliding-v2', actorBindingTtlSeconds: 3600 });
+  rll.recordClaudeId01SubagentStartObservation(root, { sessionId: SESSION, agentId: agentId + '-b', agentType: role, actionId: b });
+  primeClaudeId01V2ActorProof({ projectRoot: root, agentType: role, sessionId: SESSION, agentId, actionId: a, prefix: 'sliding-v2', actorBindingTtlSeconds: 3600 });
   return { generation, plan, worktreeId: rll.computeWorktreeId(root) };
 }
 
@@ -105,6 +106,64 @@ test('phase-scoped native hook activity keeps its verified host session alive wi
         'renewal creates no actor authority');
     }
     assert.strictEqual(generationRecord(root).generation_id, ctx.generation.generationId);
+  } finally { clock.offsetMs = 0; }
+});
+
+test('phase roles with startup proof slide their existing actor and requester bindings past one hour', { skip: SKIP }, () => {
+  clock.offsetMs = 0;
+  try {
+    for (const role of ['planner', 'verifier']) {
+      clock.offsetMs = 0;
+      const root = project();
+      const agentId = 'bound-' + role;
+      const ctx = actor(root, agentId, role);
+      const before = rll.checkClaudeId01ProofComplete(root, SESSION, ctx.worktreeId, ctx.plan.planDigest, role, agentId);
+      assert.strictEqual(before.ok, true, JSON.stringify(before));
+      const requester = rll.createRequesterBinding(root,
+        { ok: true, provider: 'claude-hook', runtime_session_key: SESSION }, agentId, role, ctx.worktreeId, ctx.plan.planDigest, 3600);
+      assert.strictEqual(requester.ok, true, JSON.stringify(requester));
+      const requesterBefore = requesterRecord(root, agentId);
+      for (const minutes of [30, 61, 90]) {
+        clock.offsetMs = minutes * MIN;
+        const result = renewal.renewSessionActivityForHook(root, { sessionId: SESSION, agentId, agentType: role });
+        assert.strictEqual(result.reason, undefined, JSON.stringify(result));
+        const current = rll.checkClaudeId01ProofComplete(root, SESSION, ctx.worktreeId, ctx.plan.planDigest, role, agentId);
+        assert.strictEqual(current.ok, true, `${role} at +${minutes}: ${JSON.stringify(current)}`);
+        assert.strictEqual(current.binding.binding_id, before.binding.binding_id);
+        assert.ok(Date.parse(current.binding.expiry) > Date.parse(before.binding.expiry));
+        assert.ok(Date.parse(requesterRecord(root, agentId).record.expiry) > Date.parse(requesterBefore.record.expiry));
+      }
+    }
+  } finally { clock.offsetMs = 0; }
+});
+
+test('phase roles never revive stale startup bindings and fenced bound actors renew nothing', { skip: SKIP }, () => {
+  clock.offsetMs = 0;
+  try {
+    for (const role of ['planner', 'verifier']) {
+      clock.offsetMs = 0;
+      const root = project();
+      const agentId = 'bound-' + role;
+      const ctx = actor(root, agentId, role);
+      const proofBefore = rll.checkClaudeId01ProofComplete(root, SESSION, ctx.worktreeId, ctx.plan.planDigest, role, agentId);
+      const actorPath = rll.roleActorBindingPathFor(root, proofBefore.binding.binding_id);
+      const actorBefore = fs.readFileSync(actorPath, 'utf8');
+      // The top-level session remains active while this actor is idle.
+      clock.offsetMs = 30 * MIN;
+      renewal.renewSessionActivityForHook(root, { sessionId: SESSION });
+      clock.offsetMs = 61 * MIN;
+      assert.strictEqual(rll.checkClaudeId01ProofComplete(root, SESSION, ctx.worktreeId, ctx.plan.planDigest, role, agentId).ok, false);
+      renewal.renewSessionActivityForHook(root, { sessionId: SESSION, agentId, agentType: role });
+      assert.strictEqual(fs.readFileSync(actorPath, 'utf8'), actorBefore, 'stale actor expiry is never revived');
+      assert.strictEqual(rll.checkClaudeId01ProofComplete(root, SESSION, ctx.worktreeId, ctx.plan.planDigest, role, agentId).ok, false);
+      const beforeFence = generationRecord(root);
+      const identityId = rll.computeClaudeAuthorityIdentityId(root, 'claude-hook', SESSION, agentId);
+      assert.strictEqual(rll.publishClaudeAuthorityFence(root, identityId).ok, true);
+      clock.offsetMs = 75 * MIN;
+      assert.strictEqual(renewal.renewSessionActivityForHook(root, { sessionId: SESSION, agentId, agentType: role }).renewed, false);
+      assert.deepStrictEqual(generationRecord(root), beforeFence);
+      assert.strictEqual(fs.readFileSync(actorPath, 'utf8'), actorBefore);
+    }
   } finally { clock.offsetMs = 0; }
 });
 
