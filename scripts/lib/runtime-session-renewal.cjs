@@ -9,6 +9,9 @@
 // created_at + absolute TTL, and only when less than the cadence threshold remains. An expired, fenced, foreign or
 // absolute-expired record is never resurrected. Immutable records (startup trace, capability) are never touched.
 
+const fs = require('node:fs');
+const path = require('node:path');
+const crypto = require('node:crypto');
 const rll = require('./runtime-role-lifecycle.cjs');
 const rc = require('./runtime-consultation.cjs');
 const {
@@ -16,6 +19,9 @@ const {
 } = require('./runtime-session-lifetime.cjs');
 
 const GENERATION_KEYS = ['created_at', 'expires_at', 'generation_id', 'provider', 'runtime_session_key', 'schema'];
+const RENEWAL_LOCK_OWNER_SCHEMA = 'runtime/session-renewal-lock-owner/v1';
+const RENEWAL_LOCK_STALE_MS = 30 * 1000;
+const TEST_FSYNC_PLATFORM_SYMBOL = Symbol.for('android-common-doc.runtime-session-renewal-fsync-platform');
 const now = () => Date.now();
 const isoSeconds = (ms) => new Date(Math.floor(ms / 1000) * 1000).toISOString().replace(/\.\d{3}Z$/, 'Z');
 const sameKeys = (obj, keys) => obj && typeof obj === 'object' && Object.keys(obj).sort().join() === keys.join();
@@ -29,24 +35,260 @@ function renewedExpiry(createdAt, expiresAt) {
   return Date.parse(iso) > expiresMs ? iso : null;
 }
 
-function renewRecord(recordPath, field, validate) {
-  const locked = rll.withRegistryLock(recordPath + '.lock', () => {
-    const valid = validate();
-    if (!valid.ok) return { ok: false, renewed: false, reason: valid.reason };
-    const renewed = renewedExpiry(valid.record.created_at, valid.record[field]);
-    if (renewed === null) return { ok: true, renewed: false };
-    const write = rll.writeRegistryRecordReplace(
-      recordPath, Buffer.from(rc.canonicalJSONStringify({ ...valid.record, [field]: renewed }), 'utf8'),
+/*
+ * Mutable records are enumerated by strict registry readers.  A lock directory
+ * or replace temporary beside one of those records is therefore observable as
+ * corrupt registry state.  Renewal coordination lives in a sibling namespace
+ * instead: the primary repo namespace contains records, and only records.
+ */
+function renewalCoordinationPaths(projectRoot, recordPath) {
+  const repoDir = path.resolve(rll.registryRepoDir(projectRoot));
+  const resolvedRecord = path.resolve(recordPath);
+  const relative = path.relative(repoDir, resolvedRecord);
+  if (relative === '' || relative === '..' || relative.startsWith('..' + path.sep) || path.isAbsolute(relative)) return null;
+  const coordinationRoot = path.join(path.dirname(repoDir), '.' + path.basename(repoDir) + '.session-renewal');
+  const recordKey = rc.sha256String(relative.split(path.sep).join('/'));
+  return {
+    lockDir: path.join(coordinationRoot, 'locks', recordKey + '.lock'),
+    tempDir: path.join(coordinationRoot, 'tmp'),
+  };
+}
+
+function writeAll(fd, bytes) {
+  let offset = 0;
+  while (offset < bytes.length) {
+    const written = fs.writeSync(fd, bytes, offset, bytes.length - offset);
+    if (!Number.isInteger(written) || written <= 0) throw new Error('short-write');
+    offset += written;
+  }
+}
+
+function fsyncDirectory(dirPath) {
+  const selectedPlatform = globalThis[TEST_FSYNC_PLATFORM_SYMBOL] === 'win32' ? 'win32' : process.platform;
+  // Node/Win32 does not provide a portable directory handle that can be
+  // fsync'd.  The durable file fsync and same-volume atomic rename remain the
+  // supported Windows publication boundary (the same fallback used by the
+  // signed-host contract writer).  POSIX must prove the directory barrier.
+  if (selectedPlatform === 'win32') return true;
+  let fd;
+  try {
+    fd = fs.openSync(dirPath, 'r');
+    fs.fsyncSync(fd);
+    fs.closeSync(fd);
+    return true;
+  } catch {
+    if (fd !== undefined) try { fs.closeSync(fd); } catch { /* best effort */ }
+    return false;
+  }
+}
+
+function writeRenewedRecord(recordPath, bytes, tempDir, stillOwnsLock) {
+  const dirs = rll.ensureSecureRegistryDir([path.dirname(recordPath), tempDir]);
+  if (!dirs.ok) return dirs;
+  const tempPath = path.join(tempDir, path.basename(recordPath) + '.' + crypto.randomBytes(8).toString('hex') + '.tmp');
+  let fd;
+  try {
+    fd = fs.openSync(tempPath, fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_EXCL, 0o600);
+  } catch {
+    return { ok: false, reason: 'temp-open-failed' };
+  }
+  try {
+    writeAll(fd, bytes);
+    fs.fsyncSync(fd);
+  } catch {
+    try { fs.closeSync(fd); } catch { /* already closed */ }
+    try { fs.unlinkSync(tempPath); } catch { /* best effort */ }
+    return { ok: false, reason: 'write-failed' };
+  }
+  try { fs.closeSync(fd); } catch { /* already closed */ }
+  if (!stillOwnsLock()) {
+    try { fs.unlinkSync(tempPath); } catch { /* best effort */ }
+    return { ok: false, reason: 'lock-ownership-lost' };
+  }
+  try {
+    // The sibling namespace is on the same registry filesystem, so rename is
+    // still the atomic publication boundary without exposing a primary temp.
+    fs.renameSync(tempPath, recordPath);
+  } catch {
+    try { fs.unlinkSync(tempPath); } catch { /* best effort */ }
+    return { ok: false, reason: 'rename-failed' };
+  }
+  if (!fsyncDirectory(path.dirname(recordPath))) return { ok: false, reason: 'directory-fsync-failed' };
+  return { ok: true };
+}
+
+function lockOwnerPath(lockDir) {
+  return path.join(lockDir, 'owner.json');
+}
+
+function readLockOwner(lockDir) {
+  try {
+    const owner = JSON.parse(fs.readFileSync(lockOwnerPath(lockDir), 'utf8'));
+    if (!owner || Object.keys(owner).sort().join() !== ['created_at', 'expires_at', 'pid', 'schema', 'token'].join()
+      || owner.schema !== RENEWAL_LOCK_OWNER_SCHEMA || !Number.isSafeInteger(owner.pid) || owner.pid <= 0
+      || typeof owner.token !== 'string' || !/^[a-f0-9]{32}$/.test(owner.token)
+      || typeof owner.created_at !== 'string' || !Number.isFinite(Date.parse(owner.created_at))
+      || typeof owner.expires_at !== 'string' || !Number.isFinite(Date.parse(owner.expires_at))
+      || Date.parse(owner.expires_at) <= Date.parse(owner.created_at)) return null;
+    return owner;
+  } catch {
+    return null;
+  }
+}
+
+function processIsAlive(pid) {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (err) {
+    return Boolean(err && err.code === 'EPERM');
+  }
+}
+
+function lockOwnedBy(lockDir, token) {
+  const owner = readLockOwner(lockDir);
+  return Boolean(owner && owner.token === token && owner.pid === process.pid && now() < Date.parse(owner.expires_at));
+}
+
+function reclaimStaleRenewalLock(lockDir) {
+  let stat;
+  try {
+    stat = fs.lstatSync(lockDir);
+  } catch {
+    return false;
+  }
+  if (!stat.isDirectory() || stat.isSymbolicLink()) return false;
+  const owner = readLockOwner(lockDir);
+  const ageMs = owner ? 0 : now() - stat.mtimeMs;
+  // A dead recorded process is a proven crash.  A live but expired owner is
+  // also reclaimable: the opaque token fences that holder before publication.
+  // An ownerless/torn lock gets a grace period so contenders cannot steal it
+  // between mkdir and owner fsync.
+  const reclaimable = owner
+    ? (!processIsAlive(owner.pid) || now() >= Date.parse(owner.expires_at))
+    : ageMs >= RENEWAL_LOCK_STALE_MS;
+  if (!reclaimable) return false;
+  const quarantine = lockDir + '.stale.' + crypto.randomBytes(8).toString('hex');
+  try {
+    fs.renameSync(lockDir, quarantine);
+  } catch {
+    return false;
+  }
+  // The exact, derived lock path is free atomically at rename.  Cleanup never
+  // follows symlinks and does not affect acquisition correctness if it fails.
+  try {
+    const entries = fs.readdirSync(quarantine);
+    if (entries.length === 1 && entries[0] === 'owner.json') fs.unlinkSync(path.join(quarantine, 'owner.json'));
+    if (fs.readdirSync(quarantine).length === 0) fs.rmdirSync(quarantine);
+  } catch { /* leave quarantined evidence for diagnosis */ }
+  fsyncDirectory(path.dirname(lockDir));
+  return true;
+}
+
+function publishLockOwner(lockDir, token) {
+  const ownerPath = lockOwnerPath(lockDir);
+  let fd;
+  try {
+    fd = fs.openSync(ownerPath, fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_EXCL, 0o600);
+    const createdAt = now();
+    writeAll(fd, Buffer.from(rc.canonicalJSONStringify({
+      schema: RENEWAL_LOCK_OWNER_SCHEMA,
+      token,
+      pid: process.pid,
+      created_at: isoSeconds(createdAt),
+      expires_at: isoSeconds(createdAt + RENEWAL_LOCK_STALE_MS),
+    }), 'utf8'));
+    fs.fsyncSync(fd);
+    fs.closeSync(fd);
+    fd = undefined;
+    if (!fsyncDirectory(lockDir)) return { ok: false, reason: 'lock-owner-fsync-failed' };
+    return { ok: true };
+  } catch {
+    if (fd !== undefined) try { fs.closeSync(fd); } catch { /* best effort */ }
+    return { ok: false, reason: 'lock-owner-write-failed' };
+  }
+}
+
+function tryWithRenewalLock(lockDir, fn) {
+  const parent = rll.ensureSecureRegistryDir(path.dirname(lockDir));
+  if (!parent.ok) return parent;
+  let acquired = false;
+  for (let attempt = 0; attempt < 2 && !acquired; attempt += 1) {
+    try {
+      fs.mkdirSync(lockDir, { mode: 0o700 });
+      acquired = true;
+    } catch (err) {
+      if (!err || err.code !== 'EEXIST') return { ok: false, reason: 'lock-create-failed' };
+      if (attempt > 0 || !reclaimStaleRenewalLock(lockDir)) {
+        // Another healthy hook is already doing the same best-effort
+        // maintenance.  A PreToolUse never waits for it or fails because of it.
+        return { ok: true, contended: true };
+      }
+    }
+  }
+  const secure = rll.ensureSecureRegistryDir(lockDir);
+  if (!secure.ok) {
+    try { fs.rmdirSync(lockDir); } catch { /* best effort */ }
+    return secure;
+  }
+  const token = crypto.randomBytes(16).toString('hex');
+  const ownerWrite = publishLockOwner(lockDir, token);
+  if (!ownerWrite.ok) {
+    try { fs.unlinkSync(lockOwnerPath(lockDir)); } catch { /* best effort */ }
+    try { fs.rmdirSync(lockDir); } catch { /* best effort */ }
+    return ownerWrite;
+  }
+  try {
+    return { ok: true, value: fn(() => lockOwnedBy(lockDir, token)) };
+  } finally {
+    if (lockOwnedBy(lockDir, token)) {
+      try { fs.unlinkSync(lockOwnerPath(lockDir)); } catch { /* best effort */ }
+      try { fs.rmdirSync(lockDir); } catch { /* best effort */ }
+      fsyncDirectory(path.dirname(lockDir));
+    }
+  }
+}
+
+function renewalCandidate(field, validate) {
+  const valid = validate();
+  if (!valid.ok) return { ok: false, renewed: false, reason: valid.reason };
+  const expiry = renewedExpiry(valid.record.created_at, valid.record[field]);
+  return expiry === null
+    ? { ok: true, renewed: false }
+    : { ok: true, renewed: true, expiry, record: valid.record };
+}
+
+function renewRecord(projectRoot, recordPath, field, validate) {
+  // The common case performs no coordination at all.  This read-only cadence
+  // check keeps every PreToolUse outside the lock until renewal is actually due.
+  const precheck = renewalCandidate(field, validate);
+  if (!precheck.ok || !precheck.renewed) return precheck;
+
+  const coordination = renewalCoordinationPaths(projectRoot, recordPath);
+  if (!coordination) return { ok: false, renewed: false, reason: 'renewal-record-outside-registry' };
+  const locked = tryWithRenewalLock(coordination.lockDir, (stillOwnsLock) => {
+    // A competing hook may have renewed the record after our precheck.  Always
+    // re-prove identity/liveness and cadence while holding the publication lock.
+    const current = renewalCandidate(field, validate);
+    if (!current.ok || !current.renewed) return current;
+    const write = writeRenewedRecord(
+      recordPath,
+      Buffer.from(rc.canonicalJSONStringify({ ...current.record, [field]: current.expiry }), 'utf8'),
+      coordination.tempDir,
+      stillOwnsLock,
     );
-    return write.ok ? { ok: true, renewed: true, expiry: renewed } : { ok: false, renewed: false, reason: write.reason };
-  }, { maxWaitMs: 2000 });
+    return write.ok
+      ? { ok: true, renewed: true, expiry: current.expiry }
+      : { ok: false, renewed: false, reason: write.reason };
+  });
+  if (locked.ok && locked.contended) return { ok: true, renewed: false, contended: true };
   return locked.ok ? locked.value : { ok: false, renewed: false, reason: locked.reason };
 }
 
 function renewSessionGeneration(projectRoot, sessionId) {
   const identity = { provider: 'claude-hook', runtime_session_key: sessionId };
   const recordPath = rll.sessionGenerationPathFor(projectRoot, identity);
-  return renewRecord(recordPath, 'expires_at', () => {
+  return renewRecord(projectRoot, recordPath, 'expires_at', () => {
     const read = rll.readRegistryRecord(recordPath);
     if (!read.ok || read.absent) return { ok: false, reason: 'session-generation-absent' };
     // peekSessionGeneration is the live judge: expired, absolute-expired and malformed records are refused.
@@ -62,7 +304,7 @@ function renewSessionGeneration(projectRoot, sessionId) {
 
 function renewRoleActorBinding(projectRoot, bindingId, role, worktreeId, planDigest) {
   const recordPath = rll.roleActorBindingPathFor(projectRoot, bindingId);
-  return renewRecord(recordPath, 'expiry', () => {
+  return renewRecord(projectRoot, recordPath, 'expiry', () => {
     const valid = rll.validateRoleActorBindingFor(projectRoot, bindingId, role, worktreeId, planDigest);
     return valid.ok ? { ok: true, record: valid.binding } : { ok: false, reason: valid.reason };
   });
@@ -77,7 +319,7 @@ function renewRequesterBinding(projectRoot, sessionId, agentId, role, worktreeId
     return { ok: true, renewed: false, reason: 'no-live-requester-binding' };
   }
   const bindingId = classified.binding.binding_id;
-  return renewRecord(rll.requesterBindingPathFor(projectRoot, bindingId), 'expiry', () => {
+  return renewRecord(projectRoot, rll.requesterBindingPathFor(projectRoot, bindingId), 'expiry', () => {
     const valid = rll.validateRequesterBindingFor(projectRoot, bindingId, role, worktreeId, planDigest);
     return valid.ok ? { ok: true, record: valid.binding } : { ok: false, reason: valid.reason };
   });
