@@ -18,8 +18,13 @@ process.stdin.on('end', () => {
     const context = require('../../scripts/lib/runtime-project-context.cjs')
       .verifyRuntimeConsumerInstallation(projectRoot, { verifyContent: true });
     if (!context.ok) process.exit(0);
-    const recorded = require('../../scripts/lib/runtime-host-claude.cjs')
-      .recordInteractiveSessionPin({ projectRoot, event });
+    const runtimeHostClaude = require('../../scripts/lib/runtime-host-claude.cjs');
+    const recorded = runtimeHostClaude.recordInteractiveSessionPin({ projectRoot, event });
+    // Non-authoritative, code-only diagnostic so the later collaboration
+    // denial can name why this session has no pin. Never used to authorize.
+    try {
+      runtimeHostClaude.recordInteractiveSessionPinDiagnostic({ projectRoot, event, result: recorded });
+    } catch { /* diagnostics are best-effort */ }
     if (!recorded || recorded.ok !== true) {
       process.stderr.write('[runtime-host-session-start] '
         + String(recorded && (recorded.detail || recorded.reason) || 'HOST_PIN_UNPROVEN') + '\n');

@@ -1599,7 +1599,13 @@ function tryInjectEntrypointComposition(toolInput, event) {
     if (composition && composition.reason === 'HOST_EFFORT_MISMATCH') {
       return m7DenyResult('[R131/P3] collaboration entrypoints require effective --effort high.');
     }
-    return m7DenyResult('[R131/P3] genuine claude-sonnet-5 host composition evidence is unavailable.');
+    // Name the bounded failure code (e.g. HOST_PIN_UNPROVEN: HOST_PIN_VENDOR_MATCH_COUNT_4) so the operator is
+    // not left with SessionStart stderr as the only clue. Only uppercase codes are ever echoed, never free text.
+    const hostCode = (value) => (typeof value === 'string' && /^[A-Z0-9_]{1,64}$/.test(value) ? value : null);
+    const hostReason = composition ? hostCode(composition.reason) : null;
+    const hostDetail = hostReason ? hostCode(composition.detail) : null;
+    const hostSuffix = hostReason ? ' (' + hostReason + (hostDetail ? ': ' + hostDetail : '') + ')' : '';
+    return m7DenyResult('[R131/P3] genuine claude-sonnet-5 host composition evidence is unavailable' + hostSuffix + '.');
   }
   let lifecycleBinding = null;
   if (plan.command !== null) {
