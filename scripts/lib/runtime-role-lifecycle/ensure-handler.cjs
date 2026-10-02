@@ -5,6 +5,8 @@
 // reconciliation, the two-pass role classification/driver-resolution
 // pipeline, and the codex-app-server/claude-sendmessage batch mints. Never
 // requires the facade or a sibling module.
+const fs = require('fs');
+const { runPlanHandoff } = require('../runtime-ensure-plan-handoff.cjs');
 
 function createEnsureHandler({
 path, SUBCOMMAND_SPEC, parseSubcommandArgv, usageError, invalidError, unavailableError, emitAndExit,
@@ -158,6 +160,12 @@ function handleEnsure(rawArgv) {
     invalidError('ensure', 'INTERNAL_ERROR');
     return;
   }
+
+  // Immutable replacement: peers still alive under an OLD plan digest are stopped before anything is spawned (see the module).
+  if (runPlanHandoff({ fs, path, registryRepoDir, readRegistryRecord, transitionRoleBinding, classifyClaudeSupportRoleLiveness,
+    effectiveActionTtlSeconds, mintRoleLifecycleAction, generateActionId, computeRepoId, sha256String, canonicalJSONStringify,
+    futureIsoForRegistry, currentClockMsForRegistry, isoToMsForRegistry, actionForEnvelope, emitAndExit, makeResult, RC,
+    invalidError, unavailableError }, projectRoot, binding, pair, sortedRoles)) return;
 
   const capabilityManifest = getCapabilityManifest(projectRoot);
   const collectedActions = [];

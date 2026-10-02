@@ -136,6 +136,12 @@
       }
     },
     "planner": {
+      "1.22.5": {
+        "date": "2026-10-02",
+        "breaking": false,
+        "summary": "Pass B never waits with sleep: when the accepted consult result has not arrived the planner ends with NO-ACCEPTED-CONSULT-RESULT and is resumed by the arch-* owner's SendMessage; the Spawn Table assigns implementation and the commit to the specialist layer, never to the orchestrator; the draft-to-final handoff is the stop-and-respawn of the draft peers, not a rebind.",
+        "migration_hint": "Run plain /sync-l0; runtime-enabled consumers refresh the managed agents and the toolkit launcher atomically."
+      },
       "1.22.4": {
         "date": "2026-10-02",
         "breaking": false,
