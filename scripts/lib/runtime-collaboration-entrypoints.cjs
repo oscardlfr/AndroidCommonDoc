@@ -612,12 +612,12 @@ function supportRolesForIntent(entrypoint, intent, projectRoot) {
   if (!intent.wave_slug) return [...SUPPORT_ROLES];
   const state = waveControl.inspect(projectRoot, intent.wave_slug);
   if (entrypoint !== 'init-session' && state.initialized === false) throw new TypeError('wave-control-state-missing');
-  if (state.plan_current === false) throw new TypeError('wave-control-plan-drift');
+  if (state.plan_current === false && state.draft_rebind !== true) throw new TypeError('wave-control-plan-drift');
   if (entrypoint === 'work' && state.phase !== 'EXECUTE') throw new TypeError('wave-control-work-outside-execute');
   // EXECUTE intentionally permits HEAD movement while specialists commit.  The
   // control plane adopts that final HEAD only at EXECUTE -> VERIFY_FINAL with
   // the explicit rebind flag.  Every other phase remains exact-HEAD-bound.
-  if (state.current === false && state.phase !== 'EXECUTE') throw new TypeError('wave-control-state-drift');
+  if (state.head_current === false && state.phase !== 'EXECUTE') throw new TypeError('wave-control-state-drift');
   return [...state.lifecycle_roles];
 }
 
@@ -678,7 +678,7 @@ function planEntrypointStep(entrypoint, intent, projectRoot) {
       waveSlug: intent.wave_slug,
       planDigest: state.plan_sha256,
       worktreeId: lifecycleOwner.computeWorktreeId(projectRoot),
-      initializeAfterAdmission: entrypoint === 'init-session' && state.initialized === false,
+      initializeAfterAdmission: entrypoint === 'init-session' && (state.initialized === false || state.draft_rebind === true),
     }));
   }
   return planned;

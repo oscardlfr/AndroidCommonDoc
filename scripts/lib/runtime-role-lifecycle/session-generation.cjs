@@ -3,6 +3,9 @@
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
+const sessionLifetime = require('../runtime-session-lifetime.cjs');
+
+const { SESSION_IDLE_TTL_SECONDS } = sessionLifetime;
 
 function createSessionGenerationModule({
   canonicalJSONStringify,
@@ -17,7 +20,16 @@ function createSessionGenerationModule({
 }) {
   const IDENTITY_PROVIDER_ENUM = Object.freeze(['claude-hook', 'codex-supervisor']);
   const MAX_RUNTIME_SESSION_KEY_BYTES = 512;
-  const SESSION_GENERATION_TTL_SECONDS = 3600;
+  const SESSION_GENERATION_TTL_SECONDS = SESSION_IDLE_TTL_SECONDS;
+  const absoluteLimitMs = sessionLifetime.absoluteLimitMs;
+  // Why a generation is no longer live, or null while it is. A generation that ran to its capped expiry ended by the absolute
+  // limit; one that lapsed earlier ended by inactivity.
+  function lapseReason(createdAtIso, expiresAtIso) {
+    const nowMs = currentClockMsForRegistry();
+    const limitMs = absoluteLimitMs(createdAtIso);
+    if (nowMs >= Date.parse(expiresAtIso)) return Date.parse(expiresAtIso) >= limitMs ? 'session-generation-absolute-expired' : 'session-generation-expired';
+    return nowMs >= limitMs ? 'session-generation-absolute-expired' : null;
+  }
   const SESSION_GENERATION_KEYS = Object.freeze([
     'created_at', 'expires_at', 'generation_id', 'provider', 'runtime_session_key', 'schema',
   ]);
@@ -126,10 +138,9 @@ function createSessionGenerationModule({
     if (createdAtMs > expiresAtMs || createdAtMs > currentClockMsForRegistry()) {
       return { ok: false, reason: 'session-generation-shape-invalid' };
     }
-    if (currentClockMsForRegistry() >= expiresAtMs) {
-      return { ok: false, reason: 'session-generation-expired' };
-    }
-    return { ok: true, generationId: rec.generation_id, expiresAt: rec.expires_at };
+    const lapse = lapseReason(rec.created_at, rec.expires_at);
+    if (lapse) return { ok: false, reason: lapse };
+    return { ok: true, generationId: rec.generation_id, expiresAt: rec.expires_at, createdAt: rec.created_at };
   }
 
   function readLiveSessionGenerationById(projectRootOrRepoDescriptor, generationId) {
@@ -175,9 +186,8 @@ function createSessionGenerationModule({
     }
     if (matches.length === 0) return { ok: false, reason: 'session-generation-absent' };
     if (matches.length !== 1) return { ok: false, reason: 'session-generation-ambiguous' };
-    if (currentClockMsForRegistry() >= isoToMsForRegistry(matches[0].expires_at)) {
-      return { ok: false, reason: 'session-generation-expired' };
-    }
+    const lapse = lapseReason(matches[0].created_at, matches[0].expires_at);
+    if (lapse) return { ok: false, reason: lapse };
     return { ok: true, record: matches[0], expiresAt: matches[0].expires_at };
   }
 
@@ -200,6 +210,7 @@ function createSessionGenerationModule({
           && typeof rec.generation_id === 'string'
           && typeof rec.expires_at === 'string'
           && nowMs < isoToMsForRegistry(rec.expires_at)
+          && nowMs < absoluteLimitMs(rec.created_at)
         ) {
           return { ok: true, generationId: rec.generation_id, expiresAt: rec.expires_at };
         }
@@ -255,7 +266,8 @@ function createSessionGenerationModule({
         current.runtime_session_key === identity.runtime_session_key && isHexCsprng32(current.generation_id) &&
         isCanonicalIsoUtc(current.created_at) && isCanonicalIsoUtc(current.expires_at);
       if (current && !currentShapeValid) return { ok: false, reason: 'session-generation-shape-invalid' };
-      const currentValid = currentShapeValid && nowMs < isoToMsForRegistry(current.expires_at);
+      const currentValid = currentShapeValid && nowMs < isoToMsForRegistry(current.expires_at)
+        && nowMs < absoluteLimitMs(current.created_at);
       if (markerValid && marker.invocation_digest === invocationDigest && currentValid &&
           marker.generation_id === current.generation_id) {
         return { ok: true, generationId: current.generation_id, expiresAt: current.expires_at, rotated: false };

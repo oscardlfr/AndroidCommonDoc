@@ -36,6 +36,8 @@ Every repository owns one portable contract. Runtime-specific files adapt that c
 Use `/init-session --orchestrate` for managed orchestration. Do not launch a separate `team-lead` or `project-manager` agent.
 ```
 
+An L1/L2 consumer adapter also says how to read L0 docs, which are not part of its checkout: `node .claude/runtime/l0-toolkit-launcher.cjs read-doc docs/agents/tl-session-start.md --project-root "$PWD"` (any `docs/<path>` works the same way).
+
 Keep the adapter small. Project architecture, test policy and Git rules belong in `AGENTS.md`; file-specific detail belongs in path-scoped rules. Do not embed a static agent roster, current PR state, branch hashes, CI results or active-wave status.
 
 ## Layer identity

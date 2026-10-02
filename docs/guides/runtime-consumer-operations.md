@@ -129,7 +129,7 @@ tests are the development loop; after the PLAN, path manifest, clean HEAD,
 architect verdict bindings, and QG session are current, it invokes the sharded
 suite once. In L1/L2, the consumer project's `/pre-pr` pipeline runs once and its
 PASS receipt is bound to the current HEAD and PLAN by the allowlisted runtime
-adapter. The L0 Bats harness is never copied or executed in a consumer.
+adapter (`runtime-consumer-qg` `pre-pr`, `mint`, `verify`; exact order in `tl-session-start`). The L0 Bats harness is never copied or executed in a consumer, and the L0-only registry-integrity, doc-validator and report-freshness steps do not run there.
 
 The layer-appropriate local gate validates the exact branch HEAD and authorizes publishing it.
 Under strict branch protection, required GitHub `CI Gate` validates the PR merge

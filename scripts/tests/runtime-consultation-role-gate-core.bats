@@ -1527,17 +1527,16 @@ _assert_pretooluse_deny() {
   [ -f "$grants_dir/$grant_id.json" ]
 }
 
-@test "TG-NONCANONICAL: a non-canonical (unquoted) 'claim' command is never recognized as owning -- allowed as ordinary passthrough, with EMPTY stdout (no hookSpecificOutput of any kind)" {
+@test "TG-NONCANONICAL: a non-canonical (unquoted) 'claim' command is never recognized as owning -- no injection, denied with the standalone recovery" {
   local cmd="node $CONSULTATION_CLI claim --coordination-root $PROJ/.planning/coordination --request $PROJ/.planning/coordination/txn/request.json --role arch-testing --worker-session tg-noncanon-worker-session"
   _make_input "$cmd" arch-testing tg-noncanon-caller
   _run_hook
   [ "$status" -eq 0 ]
-  # Under the corrected inject-a-real-flag design, a LEGITIMATELY recognized-
-  # and-allowed claim call now ALWAYS emits a real JSON hookSpecificOutput
-  # body carrying the injected --target-binding (see TG-CLAIM-1) -- so empty
-  # stdout remains the correct, unambiguous discriminator for "never even
-  # recognized as owning" specifically.
-  [ -z "$output" ]
+  # Never recognized as owning, so nothing is injected; since it is recognizably a runtime command in the wrong shape it is
+  # denied with the one-standalone-single-quoted-command recovery instead of an opaque later AUTHORITY_INVALID.
+  [[ "$output" == *'"permissionDecision":"deny"'* ]]
+  [[ "$output" == *"[RC-TARGET-GATE] run claim as ONE standalone command"* ]]
+  [[ "$output" != *updatedInput* ]]
 }
 
 @test "TG-CHAINED: a chained 'claim' command (';' operator) is never recognized as owning -- no injection, never a security bypass via chaining; it is denied with the standalone recovery" {

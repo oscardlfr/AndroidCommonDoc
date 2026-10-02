@@ -6,7 +6,7 @@ model: sonnet
 domain: development
 intent: [plan, scope, breakdown, estimate]
 token_budget: 4000
-template_version: "1.22.3"
+template_version: "1.22.4"
 ---
 
 ## Runtime source boundary
@@ -136,41 +136,40 @@ After context-gathering (Process 1–7) and BEFORE writing the finalized PLAN.md
 
 ## Output Format
 
-```
-## Execution Plan: {task title}
+The finalized PLAN.md has exactly this shape. Keep the required headings verbatim and in this order; the control plane, the QG path audit and the EXECUTE gate parse them:
 
-### Scope
-- Modules: {list}
-- Files: {estimated count and key files}
-- Blast radius: low | medium | high
-
-### Steps
-1. {step} — assigned to: {architect domain}
-2. {step} — assigned to: {architect domain}
-...
-
-### Dependencies
-- Step N depends on Step M because: {reason}
-
-### Cross-Department Impact
-- Product: {impact or "none"}
-- Marketing: {impact or "none"}
-- If flagged: the orchestrator should dispatch product-strategist/content-creator for review
-
-### Risks
-- {risk}: {mitigation}
-
-### Verification
-- {how to know it worked}
+```markdown
+# Execution Plan: {task title}
 
 ### Wave Class
 - **Class**: <HARNESS|DOC|FAST-PATH>
 - **Required-Architects**: <comma-separated arch-* roles; DOC waves only>
 
-### Open Questions
-- Q1: {question for the orchestrator to resolve before architect dispatch}
-- Q2: {if any}
+## Objective
+
+{one or two sentences: what changes and why}
+
+### Path-Manifest
+
+- {repo-relative/path/one}
+- {repo-relative/path/two}
+
+### Acceptance
+
+- {observable outcome the architects verify at VERIFY_FINAL}
+
+### Spawn Table
+
+| Role | Count | Reason |
+|------|-------|--------|
+| {role} | 1 | {reason} |
 ```
+
+- `### Wave Class`: exactly one `- **Class**:` line; `- **Required-Architects**:` only for DOC.
+- `## Objective`: the goal, not the steps.
+- `### Path-Manifest`: one bare repo-relative path per `- ` bullet (no globs, spaces, prose or trailing notes). It is the allow-list the QG path audit enforces: every file the wave commits must be listed. The section ends at the next heading.
+- `### Acceptance`: checkable outcomes, one per bullet.
+- Optional sections go between `### Acceptance` and `### Spawn Table`, only when useful: `### Scope`, `### Steps` (`1. {step} — assigned to: {architect domain}`), `### Dependencies`, `### Cross-Department Impact` (Product/Marketing impact or "none"), `### Risks`, and `### Open Questions` (`- Q1: {question for the orchestrator to resolve before architect dispatch}`).
 
 ### Spawn Table (MANDATORY for all waves)
 

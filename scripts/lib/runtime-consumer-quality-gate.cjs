@@ -5,11 +5,20 @@
 // L0 Bats harness. The consumer's own /pre-pr pipeline is the validation
 // authority; this adapter binds its PASS receipt to the current HEAD and active
 // wave so the shared control plane can verify QG -> COMPLETE.
+//
+// Order in a consumer wave, once the wave is in phase QG:
+//   1. run the project's own gate (/pre-pr) and the applicable L0 steps (path audit, secret scan);
+//   2. `pre-pr --slug <slug> --project-gate PASS|FAIL` records the outcome as .androidcommondoc/pre-pr.stamp
+//      (the only producer of that stamp in a consumer; it also runs the mechanical checks below);
+//   3. `mint --slug <slug>` binds the stamp to HEAD and PLAN and publishes the proof;
+//   4. `verify --slug <slug> --head <sha>`, then the orchestrator transitions the wave to COMPLETE.
+// The consumer set is: the project gate, a clean tracked worktree and the secret scan. The L0 registry-integrity,
+// doc-validator-parity, report-freshness and Bats steps validate the L0 toolkit itself and do not apply downstream.
 
 const crypto = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
-const { execFileSync } = require('node:child_process');
+const { execFileSync, spawnSync } = require('node:child_process');
 
 const MAX_AGE_MS = 30 * 60 * 1000;
 
@@ -119,7 +128,45 @@ function atomicWriteJson(root, relative, value) {
   }
 }
 
+// The QG reports and stamps live under .androidcommondoc/, which a consumer does not ignore: keep them out of its
+// status without touching a tracked file (a modified .gitignore would dirty the tree this gate requires clean).
+function ensureLocallyIgnored(root) {
+  try {
+    const commonDir = path.resolve(root, git(root, ['rev-parse', '--git-common-dir']));
+    const exclude = path.join(commonDir, 'info', 'exclude');
+    const current = fs.existsSync(exclude) ? fs.readFileSync(exclude, 'utf8') : '';
+    if (current.split(/\r?\n/).some((line) => line.trim() === '.androidcommondoc/')) return;
+    fs.mkdirSync(path.dirname(exclude), { recursive: true });
+    fs.appendFileSync(exclude, `${current && !current.endsWith('\n') ? '\n' : ''}.androidcommondoc/\n`);
+  } catch { /* best effort: the proof does not depend on it */ }
+}
+
+function secretScanResult(root) {
+  const script = path.resolve(__dirname, '..', 'sh', 'secret-scan-report.sh');
+  const run = spawnSync('bash', [script, root], { cwd: root, encoding: 'utf8', timeout: 600000 });
+  return run.status === 0 ? 'PASS' : 'FAIL';
+}
+
+function prePr(root, slug, projectGate) {
+  if (projectGate !== 'PASS' && projectGate !== 'FAIL') die('project-gate-required');
+  const head = currentHead(root);
+  const state = readRegularJson(root, `.androidcommondoc/wave-control/${slug}.json`, 'wave-state-invalid');
+  if (state.value.phase !== 'QG' || state.value.head !== head) die('wave-state-not-current');
+  ensureLocallyIgnored(root);
+  const checks = {
+    project_gate: projectGate,
+    tracked_worktree_clean: git(root, ['status', '--porcelain', '--untracked-files=no']) ? 'FAIL' : 'PASS',
+    secret_scan: secretScanResult(root),
+  };
+  const verdict = Object.values(checks).every((result) => result === 'PASS') ? 'PASS' : 'FAIL';
+  const stamp = { verdict, timestamp: new Date().toISOString(), head, wave_slug: slug, checks };
+  try { atomicWriteJson(root, '.androidcommondoc/pre-pr.stamp', stamp); } catch { die('artifact-publication-failed'); }
+  process.stdout.write(`RUNTIME_CONSUMER_PRE_PR_${verdict} ${head} ${JSON.stringify(checks)}\n`);
+  if (verdict !== 'PASS') process.exit(1);
+}
+
 function mint(root, slug) {
+  ensureLocallyIgnored(root);
   const dirty = git(root, ['status', '--porcelain', '--untracked-files=no']);
   if (dirty) die('tracked-worktree-not-clean');
   const { head, prePr, state } = validateInputs(root, slug, ['QG']);
@@ -164,18 +211,21 @@ function verify(root, slug, requestedHead) {
 }
 
 const argv = process.argv.slice(2);
-if (argv.length < 3) die('usage: <project-root> <mint|verify> --slug <slug> [--head <sha>]');
+if (argv.length < 3) die('usage: <project-root> <pre-pr|mint|verify> --slug <slug> [--project-gate PASS|FAIL] [--head <sha>]');
 const root = canonicalDirectory(path.resolve(argv[0]));
 const mode = argv[1];
 let slug;
 let requestedHead;
+let projectGate;
 for (let index = 2; index < argv.length; index += 1) {
   if (argv[index] === '--slug' && argv[index + 1]) { slug = validateSlug(argv[++index]); continue; }
   if (argv[index] === '--head' && argv[index + 1]) { requestedHead = argv[++index]; continue; }
+  if (argv[index] === '--project-gate' && argv[index + 1]) { projectGate = argv[++index]; continue; }
   die(`unknown-argument:${argv[index]}`);
 }
 if (!slug) die('wave-slug-required');
 if (requestedHead && !/^[0-9a-f]{40}$/.test(requestedHead)) die('requested-head-invalid');
-if (mode === 'mint') mint(root, slug);
+if (mode === 'pre-pr') prePr(root, slug, projectGate);
+else if (mode === 'mint') mint(root, slug);
 else if (mode === 'verify') verify(root, slug, requestedHead);
 else die('mode-invalid');

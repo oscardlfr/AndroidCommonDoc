@@ -29,10 +29,10 @@ const TOOL_SPECS = Object.freeze({
   'kdoc-coverage': { relative: 'mcp-server/build/cli/kdoc-coverage.js', executor: 'node', prependProjectRoot: true },
   'lint-resources': { relative: 'scripts/sh/lint-resources.sh', windowsRelative: 'scripts/ps1/lint-resources.ps1', executor: 'bash', injectProjectRoot: true },
   'l0-bats-sharded': { relative: 'scripts/tools/run-bats-sharded.cjs', executor: 'node', l0Only: true, injectProjectRoot: true },
-  'qg-doc-validators': { relative: 'scripts/sh/qg-doc-validators.sh', windowsRelative: 'scripts/ps1/qg-doc-validators.ps1', executor: 'bash', injectProjectAndToolkitRoots: true, windowsArgumentStyle: 'gnu' },
+  'qg-doc-validators': { relative: 'scripts/sh/qg-doc-validators.sh', windowsRelative: 'scripts/ps1/qg-doc-validators.ps1', executor: 'bash', l0Only: true, injectProjectAndToolkitRoots: true, windowsArgumentStyle: 'gnu' },
   'qg-path-audit': { relative: 'scripts/sh/qg-path-audit.sh', executor: 'bash', injectProjectRoot: true },
-  'qg-registry-integrity': { relative: 'scripts/sh/qg-registry-integrity.sh', windowsRelative: 'scripts/ps1/qg-registry-integrity.ps1', executor: 'bash', injectProjectRoot: true, windowsArgumentStyle: 'gnu' },
-  'qg-report-freshness': { relative: 'scripts/sh/lib/qg-report-freshness.sh', executor: 'bash' },
+  'qg-registry-integrity': { relative: 'scripts/sh/qg-registry-integrity.sh', windowsRelative: 'scripts/ps1/qg-registry-integrity.ps1', executor: 'bash', l0Only: true, injectProjectRoot: true, windowsArgumentStyle: 'gnu' },
+  'qg-report-freshness': { relative: 'scripts/sh/lib/qg-report-freshness.sh', executor: 'bash', l0Only: true },
   'readme-audit': { relative: 'scripts/sh/readme-audit.sh', windowsRelative: 'scripts/ps1/readme-audit.ps1', executor: 'bash', injectProjectRoot: true, windowsArgumentStyle: 'gnu' },
   'run-app': { relative: 'scripts/sh/build-run-app.sh', windowsRelative: 'scripts/ps1/build-run-app.ps1', executor: 'bash', injectProjectRoot: true, windowsPackArguments: true },
   'runtime-consult': { relative: 'scripts/lib/runtime-consultation.cjs', executor: 'node', allowedSubcommands: Object.freeze(['consult', 'record-delivery', 'await-result', 'accept-result']) },
@@ -49,6 +49,7 @@ const TOOL_SPECS = Object.freeze({
   'test-module': { relative: 'scripts/sh/gradle-run.sh', windowsRelative: 'scripts/ps1/gradle-run.ps1', executor: 'bash', injectProjectRoot: true },
   'verdict-pre-execute-check': { relative: 'scripts/sh/verdict-pre-execute-check.sh', executor: 'bash', l0Only: true },
   'verdict-request-write': { relative: 'scripts/sh/write-verdict-request.sh', executor: 'bash' },
+  'specialist-dispatch-write': { relative: 'scripts/sh/write-specialist-dispatch.sh', executor: 'bash' },
   'verdict-write': { relative: 'scripts/sh/write-verdict.sh', executor: 'bash' },
   'version-sync': { relative: 'scripts/sh/check-version-sync.sh', windowsRelative: 'scripts/ps1/check-version-sync.ps1', executor: 'bash' },
   'verify-kmp': { relative: 'scripts/sh/verify-kmp-packages.sh', windowsRelative: 'scripts/ps1/verify-kmp-packages.ps1', executor: 'bash', injectProjectRoot: true },
@@ -284,8 +285,65 @@ function readRuntimeDoc(projectRoot, rootAsGiven, relative) {
   process.stdout.write(fs.readFileSync(target));
 }
 
+// What each operation does, shown by `--help`. Every TOOL_SPECS id must have a line (pinned by l0-toolkit-launcher.test.js).
+const OPERATION_SUMMARIES = Object.freeze({
+  'android-test': 'Run the Android tests of a module.',
+  'audit-docs': 'Audit documentation structure and coherence.',
+  'benchmark': 'Run the benchmark suites.',
+  'bundle-write': 'Write the context bundle a role reads before it starts.',
+  'catalog-coverage': 'Check that the skill and agent catalogs cover every entry.',
+  'check-agent-parity': 'Check that .claude/agents and the registered agents agree.',
+  'check-outdated': 'Check dependency versions against Maven Central.',
+  'commit-tokens': 'List the valid commit types and scopes for this project.',
+  'detect-project-type': 'Detect whether the project is gradle, node or hybrid.',
+  'emit-push-proof': 'L0 only: mint and verify the push proof of the quality gate.',
+  'emit-qg-result': 'Emit the quality-gate phase and result signal of the active wave.',
+  'extract-errors': 'Extract build and test errors from Gradle output.',
+  'generate-api-docs': 'Generate or validate docs/api.',
+  'generate-sbom': 'Generate the software bill of materials.',
+  'kdoc-coverage': 'Report KDoc coverage of public Kotlin APIs.',
+  'l0-bats-sharded': 'L0 only: run the sharded Bats aggregate.',
+  'lint-resources': 'Check string resource completeness.',
+  'qg-doc-validators': 'L0 only: run the doc-validator parity checks.',
+  'qg-path-audit': 'Check that every file the wave touched is in its PLAN Path-Manifest.',
+  'qg-registry-integrity': 'L0 only: check the skill registry hashes.',
+  'qg-report-freshness': 'L0 only: check the quality-gate report is fresh for HEAD.',
+  'readme-audit': 'Audit the README counts against the repository.',
+  'run-app': 'Build and run the application.',
+  'runtime-consult': 'Consultation requester operations: consult, record-delivery, await-result, accept-result.',
+  'runtime-consumer-qg': 'Consumer quality gate: pre-pr (record the stamp), mint (publish the proof), verify.',
+  'sbom-analyze': 'Analyze the software bill of materials.',
+  'sbom-scan': 'Scan the software bill of materials for known vulnerabilities.',
+  'scan-secrets': 'Scan the project for secrets (the /pre-pr scan).',
+  'secret-scan': 'Run the secret scanner and write its quality-gate report.',
+  'sync-gsd-agents': 'Sync the agents to the GSD subagent system.',
+  'sync-gsd-skills': 'Sync the skills to the GSD user-level directory.',
+  'test-changed': 'Run the tests of the modules with uncommitted changes.',
+  'test-full': 'Run the full test suite.',
+  'test-module': 'Run the tests of one module.',
+  'verdict-pre-execute-check': 'L0 only: check the PREP verdicts before an EXECUTE dispatch.',
+  'verdict-request-write': 'Create the immutable verdict request of an architect (--phase prep|verify-final).',
+  'specialist-dispatch-write': 'Architect writes the dispatch artifact a specialist needs before editing (--architect, --specialist, --file; task on stdin).',
+  'verdict-write': 'Record an architect verdict (--phase prep|verify-final, --decision approve|escalate).',
+  'verify-kmp': 'Validate KMP source sets and imports.',
+  'version-sync': 'Check that the versions agree across the project.',
+  'wave-control': 'Wave control plane: init, status, transition, lifecycle-actions.',
+});
+
+function printHelp() {
+  const lines = [
+    'Usage: node .claude/runtime/l0-toolkit-launcher.cjs <run <operation>|read-doc <docs/...>|describe layer> --project-root <absolute-root> [-- <operation arguments>]',
+    '',
+    'Operations (run <operation>):',
+  ];
+  const width = Math.max(...Object.keys(TOOL_SPECS).map((id) => id.length));
+  for (const id of Object.keys(TOOL_SPECS).sort()) lines.push(`  ${id.padEnd(width)}  ${OPERATION_SUMMARIES[id] || ''}`);
+  process.stdout.write(`${lines.join('\n')}\n`);
+}
+
 function main(argv) {
-  if (argv.length < 4) fail('expected run/read-doc/describe, subject, --project-root, absolute-root');
+  if (argv.length === 0 || ['--help', '-h', 'help'].includes(argv[0])) { printHelp(); return; }
+  if (argv.length < 4) fail('expected run/read-doc/describe, subject, --project-root, absolute-root (see --help)');
   const mode = argv[0];
   const subject = argv[1];
   if (argv[2] !== '--project-root') fail('expected --project-root');

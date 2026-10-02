@@ -1,6 +1,6 @@
 'use strict';
 
-/** startup portion of the CLAUDE-ID-01 lifecycle authority. */
+/** startup portion of the CLAUDE-ID-01 lifecycle authority. */ const { absoluteLimitMs } = require('../runtime-session-lifetime.cjs');
 function createClaudeId01Startup(deps) {
   const {
     CLAUDE_ID01_EVENTS_SCAN_CAP,
@@ -159,8 +159,9 @@ function createClaudeId01Startup(deps) {
       if (!generation.ok || generation.generationId !== action.session_generation_id) {
         return { ok: false, reason: 'startup-actor-generation-invalid' };
       }
-      const expiryMs = Math.min(isoToMsForRegistry(binding.binding.expiry), Date.parse(session.record.expires_at),
-        Date.parse(generation.expiresAt));
+      // Immutable records carry ABSOLUTE lifetimes; idle expiry is enforced live on the (sliding) generation and binding.
+      const expiryMs = Math.min(Date.parse(session.record.expires_at),
+        absoluteLimitMs(generation.createdAt), absoluteLimitMs(binding.binding.created_at));
       if (!(expiryMs > currentClockMsForRegistry())) return { ok: false, reason: 'startup-actor-expired' };
       const record = {
         schema: CLAUDE_STARTUP_ACTOR_SCHEMA,
@@ -388,7 +389,7 @@ function createClaudeId01Startup(deps) {
           return { ok: false, reason: 'startup-ready-outcome-conflict' };
         }
       }
-      const expiryMs = Math.min(isoToMsForRegistry(trace.expiry), isoToMsForRegistry(binding.binding.expiry));
+      const expiryMs = Math.min(isoToMsForRegistry(trace.expiry), absoluteLimitMs(binding.binding.created_at));
       if (!(expiryMs > currentClockMsForRegistry())) return { ok: false, reason: 'startup-ready-capability-expired' };
       const nowStr = nowIsoForRegistry();
       const capability = {

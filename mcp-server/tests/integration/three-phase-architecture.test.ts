@@ -318,8 +318,8 @@ describe('arch-platform + arch-integration — caller grep rule', () => {
     expect(platformContent).toMatch(/template_version:\s*"\d+\.\d+\.\d+"/);
   });
 
-  it('arch-integration has template version 1.32.2', () => {
-    expect(integrationContent).toContain('template_version: "1.32.2"');
+  it('arch-integration has template version 1.32.3', () => {
+    expect(integrationContent).toContain('template_version: "1.32.3"');
   });
 });
 
@@ -489,8 +489,8 @@ describe('quality-gater template — gate protocol', () => {
     expect(content).toMatch(/[Cc]ross-cutting/);
   });
 
-  it('has template version 2.28.0', () => {
-    expect(content).toContain('template_version: "2.28.1"');
+  it('has template version 2.28.2', () => {
+    expect(content).toContain('template_version: "2.28.2"');
   });
 });
 
@@ -917,8 +917,8 @@ describe('architect templates — PRE-TASK protocol', () => {
     expect(plannerContent).toMatch(/context-provider/);
   });
 
-  it('planner version 1.22.3', () => {
-    expect(plannerContent).toContain('template_version: "1.22.3"');
+  it('planner version 1.22.4', () => {
+    expect(plannerContent).toContain('template_version: "1.22.4"');
   });
 
   it('arch-testing has template_version field in frontmatter', () => {

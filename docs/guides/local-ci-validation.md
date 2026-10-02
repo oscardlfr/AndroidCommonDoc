@@ -42,7 +42,7 @@ Optional per-machine setting in `.androidcommondoc/local-ci.json` (git-ignored).
 | `native` | `scripts/tools/run-bats-sharded.cjs` with the workflow's shard count (on Windows `scripts/sh/run-bats.sh`), then the Node hook roster minus the workflow's skip list. Hermetic: temporary `HOME` and `TMPDIR`, `GIT_CONFIG_GLOBAL=/dev/null`, `GIT_CONFIG_NOSYSTEM=1`. | Your OS only. |
 | `none` | Nothing. | - |
 
-`act` runs a fresh clone of the **committed `HEAD`** (uncommitted changes are reported and not validated), so it works from linked worktrees and tests exactly what you push. Logs: `.androidcommondoc/local-ci/shard-N.log` and `hooks.log`.
+`act` runs a fresh clone of the **committed `HEAD`** (on a local branch named `local-ci`, so the clone survives `docker cp` even when you start from a detached HEAD; run one `local-ci` at a time, parallel act runs compete for ports and the action cache) (uncommitted changes are reported and not validated), so it works from linked worktrees and tests exactly what you push. Logs: `.androidcommondoc/local-ci/shard-N.log` and `hooks.log`.
 
 `native` needs the built mcp-server, as the CI jobs build it: `(cd mcp-server && npm ci && npm run build)`.
 

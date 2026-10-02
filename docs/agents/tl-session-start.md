@@ -182,6 +182,25 @@ node .claude/runtime/l0-toolkit-launcher.cjs run verdict-request-write --project
 node .claude/runtime/l0-toolkit-launcher.cjs run wave-control --project-root "$PWD" -- transition --slug <slug> --to EXECUTE --verdict <arch-*>=<verdict-path>
 ```
 
+**VERIFY_FINAL and QG in an L1/L2 consumer (orchestrator).** `--phase` accepts exactly `prep` or `verify-final`. After the final commit, freeze HEAD and request fresh verdicts:
+
+```
+node .claude/runtime/l0-toolkit-launcher.cjs run wave-control --project-root "$PWD" -- transition --slug <slug> --to VERIFY_FINAL --rebind-head true
+node .claude/runtime/l0-toolkit-launcher.cjs run verdict-request-write --project-root "$PWD" -- --role <arch-*> --phase verify-final --slug <slug>
+```
+
+Each architect approves with `node .claude/runtime/l0-toolkit-launcher.cjs run verdict-write --project-root "$PWD" -- --role <arch-*> --phase verify-final --slug <slug> --request <absolute-request-path> --request-sha256 <sha256> --decision approve --evidence-text "<concise evidence>"`. A VERIFY_FINAL approve requires evidence; `--evidence-text` makes the writer store it in the wave directory as `<arch-*>-verify-final-evidence.md`, so a role without a Write tool never creates a file (`--evidence-file` still takes an absolute path inside `.planning/wave-<slug>/`). Then, in this order:
+
+```
+node .claude/runtime/l0-toolkit-launcher.cjs run wave-control --project-root "$PWD" -- transition --slug <slug> --to QG --verdict <arch-*>=<verdict-path>
+node .claude/runtime/l0-toolkit-launcher.cjs run runtime-consumer-qg --project-root "$PWD" -- pre-pr --slug <slug> --project-gate PASS|FAIL
+node .claude/runtime/l0-toolkit-launcher.cjs run runtime-consumer-qg --project-root "$PWD" -- mint --slug <slug>
+node .claude/runtime/l0-toolkit-launcher.cjs run runtime-consumer-qg --project-root "$PWD" -- verify --slug <slug>
+node .claude/runtime/l0-toolkit-launcher.cjs run wave-control --project-root "$PWD" -- transition --slug <slug> --to COMPLETE
+```
+
+Between the QG transition and `pre-pr`, the phase-scoped quality-gater runs the consumer checks: the project's own `/pre-pr` plus the applicable steps of its template; the launcher refuses the L0-only registry-integrity, doc-validator, report-freshness and Bats steps in a consumer. `pre-pr` is the only producer of `.androidcommondoc/pre-pr.stamp`: it runs the secret scan, checks the tracked tree and records `--project-gate` (`PASS` only when every consumer check passed); never write the stamp by hand. `mint` binds the stamp to HEAD and PLAN, `verify` re-checks the proof, and the COMPLETE transition verifies it again. The QG reports stay out of `git status` through the clone-local `.git/info/exclude`.
+
 A **DOC** wave starts its `Required-Architects` together with `context-provider` and `doc-updater`, so Pass B and PREP consultations have an architect to ask. A **FAST-PATH** wave has no support plane by design: the planner finalizes it without a Pass B consultation and records that in the PLAN.
 
 Supported surfaces: the Claude Code CLI and the Claude desktop app, both with **Sonnet 5.5 and effort High**. A model/profile mismatch reports `host-model-mismatch`; switch the session model and effort, then run `/init-session` again. A desktop Code-tab session runs in a managed linked worktree of the same repository and is admitted as the consumer root.
@@ -255,6 +274,7 @@ For non-trivial tasks, planner bootstrap is a bounded **two-pass** sequence — 
 4. **Ensure the persistent support plane** with `/init-session --orchestrate <slug>` over the draft (it validates the draft's class line, CLASS sentinel and, for DOC, `Required-Architects`) through the shared role-lifecycle manager — `probe(profile)` → `ensureRoles(profile, roles)` over exactly `arch-platform`, `arch-testing`, `arch-integration`, `context-provider`, `doc-updater` (never `quality-gater`) → `waitReady`. In `auto|persistent`, this is one multi-role `ensure` over the complete configured support-plane array, so a retained Codex supervisor is launched once with its final role set. In `ephemeral|disk-only`, this step instead requires an already-registered non-recursive CP consumer/binding and never grows a supervisor. Bootstrap routing admits retained Claude (`claude-sendmessage`), retained Codex (`codex-app-server`), or registered disk consumer (`noop`), and excludes recursive `claude-agent` plus requester-launched `codex-mcp`/`runtime-spawn`.
 5. **Pass B — rehydrate + real CP transaction**: re-invoke the canonical planner from the same brief+draft (same `Agent(subagent_type="planner", ...)` shape as Pass A). Its first Bash surface begins the exact branch-aware CP-targeted `consult/v2` transaction. A valid accepted CP disk result — optionally accelerated by SendMessage now that CP is READY from step 4 — is required before Pass B removes the `DRAFT-CONTEXT-PENDING` marker and finalizes PLAN. **No result means STOP.** Architects/verdicts can bind only the marker-free final bytes; draft-bound consultation is planning input only and cannot satisfy a final PREP verdict, EXECUTE, or QG gate.
 6. **Final-digest role-rebind**: the same multi-role `ensure` then emits ordered `role-rebind` actions for every healthy draft-bound support peer/child and requires all of them READY without respawn before proceeding. Failure quarantines and STOPs — it never silently reuses a draft binding.
+   Run it as `/init-session --orchestrate <slug>` again: when the wave-control state was bound to the Pass A draft and nothing was decided on it (still PREP at revision 0, no transition, same HEAD and class), that run re-binds the state once to the marker-free final PLAN digest, then emits the rebinds. Any other PLAN change is `wave-control-plan-drift`; a second change after the re-binding, or a HEAD that moved, needs a new wave slug.
 7. Present plan summary to user as text output (team-lead needs no file writes during planning)
 8. **On user approval**: call `ExitPlanMode()`
 9. **⛔ MANDATORY Phase 2 Topology Activation Gate (Bug #8 — Wave 26 regression fix)**: AFTER `ExitPlanMode()` and BEFORE any architect EXECUTE dispatch:
@@ -263,6 +283,7 @@ For non-trivial tasks, planner bootstrap is a bounded **two-pass** sequence — 
    - **Verification after architect APPROVE**: The main agent runs `rtk git log --format='%an' <commit-range>` and confirms commits are authored by the specialist layer (per SendMessage ownership trail), not exclusively by the architect layer. If architects self-edited: STOP, reset, re-dispatch through specialists, update `feedback_plan_mode_exit_topology.md` memory with the violation details.
    - Why this gate exists: Wave 26 BL-W26-01a shipped with 100% architect-authored edits and 0 specialists dispatched. User flagged: "no devs are working and all work has been done by the architects" (literal quote preserved — "devs" was the user's term at the time). Architects hold `Read` + mediation tools only; they do NOT self-implement.
 10. **Only then** execute the control-plane sequence `PREP → EXECUTE → VERIFY_FINAL → QG → COMPLETE`; messages accelerate delivery but never advance state.
+    **The session renews itself with activity.** A verified tool call of a role (a hook, never the model) extends the session generation and that actor's bindings: they expire after one hour of inactivity and never live beyond twelve hours from creation. After one hour of inactivity or at the twelve-hour limit, re-run `/init-session --orchestrate <slug>` and execute the returned role actions (`role-spawn` or resume) before dispatching work; a hook denial that starts `identity proof expired (session generation rotated)` means exactly this.
 
 **Hook enforcement (BL-W31.7-12)**: The hook `.claude/hooks/plan-mode-spawn-planner.js` mechanically blocks `ExitPlanMode` if planner has not been spawned via `Agent(subagent_type="planner")` during the current plan-mode session (Pass A satisfies this; Pass B is the same subagent_type, spawned again). Sentinel: `.planning/.plan-mode-planner-required`. Escape hatch: `CLAUDE_SKIP_PLANNER=1` env var (set BEFORE `EnterPlanMode`) for genuinely trivial work.
 

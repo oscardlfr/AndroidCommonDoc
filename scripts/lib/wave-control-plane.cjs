@@ -15,6 +15,10 @@ const LIFECYCLE_ROLE_RE = /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/;
 const ISO_UTC_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/;
 const STATE_KEYS = Object.freeze(['baseline_head', 'created_at', 'execution_mode', 'head', 'lifecycle_roles',
   'phase', 'plan_sha256', 'required_roles', 'revision', 'schema', 'transitions', 'updated_at', 'wave_class', 'wave_slug'].sort());
+// A state initialized from a Pass A draft also records that fact, so the one legitimate re-binding to the final PLAN can
+// be recognized. States written before this key existed simply lack it and are never rebindable.
+const STATE_KEYS_WITH_DRAFT = Object.freeze(STATE_KEYS.concat(['plan_draft']).sort());
+const DRAFT_PLAN_MARKER = 'STATUS: DRAFT-CONTEXT-PENDING';
 const TRANSITION_KEYS = Object.freeze(['at', 'evidence', 'from', 'from_head', 'to', 'to_head']);
 const LOCK_WAIT_MS = 2000;
 const WAVE_CLASSES = Object.freeze(['HARNESS', 'DOC', 'FAST-PATH']);
@@ -141,6 +145,10 @@ function gitHead(root) {
   if (result.status !== 0 || !/^[0-9a-f]{40}$/.test((result.stdout || '').trim())) throw new Error('HEAD_UNAVAILABLE');
   return result.stdout.trim();
 }
+/** A Pass A draft carries the marker on its first line; the finalized PLAN has no marker. */
+function isDraftPlan(planText) {
+  return planText.split(/\r?\n/, 1)[0].trim() === DRAFT_PLAN_MARKER;
+}
 function parsePlanClass(planText) {
   const lines = planText.split(/\r?\n/);
   const structural = [];
@@ -247,12 +255,13 @@ function currentInputs(root, slug) {
     throw new Error(`WAVE_CLASS_MISMATCH:sentinel=${sentinelClass}:plan=${planClass}`);
   }
   const className = planClass;
-  return { ...p, head: gitHead(p.root), planDigest: sha256(planBytes), className,
+  return { ...p, head: gitHead(p.root), planDigest: sha256(planBytes), planDraft: isDraftPlan(planText), className,
     roles: requiredRoles(p.root, planText, className), lifecycleRoles: lifecycleRoles(p.root, className, requiredRoles(p.root, planText, className)),
     executionMode: executionMode(p.root, className) };
 }
 function validateStateShape(state) {
-  if (!exactKeys(state, STATE_KEYS) || state.schema !== SCHEMA || !PHASES.includes(state.phase)
+  const hasDraftKey = Object.prototype.hasOwnProperty.call(state || {}, 'plan_draft');
+  if (!exactKeys(state, hasDraftKey ? STATE_KEYS_WITH_DRAFT : STATE_KEYS) || (hasDraftKey && typeof state.plan_draft !== 'boolean') || state.schema !== SCHEMA || !PHASES.includes(state.phase)
     || !SLUG_RE.test(state.wave_slug || '') || !/^[0-9a-f]{40}$/.test(state.head || '')
     || !/^[0-9a-f]{40}$/.test(state.baseline_head || '')
     || !/^[0-9a-f]{64}$/.test(state.plan_sha256 || '') || !Array.isArray(state.required_roles)
@@ -366,9 +375,24 @@ function readStateUnlocked(root, slug) {
   }
 }
 
+// A wave that was never initialized must say so, not surface a path-ancestry failure from reading the missing state.
+function assertInitialized(inputs) {
+  if (!fs.existsSync(inputs.state)) throw new Error('WAVE_NOT_INITIALIZED');
+}
+
 function readState(root, slug) {
   const p = pathsFor(root, slug);
   return withStateLock(p.root, p.state, () => readStateUnlocked(p.root, slug));
+}
+/**
+ * A state bound to a Pass A draft may be re-bound ONCE to the finalized PLAN, and only while nothing was decided on it:
+ * still PREP at revision 0 with no transition (so no verdict), same HEAD, same class, and the new PLAN is no draft.
+ * Any other PLAN change stays drift.
+ */
+function draftRebindAllowed(existing, inputs) {
+  return existing.plan_draft === true && existing.phase === 'PREP' && existing.revision === 0
+    && existing.transitions.length === 0 && existing.head === inputs.head && inputs.planDraft === false
+    && existing.wave_class === inputs.className && existing.plan_sha256 !== inputs.planDigest;
 }
 function initialize(root, slug, expectedPlanDigest = null) {
   const target = pathsFor(root, slug);
@@ -379,8 +403,13 @@ function initialize(root, slug, expectedPlanDigest = null) {
     }
     if (fs.existsSync(inputs.state)) {
       const existing = readStateUnlocked(root, slug);
-      if (existing.head !== inputs.head || existing.plan_sha256 !== inputs.planDigest) throw new Error('PHASE_STATE_INPUT_DRIFT');
-      return existing;
+      if (existing.head === inputs.head && existing.plan_sha256 === inputs.planDigest) return existing;
+      if (!draftRebindAllowed(existing, inputs)) throw new Error('PHASE_STATE_INPUT_DRIFT');
+      // The one re-binding: Pass B legitimately rewrote the draft into the final PLAN before anything was decided.
+      const rebound = { ...existing, plan_sha256: inputs.planDigest, plan_draft: false, required_roles: inputs.roles,
+        lifecycle_roles: inputs.lifecycleRoles, execution_mode: inputs.executionMode, updated_at: new Date().toISOString() };
+      atomicWrite(inputs.state, rebound);
+      return rebound;
     }
     assertSafeAncestry(inputs.root, inputs.state, true);
     const now = new Date().toISOString();
@@ -388,7 +417,7 @@ function initialize(root, slug, expectedPlanDigest = null) {
       schema: SCHEMA, wave_slug: slug, wave_class: inputs.className,
       plan_sha256: inputs.planDigest, baseline_head: inputs.head, head: inputs.head, phase: 'PREP',
       required_roles: inputs.roles, lifecycle_roles: inputs.lifecycleRoles, execution_mode: inputs.executionMode,
-      revision: 0, created_at: now, updated_at: now,
+      plan_draft: inputs.planDraft, revision: 0, created_at: now, updated_at: now,
       transitions: [],
     };
     atomicWrite(inputs.state, state);
@@ -410,7 +439,11 @@ function inspect(root, slug) {
   const existing = readState(root, slug);
   const planCurrent = existing.plan_sha256 === inputs.planDigest;
   const headCurrent = existing.head === inputs.head;
-  return { ...existing, plan_current: planCurrent, head_current: headCurrent,
+  // `draft_rebind`: the state is a draft that initialize() would re-bind to this final PLAN. The admission then plans
+  // with the final PLAN's digest and roles, exactly what initialize() is about to record.
+  const draftRebind = !planCurrent && draftRebindAllowed(existing, inputs);
+  return { ...existing, ...(draftRebind ? { plan_sha256: inputs.planDigest, lifecycle_roles: inputs.lifecycleRoles } : {}),
+    plan_current: planCurrent, head_current: headCurrent, draft_rebind: draftRebind,
     current: planCurrent && headCurrent, initialized: true };
 }
 function verifyVerdicts(root, slug, state, phase, verdicts) {
@@ -460,6 +493,7 @@ function qualityGateProofInvocation(root, slug, head, platform = process.platfor
 function transition(root, slug, to, options = {}) {
   if (!PHASES.includes(to)) throw new Error('UNKNOWN_PHASE');
   const inputs = currentInputs(root, slug);
+  assertInitialized(inputs);
   return withStateLock(inputs.root, inputs.state, () => {
   const state = readStateUnlocked(root, slug);
   if (state.plan_sha256 !== inputs.planDigest) throw new Error('PHASE_STATE_PLAN_DRIFT');
@@ -501,6 +535,7 @@ function transition(root, slug, to, options = {}) {
 }
 function status(root, slug) {
   const inputs = currentInputs(root, slug);
+  assertInitialized(inputs);
   const state = readState(root, slug);
   const planCurrent = state.plan_sha256 === inputs.planDigest;
   const headCurrent = state.head === inputs.head;

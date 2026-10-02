@@ -25,7 +25,7 @@ const path = require('path');
 const crypto = require('crypto');
 const { spawnSync } = require('child_process');
 const coordinationArtifact = require('./coordination-artifact.js');
-const { getWaveSlug, MEDIATED_RECIPIENT_ROLES } = require('./hook-control-plane-utils.js');
+const { getWaveSlug, MEDIATED_RECIPIENT_ROLES, chainedRuntimeInvocation, standaloneRuntimeCommandMessage } = require('./hook-control-plane-utils.js');
 
 // M7/WP4 (P0-2, lifecycle-grant injection, below): lazily-tolerant of either
 // sibling module failing to load -- a corrupt/missing file must never turn
@@ -1683,7 +1683,6 @@ function harnessSuffixCandidateRole(name) {
 // launcher operation. The exact argv is mapped to the canonical toolkit target here -- the only place the requester
 // grant is minted -- mirroring the entrypoint-launcher branch above. Every deviation is an explicit deny.
 const CONSULT_LAUNCHER_RELATIVE_PATH = '.claude/runtime/l0-toolkit-launcher.cjs';
-const CONSULT_LAUNCHER_INTENT_RE = /^\S+\s+'?\.claude\/runtime\/l0-toolkit-launcher\.cjs'?\s+'?run'?\s+'?runtime-consult'?(?:\s|$)/;
 const CONSULT_LAUNCHER_SUBCOMMANDS = Object.freeze(['consult', 'record-delivery', 'await-result', 'accept-result']);
 
 /** @returns {null|{deny:string}|{tokens:string[]}} null when the command is not the consult launcher form. */
@@ -1745,14 +1744,7 @@ function tryInjectRequesterGrant(toolInput, sessionId, agentType, agentId) {
   const hasShellMetacharacters = /[;&|`\n]|\$\(/.test(command);
 
   let tokens = runtimeRoleLifecycle.parsePosixDirect(command);
-  if (!tokens) {
-    // The consult launcher form must never fall through silently: an unbound command only fails later with an opaque
-    // AUTHORITY_INVALID, so a recognizable-but-malformed form is denied with the rule it broke.
-    if (CONSULT_LAUNCHER_INTENT_RE.test(command)) {
-      return m7DenyResult('[BL-CONS-P1-08] the consult command must be exactly the documented form: every token single-quoted, single spaces between tokens, no newline and nothing chained after it.');
-    }
-    return null; // not applicable.
-  }
+  if (!tokens) return null; // not applicable (a recognizable runtime invocation was already denied by the shared shape check).
   const launcherForm = canonicalizeConsultLauncher(tokens);
   if (hasShellMetacharacters && !launcherForm) return null; // not applicable.
   if (launcherForm) {
@@ -2351,6 +2343,16 @@ process.stdin.on('end', () => {
           { sessionId: data.session_id, agentId: data.agent_id, agentType: data.agent_type }
         );
       } catch { /* authority stays unavailable; the normal gate still decides */ }
+
+      // Sliding session: verified activity of THIS exact identity extends the session generation and the actor's binding
+      // (idle timeout; the absolute lifetime still caps both). Renewal happens only here, in a hook, and only after the
+      // identity proof passes; it never decides anything and a failure leaves every record as it was.
+      try {
+        require('../../scripts/lib/runtime-session-renewal.cjs').renewSessionActivityForHook(
+          process.env.CLAUDE_PROJECT_DIR || process.cwd(),
+          { sessionId: data.session_id, agentId: data.agent_id, agentType: data.agent_type }
+        );
+      } catch { /* advice only */ }
     }
 
     // M7/WP4 second-pass correction: REQUESTER role-command-grant/v1
@@ -2361,6 +2363,18 @@ process.stdin.on('end', () => {
     // mechanism below). Checked before the main-orchestrator branch so a
     // named role (architect/specialist) issuing one of these commands is
     // covered too.
+    if (toolName === 'Bash' && runtimeRoleLifecycle) {
+      // One shared rule for every hook-minted runtime authority: a recognizable runtime invocation that is not the
+      // canonical standalone form is denied with the recovery, never passed through to fail as AUTHORITY_INVALID.
+      const chained = chainedRuntimeInvocation(data.tool_input && data.tool_input.command, {
+        parseDirect: runtimeRoleLifecycle.parsePosixDirect,
+        canonicalClis: [
+          { path: CANONICAL_CONSULTATION_CLI_PATH, subcommands: REQUESTER_ADMIN_SUBCOMMANDS.concat(['claim', 'lease-heartbeat', 'publish-result', 'worker-stop-ack']) },
+          { path: CANONICAL_LIFECYCLE_CLI_PATH, subcommands: Object.keys(LIFECYCLE_SUBCOMMAND_SCOPE_RESOLVERS) },
+        ],
+      });
+      if (chained) emitDeny('[RUNTIME-COMMAND-SHAPE] ' + standaloneRuntimeCommandMessage(chained.operation));
+    }
     if (toolName === 'Bash') {
       let initialRootSourceResult = null;
       try {
@@ -2621,6 +2635,39 @@ process.stdin.on('end', () => {
     const blockMarker = path.join(tmpDir, `claude-cp-blocked-${sessionId}-${agentId}.flag`);
     try { fs.writeFileSync(blockMarker, new Date().toISOString()); } catch {}
 
+    // When this session's generation has lapsed (they rotate after an hour) every role's identity proof lapsed with it; say
+    // so, because the way out is not another consult but a new orchestrate and fresh role actions.
+    let generationLapsed = false;
+    let lapsedWave = ' <slug>';
+    try {
+      if (runtimeRoleLifecycle && typeof data.session_id === 'string' && data.session_id.length > 0) {
+        // The gate itself may already have resolved a NEW generation for this session, so the lapse is read from evidence: the
+        // session has startup proofs on record but none of them belongs to its current generation (or the generation itself is
+        // idle- or absolute-expired).
+        const root = process.env.CLAUDE_PROJECT_DIR || process.cwd();
+        const crypto = require('crypto');
+        const sha = (value) => crypto.createHash('sha256').update(value).digest('hex');
+        const current = runtimeRoleLifecycle.peekSessionGeneration(root, { provider: 'claude-hook', runtime_session_key: data.session_id });
+        if (!current.ok && /expired/.test(String(current.reason))) {
+          generationLapsed = true;
+        } else if (current.ok) {
+          const sessionDigest = sha(data.session_id);
+          const currentDigest = sha(current.generationId);
+          const tracesDir = path.join(runtimeRoleLifecycle.registryRepoDir(root), 'claude-id01-traces');
+          const entries = fs.readdirSync(tracesDir).filter((name) => name.startsWith('startup-v2-') && name.endsWith('.json'));
+          if (entries.length <= 1024) {
+            const own = entries.map((name) => JSON.parse(fs.readFileSync(path.join(tracesDir, name), 'utf8')))
+              .filter((trace) => trace && trace.session_digest === sessionDigest);
+            generationLapsed = own.length > 0 && !own.some((trace) => trace.session_generation_digest === currentDigest);
+          }
+        }
+        const waveSlug = getWaveSlug(process.env.CLAUDE_PROJECT_DIR || process.cwd());
+        if (typeof waveSlug === 'string' && waveSlug.length > 0) lapsedWave = ' ' + waveSlug;
+      }
+    } catch { /* advice only */ }
+    if (generationLapsed) {
+      emitDeny(`identity proof expired (session generation rotated); re-run /init-session --orchestrate${lapsedWave} and execute the returned role actions, then retry. A new consult alone will not restore it.`);
+    }
     emitDeny('No agent in this session has consulted context-provider yet. SendMessage to context-provider first to validate pattern assumptions, then retry.');
 
   } catch (e) {

@@ -12,6 +12,7 @@
 #     --request <path> --request-sha256 <64hex>
 #     --decision <approve|escalate> [--reason-code <code>]
 #     [--evidence-file <path> [--evidence-schema <name>]]...
+#     [--evidence-text <text>]
 #     [--supersede --expected-current-sha256 <64hex>]
 #   Rationale is read from stdin.
 #
@@ -20,6 +21,10 @@
 #   --evidence-schema. This script computes each file's real sha256 itself --
 #   never trusts a caller-supplied digest. --evidence-schema present ->
 #   kind=json-record (+ expected_schema); absent -> kind=opaque-file.
+#
+# --evidence-text <text> is for a role that cannot write files: this script writes the text itself, as
+#   <wave dir>/<role>-<phase>-evidence.md, and records it as one more opaque evidence file. The name is canonical and
+#   fixed, so a second, different text for the same role and phase is refused instead of replacing the first.
 #
 # Delegates ALL schema-validation + durable writing to
 # verdict-evidence-contract-cli.cjs's publish-record subcommand (backed by
@@ -81,6 +86,8 @@ SUPERSEDE=0
 EXPECTED_CURRENT_SHA256=""
 EVIDENCE_FILES=()
 EVIDENCE_SCHEMAS=()
+EVIDENCE_TEXT=""
+EVIDENCE_TEXT_SET=0
 PUBLICATION_NONCE=""
 PUBLICATION_NONCE_SET=0
 
@@ -93,6 +100,18 @@ while [[ $# -gt 0 ]]; do
     --request-sha256) REQUEST_SHA256="${2:-}"; shift 2 ;;
     --decision) DECISION="${2:-}"; shift 2 ;;
     --reason-code) REASON_CODE="${2:-}"; REASON_CODE_SET=1; shift 2 ;;
+    --evidence-text)
+      if [[ $# -lt 2 || -z "${2:-}" ]]; then
+        echo "[write-verdict] ERROR: --evidence-text requires a non-empty value" >&2
+        exit 1
+      fi
+      if [[ "$EVIDENCE_TEXT_SET" -eq 1 ]]; then
+        echo "[write-verdict] ERROR: --evidence-text may be given once" >&2
+        exit 1
+      fi
+      EVIDENCE_TEXT="$2"; EVIDENCE_TEXT_SET=1
+      shift 2
+      ;;
     --evidence-file)
       EVIDENCE_FILES+=("${2:-}")
       EVIDENCE_SCHEMAS+=("")
@@ -421,6 +440,22 @@ if [[ ! -t 0 ]]; then
 fi
 
 # ── Evidence (WV: this script computes each file's real sha256 itself) ───────
+
+# Inline evidence: written here, confined to the wave directory, under its canonical name.
+if [[ "$EVIDENCE_TEXT_SET" -eq 1 ]]; then
+  EVIDENCE_TEXT_FILE="$WAVE_DIR/${ROLE}-${PHASE}-evidence.md"
+  _confine_under_wave "$EVIDENCE_TEXT_FILE" false   # the leaf does not exist yet; the evidence loop below checks it with the leaf
+  EVIDENCE_TEXT_TMP="$EVIDENCE_TEXT_FILE.$$.tmp"
+  printf '%s\n' "$EVIDENCE_TEXT" > "$EVIDENCE_TEXT_TMP"
+  if [[ -f "$EVIDENCE_TEXT_FILE" ]] && ! cmp -s "$EVIDENCE_TEXT_TMP" "$EVIDENCE_TEXT_FILE"; then
+    rm -f "$EVIDENCE_TEXT_TMP"
+    echo "[write-verdict] ERROR: $EVIDENCE_TEXT_FILE already holds different evidence for this role and phase" >&2
+    exit 2
+  fi
+  mv -f "$EVIDENCE_TEXT_TMP" "$EVIDENCE_TEXT_FILE"
+  EVIDENCE_FILES+=("$EVIDENCE_TEXT_FILE")
+  EVIDENCE_SCHEMAS+=("")
+fi
 
 EV_PATHS_ENV=""
 EV_SHA_ENV=""

@@ -95,6 +95,10 @@ manifest or scan markers after the launcher returns.
 
 - Dashboard mode is read-only; orchestration may perform only the actions admitted by the runtime envelope.
 - Run this at the start of a new session to orient yourself
+- In an L1/L2 consumer the L0 orchestration docs are not part of the checkout.
+  Read them through the installed launcher, starting with
+  `node .claude/runtime/l0-toolkit-launcher.cjs read-doc docs/agents/tl-session-start.md --project-root "$PWD"`;
+  never resolve `docs/` relative to the consumer or guess the toolkit path.
 - Session naming: the wave slug names an existing wave artifact directory
   (`.planning/wave-<slug>/`). Create and approve its PLAN through the normal
   planning workflow before invoking orchestration. Pick descriptive slugs

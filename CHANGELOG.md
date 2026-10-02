@@ -5,6 +5,22 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 
 ## [Unreleased]
 
+### Fixed (consumer wave flow, end to end)
+
+- `/init-session --orchestrate` re-binds the wave-control state once from the Pass A draft digest to the final PLAN digest (state was a draft, still PREP at revision 0, no transition, same HEAD and class, the new PLAN has no draft marker). Any other PLAN change stays drift.
+- Runtime commands that are recognizable but not the canonical standalone single-quoted form (chained, heredoc, piped, unquoted) are denied with an actionable `[RUNTIME-COMMAND-SHAPE]` message by one shared helper used by `context-provider-gate.js` and `runtime-consultation-target-gate.js`, instead of an opaque `AUTHORITY_INVALID`.
+- `wave-control status` of an uninitialized wave says `wave not initialized` and names the `init` command.
+- New launcher operation `specialist-dispatch-write` lets an architect create the specialist dispatch artifact in a consumer.
+- `consumer-full-wave-acceptance.test.js` runs a consumer wave (toolkit and consumer roots distinct, injectable clock) from the Pass A draft to COMPLETE with the real hooks and CLIs, across 10 and 40 minute gaps and a session-generation rotation at +65 min and +3 h that re-orchestrating and restarting the roles recovers.
+
+- The session is sliding: the session generation and an actor's bindings (role actor and requester) expire after one hour of inactivity and never live beyond twelve hours from creation. A hook renews them after the actor's identity proof passes (only when under 3000 s remain); the immutable startup trace and capability carry the absolute lifetime and are never rewritten. Past either limit `context-provider-gate.js` says `identity proof expired (session generation rotated); re-run /init-session --orchestrate <slug> and execute the returned role actions, then retry`, and `ensure` returns `role-spawn` actions for the new generation, never a stale READY.
+
+### Added (consumer quality gate, verdict evidence, launcher help)
+
+- `runtime-consumer-qg pre-pr --slug S --project-gate PASS|FAIL` produces the consumer `pre-pr.stamp` (project gate attested, tracked worktree clean, secret scan); `.androidcommondoc/` is excluded locally, and the QG-only operations are `l0Only`.
+- `write-verdict.sh --evidence-text <text>` records a verdict's evidence without a hand-written file.
+- `l0-toolkit-launcher.cjs --help` lists every operation with a one-line summary.
+
 ### Added (local CI validation)
 
 - `scripts/sh/local-ci.sh` and its PowerShell twin run the CI shell and hook tests before a push, with the engine chosen in `.androidcommondoc/local-ci.json`: `act` runs the Linux jobs of `reusable-shell-tests.yml` in Docker on a clean clone of the committed `HEAD` (so it also works from linked worktrees), one container per Bats shard in parallel (own action cache and artifact port per shard); `native` (the default) runs the sharded runner and the Node hook roster on the host with a temporary `HOME`/`TMPDIR` and no global or system git config; `none` disables it. A missing Docker or act fails with exit 2 and the install command for the current OS. The shard list and the hook skip roster are read from the workflow, which stays the only definition of the jobs. See [local-ci-validation](docs/guides/local-ci-validation.md).

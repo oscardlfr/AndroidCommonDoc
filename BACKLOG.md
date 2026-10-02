@@ -18,6 +18,10 @@
   record. Once its PR ships, replace the temporary block with one concise shipped
   entry and remove the duplicated workstream detail.
 
+## Open owner decisions
+
+- Architect write gates (`architect-bash-write-gate`, `architect-self-edit-gate`) are not in a consumer's `HOOK_MATRIX`; whether a consumer should install them is an owner decision pending.
+
 ## Gate 0 — completed prerequisite (not counted among the seven waves)
 
 ### G0 — Reusable Workflow Input Boundary Hardening

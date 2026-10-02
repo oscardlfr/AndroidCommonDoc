@@ -305,8 +305,8 @@ describe('quality-gater template', () => {
     expect(content).toContain('Project Rule Cross-Check');
   });
 
-  it('template version 2.28.0', () => {
-    expect(content).toContain('template_version: "2.28.1"');
+  it('template version 2.28.2', () => {
+    expect(content).toContain('template_version: "2.28.2"');
   });
 
   it('has architect deliberation step', () => {
