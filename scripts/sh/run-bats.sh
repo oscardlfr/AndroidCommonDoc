@@ -282,9 +282,15 @@ GNU_MKTEMP_SHIM
 # _bats_invoke <args...> — runs bats via whichever method _bats_resolvable found,
 # mirroring its exact priority order (npx --no-install first, plain PATH `bats` as
 # fallback). Callers must have already confirmed _bats_resolvable before calling this.
-_bats_invoke() {
+_bats_invoke() (
+    # Test output is a machine-readable TAP contract. Claude Code and other
+    # hosts may export FORCE_COLOR while also setting NO_COLOR; Node then
+    # decorates console.log values and writes a warning that corrupts numeric
+    # assertions. Give every Bats child one deterministic, non-colored env.
+    unset NO_COLOR
+    export FORCE_COLOR=0
     # Only the bats child gets the shim; the ambient PATH is left untouched.
-    local _invoke_path="$PATH"
+    _invoke_path="$PATH"
     if [[ -n "${GNU_MKTEMP_SHIM_DIR:-}" ]]; then
         _invoke_path="$GNU_MKTEMP_SHIM_DIR:$PATH"
     fi
@@ -293,7 +299,7 @@ _bats_invoke() {
     else
         PATH="$_invoke_path" bats "$@"
     fi
-}
+)
 
 # ── Derived fields (computed regardless of outcome; scope reflects caller intent) ─────────
 # NOTE: deliberately `if/fi`, not a bare `[[ ]] && var=...` — the latter's exit status IS

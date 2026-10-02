@@ -2,15 +2,19 @@
 'use strict';
 const control = require('../lib/wave-control-plane.cjs');
 
-function flags(argv) {
+function flags(argv, command) {
   const out = { verdicts: [] };
   for (let i = 0; i < argv.length; i += 1) {
     const key = argv[i];
     if (key === '--verdict') {
       const raw = argv[++i] || '';
-      const at = raw.indexOf('=');
-      if (at < 1) throw new Error('INVALID_VERDICT_ARGUMENT');
-      out.verdicts.push({ role: raw.slice(0, at), path: raw.slice(at + 1) });
+      if (command === 'qg-attempt') {
+        out.verdict = raw;
+      } else {
+        const at = raw.indexOf('=');
+        if (at < 1) throw new Error('INVALID_VERDICT_ARGUMENT');
+        out.verdicts.push({ role: raw.slice(0, at), path: raw.slice(at + 1) });
+      }
     } else if (key.startsWith('--')) out[key.slice(2)] = argv[++i];
   }
   return out;
@@ -18,7 +22,7 @@ function flags(argv) {
 function emit(value) { process.stdout.write(JSON.stringify(value) + '\n'); }
 function main() {
   const command = process.argv[2];
-  const args = flags(process.argv.slice(3));
+  const args = flags(process.argv.slice(3), command);
   if (!args.root || !args.slug) throw new Error('REQUIRED_ARGUMENT_MISSING');
   const expectedRevision = args['expected-revision'] === undefined ? undefined : Number(args['expected-revision']);
   if (command === 'init') emit(control.initialize(args.root, args.slug));

@@ -10,6 +10,7 @@ const waveControl = require('../lib/wave-control-plane.cjs');
 const { installConsumerFixture } = require('./lib/consumer-runtime-fixture.cjs');
 
 const SCRIPT = path.resolve(__dirname, '../lib/runtime-consumer-quality-gate.cjs');
+const WAVE_SCRIPT = path.resolve(__dirname, '../tools/wave-control-plane.cjs');
 
 function git(root, args) {
   return execFileSync('git', args, { cwd: root, encoding: 'utf8' }).trim();
@@ -51,6 +52,31 @@ function mint(root, qgAttemptPath) {
     cwd: root, encoding: 'utf8',
   });
 }
+
+test('wave-control CLI accepts scalar PASS and FAIL verdicts for qg-attempt', (t) => {
+  for (const verdict of ['PASS', 'FAIL']) {
+    const { root } = fixture();
+    t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+    const result = spawnSync(process.execPath, [WAVE_SCRIPT, 'qg-attempt', '--root', root, '--slug', 'test',
+      '--expected-revision', '3', '--verdict', verdict, '--checks', JSON.stringify({ project_gate: verdict })], {
+      cwd: root, encoding: 'utf8',
+    });
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    const receipt = JSON.parse(result.stdout);
+    assert.equal(receipt.verdict, verdict);
+    assert.equal(receipt.checks.project_gate, verdict);
+    assert.equal(fs.existsSync(path.join(root, receipt.path)), true);
+  }
+});
+
+test('wave-control CLI keeps architect verdicts role=path shaped outside qg-attempt', (t) => {
+  const { root } = fixture();
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const result = spawnSync(process.execPath, [WAVE_SCRIPT, 'transition', '--root', root, '--slug', 'test',
+    '--to', 'COMPLETE', '--expected-revision', '3', '--verdict', 'PASS'], { cwd: root, encoding: 'utf8' });
+  assert.equal(result.status, 2);
+  assert.match(result.stdout, /INVALID_VERDICT_ARGUMENT/);
+});
 
 test('mint confines every artifact to regular consumer-owned ancestors', (t) => {
   const { root } = fixture();

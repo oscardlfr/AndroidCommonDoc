@@ -332,7 +332,7 @@ Full procedure: [quality-gater-registry-integrity](l0doc:docs/agents/quality-gat
 
 ### Step Z: Report Freshness Gate (L0 only — REQUIRED pre-mint)
 
-Full procedure: [quality-gater-freshness-gate](l0doc:docs/agents/quality-gater-freshness-gate.md). Run `node .claude/runtime/l0-toolkit-launcher.cjs run qg-report-freshness --project-root "$PWD" -- .androidcommondoc/quality-gate-report.json`, then emit `report-freshness` (ran=true, PASS/FAIL) into the report. **Non-zero exit → exit 1.** In L1/L2 skip it: the launcher refuses it and `runtime-consumer-qg` binds freshness itself.
+Full procedure: [quality-gater-freshness-gate](l0doc:docs/agents/quality-gater-freshness-gate.md). Load it with launcher `read-doc` and execute its **Canonical Step Z Bash Block exactly**; do not abbreviate the script's required `--report`, `--head`, `--bats-count`, or `--repo-root` arguments. Emit `report-freshness` (ran=true, PASS/FAIL) into the report. **Non-zero exit → exit 1.** In L1/L2 skip it: the launcher refuses it and `runtime-consumer-qg` binds freshness itself.
 
 ### Step S: Secret Scan (REQUIRED — pre-mint)
 
