@@ -119,8 +119,8 @@ agents:
   arch-platform:
     canonical_name: arch-platform
     subagent_type: arch-platform
-    template_version: "1.36.3"
-    template_frontmatter_sha256: c9bbfa8da2f36cf963dc3a6df1b28f0c2ee77b67885b5e3e86432db4a2bbc0ab
+    template_version: "1.36.4"
+    template_frontmatter_sha256: f77b03e17199365312431cebdd2c0079a22ac4af627d26e5400a5a8a18b59224
     category: architect
     lifecycle: ephemeral
     description: "Platform architecture architect. Mini-orchestrator: verifies KMP patterns via MCP tools, fixes violations directly or via delegation, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict."
@@ -174,8 +174,8 @@ agents:
   arch-testing:
     canonical_name: arch-testing
     subagent_type: arch-testing
-    template_version: "1.41.3"
-    template_frontmatter_sha256: fce057cb0d08062f2735a7607f36685bb044e844e436d761e3323a5fad1b6fd6
+    template_version: "1.41.4"
+    template_frontmatter_sha256: 4dce7ae4c0dc6d392fdc265760d0476569beee0c82d4251d5a3b09837305d1d4
     category: architect
     lifecycle: ephemeral
     description: "Test quality architect. Mini-orchestrator: verifies TDD compliance, detects test gaps, delegates fixes to test-specialist, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict."
@@ -226,8 +226,8 @@ agents:
   arch-integration:
     canonical_name: arch-integration
     subagent_type: arch-integration
-    template_version: "1.32.3"
-    template_frontmatter_sha256: 1406178cc99213298c660985eaaa91da0c5af774122869bcbceb178ea5524b9c
+    template_version: "1.32.4"
+    template_frontmatter_sha256: 52d30e2943214bcd94b0ca8e8e849e5b06aa8ced43fffdb51de4964e2cd7a5b5
     category: architect
     lifecycle: ephemeral
     description: "Integration architect. Mini-orchestrator: verifies compilation, DI wiring, navigation via MCP tools. Fixes wiring gaps, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict."
@@ -510,8 +510,8 @@ agents:
   toolkit-specialist:
     canonical_name: toolkit-specialist
     subagent_type: toolkit-specialist
-    template_version: "1.10.1"
-    template_frontmatter_sha256: 65ebbb2649e373c4c8ace42247a9f6bf42f4407371fe6f2a49f543df8f7d44be
+    template_version: "1.10.2"
+    template_frontmatter_sha256: 5334ddd8346c1e56afad728b7c67f040778905ab7c7e33d81b5ee03bd034dc05
     category: core-specialist
     lifecycle: ephemeral
     description: "Owns mcp-server TypeScript source, .claude/hooks/*.js runtime code, scripts/lib runtime facades and internal CommonJS modules, and non-test shell tooling. Reports to arch-platform. Does NOT write test files (test-specialist's domain)."
@@ -571,8 +571,8 @@ agents:
   context-provider:
     canonical_name: context-provider
     subagent_type: context-provider
-    template_version: "3.9.1"
-    template_frontmatter_sha256: 56b9aba239f096e071fa540099fd5e6ad28027817c623dbcd3435acf6e241e99
+    template_version: "3.9.2"
+    template_frontmatter_sha256: f10c01d6ae93c0a42d4a5d0790ca0b0324cee56a9227acedd5e5a356a26a9eb1
     category: context
     lifecycle: persistent
     description: "Context oracle. Pre-caches L0 pattern index on spawn, then answers queries about patterns, docs, rules, specs, and cross-project state via MCP tools. Read-only."
@@ -630,8 +630,8 @@ agents:
   doc-updater:
     canonical_name: doc-updater
     subagent_type: doc-updater
-    template_version: "2.13.2"
-    template_frontmatter_sha256: 41d3a8b180322ac4055f7b13455990dc4ebbc192e49f6e5acffb453315b6f74e
+    template_version: "2.13.3"
+    template_frontmatter_sha256: 85285a8fa42131f5aeb066a259befb89ccce4cfbe1835859cd9b12799c1fa1cd
     category: doc-owner
     lifecycle: persistent
     description: "Documentation updater. Updates roadmap, memory, CHANGELOG, specs after work. Ingests approved external patterns via MCP. Follows L0 patterns (frontmatter, line limits, hub structure)."
@@ -904,8 +904,8 @@ agents:
   quality-gater:
     canonical_name: quality-gater
     subagent_type: quality-gater
-    template_version: "2.28.3"
-    template_frontmatter_sha256: cdd665b86beef296aa8319154899e5c9460b33b0cda73519635942383fac916f
+    template_version: "2.28.4"
+    template_frontmatter_sha256: e0859a481759c24c1a6f448e550990c99ab3b9190b1e8558c57cfd28673020ce
     category: orchestrator
     lifecycle: ephemeral
     description: "QG owner (Phase 3). Runs sequential verification on the final committed HEAD after VERIFY-FINAL architect approval. Reports structured PASS/FAIL."
@@ -1569,8 +1569,8 @@ agents:
   verifier:
     canonical_name: verifier
     subagent_type: verifier
-    template_version: "1.2.1"
-    template_frontmatter_sha256: 96908b12dd0da56f0dede89954cbc5c53bac0520033d84f50f3ee1445e0ee5f4
+    template_version: "1.2.2"
+    template_frontmatter_sha256: 75a1d536c69853fbc6f782469b93dab437fbd637dd12fc9ad94a2e866b46526b
     category: tool
     lifecycle: per-task
     description: "Goal-backward verification — checks if code achieves stated goals and success criteria. Use after implementation to verify deliverables match spec."
@@ -1618,8 +1618,8 @@ agents:
   planner:
     canonical_name: planner
     subagent_type: planner
-    template_version: "1.22.5"
-    template_frontmatter_sha256: 58224a3ad01953f3495fb71b8e509e0e3a1a5fdbb7912a0feaa9d12cbbdff156
+    template_version: "1.22.6"
+    template_frontmatter_sha256: bab2068e3ded11d59137c9d19bf9ad9625ce2c229469f68c6f83f65662f7cd0c
     category: orchestrator
     lifecycle: ephemeral
     description: "Single-use planning subagent. Reads context, specs, architecture to produce structured execution plans. Spawned without team_name; results land as PLAN.md on disk. Works alongside context-provider via SendMessage."

@@ -209,6 +209,47 @@ test('draft rebind: a state bound to the draft is re-bound once to the final PLA
   } finally { fs.rmSync(root, { recursive: true, force: true }); }
 });
 
+// A real consumer planner wrote the marker below a title line, so the first-line-only parser recorded plan_draft:false
+// and the documented re-binding was refused as drift. The marker is a standalone line anywhere outside fenced code.
+function withLeadingTitle(root) {
+  fs.writeFileSync(planPathOf(root), '# Execution Plan: demo\n\n' + DRAFT_MARKER + '\n' + fs.readFileSync(planPathOf(root), 'utf8'));
+}
+test('draft rebind: a draft whose marker line follows a title is recognized and re-bound', () => {
+  const root = fixture();
+  try {
+    withLeadingTitle(root);
+    const draft = control.initialize(root, 'demo');
+    assert.strictEqual(draft.plan_draft, true, 'a standalone marker line below the title marks a draft');
+    asFinal(root);
+    const rebound = control.initialize(root, 'demo');
+    assert.strictEqual(rebound.plan_draft, false);
+    assert.notStrictEqual(rebound.plan_sha256, draft.plan_sha256);
+    assert.strictEqual(control.status(root, 'demo').current, true);
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
+
+test('draft marker: inline prose or fenced code is not a draft, and a final PLAN still carrying the line is drift', () => {
+  const root = fixture();
+  try {
+    const base = fs.readFileSync(planPathOf(root), 'utf8');
+    fs.writeFileSync(planPathOf(root), 'Pass B removed the `' + DRAFT_MARKER + '` line.\n' + base);
+    assert.strictEqual(control.initialize(root, 'demo').plan_draft, false, 'an inline quotation is not the marker line');
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+  const fenced = fixture();
+  try {
+    const base = fs.readFileSync(planPathOf(fenced), 'utf8');
+    fs.writeFileSync(planPathOf(fenced), '```text\n' + DRAFT_MARKER + '\n```\n' + base);
+    assert.strictEqual(control.initialize(fenced, 'demo').plan_draft, false, 'a code sample is not the marker line');
+  } finally { fs.rmSync(fenced, { recursive: true, force: true }); }
+  const stale = fixture();
+  try {
+    withLeadingTitle(stale);
+    control.initialize(stale, 'demo');
+    fs.writeFileSync(planPathOf(stale), fs.readFileSync(planPathOf(stale), 'utf8') + 'Pass B kept the marker.\n');
+    assert.throws(() => control.initialize(stale, 'demo'), /PHASE_STATE_INPUT_DRIFT/, 'a PLAN that is still a draft is never a re-binding target');
+  } finally { fs.rmSync(stale, { recursive: true, force: true }); }
+});
+
 test('draft rebind: a second PLAN change after the re-binding is drift as before', () => {
   const root = fixture();
   try {

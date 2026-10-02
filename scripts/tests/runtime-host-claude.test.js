@@ -2662,27 +2662,35 @@ test('MACOS-PIN-06b the 8-ancestor bound and an empty process table are unchange
   assert.equal(hostClaude.__TEST_ONLY__queryDarwinParentChain(20, 10000, () => ({ status: 1, stdout: '', stderr: '' })), null);
 });
 
-function observeWithProbes(label, chainRows, signedPaths) {
+function observeWithProbes(label, chainRows, signedPaths, afterRows, hardLinks = {}) {
   const fixture = writeHostContractFixture(label);
-  const binaries = [];
   try {
     const published = hostClaude.publishClaudeHostContractPackage({
       projectRoot: fixture.projectRoot, qualificationPath: fixture.qualificationPath,
       evidenceRoot: fixture.evidenceRoot, observerPath: fixture.observerPath,
     });
     assert.equal(published.ok, true, JSON.stringify(published));
-    const resolved = chainRows.map((row) => {
+    const materialize = (rows) => rows.map((row) => {
       if (!row.image) return row;
       const file = path.join(fixture.projectRoot, row.image);
-      fs.writeFileSync(file, 'fake claude ' + row.image + '\n', { mode: 0o755 });
-      binaries.push(file);
+      if (!fs.existsSync(file)) fs.writeFileSync(file, 'fake claude ' + row.image + '\n', { mode: 0o755 });
       return { ...row, executable_path: file };
     });
+    const resolved = materialize(chainRows);
+    // `hardLinks` maps an image to the image it is a hard link of (the same file object, like the bundle wrapper).
+    for (const [linkName, targetName] of Object.entries(hardLinks)) {
+      const link = path.join(fixture.projectRoot, linkName);
+      fs.rmSync(link, { force: true });
+      fs.linkSync(path.join(fixture.projectRoot, targetName), link);
+    }
+    // The first walk sees `chainRows`; the stability re-walk sees `afterRows` when given.
+    const walks = [resolved, afterRows ? materialize(afterRows) : resolved];
+    let walk = 0;
     const signed = new Set(signedPaths.map((name) => path.join(fixture.projectRoot, name)));
     return withCapabilityEnv(() => hostClaude.observeClaudeExecutablePin({
       projectRoot: fixture.projectRoot, startingPid: resolved[0].process_id,
       __testProbes: {
-        chain: () => resolved.map((row) => ({ ...row })),
+        chain: () => walks[Math.min(walk++, 1)].map((row) => ({ ...row })),
         trustedSignature: (file) => signed.has(file),
         version: () => '2.1.283',
       },
@@ -2704,12 +2712,14 @@ test('MACOS-PIN-07 claude → zsh → login(unresolvable) → Terminal is admitt
     assert.equal(observed.processId, 400);
   });
 
-test('MACOS-PIN-08 two signed Claude ancestors, zero Claude ancestors and an unresolvable Claude row are rejected',
+test('MACOS-PIN-08 adjacent signed Claude ancestors pin the nearest; zero and unresolvable Claude rows are rejected',
   { skip: process.platform !== 'darwin' }, () => {
     const two = observeWithProbes('two-claude', [
       chainRow(400, 300, 'claude-a', 'claude-a'), chainRow(300, 200, 'claude-b', 'claude-b'), chainRow(200, 1, 'login'),
     ], ['claude-a', 'claude-b']);
-    assert.deepEqual([two.ok, two.detail], [false, 'HOST_PIN_VENDOR_MATCH_COUNT_2']);
+    assert.equal(two.ok, true, JSON.stringify(two));
+    assert.equal(two.processId, 400, 'the nearest signed vendor ancestor is the host');
+    assert.equal(path.basename(two.executablePath), 'claude-a');
     const zero = observeWithProbes('zero-claude', [
       chainRow(400, 300, '/bin/zsh'), chainRow(300, 200, 'login'), chainRow(200, 1, '/usr/bin/tmux'),
     ], []);
@@ -2718,4 +2728,217 @@ test('MACOS-PIN-08 two signed Claude ancestors, zero Claude ancestors and an unr
       chainRow(400, 300, 'claude'), chainRow(300, 200, '/bin/zsh'), chainRow(200, 1, 'login'),
     ], []);
     assert.deepEqual([unresolvable.ok, unresolvable.detail], [false, 'HOST_PIN_VENDOR_MATCH_COUNT_0']);
+  });
+
+// --- Claude daemon hosting (2.1.287 `claude --bg`) ---
+//
+// Captured macOS ancestry of a hook shell in a daemon-hosted session:
+//   bash -> zsh -> claude bg-spare -> claude bg-pty-host -> claude daemon run (ppid 1)
+// and, under a client-driven launch, the interactive CLI client above the daemon. Every claude row is the same
+// signed vendor family. Peer code-signature validation of the immediate host: the nearest signed vendor ancestor
+// is the host, and a vendor process is accepted above it only while the vendor rows stay contiguous.
+const DAEMON_TOPOLOGY = [
+  chainRow(500, 450, process.execPath), chainRow(450, 400, '/bin/zsh'),
+  chainRow(400, 300, 'claude-bg-spare', 'claude-2.1.287'),
+  chainRow(300, 200, 'claude-bg-pty-host', 'claude-2.1.287'),
+  chainRow(200, 1, 'claude-daemon', 'claude-2.1.286'),
+];
+
+test('MACOS-PIN-09 the daemon-hosted session topology is admitted and pins the bg-spare host',
+  { skip: process.platform !== 'darwin' }, () => {
+    const daemon = observeWithProbes('daemon-three', DAEMON_TOPOLOGY, ['claude-2.1.287', 'claude-2.1.286']);
+    assert.equal(daemon.ok, true, JSON.stringify(daemon));
+    assert.equal(daemon.processId, 400, 'bg-spare (the nearest vendor ancestor) hosts the session');
+    assert.equal(path.basename(daemon.executablePath), 'claude-2.1.287');
+    const withClient = observeWithProbes('daemon-four', [
+      ...DAEMON_TOPOLOGY.slice(0, 4),
+      chainRow(200, 150, 'claude-daemon', 'claude-2.1.286'),
+      chainRow(150, 120, 'claude-client', 'claude-2.1.287'),
+      chainRow(120, 100, '/bin/zsh'), chainRow(100, 1, '/usr/bin/tmux'),
+    ], ['claude-2.1.287', 'claude-2.1.286']);
+    assert.equal(withClient.ok, true, JSON.stringify(withClient));
+    assert.equal(withClient.processId, 400);
+  });
+
+test('MACOS-PIN-10 a Claude reached through a non-vendor process above the host segment is a nested host',
+  { skip: process.platform !== 'darwin' }, () => {
+    const viaShell = observeWithProbes('nested-shell', [
+      chainRow(400, 300, 'claude-inner', 'claude-inner'), chainRow(300, 200, '/bin/zsh'),
+      chainRow(200, 100, 'claude-outer', 'claude-outer'), chainRow(100, 1, 'login'),
+    ], ['claude-inner', 'claude-outer']);
+    assert.deepEqual([viaShell.ok, viaShell.reason, viaShell.detail],
+      [false, 'HOST_PIN_UNPROVEN', 'HOST_PIN_NESTED_VENDOR_HOST']);
+    const segmentThenShell = observeWithProbes('nested-segment-shell', [
+      chainRow(400, 300, 'claude-inner', 'claude-inner'), chainRow(300, 200, 'claude-pty', 'claude-pty'),
+      chainRow(200, 100, '/bin/zsh'), chainRow(100, 1, 'claude-outer', 'claude-outer'),
+    ], ['claude-inner', 'claude-pty', 'claude-outer']);
+    assert.deepEqual([segmentThenShell.ok, segmentThenShell.detail], [false, 'HOST_PIN_NESTED_VENDOR_HOST']);
+    const unsignedGap = observeWithProbes('nested-unsigned-gap', [
+      chainRow(400, 300, 'claude-inner', 'claude-inner'), chainRow(300, 200, 'claude-unsigned', 'claude-unsigned'),
+      chainRow(200, 1, 'claude-outer', 'claude-outer'),
+    ], ['claude-inner', 'claude-outer']);
+    assert.deepEqual([unsignedGap.ok, unsignedGap.detail], [false, 'HOST_PIN_NESTED_VENDOR_HOST'],
+      'an unsigned claude-named process is non-vendor and breaks the segment');
+    const brokenLink = observeWithProbes('nested-broken-link', [
+      chainRow(400, 300, 'claude-inner', 'claude-inner'), chainRow(250, 1, 'claude-outer', 'claude-outer'),
+    ], ['claude-inner', 'claude-outer']);
+    assert.deepEqual([brokenLink.ok, brokenLink.detail], [false, 'HOST_PIN_NESTED_VENDOR_HOST'],
+      'adjacent vendor rows without a parent link are not one segment');
+  });
+
+test('MACOS-PIN-11 the stability re-walk verifies the host row only',
+  { skip: process.platform !== 'darwin' }, () => {
+    const signed = ['claude-2.1.287', 'claude-2.1.286'];
+    const reborn = DAEMON_TOPOLOGY.map((row) => (row.process_id === 400
+      ? { ...row, creation_time: 'Wed Sep 30 10:00:05 2026' } : row));
+    const hostRebirth = observeWithProbes('drift-host-birth', DAEMON_TOPOLOGY, signed, reborn);
+    assert.deepEqual([hostRebirth.ok, hostRebirth.detail], [false, 'HOST_PIN_PARENT_CHAIN_DRIFT']);
+    const hostGone = observeWithProbes('drift-host-pid', DAEMON_TOPOLOGY, signed, [
+      DAEMON_TOPOLOGY[0], { ...DAEMON_TOPOLOGY[1], parent_process_id: 401 },
+      { ...DAEMON_TOPOLOGY[2], process_id: 401 }, DAEMON_TOPOLOGY[3], DAEMON_TOPOLOGY[4],
+    ]);
+    assert.deepEqual([hostGone.ok, hostGone.detail], [false, 'HOST_PIN_PARENT_CHAIN_DRIFT']);
+    const daemonExited = observeWithProbes('drift-daemon-exit', DAEMON_TOPOLOGY, signed, [
+      DAEMON_TOPOLOGY[0], DAEMON_TOPOLOGY[1], DAEMON_TOPOLOGY[2], { ...DAEMON_TOPOLOGY[3], parent_process_id: 1 },
+    ]);
+    assert.equal(daemonExited.ok, true, 'a non-host segment member may exit: ' + JSON.stringify(daemonExited));
+    assert.equal(daemonExited.processId, 400);
+  });
+
+// --- R131/P3 diagnostics: the deny surfaces the bounded pin failure code instead of hiding it ---
+//
+// SessionStart cannot block, so a pin it could not mint used to surface only on SessionStart stderr while every
+// collaboration entrypoint later failed with an opaque denial. The SessionStart hook now persists a NON-authoritative,
+// session-scoped diagnostic carrying only `^[A-Z0-9_]+$` codes; the composition mint reports it (or the live
+// re-observation failure) as reason/detail. The diagnostic is never consulted for authorization.
+function pinDiagnosticFixture(label) {
+  const fixture = writeHostContractFixture(label);
+  const published = hostClaude.publishClaudeHostContractPackage({
+    projectRoot: fixture.projectRoot, qualificationPath: fixture.qualificationPath,
+    evidenceRoot: fixture.evidenceRoot, observerPath: fixture.observerPath,
+  });
+  assert.equal(published.ok, true, JSON.stringify(published));
+  const sessionId = label + '-' + crypto.randomBytes(6).toString('hex');
+  const transcriptPath = path.join(fixture.projectRoot, label + '.jsonl');
+  fs.writeFileSync(transcriptPath, '{}\n');
+  const sessionStart = { hook_event_name: 'SessionStart', session_id: sessionId, cwd: fixture.projectRoot,
+    transcript_path: transcriptPath, model: 'claude-sonnet-5' };
+  const preToolUse = { hook_event_name: 'PreToolUse', tool_name: 'Bash', session_id: sessionId,
+    tool_use_id: 'toolu_' + label, transcript_path: transcriptPath, cwd: fixture.projectRoot,
+    effort: { level: 'high' }, tool_input: { command: 'node launcher monitor-docs' } };
+  const mint = (extra) => withCapabilityEnv(() => hostClaude.mintProductionHostComposition({
+    projectRoot: fixture.projectRoot, event: preToolUse, entrypoint: 'monitor-docs',
+    argvDigest: sha256hex('entrypoint:monitor-docs:readonly'), roleScope: null, ...(extra || {}),
+  }));
+  const diagnosticPath = path.join(rll.registryRepoDir(fixture.projectRoot), 'host-sessions',
+    'diagnostic-interactive-' + sha256hex(sessionId) + '.json');
+  return { fixture, published, sessionId, sessionStart, mint, diagnosticPath };
+}
+
+test('PIN-DIAG-01 a SessionStart pin failure code is persisted and surfaced by the composition mint', () => {
+  const { fixture, sessionStart, mint, diagnosticPath } = pinDiagnosticFixture('pin-diag-surface');
+  try {
+    assert.deepEqual(mint(), { ok: false, reason: 'HOST_PIN_UNPROVEN', detail: 'HOST_PIN_SESSION_RECORD_ABSENT' },
+      'a session whose SessionStart left no record says so');
+    const persisted = hostClaude.recordInteractiveSessionPinDiagnostic({
+      projectRoot: fixture.projectRoot, event: sessionStart,
+      result: { ok: false, reason: 'HOST_PIN_UNPROVEN', detail: 'HOST_PIN_VENDOR_MATCH_COUNT_4' },
+    });
+    assert.equal(persisted.ok, true, JSON.stringify(persisted));
+    const record = JSON.parse(fs.readFileSync(diagnosticPath, 'utf8'));
+    assert.deepEqual(Object.keys(record).sort(), ['detail', 'observed_at', 'reason', 'schema', 'session_digest']);
+    assert.equal(record.session_digest, sha256hex(sessionStart.session_id));
+    assert.deepEqual(mint(), { ok: false, reason: 'HOST_PIN_UNPROVEN', detail: 'HOST_PIN_VENDOR_MATCH_COUNT_4' });
+    const otherSession = hostClaude.mintProductionHostComposition({
+      projectRoot: fixture.projectRoot, event: { hook_event_name: 'PreToolUse', tool_name: 'Bash',
+        session_id: 'another-session', tool_use_id: 'toolu_other', transcript_path: sessionStart.transcript_path,
+        cwd: fixture.projectRoot, effort: { level: 'high' }, tool_input: {} },
+      entrypoint: 'monitor-docs', argvDigest: sha256hex('entrypoint:monitor-docs:readonly'), roleScope: null,
+    });
+    assert.equal(otherSession.detail, 'HOST_PIN_SESSION_RECORD_ABSENT', 'a diagnostic is bound to its own session');
+  } finally { cleanupHostContractFixture(fixture); }
+});
+
+test('PIN-DIAG-02 only uppercase codes are persisted or echoed; a tampered diagnostic is ignored', () => {
+  const { fixture, sessionStart, mint, diagnosticPath } = pinDiagnosticFixture('pin-diag-privacy');
+  try {
+    const persisted = hostClaude.recordInteractiveSessionPinDiagnostic({
+      projectRoot: fixture.projectRoot, event: sessionStart,
+      result: { ok: false, reason: 'HOST_PIN_UNPROVEN', detail: '/Users/someone/secret path' },
+    });
+    assert.equal(persisted.ok, true, JSON.stringify(persisted));
+    assert.doesNotMatch(fs.readFileSync(diagnosticPath, 'utf8'), /secret|Users/);
+    const surfaced = mint();
+    assert.deepEqual(surfaced, { ok: false, reason: 'HOST_PIN_UNPROVEN' }, JSON.stringify(surfaced));
+    const record = JSON.parse(fs.readFileSync(diagnosticPath, 'utf8'));
+    for (const forged of [
+      { ...record, detail: 'HOST_PIN lowercase or spaced' },
+      { ...record, reason: 'host_pin_unproven' },
+      { ...record, session_digest: sha256hex('foreign-session') },
+      { ...record, schema: 'runtime/other/v1' },
+      { ...record, observed_at: new Date(Date.now() + 3600 * 1000).toISOString() },
+      { ...record, extra: 'HOST_PIN_X' },
+    ]) {
+      fs.writeFileSync(diagnosticPath, JSON.stringify(forged));
+      assert.deepEqual(mint(), { ok: false, reason: 'HOST_PIN_UNPROVEN', detail: 'HOST_PIN_SESSION_RECORD_ABSENT' },
+        'an invalid diagnostic is ignored: ' + JSON.stringify(forged));
+    }
+    assert.equal(hostClaude.recordInteractiveSessionPinDiagnostic({
+      projectRoot: fixture.projectRoot, event: { ...sessionStart, cwd: os.tmpdir() },
+      result: { ok: false, reason: 'HOST_PIN_UNPROVEN' },
+    }).ok, false, 'a diagnostic is only written for an event bound to this project root');
+  } finally { cleanupHostContractFixture(fixture); }
+});
+
+test('PIN-DIAG-03 a recorded pin clears the diagnostic and live re-observation failures surface their code', () => {
+  const { fixture, published, sessionStart, mint, diagnosticPath } = pinDiagnosticFixture('pin-diag-live');
+  try {
+    assert.equal(hostClaude.recordInteractiveSessionPinDiagnostic({
+      projectRoot: fixture.projectRoot, event: sessionStart,
+      result: { ok: false, reason: 'HOST_PIN_UNPROVEN', detail: 'HOST_PIN_VENDOR_MATCH_COUNT_3' },
+    }).ok, true);
+    const liveObservation = {
+      ok: true, observationSource: hostClaude.__TEST_ONLY__pinObservationSourceFor(process.platform),
+      processId: process.pid, processBirth: new Date().toISOString(), executablePath: fixture.executablePath,
+      executableDigest: sha256bytes(fs.readFileSync(fixture.executablePath)), cliVersion: '2.1.283', cliFamily: '2.1',
+      pinDigest: published.pinDigest, hostContractDigest: published.hostContractDigest,
+    };
+    const recorded = withCapabilityEnv(() => hostClaude.recordInteractiveSessionPin({
+      projectRoot: fixture.projectRoot, event: sessionStart, __testObserved: liveObservation,
+    }));
+    assert.equal(recorded.ok, true, JSON.stringify(recorded));
+    assert.equal(hostClaude.recordInteractiveSessionPinDiagnostic({
+      projectRoot: fixture.projectRoot, event: sessionStart, result: recorded,
+    }).ok, true);
+    assert.equal(fs.existsSync(diagnosticPath), false, 'a successful pin removes the stale diagnostic');
+    assert.deepEqual(mint({ __testObserved: { ok: false, reason: 'HOST_PIN_UNPROVEN', detail: 'HOST_PIN_NESTED_VENDOR_HOST' } }),
+      { ok: false, reason: 'HOST_PIN_UNPROVEN', detail: 'HOST_PIN_NESTED_VENDOR_HOST' });
+    assert.deepEqual(mint({ __testObserved: { ...liveObservation, executableDigest: sha256hex('foreign executable') } }),
+      { ok: false, reason: 'HOST_PIN_UNPROVEN', detail: 'HOST_PIN_LIVE_HOST_MISMATCH' });
+    assert.deepEqual(mint({ __testObserved: { ok: false, reason: 'HOST_PIN_UNPROVEN', detail: 'not a code' } }),
+      { ok: false, reason: 'HOST_PIN_UNPROVEN' });
+    fs.writeFileSync(path.join(rll.registryRepoDir(fixture.projectRoot), 'host-sessions',
+      'interactive-' + sha256hex(sessionStart.session_id) + '.json'), '{"schema":"tampered"}');
+    assert.deepEqual(mint({ __testObserved: liveObservation }),
+      { ok: false, reason: 'HOST_PIN_UNPROVEN', detail: 'HOST_PIN_SESSION_RECORD_INVALID' });
+  } finally { cleanupHostContractFixture(fixture); }
+});
+
+test('MACOS-PIN-12 an on-demand daemon host whose PTY host runs from a hard-linked bundle wrapper is admitted',
+  { skip: process.platform !== 'darwin' }, () => {
+    // Captured from Claude Code 2.1.287 `bg spawned` (no spare): worker (versions/<v>) -> pty host
+    // (ClaudeCode.app/Contents/MacOS/claude, a hard link that fails codesign --strict at the bundle path) -> daemon.
+    const chain = [
+      chainRow(900, 800, '/bin/bash'), chainRow(800, 700, '/bin/zsh'),
+      chainRow(700, 600, 'claude-versioned', 'claude-versioned'),
+      chainRow(600, 500, 'claude-bundle-wrapper', 'claude-bundle-wrapper'),
+      chainRow(500, 1, 'claude-daemon', 'claude-daemon'),
+    ];
+    const linked = observeWithProbes('bundle-wrapper', chain, ['claude-versioned', 'claude-daemon'], null,
+      { 'claude-bundle-wrapper': 'claude-versioned' });
+    assert.equal(linked.ok, true, JSON.stringify(linked));
+    assert.equal(linked.processId, 700, 'the session worker is the pinned host');
+    // The same layout where the wrapper is a different (unsigned) file stays a non-vendor gap: nested host.
+    const copied = observeWithProbes('bundle-copy', chain, ['claude-versioned', 'claude-daemon']);
+    assert.deepEqual([copied.ok, copied.detail], [false, 'HOST_PIN_NESTED_VENDOR_HOST']);
   });

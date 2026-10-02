@@ -145,12 +145,8 @@ function gitHead(root) {
   if (result.status !== 0 || !/^[0-9a-f]{40}$/.test((result.stdout || '').trim())) throw new Error('HEAD_UNAVAILABLE');
   return result.stdout.trim();
 }
-/** A Pass A draft carries the marker on its first line; the finalized PLAN has no marker. */
-function isDraftPlan(planText) {
-  return planText.split(/\r?\n/, 1)[0].trim() === DRAFT_PLAN_MARKER;
-}
-function parsePlanClass(planText) {
-  const lines = planText.split(/\r?\n/);
+/** Per line: true when it is Markdown structure, false inside (or on the delimiters of) a fenced code block. */
+function structuralLineFlags(lines) {
   const structural = [];
   let fence = null;
   for (const line of lines) {
@@ -164,6 +160,23 @@ function parsePlanClass(planText) {
     }
     structural.push(fence === null);
   }
+  return structural;
+}
+/**
+ * A Pass A draft carries the marker as a standalone line; the finalized PLAN has no such line. This is the one grammar
+ * the planner contract ("write a draft with the marker"), the orchestrator check ("the marker is present") and this
+ * parser share: an exact line outside fenced code, anywhere in the PLAN. Prose that merely quotes the marker inline
+ * or a code sample is not a draft. Recognizing a draft grants nothing by itself: the re-binding it enables still
+ * requires PREP, revision 0, no transition, the same HEAD and class, and a final PLAN without the marker.
+ */
+function isDraftPlan(planText) {
+  const lines = planText.split(/\r?\n/);
+  const structural = structuralLineFlags(lines);
+  return lines.some((line, index) => structural[index] && line.trim() === DRAFT_PLAN_MARKER);
+}
+function parsePlanClass(planText) {
+  const lines = planText.split(/\r?\n/);
+  const structural = structuralLineFlags(lines);
 
   const headings = [];
   for (let index = 0; index < lines.length; index += 1) {

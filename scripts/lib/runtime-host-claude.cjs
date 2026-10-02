@@ -31,6 +31,11 @@ const INTERACTIVE_PIN_EVIDENCE_KEYS = Object.freeze([
   'requested_profile_name', 'schema', 'session_digest', 'signature_ed25519_base64',
   'transcript_path_digest', 'worktree_id',
 ].sort());
+// Non-authoritative SessionStart failure diagnostic: read only to explain a
+// denial, never for authorization. It carries bounded codes only.
+const INTERACTIVE_PIN_DIAGNOSTIC_SCHEMA = 'runtime/claude-interactive-pin-diagnostic/v1';
+const INTERACTIVE_PIN_DIAGNOSTIC_KEYS = Object.freeze(['detail', 'observed_at', 'reason', 'schema', 'session_digest']);
+const HOST_DIAGNOSTIC_CODE_RE = /^[A-Z0-9_]{1,64}$/;
 const SESSION_EVIDENCE_KEYS = Object.freeze([
   'actual_host', 'actual_model', 'actual_role_engine', 'continuity', 'expires_at',
   'host_contract_digest', 'key_id', 'observation_source', 'pin_digest', 'plan_digest',
@@ -1000,6 +1005,70 @@ function interactivePinEvidencePath(projectRoot, sessionId) {
   return path.join(sessionEvidenceDir(projectRoot), 'interactive-' + digest(sessionId) + '.json');
 }
 
+function interactivePinDiagnosticPath(projectRoot, sessionId) {
+  return path.join(sessionEvidenceDir(projectRoot), 'diagnostic-interactive-' + digest(sessionId) + '.json');
+}
+
+function diagnosticCode(value) {
+  return typeof value === 'string' && HOST_DIAGNOSTIC_CODE_RE.test(value) ? value : null;
+}
+
+// Bounded failure shape for operator messages: only codes, never free text.
+function hostEvidenceFailure(reason, detail) {
+  const failure = { ok: false };
+  const reasonCode = diagnosticCode(reason);
+  if (!reasonCode) return failure;
+  failure.reason = reasonCode;
+  const detailCode = diagnosticCode(detail);
+  if (detailCode) failure.detail = detailCode;
+  return failure;
+}
+
+// The SessionStart hook cannot block, so the reason it could not mint a pin
+// would otherwise be visible only on its stderr. It persists that code here,
+// session-scoped and code-only, so the later collaboration denial can name it.
+// A successful pin removes any stale diagnostic. This record is never read for
+// authorization.
+function recordInteractiveSessionPinDiagnostic(options) {
+  const projectRoot = options && options.projectRoot;
+  const event = options && options.event;
+  const result = options && options.result;
+  if (!isUsableRoot(projectRoot) || !event || event.hook_event_name !== 'SessionStart' ||
+      !boundedLiteral(event.session_id, 4096) || typeof event.cwd !== 'string' ||
+      path.resolve(event.cwd) !== path.resolve(projectRoot)) return { ok: false };
+  const destination = interactivePinDiagnosticPath(projectRoot, event.session_id);
+  try {
+    if (result && result.ok === true) {
+      fs.rmSync(destination, { force: true });
+      return { ok: true, cleared: true };
+    }
+    const failure = hostEvidenceFailure(result && result.reason, result && result.detail);
+    const record = {
+      schema: INTERACTIVE_PIN_DIAGNOSTIC_SCHEMA,
+      session_digest: digest(event.session_id),
+      reason: failure.reason || 'HOST_PIN_UNPROVEN',
+      detail: failure.reason ? failure.detail || null : null,
+      observed_at: new Date().toISOString(),
+    };
+    const written = lifecycleOwner().writeRegistryRecordReplace(
+      destination, Buffer.from(canonicalJSONStringify(record), 'utf8'),
+    );
+    return written.ok ? { ok: true, cleared: false } : { ok: false };
+  } catch { return { ok: false }; }
+}
+
+function readInteractivePinDiagnostic(projectRoot, sessionId) {
+  const record = readJsonFile(interactivePinDiagnosticPath(projectRoot, sessionId));
+  if (!record || !hasExactKeys(record, INTERACTIVE_PIN_DIAGNOSTIC_KEYS) ||
+      record.schema !== INTERACTIVE_PIN_DIAGNOSTIC_SCHEMA || record.session_digest !== digest(sessionId) ||
+      !diagnosticCode(record.reason) || !(record.detail === null || diagnosticCode(record.detail)) ||
+      !boundedLiteral(record.observed_at, 128)) return null;
+  const observed = Date.parse(record.observed_at);
+  if (!Number.isFinite(observed) || observed > Date.now() ||
+      Date.now() - observed > SESSION_EVIDENCE_TTL_SECONDS * 1000) return null;
+  return hostEvidenceFailure(record.reason, record.detail);
+}
+
 function loadOrCreateProductionKey(projectRoot) {
   const files = compositionKeyPaths(projectRoot);
   fs.mkdirSync(path.dirname(files.privateKey), { recursive: true, mode: 0o700 });
@@ -1196,28 +1265,86 @@ function observeClaudeExecutablePin(options) {
   if (claudeVersionFamily(contract.certificate.cli_version) !== SUPPORTED_CLAUDE_FAMILY) {
     return { ok: false, reason: 'HOST_PROTOCOL_FAMILY_UNSUPPORTED' };
   }
-  const matches = [];
+  // Every walked row is classified as vendor (a provable signed Claude binary of
+  // the supported family) or non-vendor (anything else, including an
+  // unresolvable or non-absolute row). `vendorRows[i]` is null for non-vendor.
+  const vendorRows = [];
   for (const row of before) {
+    let vendor = null;
     // A non-absolute image name (darwin `comm` reports a bare name for a process
     // launched through a PATH lookup) identifies nothing: resolving it would be
     // resolved against the CURRENT working directory and could match an
     // unrelated file of the same name. Such an ancestor is never provable.
-    if (!path.isAbsolute(row.executable_path)) continue;
-    try {
-      const resolved = fs.realpathSync(row.executable_path);
-      const stat = fs.statSync(resolved);
-      const signatureTrusted = stat.isFile() && (probes ? probes.trustedSignature(resolved) : trustedClaudeVendorSignature(resolved));
-      const cliVersion = signatureTrusted ? (probes ? probes.version(resolved) : observedClaudeVersion(resolved)) : null;
-      if (cliVersion && claudeVersionFamily(cliVersion) === SUPPORTED_CLAUDE_FAMILY) {
-        matches.push({ row, resolved, cliVersion });
-      }
-    } catch { /* this ancestor is not a provable selected Claude binary */ }
+    if (path.isAbsolute(row.executable_path)) {
+      try {
+        const resolved = fs.realpathSync(row.executable_path);
+        const stat = fs.statSync(resolved);
+        const signatureTrusted = stat.isFile() && (probes ? probes.trustedSignature(resolved) : trustedClaudeVendorSignature(resolved));
+        const cliVersion = signatureTrusted ? (probes ? probes.version(resolved) : observedClaudeVersion(resolved)) : null;
+        if (cliVersion && claudeVersionFamily(cliVersion) === SUPPORTED_CLAUDE_FAMILY) {
+          vendor = { row, resolved, cliVersion };
+        }
+      } catch { /* this ancestor is not a provable selected Claude binary */ }
+    }
+    vendorRows.push(vendor);
     if (Date.now() - startedMs >= 15000) {
       return { ok: false, reason: 'HOST_PIN_UNPROVEN', detail: 'HOST_PIN_OBSERVATION_TIMEOUT' };
     }
   }
-  if (matches.length !== 1) {
-    return { ok: false, reason: 'HOST_PIN_UNPROVEN', detail: 'HOST_PIN_VENDOR_MATCH_COUNT_' + matches.length };
+  // Host attribution follows peer code-signature validation of the immediate
+  // host (the Apple XPC / audit-token peer validation pattern): the session
+  // belongs to the NEAREST signed vendor ancestor, and the trust boundary is
+  // crossed only through a non-vendor process. Claude 2.1.x can host a session
+  // inside its own daemon (`claude daemon` -> `bg-pty-host` -> `bg-spare`,
+  // optionally with the interactive client above the daemon), so the host may
+  // head a contiguous run of signed vendor processes: the host's vendor
+  // segment. Rows below the host (the hook's own node/sh) may be anything. Any
+  // vendor row ABOVE the segment -- reachable only through a non-vendor process
+  // such as a shell -- means one Claude launched another, and is rejected as a
+  // nested host. Each segment row passes the full vendor test individually;
+  // identical paths are not required (an auto-update can leave the daemon and
+  // the worker on different signed versions of the supported family).
+  // This is no weaker than the previous exactly-one-match rule: a detached
+  // `nohup`/`setsid` `claude` (reparented to launchd) already had exactly one
+  // match, so that rule never resisted detachment; it only ever blocked naive
+  // nesting through a shell (claude -> zsh -> claude), which is still blocked.
+  // An on-demand daemon host runs its PTY host from the bundle wrapper
+  // `.../ClaudeCode.app/Contents/MacOS/claude`, a hard link to the versioned
+  // binary. `codesign --strict` at a bundle path demands bundle resources and
+  // fails although the Mach-O and its embedded signature are byte-identical. A
+  // row whose executable is the SAME file object (st_dev, st_ino) as a row that
+  // verified in this walk is that signed binary, not a copy, so it is vendor too.
+  const verifiedFiles = new Map();
+  for (const entry of vendorRows) {
+    if (entry === null) continue;
+    try {
+      const stat = fs.statSync(entry.resolved);
+      verifiedFiles.set(stat.dev + ':' + stat.ino, entry);
+    } catch { /* an unreadable verified row contributes no identity */ }
+  }
+  for (let index = 0; index < before.length; index += 1) {
+    if (vendorRows[index] !== null || !path.isAbsolute(before[index].executable_path)) continue;
+    try {
+      const resolved = fs.realpathSync(before[index].executable_path);
+      const stat = fs.statSync(resolved);
+      const same = stat.isFile() ? verifiedFiles.get(stat.dev + ':' + stat.ino) : undefined;
+      if (same) vendorRows[index] = { row: before[index], resolved, cliVersion: same.cliVersion };
+    } catch { /* not the same file as a verified vendor binary */ }
+  }
+  const hostIndex = vendorRows.findIndex((entry) => entry !== null);
+  if (hostIndex === -1) {
+    return { ok: false, reason: 'HOST_PIN_UNPROVEN', detail: 'HOST_PIN_VENDOR_MATCH_COUNT_0' };
+  }
+  let segmentEnd = hostIndex;
+  // Both platform walks follow parent links; testing the link keeps the segment
+  // contiguous by construction. A broken link ends the segment, so any vendor
+  // row beyond it fails closed as nested.
+  while (segmentEnd + 1 < before.length && vendorRows[segmentEnd + 1] !== null &&
+      before[segmentEnd].parent_process_id === before[segmentEnd + 1].process_id) {
+    segmentEnd += 1;
+  }
+  if (vendorRows.slice(segmentEnd + 1).some((entry) => entry !== null)) {
+    return { ok: false, reason: 'HOST_PIN_UNPROVEN', detail: 'HOST_PIN_NESTED_VENDOR_HOST' };
   }
   const remainingMs = 15000 - (Date.now() - startedMs);
   if (remainingMs <= 0) return { ok: false, reason: 'HOST_PIN_UNPROVEN', detail: 'HOST_PIN_OBSERVATION_TIMEOUT' };
@@ -1225,7 +1352,9 @@ function observeClaudeExecutablePin(options) {
   if (!after || Date.now() - startedMs > 15000) {
     return { ok: false, reason: 'HOST_PIN_UNPROVEN', detail: 'HOST_PIN_PARENT_CHAIN_RECHECK_UNAVAILABLE' };
   }
-  const match = matches[0];
+  // Only the host row is re-verified: other segment members (for example a
+  // transient daemon) may legitimately exit between the two walks.
+  const match = vendorRows[hostIndex];
   // Same identity test on both platforms: the pid, its birth time, and the image
   // path must all still agree. Windows keeps its case-insensitive comparison;
   // darwin compares canonical paths exactly rather than lowercasing, which would
@@ -1532,30 +1661,47 @@ function recordProductionSessionIdentity(options) {
 }
 
 function productionSessionObservation(projectRoot, event, testObserved) {
-  if (!event || typeof event.session_id !== 'string' || event.session_id.length === 0) return null;
+  const resolved = resolveProductionSessionObservation(projectRoot, event, testObserved);
+  return resolved.ok ? resolved.observation : null;
+}
+
+// Returns { ok:true, observation } or a code-only failure. The failure codes
+// exist for the operator message only; every failure denies identically.
+function resolveProductionSessionObservation(projectRoot, event, testObserved) {
+  if (!event || typeof event.session_id !== 'string' || event.session_id.length === 0) return { ok: false };
   const record = readJsonFile(sessionEvidencePath(projectRoot, event.session_id));
-  if (verifyProductionSessionRecord(projectRoot, record, event.session_id)) return record;
-  const interactive = readJsonFile(interactivePinEvidencePath(projectRoot, event.session_id));
-  if (!verifyInteractivePinEvidence(projectRoot, interactive, event.session_id) ||
-      !boundedLiteral(event.tool_use_id, 4096) || !boundedLiteral(event.transcript_path, 4096) ||
+  if (verifyProductionSessionRecord(projectRoot, record, event.session_id)) return { ok: true, observation: record };
+  const interactivePath = interactivePinEvidencePath(projectRoot, event.session_id);
+  const interactive = readJsonFile(interactivePath);
+  if (!verifyInteractivePinEvidence(projectRoot, interactive, event.session_id)) {
+    if (fs.existsSync(interactivePath)) return hostEvidenceFailure('HOST_PIN_UNPROVEN', 'HOST_PIN_SESSION_RECORD_INVALID');
+    return readInteractivePinDiagnostic(projectRoot, event.session_id) ||
+      hostEvidenceFailure('HOST_PIN_UNPROVEN', 'HOST_PIN_SESSION_RECORD_ABSENT');
+  }
+  if (!boundedLiteral(event.tool_use_id, 4096) || !boundedLiteral(event.transcript_path, 4096) ||
       !path.isAbsolute(event.transcript_path) || typeof event.cwd !== 'string' ||
-      path.resolve(event.cwd) !== path.resolve(projectRoot)) return null;
+      path.resolve(event.cwd) !== path.resolve(projectRoot)) return { ok: false };
   let transcriptPath;
   try {
     transcriptPath = fs.realpathSync(event.transcript_path);
     const stat = fs.lstatSync(transcriptPath);
-    if (!stat.isFile() || stat.isSymbolicLink()) return null;
-  } catch { return null; }
+    if (!stat.isFile() || stat.isSymbolicLink()) return { ok: false };
+  } catch { return { ok: false }; }
   const profile = resolveRequestedModelProfile(projectRoot, null);
   if (!profile.ok || (interactive.actual_model !== null &&
-      !actualModelMatchesRequestedAlias(interactive.actual_model, profile.requestedModel))) return null;
+      !actualModelMatchesRequestedAlias(interactive.actual_model, profile.requestedModel))) return { ok: false };
   const observed = isTestCapability() && testObserved
     ? testObserved
     : observeClaudeExecutablePin({ projectRoot, startingPid: process.pid });
-  if (!observed || !observed.ok || observed.observationSource !== interactive.observation_source ||
+  if (!observed || !observed.ok) {
+    return observed ? hostEvidenceFailure(observed.reason, observed.detail) : { ok: false };
+  }
+  if (observed.observationSource !== interactive.observation_source ||
       observed.executableDigest !== interactive.executable_digest || observed.cliVersion !== interactive.cli_version ||
       observed.cliFamily !== interactive.cli_family || observed.pinDigest !== interactive.pin_digest ||
-      observed.hostContractDigest !== interactive.host_contract_digest) return null;
+      observed.hostContractDigest !== interactive.host_contract_digest) {
+    return hostEvidenceFailure('HOST_PIN_UNPROVEN', 'HOST_PIN_LIVE_HOST_MISMATCH');
+  }
   let currentInteractive = interactive;
   let hostInvocationChanged = false;
   const transcriptPathDigest = digest(transcriptPath);
@@ -1592,7 +1738,7 @@ function productionSessionObservation(projectRoot, event, testObserved) {
       );
       return written.ok ? renewed : null;
     });
-    if (!locked.ok || !locked.value) return null;
+    if (!locked.ok || !locked.value) return { ok: false };
     currentInteractive = locked.value;
     hostInvocationChanged = true;
   }
@@ -1604,11 +1750,11 @@ function productionSessionObservation(projectRoot, event, testObserved) {
       forceRotation: hostInvocationChanged,
     },
   );
-  if (!invocationGeneration.ok) return null;
-  return {
+  if (!invocationGeneration.ok) return { ok: false };
+  return { ok: true, observation: {
     ...currentInteractive,
     actual_host: 'claude', actual_role_engine: 'claude', continuity: 'session-persistent',
-  };
+  } };
 }
 
 function consumedCompositionScopePayload(record) {
@@ -2259,9 +2405,9 @@ function mintProductionHostComposition(options) {
   if (options.event.effort.level !== REQUIRED_ENTRYPOINT_EFFORT) {
     return { ok: false, reason: 'HOST_EFFORT_MISMATCH' };
   }
-  return mintHostCompositionFromSessionObservation(
-    options, productionSessionObservation(projectRoot, options.event, options.__testObserved),
-  );
+  const session = resolveProductionSessionObservation(projectRoot, options.event, options.__testObserved);
+  if (!session.ok) return hostEvidenceFailure(session.reason, session.detail);
+  return mintHostCompositionFromSessionObservation(options, session.observation);
 }
 
 function managedSessionObservation(options) {
@@ -2420,6 +2566,7 @@ module.exports = {
   verifyClaudeHostContractPackage,
   observeClaudeExecutablePin,
   recordInteractiveSessionPin,
+  recordInteractiveSessionPinDiagnostic,
   mintProductionHostComposition,
   mintManagedHostComposition,
   mintManagedLifecycleCommandAuthority,
