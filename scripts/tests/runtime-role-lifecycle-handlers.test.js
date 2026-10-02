@@ -1002,7 +1002,7 @@ test('ensure(live driver, valid grant): a SINGLE call mints the direct role-spaw
     assert.match(action.action_id, /^[0-9a-f]{32}$/);
     assert.strictEqual(action.payload.bootstrap_message.includes("'ready'"), true);
     assert.strictEqual(action.payload.bootstrap_message.startsWith('FIRST Bash='), true);
-    assert.strictEqual(action.payload.bootstrap_message.includes('Bash=single-quote tokens;no chain'), true);
+    assert.strictEqual(action.payload.bootstrap_message.includes('Bash=single-quote;no-chain'), true);
     assert.strictEqual(action.payload.bootstrap_message.includes(action.action_id), true);
     assert.strictEqual(action.payload.bootstrap_message.includes('COORDINATION_CONSULT/v1\\n'), true);
     assert.strictEqual(action.payload.bootstrap_message.includes('X+["claim"]+Y+["--role",r]'), true);

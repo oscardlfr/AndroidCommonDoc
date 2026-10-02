@@ -342,8 +342,7 @@ Full procedure: [quality-gater-secret-scan](l0doc:docs/agents/quality-gater-secr
 If ALL steps passed (`PROJECT_GATE=PASS`; in L1/L2 a failed step means `PROJECT_GATE=FAIL`, which records a FAIL stamp and stops before the mint):
 ```bash
 wave_slug="$(node .claude/runtime/l0-toolkit-launcher.cjs run runtime-consumer-qg --project-root "$PWD" -- resolve-active-wave)" || exit $?
-QG_STATE="$(node .claude/runtime/l0-toolkit-launcher.cjs run wave-control --project-root "$PWD" -- status --slug "$wave_slug")"
-QG_REVISION="$(printf '%s' "$QG_STATE" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const v=JSON.parse(s);if(!Number.isInteger(v.revision))process.exit(2);process.stdout.write(String(v.revision));})')"
+QG_STATE="$(node .claude/runtime/l0-toolkit-launcher.cjs run wave-control --project-root "$PWD" -- status --slug "$wave_slug")"; QG_REVISION="$(printf '%s' "$QG_STATE" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const v=JSON.parse(s);if(!Number.isInteger(v.revision))process.exit(2);process.stdout.write(String(v.revision));})')"
 if [[ "$(node .claude/runtime/l0-toolkit-launcher.cjs describe layer --project-root "$PWD")" == "L0" ]]; then
   node .claude/runtime/l0-toolkit-launcher.cjs run emit-push-proof --project-root "$PWD" -- --subcommand run-qg
   QG_ATTEMPT="$(node .claude/runtime/l0-toolkit-launcher.cjs run wave-control --project-root "$PWD" -- qg-attempt --slug "$wave_slug" --expected-revision "$QG_REVISION" --verdict PASS --checks '{"project_gate":"PASS"}')"
