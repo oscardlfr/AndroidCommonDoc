@@ -187,12 +187,24 @@ function cleanup(wave) {
   fs.rmSync(wave.root, { recursive: true, force: true });
 }
 
+/** Runs the real plan-md-write-gate for a planner Write of this wave's PLAN.md and asserts it is allowed. */
+function assertPlannerWriteAllowed(wave, agentType) {
+  const result = spawnSync('node', [path.join(ROOT, '.claude', 'hooks', 'plan-md-write-gate.js')], {
+    input: JSON.stringify({ hook_event_name: 'PreToolUse', tool_name: 'Write', tool_input: { file_path: wave.planPath, content: 'x' },
+      session_id: SESSION_PLANNING, agent_type: agentType, agent_id: agentType }),
+    encoding: 'utf8', cwd: wave.root, env: { ...childEnv(wave.root), CLAUDE_PROJECT_DIR: wave.root },
+  });
+  assert.strictEqual(result.status, 0, `plan-md-write-gate must allow ${agentType}'s PLAN write: ${result.stdout}${result.stderr}`);
+}
+const SESSION_PLANNING = 'fw-session-planning';
+
 test('a consumer wave runs from the Pass A draft to the Pass B final PLAN, with the control plane following the final digest', { skip: SKIP }, () => {
   const wave = newWave('full-wave-a');
   try {
     const { root } = wave;
 
     // ── Pass A: the planner (SIM-MODEL) writes the draft; the orchestrator revalidates the marker on disk. ──
+    assertPlannerWriteAllowed(wave, 'planner');
     fs.writeFileSync(wave.planPath, planText(wave.slug, { draft: true }));
     assert.ok(fs.readFileSync(wave.planPath, 'utf8').startsWith(DRAFT_MARKER + '\n'), 'the draft carries the marker on its first line');
     // The wave directory is working-tree planning state, never committed: HEAD stays the baseline of the wave.
@@ -208,6 +220,9 @@ test('a consumer wave runs from the Pass A draft to the Pass B final PLAN, with 
     assert.strictEqual(initDraft.body.phase, 'PREP');
 
     // ── Pass B: the planner finalizes the PLAN (marker removed, context added). ──
+    // Consumer trace: the documented Pass B is a second Agent(subagent_type="planner") in the same session, which
+    // Claude Code names "planner-2" while the Pass A planner is kept. The real gate must treat it as the planner.
+    assertPlannerWriteAllowed(wave, 'planner-2');
     fs.writeFileSync(wave.planPath, planText(wave.slug, { draft: false, extra: '\n## Context\n\n- an accepted context-provider answer informed this plan\n' }));
 
     // The documented step 6 runs orchestrate again: it must re-bind, once, to the final digest.

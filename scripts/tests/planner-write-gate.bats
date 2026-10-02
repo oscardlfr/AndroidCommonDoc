@@ -196,3 +196,40 @@ teardown_file() {
   [[ "$output" == *'"decision":"block"'* ]]
   rm -rf "$tmp_dir"
 }
+
+# ── Pass B planner instance: Claude Code names a second canonical
+# Agent(subagent_type="planner") in the same session "planner-2". It is the
+# planner role and gets exactly the planner's confined ownership; no other
+# suffix shape is the planner. ───────────────────────────────────────────────
+
+@test "harness-suffixed planner instance (planner-2) may write its own wave PLAN.md" {
+  local tmp_dir
+  tmp_dir="$(mktemp -d)"
+  run bash -c "echo '{\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\".planning/wave-foo/PLAN.md\"},\"agent_type\":\"planner-2\"}' | CLAUDE_PROJECT_DIR='$tmp_dir' CLAUDE_WAVE_SLUG=foo node '$HOOK'"
+  [ "$status" -eq 0 ]
+  run bash -c "echo '{\"tool_name\":\"Edit\",\"tool_input\":{\"file_path\":\".planning/wave-foo/PLAN.md\"},\"agent_type\":\"planner-13\"}' | CLAUDE_PROJECT_DIR='$tmp_dir' CLAUDE_WAVE_SLUG=foo node '$HOOK'"
+  [ "$status" -eq 0 ]
+  rm -rf "$tmp_dir"
+}
+
+@test "harness-suffixed planner instance keeps the planner write confinement" {
+  local tmp_dir
+  tmp_dir="$(mktemp -d)"
+  run env CLAUDE_SKIP_PLANNER=1 bash -c "echo '{\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"docs/other.md\"},\"agent_type\":\"planner-2\"}' | CLAUDE_PROJECT_DIR='$tmp_dir' CLAUDE_WAVE_SLUG=foo node '$HOOK'"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *'planner writes are confined'* ]]
+  run bash -c "echo '{\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\".planning/wave-bar/PLAN.md\"},\"agent_type\":\"planner-2\"}' | CLAUDE_PROJECT_DIR='$tmp_dir' CLAUDE_WAVE_SLUG=foo node '$HOOK'"
+  [ "$status" -eq 2 ]
+  rm -rf "$tmp_dir"
+}
+
+@test "only the harness suffix shape is the planner: planner-1, planner-02, planner-x and plannerx are not" {
+  local tmp_dir name
+  tmp_dir="$(mktemp -d)"
+  for name in planner-1 planner-02 planner-x plannerx arch-planner-2 planner-2-x; do
+    run bash -c "echo '{\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\".planning/wave-foo/PLAN.md\"},\"agent_type\":\"$name\"}' | CLAUDE_PROJECT_DIR='$tmp_dir' CLAUDE_WAVE_SLUG=foo node '$HOOK'"
+    [ "$status" -eq 2 ] || { echo "accepted $name"; return 1; }
+    [[ "$output" == *'may NOT write .planning/wave-*/PLAN.md'* ]]
+  done
+  rm -rf "$tmp_dir"
+}

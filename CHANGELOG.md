@@ -5,6 +5,10 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 
 ## [Unreleased]
 
+### Fixed (planner Pass B identity)
+
+- The documented planner Pass B is a second `Agent(subagent_type="planner")` in the same session. Claude Code keeps the Pass A planner and names the second one `planner-2`. `plan-md-write-gate` accepted only the exact `planner`, so Pass B's PLAN write was blocked with `[planner-gate] team-lead/architects/specialists may NOT write .planning/wave-*/PLAN.md`. The gate now identifies the planner with the harness-suffix rule the other identity hooks already use (`<role>-<N>`, with `N` ≥ 2 in canonical decimal), and keeps the planner's write confinement. `planner-1`, `planner-02`, `planner-x` and `arch-planner-2` are still refused. The full-chain consumer contract test now drives Pass A as `planner` and Pass B as `planner-2` through the real gate.
+
 ### Fixed (daemon-hosted Claude sessions)
 
 - The interactive host pin admits a session that Claude hosts inside its own daemon (`claude daemon` → `bg-pty-host` → `bg-spare`, optionally with the interactive client above). The host is the nearest signed Claude ancestor. Signed Claude ancestors directly above it are accepted while they are contiguous parent links. A signed Claude reached through a non-vendor process (for example `claude` → `zsh` → `claude`) is still rejected, now as `HOST_PIN_NESTED_VENDOR_HOST`. The stability re-check verifies only the host row, so a transient daemon may exit. An on-demand daemon host runs its PTY host from the bundle wrapper `ClaudeCode.app/Contents/MacOS/claude`, a hard link to the versioned binary. `codesign --strict` fails at that bundle path, so a row whose executable is the same file object (`st_dev`, `st_ino`) as a binary verified in the same walk counts as that signed binary. `R131/P3` "host composition evidence is unavailable" denials now name the bounded failure code, for example `(HOST_PIN_UNPROVEN: HOST_PIN_VENDOR_MATCH_COUNT_4)`. The code comes from the live observation or from a SessionStart diagnostic that is session-scoped, code-only and never used for authorization.

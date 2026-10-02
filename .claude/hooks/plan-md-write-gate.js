@@ -47,6 +47,20 @@ function confinedRelativePath(projectRoot, requestedPath) {
   return relative.split(path.sep).join('/');
 }
 
+// M67-RS-HARNESS-SUFFIX-IDENTITY-01: mirrors the harnessSuffixCandidateRole
+// helper of context-provider-gate.js, agent-spawn-execution-gate.js and
+// subagent-start-context-bundle.js exactly (duplicated by their precedent:
+// parsing private to each hook). Claude Code names a second canonical
+// Agent(subagent_type="planner") in the same session "planner-2" -- the
+// documented planner Pass B. Only "<role>-<N>" with canonical decimal N>=2.
+function harnessSuffixCandidateRole(name) {
+  const m = /^(.+)-([1-9][0-9]*)$/.exec(name);
+  if (!m) return null;
+  const digits = m[2];
+  if (digits.length === 1 && digits < '2') return null; // excludes "-1" (N must be >=2)
+  return m[1];
+}
+
 let input = '';
 const stdinTimeout = setTimeout(() => process.exit(0), 5000);
 process.stdin.setEncoding('utf8');
@@ -68,12 +82,13 @@ process.stdin.on('end', () => {
   const requestedPath = data.tool_input?.file_path ?? '';
   const filePath = confinedRelativePath(projectRoot, requestedPath);
   const agentType = (data.agent_type ?? '').toLowerCase();
+  const isPlanner = agentType === 'planner' || harnessSuffixCandidateRole(agentType) === 'planner';
 
   // The escape hatch skips mandatory planner delegation for a trivial main-agent
   // change. It must never disable confinement once the active actor is a planner.
-  if (process.env.CLAUDE_SKIP_PLANNER === '1' && agentType !== 'planner') process.exit(0);
+  if (process.env.CLAUDE_SKIP_PLANNER === '1' && !isPlanner) process.exit(0);
 
-  if (agentType === 'planner') {
+  if (isPlanner) {
     const activeSlug = getWaveSlug(projectRoot, { protectedEnvReturnsNull: true });
     if (!activeSlug) {
       block('[planner-gate] planner write denied: active wave slug is unavailable; switch to the wave branch (git switch -c feature/<slug>) or set CLAUDE_WAVE_SLUG before dispatch.');
