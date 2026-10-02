@@ -5,6 +5,14 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 
 ## [Unreleased]
 
+### Fixed (daemon-hosted Claude sessions)
+
+- The interactive host pin admits a session that Claude hosts inside its own daemon (`claude daemon` → `bg-pty-host` → `bg-spare`, optionally with the interactive client above). The host is the nearest signed Claude ancestor. Signed Claude ancestors directly above it are accepted while they are contiguous parent links. A signed Claude reached through a non-vendor process (for example `claude` → `zsh` → `claude`) is still rejected, now as `HOST_PIN_NESTED_VENDOR_HOST`. The stability re-check verifies only the host row, so a transient daemon may exit. `R131/P3` "host composition evidence is unavailable" denials now name the bounded failure code, for example `(HOST_PIN_UNPROVEN: HOST_PIN_VENDOR_MATCH_COUNT_4)`. The code comes from the live observation or from a SessionStart diagnostic that is session-scoped, code-only and never used for authorization.
+
+### Fixed (runtime-rendered role commands)
+
+- Every role template now says that commands the runtime renders for a role are executed exactly as rendered, with their absolute toolkit path. This covers the bootstrap `FIRST Bash=` `ready` command and the consultation `claim`, `lease-heartbeat` and `publish-result` recipe. The launcher-only rule and its "no launcher ID" stop apply only to operations the agent resolves itself. Before this, a consumer context-provider that followed the launcher rule literally refused to claim, and the wave stopped with `WORKER_NOT_CLAIMED`. The template versions and registry are bumped, and `tl-session-start` documents the same exception.
+
 ### Fixed (consumer wave flow, end to end)
 
 - `/init-session --orchestrate` re-binds the wave-control state once from the Pass A draft digest to the final PLAN digest (state was a draft, still PREP at revision 0, no transition, same HEAD and class, the new PLAN has no draft marker). Any other PLAN change stays drift.

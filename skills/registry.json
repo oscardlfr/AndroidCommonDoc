@@ -1923,7 +1923,7 @@
       "description": "Integration architect. Mini-orchestrator: verifies compilation, DI wiring, navigation via MCP tools. Fixes wiring gaps, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:869f0c3c7a2904b021892aebcadf8b25a4861451e09880e6bcf15a326c585e8e",
+      "hash": "sha256:7b7529885a912992bfa1a743ef4284a490ab10989e40c011440e54d66cc58bdc",
       "dependencies": [],
       "frontmatter": {
         "name": "arch-integration",
@@ -1939,7 +1939,7 @@
           "compilation"
         ],
         "token_budget": 4000,
-        "template_version": "1.32.3",
+        "template_version": "1.32.4",
         "skills": [
           "test",
           "extract-errors"
@@ -1953,7 +1953,7 @@
       "description": "Platform architecture architect. Mini-orchestrator: verifies KMP patterns via MCP tools, fixes violations directly or via delegation, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:b9ebb0d480949cbb690587e7ec6e77b4eb01abc167f3197126533a06eb35c97c",
+      "hash": "sha256:9090cf17da9f0736aadad10993dd4cb2c2bd5cfaccf1f223102b37587e7ad5c2",
       "dependencies": [],
       "frontmatter": {
         "name": "arch-platform",
@@ -1968,7 +1968,7 @@
           "encoding"
         ],
         "token_budget": 4000,
-        "template_version": "1.36.3",
+        "template_version": "1.36.4",
         "skills": [
           "verify-kmp",
           "validate-patterns"
@@ -1982,7 +1982,7 @@
       "description": "Test quality architect. Mini-orchestrator: verifies TDD compliance, detects test gaps, delegates fixes to test-specialist, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict.",
       "category": "testing",
       "tier": "core",
-      "hash": "sha256:a49c4e8758e6de148701017ef057d0c70c5bbb993c50a7f43105fa2b22ee90df",
+      "hash": "sha256:661052bade0f805177b167e8597009a31a459bd4d15ca5bee95634ced60efc35",
       "dependencies": [],
       "frontmatter": {
         "name": "arch-testing",
@@ -1997,7 +1997,7 @@
           "test-quality"
         ],
         "token_budget": 4000,
-        "template_version": "1.41.3",
+        "template_version": "1.41.4",
         "skills": [
           "test",
           "test-full-parallel",
@@ -2098,7 +2098,7 @@
       "description": "Context oracle. Pre-caches L0 pattern index on spawn, then answers queries about patterns, docs, rules, specs, and cross-project state via MCP tools. Read-only.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:8198ee52f8c500e453b1fe0f1c1032a131d5bb67d7f6764e2b5a7c40866e0934",
+      "hash": "sha256:071df6f92085de706824d00e8d42bb106fbfd9cf9795569644f3c2d032bfee45",
       "dependencies": [],
       "frontmatter": {
         "name": "context-provider",
@@ -2113,7 +2113,7 @@
           "state"
         ],
         "token_budget": 2000,
-        "template_version": "3.9.1"
+        "template_version": "3.9.2"
       }
     },
     {
@@ -2302,7 +2302,7 @@
       "description": "Documentation updater. Updates roadmap, memory, CHANGELOG, specs after work. Ingests approved external patterns via MCP. Follows L0 patterns (frontmatter, line limits, hub structure).",
       "category": "guides",
       "tier": "extended",
-      "hash": "sha256:eba28aa8be500bd4dfb691f13a88ad3de862b09a7e4ecf37cd390065f8ad7216",
+      "hash": "sha256:18b9f42f598b92d9a188b8a32f9d36200286b8b61c8647bd71769aeaf72b569a",
       "dependencies": [],
       "frontmatter": {
         "name": "doc-updater",
@@ -2318,7 +2318,7 @@
           "ingest"
         ],
         "token_budget": 2000,
-        "template_version": "2.13.1",
+        "template_version": "2.13.3",
         "skills": [
           "audit-docs",
           "readme-audit",
@@ -2538,7 +2538,7 @@
       "description": "Single-use planning subagent. Reads context, specs, architecture to produce structured execution plans. Spawned without team_name; results land as PLAN.md on disk. Works alongside context-provider via SendMessage.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:9f851a05a4343a541e96ef4d9163ab273e3ecd3135eebd1c65cd9b2014cdfe85",
+      "hash": "sha256:2d78f43cd5a965691b3ad549aea098298653ac05e45de3fcb5e294d0afe64cf7",
       "dependencies": [],
       "frontmatter": {
         "name": "planner",
@@ -2553,7 +2553,7 @@
           "estimate"
         ],
         "token_budget": 4000,
-        "template_version": "1.22.4"
+        "template_version": "1.22.6"
       }
     },
     {
@@ -2705,7 +2705,7 @@
       "description": "QG owner (Phase 3). Runs sequential verification on the final committed HEAD after VERIFY-FINAL architect approval. Reports structured PASS/FAIL.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:4e7864fb73a32afd613a03d347042df0294ff63be4ce7e0b49726116e5b4c083",
+      "hash": "sha256:283d2741dc16528081fb6ef9f3a63f2f96c6e29bf3c7c4bc90072da80330a6aa",
       "dependencies": [],
       "frontmatter": {
         "name": "quality-gater",
@@ -2721,7 +2721,7 @@
           "detekt"
         ],
         "token_budget": 3000,
-        "template_version": "2.28.2"
+        "template_version": "2.28.4"
       }
     },
     {
@@ -2905,7 +2905,7 @@
       "description": "Owns mcp-server TypeScript source, .claude/hooks/*.js runtime code, scripts/lib runtime facades and internal CommonJS modules, and non-test shell tooling. Reports to arch-platform. Does NOT write test files (test-specialist's domain).",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:464b1bbb6626b9b12259b587dd0b5531492d1348e7b71921c1a0bf2a3ec7b14d",
+      "hash": "sha256:80e697b6cba46ec96995d14f07ef2049515a8394b6f0e14fc4955f23b2c6865b",
       "dependencies": [],
       "frontmatter": {
         "name": "toolkit-specialist",
@@ -2924,7 +2924,7 @@
           "validator"
         ],
         "token_budget": 3000,
-        "template_version": "1.10.1"
+        "template_version": "1.10.2"
       }
     },
     {
@@ -2966,7 +2966,7 @@
       "description": "Goal-backward verification — checks if code achieves stated goals and success criteria. Use after implementation to verify deliverables match spec.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:4b6ea11a5daa47e2f08ea4bcca0904b98148658e9ff4cc1bb99f51be9964b735",
+      "hash": "sha256:0c7451b487364b0a99122bff9a4b31bf889b93362db8c6bde7330da8e31b6ee4",
       "dependencies": [],
       "frontmatter": {
         "name": "verifier",
@@ -2982,7 +2982,7 @@
           "check"
         ],
         "token_budget": 2000,
-        "template_version": "1.2.1",
+        "template_version": "1.2.2",
         "skills": [
           "verify",
           "test",

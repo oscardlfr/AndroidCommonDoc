@@ -52,13 +52,14 @@ describe("planner template enforces T-BUG-015 Search Dispatch Protocol", () => {
       const frontmatter = extractFrontmatter(raw);
       const body = extractBody(raw);
 
-      it('has template_version "1.22.5"', () => {
+      it('has template_version "1.22.6"', () => {
         // BL-W48 team-model migration: bumped 1.17.0 → 1.18.0 (session-team removal),
         // then 1.18.0 → 1.22.0 (single-use reframe + portable instruction authority).
         expect(frontmatter).not.toBeNull();
         // Consumer runtime portability adds the launcher boundary; 1.22.2 makes the Pass A draft orchestratable.
         // 1.22.5 documents the exact final PLAN shape.
-        expect(frontmatter?.template_version).toBe("1.22.5");
+        // 1.22.6 lets runtime-rendered commands run verbatim despite the launcher rule.
+        expect(frontmatter?.template_version).toBe("1.22.6");
       });
 
       it("body contains T-BUG-015", () => {

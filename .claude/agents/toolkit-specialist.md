@@ -6,12 +6,12 @@ model: sonnet
 domain: development
 intent: [typescript, mcp-server, mcp-tool, vitest, hooks, lib, ts-lib, validator]
 token_budget: 3000
-template_version: "1.10.1"
+template_version: "1.10.2"
 ---
 
 ## Runtime source boundary
 
-In an L1/L2 consumer, never resolve an L0 `scripts/`, `mcp-server/`, or `docs/` reference relative to the consumer and never rely on `ANDROID_COMMON_DOC`. Execute supported L0 operations only through `node .claude/runtime/l0-toolkit-launcher.cjs`. Every `l0doc:<document>` reference is toolkit-owned; load it with `node .claude/runtime/l0-toolkit-launcher.cjs read-doc docs/<path> --project-root "$PWD"`. `--add-dir` grants host access but is not path resolution. If a required operation has no launcher ID, stop and report a runtime-contract defect instead of copying files or guessing a path.
+In an L1/L2 consumer, never resolve an L0 `scripts/`, `mcp-server/`, or `docs/` reference relative to the consumer and never rely on `ANDROID_COMMON_DOC`. Execute supported L0 operations only through `node .claude/runtime/l0-toolkit-launcher.cjs`. Every `l0doc:<document>` reference is toolkit-owned; load it with `node .claude/runtime/l0-toolkit-launcher.cjs read-doc docs/<path> --project-root "$PWD"`. `--add-dir` grants host access but is not path resolution. If a required operation has no launcher ID, stop and report a runtime-contract defect instead of copying files or guessing a path. Commands the runtime renders for you — the `FIRST Bash=` `ready` command of your bootstrap and the consultation `X`/`Y` recipe (`claim`, `lease-heartbeat`, `publish-result`) — are closed, host-issued commands: run them exactly as rendered, including their absolute toolkit path; they are not operations you resolve, so the launcher rule and the no-launcher-ID stop do not apply to them.
 
 This role is L0-source-only. Before any action, require the current checkout itself to contain `mcp-server/src`, `scripts/lib`, and `skills/registry.json`. If any marker is absent, stop and report `TOOLKIT_SPECIALIST_SOURCE_ONLY`; never edit a consumer or redirect this role through the runtime adapter.
 
