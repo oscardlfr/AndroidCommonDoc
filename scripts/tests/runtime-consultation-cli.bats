@@ -239,6 +239,15 @@ setup() {
     node "$GRANT_WRAPPER" root-init --coordination-root "$COORD_ROOT" >/dev/null 2>&1 || true
 }
 
+@test "RCC-runtime-artifact-1: generated coordination subject bundle is ignored by the owning repository" {
+  local repo_root
+  repo_root="$(cd "$BATS_TEST_DIRNAME/../.." && pwd)"
+
+  run git -C "$repo_root" check-ignore -q .planning/coordination-subject-bundle-manifest.json
+
+  [ "$status" -eq 0 ]
+}
+
 teardown() {
   if [ -n "$RUNTIME_TMP" ] && _assert_isolated_runtime_tmp "$RUNTIME_TMP" >/dev/null 2>&1; then
     # M6+M7 SIXTEENTH Phase 2B follow-up: some fixtures materialize a
