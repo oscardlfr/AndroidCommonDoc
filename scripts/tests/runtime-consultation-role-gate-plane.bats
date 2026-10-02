@@ -1565,7 +1565,17 @@ _s16e2e_create_arch_platform_claude_peer() {
 @test "S16-ROOT-INGRESS-WAL-RECOVERY-01: crash between durable request.json and durable published-marker recovers the SAME preallocated request_id, never mints a second transaction" {
   local session_id="s16e2e-ri-crash-session"
   S16E2E_BG_PID=""
+  # Deterministic precondition, not a race: hold every non-bootstrap turn open
+  # so the consult cannot complete. A real crash between request.json and the
+  # published-marker can never leave a completion record behind, but a
+  # cooperative fake can complete the turn before the marker is deleted below;
+  # consult-root-status then correctly fails closed DURABILITY_UNPROVEN on a
+  # completion without its published-marker (CI runs 36860970648, 36899873383
+  # and 36962126401 shard 2). Same isolation as S16-ROOT-INGRESS-TARGET-LOST-01.
+  local previous_fake_mode="${S16E2E_FAKE_MODE:-}"
+  S16E2E_FAKE_MODE="hold-non-bootstrap"
   _s16e2e_start_retained_plane "$session_id"
+  S16E2E_FAKE_MODE="$previous_fake_mode"
   _s16e2e_consult_root_publish "$session_id" "ROOT-INGRESS-WAL-RECOVERY-01"
   local intent_id="$S16E2E_CR_INTENT_ID"
 
@@ -1587,6 +1597,8 @@ _s16e2e_create_arch_platform_claude_peer() {
   # writes would leave (reservation + request.json survive; only the LAST
   # write in that lock body is deleted here, mirroring S16-ROOT-SOURCE-WAL-
   # RECOVERY-01's own precedent of deleting the last-written artifact).
+  local completion_path; completion_path="$(node -e 'const rll=require(process.argv[1]); process.stdout.write(rll.rootConsultCompletionPathFor(process.argv[2], process.argv[3]));' "$RLL_IMPL" "$PROJ" "$intent_id")"
+  [ ! -f "$completion_path" ]
   rm -f "$published_path"
   [ ! -f "$published_path" ]
 
