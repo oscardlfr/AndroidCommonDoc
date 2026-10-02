@@ -5,8 +5,9 @@
 // embed it, so the two activation paths cannot drift apart: claim, then lease-heartbeat, then publish-result, each as
 // one standalone single-quoted command.
 
-const TARGET_COMMAND_LINE = 'Bash=single-quote tokens;no chain.Before reads:X+["claim"]+Y+["--role",r];need SUCCESS;K=artifact_ref;'
-  + '60s:X+["lease-heartbeat"]+Y+["--claim",K];X+["publish-result"]+Y+["--claim",K,"--content",B];B=b64url(result);Invalid=>no tool';
+const TARGET_COMMAND_LINE = 'Bash=single-quote;no-chain.Pre-read:X+["claim"]+Y+["--role",r];need SUCCESS;'
+  + 'Z=["--claim",artifact_ref];60s:X+["lease-heartbeat"]+Y+Z;'
+  + 'X+["publish-result"]+Y+Z+["--content",B];B=b64url(result);invalid:stop';
 
 function consultationTargetCommandLine() {
   return TARGET_COMMAND_LINE;

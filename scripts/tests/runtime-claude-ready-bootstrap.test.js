@@ -4,13 +4,24 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
+const { spawnSync } = require('node:child_process');
 
+process.env.NODE_ENV = 'test';
+process.env.RUNTIME_ROLE_LIFECYCLE_TEST_CAPABILITY = 'claude-bootstrap-envelope-v1';
+process.env.RUNTIME_COLLABORATION_ENTRYPOINTS_TEST_CAPABILITY = 'p3-entrypoints-v1';
+
+const lifecycle = require('../lib/runtime-role-lifecycle.cjs');
 const {
   claudeReadyBootstrapMessageFor,
+  __TEST_ONLY__claudeReadyBootstrapMessageForPaths: claudeReadyBootstrapMessageForPathsForTest,
   coordinationRootPathFor,
   renderPosixDirect,
   parsePosixDirect,
-} = require('../lib/runtime-role-lifecycle.cjs');
+} = lifecycle;
+const {
+  __TEST_ONLY__makeEnvelope: makeEnvelope,
+  __TEST_ONLY__nativeToolResultEnvelopeBudgetBytes: NATIVE_TOOL_RESULT_ENVELOPE_BUDGET_BYTES,
+} = require('../lib/runtime-collaboration-entrypoints.cjs');
 
 const VALID_ACTION_ID = 'a'.repeat(32);
 const VALID_ROLE = 'arch-platform';
@@ -22,6 +33,17 @@ const SUPPORT_ROLES = [
   'context-provider',
   'doc-updater',
 ];
+const FIXED_SELECTION = Object.freeze({
+  actual_host: 'claude',
+  actual_model: 'claude-sonnet-5',
+  actual_role_engine: 'claude',
+  continuity: 'session-persistent',
+  fallback_reason: null,
+  fallback_used: false,
+  requested_host: 'claude',
+  requested_model_profile: '.claude/model-profiles.json#current',
+  requested_role_engine: 'claude',
+});
 
 function messageForReceiver() {
   return claudeReadyBootstrapMessageFor(VALID_ACTION_ID, VALID_ROLE, PROJECT_ROOT);
@@ -48,14 +70,14 @@ test('valid scope returns the exact ready command followed by a closed persisten
   assert.ok(message.startsWith('FIRST Bash='));
   assert.match(message, /;require READY else report\/stop;WAIT\./);
   assert.match(message, /COORDINATION_CONSULT\/v1\\n/);
-  assert.match(message, /artifact_path,kind,request_id,role,target_role/);
+  assert.match(message, /JSON exact\{artifact_path,kind,request_id,role,target_role\}/);
   assert.match(message, /target_role=r/);
-  assert.match(message, /Bash=single-quote tokens;no chain/);
-  assert.match(message, /Before reads:/);
-  assert.match(message, /need SUCCESS;K=artifact_ref/);
+  assert.match(message, /Bash=single-quote;no-chain/);
+  assert.match(message, /Pre-read:/);
+  assert.match(message, /need SUCCESS;Z=\["--claim",artifact_ref\]/);
   assert.match(message, /lease-heartbeat/);
   assert.match(message, /publish-result/);
-  assert.match(message, /Invalid=>no tool/);
+  assert.match(message, /invalid:stop/);
 });
 
 test('the embedded command parses with the real parsePosixDirect', () => {
@@ -131,10 +153,11 @@ test('receiver command templates pin canonical executable, script, coordination 
       '--request', '{{ARTIFACT_PATH}}', '--claim', '{{CLAIM}}', '--content', '{{CONTENT_BASE64URL}}',
     ]),
   };
-  assert.ok(message.includes('X=[n,C];Y=["--coordination-root",Q,"--request",A]'));
+  assert.ok(message.includes('Q=p+"/.planning/coordination";X=[n,C];Y=["--coordination-root",Q,"--request",artifact_path]'));
   assert.ok(message.includes('X+["claim"]+Y+["--role",r]'));
-  assert.ok(message.includes('X+["lease-heartbeat"]+Y+["--claim",K]'));
-  assert.ok(message.includes('X+["publish-result"]+Y+["--claim",K,"--content",B]'));
+  assert.ok(message.includes('Z=["--claim",artifact_ref]'));
+  assert.ok(message.includes('X+["lease-heartbeat"]+Y+Z'));
+  assert.ok(message.includes('X+["publish-result"]+Y+Z+["--content",B]'));
   assert.equal(expectedCommands.claim, renderPosixDirect([
     contract.n, path.join(contract.p, 'scripts', 'lib', 'runtime-consultation.cjs'),
     'claim', '--coordination-root', path.join(contract.p, '.planning', 'coordination'),
@@ -142,22 +165,31 @@ test('receiver command templates pin canonical executable, script, coordination 
   ]));
 });
 
-// The five-action envelope embeds the project root TWICE per action (once in the
-// ready command, once in the receiver contract) and the node path once per
-// action -- so every project-root character costs 10 envelope bytes and every
-// node-path character costs 5. Measuring the AMBIENT checkout therefore makes
-// this assertion a property of wherever the repository happens to live: it
-// passes on a short CI checkout and fails on a deep worktree, while proving
-// nothing stable about the envelope itself. Declare the bound instead, measure
-// against it, and separately assert the bound is genuinely met -- so a
-// regression that fattens the envelope is still caught, deterministically, on
-// every platform.
+// The five-action envelope necessarily repeats the absolute, realpath-verified
+// node and toolkit executables for each independent role action. The receiver
+// contract therefore keeps the operated project root exactly once and reuses
+// closed argv suffixes (Y and Z), rather than repeating long absolute values or
+// one-use aliases. Measure a declared root bound instead of the ambient checkout
+// so a deep worktree cannot make this test nondeterministic.
 const MAX_SUPPORTED_PROJECT_ROOT_CHARS = 100;
-const NATIVE_TOOL_RESULT_ENVELOPE_BUDGET_BYTES = 9300;
+const HERMETIC_NODE_PATH_CHARS = 45;
+const HERMETIC_TOOLKIT_ROOT_CHARS = 88;
 
-function fiveRoleEnvelopeBytesForRootLength(rootLength) {
-  const projectRoot = path.sep + 'p'.repeat(rootLength - 1);
-  const actions = SUPPORT_ROLES.map((role, index) => ({
+function absolutePathOfLength(length, fill) {
+  const root = path.parse(path.resolve(path.sep)).root;
+  assert.ok(length > root.length);
+  const value = path.join(root, fill.repeat(length - root.length));
+  assert.equal(value.length, length);
+  assert.ok(path.isAbsolute(value));
+  return value;
+}
+
+const HERMETIC_NODE_PATH = absolutePathOfLength(HERMETIC_NODE_PATH_CHARS, 'n');
+const HERMETIC_TOOLKIT_ROOT = absolutePathOfLength(HERMETIC_TOOLKIT_ROOT_CHARS, 't');
+
+function fiveRoleActionsForPaths(rootLength, nodePath = HERMETIC_NODE_PATH, toolkitRoot = HERMETIC_TOOLKIT_ROOT) {
+  const projectRoot = absolutePathOfLength(rootLength, 'p');
+  return SUPPORT_ROLES.map((role, index) => ({
     schema: 'coordination/role-lifecycle-action/v1',
     action_id: String(index + 1).repeat(32),
     kind: 'role-spawn',
@@ -174,30 +206,23 @@ function fiveRoleEnvelopeBytesForRootLength(rootLength) {
       teammate_name: role,
       agent_type: role,
       bootstrap_artifact_ref: null,
-      bootstrap_message: claudeReadyBootstrapMessageFor(String(index + 1).repeat(32), role, projectRoot),
+      bootstrap_message: claudeReadyBootstrapMessageForPathsForTest(
+        String(index + 1).repeat(32), role, projectRoot,
+        nodePath, toolkitRoot,
+      ),
     },
     operation: 'Agent',
   }));
-  const envelope = {
-    actions,
-    detail: 'support-plane-action-required',
-    entrypoint: 'init-session',
-    result: null,
-    schema: 'runtime/collaboration-entrypoint-result/v1',
-    selection: {
-      actual_host: 'claude',
-      actual_model: 'claude-sonnet-5',
-      actual_role_engine: 'claude',
-      continuity: 'session-persistent',
-      fallback_reason: null,
-      fallback_used: false,
-      requested_host: 'claude',
-      requested_model_profile: '.claude/model-profiles.json#current',
-      requested_role_engine: 'claude',
-    },
-    status: 'ACTION_REQUIRED',
-  };
-  return Buffer.byteLength(JSON.stringify(envelope), 'utf8');
+}
+
+function fiveRoleEnvelopeBytesForRootLength(rootLength) {
+  const envelope = makeEnvelope(
+    'init-session', 'ACTION_REQUIRED', 'support-plane-action-required', FIXED_SELECTION,
+    fiveRoleActionsForPaths(rootLength),
+  );
+  return envelope.status === 'ACTION_REQUIRED'
+    ? Buffer.byteLength(JSON.stringify(envelope), 'utf8')
+    : Number.POSITIVE_INFINITY;
 }
 
 test('five receiver actions fit the pinned native tool-result transport budget', () => {
@@ -207,13 +232,22 @@ test('five receiver actions fit the pinned native tool-result transport budget',
     + `for a project root of the declared maximum ${MAX_SUPPORTED_PROJECT_ROOT_CHARS} characters; saw ${envelopeBytes}`);
 });
 
-test('the envelope keeps genuine headroom above the declared maximum project-root length', () => {
-  // Proves the declared bound is not merely asserted but actually achievable on
-  // THIS host (the node path is ambient and also costs 5 bytes per character),
-  // and pins the headroom so a change that fattens the envelope is caught even
-  // when the declared maximum still happens to fit.
+test('the compact receiver contract carries an external project root exactly once', () => {
+  const projectRoot = absolutePathOfLength(MAX_SUPPORTED_PROJECT_ROOT_CHARS, 'p');
+  const message = claudeReadyBootstrapMessageForPathsForTest(
+    VALID_ACTION_ID, VALID_ROLE, projectRoot, HERMETIC_NODE_PATH, HERMETIC_TOOLKIT_ROOT,
+  );
+  assert.equal(message.split(projectRoot).length - 1, 1);
+  assert.ok(!message.includes('A=artifact_path'));
+  assert.ok(message.includes('Q=p+'));
+  assert.equal(receiverContractFrom(message).n, 'node');
+});
+
+test('the envelope supports the declared maximum project-root length hermetically', () => {
+  // The fixed node/toolkit paths make this a protocol property, not a property
+  // of whichever checkout happens to execute the test.
   let supported = 0;
-  for (let length = 1; length <= 400; length += 1) {
+  for (let length = 8; length <= 400; length += 1) {
     if (fiveRoleEnvelopeBytesForRootLength(length) <= NATIVE_TOOL_RESULT_ENVELOPE_BUDGET_BYTES) supported = length;
     else break;
   }
@@ -222,8 +256,52 @@ test('the envelope keeps genuine headroom above the declared maximum project-roo
     + `the largest that fits on this host is ${supported}`);
   // A shorter root must obviously still fit -- guards against an inverted or
   // length-insensitive measurement passing the bound check for the wrong reason.
-  assert.ok(fiveRoleEnvelopeBytesForRootLength(20) < fiveRoleEnvelopeBytesForRootLength(120),
+  assert.ok(fiveRoleEnvelopeBytesForRootLength(20) < fiveRoleEnvelopeBytesForRootLength(100),
     'the envelope must grow with the project-root length, or this budget measures nothing');
+});
+
+test('an oversized real-path combination returns an actionable small failure from the real envelope boundary', () => {
+  const deepToolkitRoot = absolutePathOfLength(HERMETIC_TOOLKIT_ROOT_CHARS + 80, 't');
+  const envelope = makeEnvelope(
+    'init-session', 'ACTION_REQUIRED', 'support-plane-action-required', FIXED_SELECTION,
+    fiveRoleActionsForPaths(MAX_SUPPORTED_PROJECT_ROOT_CHARS, HERMETIC_NODE_PATH, deepToolkitRoot),
+  );
+  assert.equal(envelope.status, 'FAILED');
+  assert.deepEqual(envelope.actions, []);
+  assert.match(envelope.detail, /^support-plane-envelope-too-large:bytes=\d+:max=9300:actions=5:/);
+  assert.ok(envelope.detail.endsWith('shorten-project-or-toolkit-paths'));
+  assert.ok(Buffer.byteLength(JSON.stringify(envelope), 'utf8') < NATIVE_TOOL_RESULT_ENVELOPE_BUDGET_BYTES);
+});
+
+test('the size guard is limited to init-session support-plane ACTION_REQUIRED', () => {
+  const deepToolkitRoot = absolutePathOfLength(HERMETIC_TOOLKIT_ROOT_CHARS + 80, 't');
+  const actions = fiveRoleActionsForPaths(
+    MAX_SUPPORTED_PROJECT_ROOT_CHARS, HERMETIC_NODE_PATH, deepToolkitRoot,
+  );
+  for (const [entrypoint, status, detail] of [
+    ['resume-work', 'ACTION_REQUIRED', 'support-plane-action-required'],
+    ['init-session', 'READY', 'support-plane-action-required'],
+    ['init-session', 'ACTION_REQUIRED', 'recovery-action-required'],
+  ]) {
+    const envelope = makeEnvelope(entrypoint, status, detail, FIXED_SELECTION, actions);
+    assert.equal(envelope.status, status);
+    assert.equal(envelope.actions.length, actions.length);
+    assert.ok(Buffer.byteLength(JSON.stringify(envelope), 'utf8') > NATIVE_TOOL_RESULT_ENVELOPE_BUDGET_BYTES);
+  }
+});
+
+test('the fixed-path constructor is non-enumerable and absent without its test capability', () => {
+  assert.equal(Object.prototype.propertyIsEnumerable.call(
+    lifecycle, '__TEST_ONLY__claudeReadyBootstrapMessageForPaths',
+  ), false);
+  const modulePath = require.resolve('../lib/runtime-role-lifecycle.cjs');
+  const env = { ...process.env };
+  delete env.RUNTIME_ROLE_LIFECYCLE_TEST_CAPABILITY;
+  const probe = spawnSync(process.execPath, ['-e',
+    `const m=require(${JSON.stringify(modulePath)});process.stdout.write(String('__TEST_ONLY__claudeReadyBootstrapMessageForPaths' in m));`,
+  ], { encoding: 'utf8', env });
+  assert.equal(probe.status, 0, probe.stderr);
+  assert.equal(probe.stdout, 'false');
 });
 
 test('invalid action ids throw TypeError with message invalid-action-id', () => {
@@ -244,5 +322,17 @@ test('invalid receiver role or project root fails closed', () => {
   assert.throws(
     () => claudeReadyBootstrapMessageFor(VALID_ACTION_ID, VALID_ROLE, 'relative-root'),
     (err) => err instanceof TypeError && err.message === 'invalid-project-root'
+  );
+  assert.throws(
+    () => claudeReadyBootstrapMessageForPathsForTest(
+      VALID_ACTION_ID, VALID_ROLE, PROJECT_ROOT, 'relative-node', HERMETIC_TOOLKIT_ROOT,
+    ),
+    (err) => err instanceof TypeError && err.message === 'invalid-node-path'
+  );
+  assert.throws(
+    () => claudeReadyBootstrapMessageForPathsForTest(
+      VALID_ACTION_ID, VALID_ROLE, PROJECT_ROOT, HERMETIC_NODE_PATH, 'relative-toolkit',
+    ),
+    (err) => err instanceof TypeError && err.message === 'invalid-toolkit-root'
   );
 });

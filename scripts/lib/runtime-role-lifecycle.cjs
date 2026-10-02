@@ -312,7 +312,8 @@ const lifecycleActionPayloads = createLifecycleActionPayloads({
 const {
   buildTeamEnsurePayload, buildRoleSpawnPayload, buildRoleRebindClaudeNativePayload,
   buildRoleRebindHostProcessPayload, buildRoleNotifyPayload, buildRoleStopOwnedPayload,
-  resolvedNodePath, claudeReadyBootstrapMessageFor, buildSupervisorStartPayload,
+  resolvedNodePath, claudeReadyBootstrapMessageFor, claudeReadyBootstrapMessageForPaths,
+  buildSupervisorStartPayload,
   ROLE_LIFECYCLE_ACTION_KEYS_SORTED, SUPERVISOR_START_PAYLOAD_KEYS_SORTED,
   validateSupervisorStartAction, buildSupervisorStopOwnedPayload,
 } = lifecycleActionPayloads;
@@ -1477,6 +1478,18 @@ Object.defineProperties(module.exports, {
   settleClaudeLivenessProbeOutcome: { value: settleClaudeLivenessProbeOutcome, enumerable: false, writable: true, configurable: true },
   findClaudeLivenessProbeState: { value: findClaudeLivenessProbeState, enumerable: false, writable: true, configurable: true },
 });
+// Hermetic transport-size proofs need fixed executable/toolkit paths rather
+// than the ambient checkout. Keep that pure constructor out of the production
+// ABI and expose it only to an explicitly-capable test process.
+if (process.env.NODE_ENV === 'test'
+    && process.env.RUNTIME_ROLE_LIFECYCLE_TEST_CAPABILITY === 'claude-bootstrap-envelope-v1') {
+  Object.defineProperty(module.exports, '__TEST_ONLY__claudeReadyBootstrapMessageForPaths', {
+    value: claudeReadyBootstrapMessageForPaths,
+    enumerable: false,
+    writable: false,
+    configurable: false,
+  });
+}
 // M7 §10.1: test-only rendezvous surface (mirrors runtime-consultation.cjs's own
 // isTestCapability()-gated export; production never observes these names).
 if (isTestCapability()) {
