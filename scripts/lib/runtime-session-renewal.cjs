@@ -4,6 +4,8 @@
 // identity is known. Nothing is renewed unless the identity proof passes first:
 //   - a subagent (agentId present): its full CLAUDE-ID-01 startup proof for the current PLAN (the check the gates use: fence,
 //     binding, generation, capability); then its actor binding, its requester binding and the session generation slide;
+//   - a policy-defined phase/wave actor: the trusted native hook tuple, signed host scope, live generation and unfenced
+//     authority classification suffice to slide only the generation. These actors do not own persistent startup bindings.
 //   - the top-level session (no agentId): the session generation slides if it is still live.
 // Only an `expires_at`/`expiry` field is rewritten (atomic replace under the record's own lock), to now + idle TTL capped at
 // created_at + absolute TTL, and only when less than the cadence threshold remains. An expired, fenced, foreign or
@@ -14,6 +16,7 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 const rll = require('./runtime-role-lifecycle.cjs');
 const rc = require('./runtime-consultation.cjs');
+const claudeHost = require('./runtime-host-claude.cjs');
 const {
   SESSION_IDLE_TTL_SECONDS, SESSION_RENEW_BELOW_SECONDS, absoluteLimitMs,
 } = require('./runtime-session-lifetime.cjs');
@@ -285,10 +288,14 @@ function renewRecord(projectRoot, recordPath, field, validate) {
   return locked.ok ? locked.value : { ok: false, renewed: false, reason: locked.reason };
 }
 
-function renewSessionGeneration(projectRoot, sessionId) {
+function renewSessionGeneration(projectRoot, sessionId, verifyActivity) {
   const identity = { provider: 'claude-hook', runtime_session_key: sessionId };
   const recordPath = rll.sessionGenerationPathFor(projectRoot, identity);
   return renewRecord(projectRoot, recordPath, 'expires_at', () => {
+    if (verifyActivity) {
+      const activity = verifyActivity();
+      if (!activity.ok) return activity;
+    }
     const read = rll.readRegistryRecord(recordPath);
     if (!read.ok || read.absent) return { ok: false, reason: 'session-generation-absent' };
     // peekSessionGeneration is the live judge: expired, absolute-expired and malformed records are refused.
@@ -325,10 +332,60 @@ function renewRequesterBinding(projectRoot, sessionId, agentId, role, worktreeId
   });
 }
 
+function canonicalObservedRole(agentType) {
+  if (typeof agentType !== 'string' || Buffer.byteLength(agentType, 'utf8') > 512) return null;
+  if (rll.CANONICAL_ROLES.includes(agentType)) return agentType;
+  // Same harness instance convention as the native spawn boundary: N >= 2,
+  // without leading zeroes or conversion of an unbounded number.
+  const instance = /^(.+)-([1-9][0-9]*)$/.exec(agentType);
+  if (!instance || (instance[2].length === 1 && instance[2] < '2')) return null;
+  return rll.CANONICAL_ROLES.includes(instance[1]) ? instance[1] : null;
+}
+
+function checkPhaseActorSessionActivity(projectRoot, sessionId, agentId, role, worktreeId, planDigest) {
+  const pair = rll.resolvePolicyPair(projectRoot);
+  if (!pair.ok || !role || pair.policy.support_plane.includes(role)
+      || (!pair.policy.phase_scoped_roles.includes(role) && !Object.hasOwn(pair.routing.routes, role))) {
+    return { ok: false, reason: 'phase-actor-role-invalid' };
+  }
+  const currentPlan = rll.discoverPlan(projectRoot);
+  if (!currentPlan.ok || currentPlan.planDigest !== planDigest || rll.computeWorktreeId(projectRoot) !== worktreeId) {
+    return { ok: false, reason: 'phase-actor-scope-drift' };
+  }
+  const generation = rll.peekSessionGeneration(projectRoot, { provider: 'claude-hook', runtime_session_key: sessionId });
+  if (!generation.ok) return generation;
+  const host = claudeHost.getProductionSessionIdentity(projectRoot, sessionId, { worktreeId, planDigest });
+  if (!host.ok || !host.record || host.record.session_digest !== rc.sha256String(sessionId)
+      || host.record.worktree_id !== worktreeId || host.record.plan_digest !== planDigest) {
+    return { ok: false, reason: 'phase-actor-host-unproven' };
+  }
+  const authority = rll.classifyClaudeAuthorityForIdentity(projectRoot, {
+    schema: rll.CLAUDE_AUTHORITY_IDENTITY_SCHEMA, provider: 'claude-hook',
+    repo_id: rll.computeRepoId(projectRoot), runtime_session_key: sessionId, agent_id: agentId,
+  });
+  if (!authority.ok || !['ABSENT', 'ONE'].includes(authority.state)) {
+    return { ok: false, reason: authority.reason || 'phase-actor-authority-invalid' };
+  }
+  if (authority.state === 'ONE' && (!authority.binding || authority.binding.role !== role
+      || authority.binding.worktree_id !== worktreeId || authority.binding.plan_digest !== planDigest
+      || authority.binding.session_generation_id !== generation.generationId)) {
+    return { ok: false, reason: 'phase-actor-authority-scope-invalid' };
+  }
+  // This is session maintenance, never actor admission: ABSENT remains ABSENT,
+  // no binding/grant is minted, and the normal tool gate still decides access.
+  return { ok: true };
+}
+
 /** @returns {{renewed:boolean, reason?:string}} */
 function renewSessionActivityForHook(projectRoot, { sessionId, agentId, agentType } = {}) {
   try {
-    if (typeof sessionId !== 'string' || sessionId.length === 0) return { renewed: false, reason: 'session-id-invalid' };
+    if (typeof sessionId !== 'string' || sessionId.length === 0 || Buffer.byteLength(sessionId, 'utf8') > 512) return { renewed: false, reason: 'session-id-invalid' };
+    if (agentId !== undefined && (typeof agentId !== 'string' || Buffer.byteLength(agentId, 'utf8') > 512)) {
+      return { renewed: false, reason: 'agent-id-invalid' };
+    }
+    if (agentType !== undefined && agentType !== '' && (typeof agentId !== 'string' || agentId.length === 0)) {
+      return { renewed: false, reason: 'agent-id-invalid' };
+    }
     if (typeof agentId !== 'string' || agentId.length === 0) {
       const generation = renewSessionGeneration(projectRoot, sessionId);
       return { renewed: generation.renewed, reason: generation.reason };
@@ -336,11 +393,20 @@ function renewSessionActivityForHook(projectRoot, { sessionId, agentId, agentTyp
     const plan = rll.discoverPlan(projectRoot);
     if (!plan.ok) return { renewed: false, reason: 'plan-not-discoverable' };
     const worktreeId = rll.computeWorktreeId(projectRoot);
-    const proof = rll.checkClaudeId01ProofComplete(projectRoot, sessionId, worktreeId, plan.planDigest, agentType, agentId);
+    const role = canonicalObservedRole(agentType);
+    if (!role) return { renewed: false, reason: 'actor-role-invalid' };
+    const phase = checkPhaseActorSessionActivity(projectRoot, sessionId, agentId, role, worktreeId, plan.planDigest);
+    if (phase.ok) {
+      const generation = renewSessionGeneration(projectRoot, sessionId, () =>
+        checkPhaseActorSessionActivity(projectRoot, sessionId, agentId, role, worktreeId, plan.planDigest));
+      return { renewed: generation.renewed, reason: generation.reason };
+    }
+    if (phase.reason !== 'phase-actor-role-invalid') return { renewed: false, reason: phase.reason };
+    const proof = rll.checkClaudeId01ProofComplete(projectRoot, sessionId, worktreeId, plan.planDigest, role, agentId);
     if (!proof.ok || !proof.binding) return { renewed: false, reason: proof.reason || 'identity-proof-failed' };
-    const binding = renewRoleActorBinding(projectRoot, proof.binding.binding_id, agentType, worktreeId, plan.planDigest);
+    const binding = renewRoleActorBinding(projectRoot, proof.binding.binding_id, role, worktreeId, plan.planDigest);
     const generation = renewSessionGeneration(projectRoot, sessionId);
-    const requester = renewRequesterBinding(projectRoot, sessionId, agentId, agentType, worktreeId, plan.planDigest);
+    const requester = renewRequesterBinding(projectRoot, sessionId, agentId, role, worktreeId, plan.planDigest);
     return {
       renewed: Boolean(binding.renewed || generation.renewed || requester.renewed),
       reason: binding.reason || generation.reason || (requester.ok ? undefined : requester.reason),

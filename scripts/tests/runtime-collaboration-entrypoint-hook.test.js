@@ -18,6 +18,7 @@ const crypto = require('crypto');
 const fs = require('fs');
 const os = require('os');
 const { spawnSync } = require('child_process');
+const { runOrphanedSessionStart } = require('./lib/orphaned-session-start.cjs');
 
 const REPO_ROOT = path.resolve(__dirname, '../..');
 const HOOK_PATH = path.join(REPO_ROOT, '.claude/hooks/context-provider-gate.js');
@@ -522,7 +523,9 @@ assert.strictEqual(passed, 19);
     transcript_path: path.join(os.tmpdir(), 'r131-p4-no-persist-transcript-' + crypto.randomBytes(8).toString('hex') + '.jsonl'),
     cwd: REPO_ROOT, model: 'claude-sonnet-5',
   };
-  const result = spawnSync(process.execPath, [SESSION_START_HOOK_PATH], {
+  const result = process.platform === 'darwin'
+    ? runOrphanedSessionStart({ event, hookPath: SESSION_START_HOOK_PATH, projectRoot: REPO_ROOT })
+    : spawnSync(process.execPath, [SESSION_START_HOOK_PATH], {
     input: JSON.stringify(event), encoding: 'utf8', cwd: REPO_ROOT,
     env: Object.assign({}, process.env, { CLAUDE_PROJECT_DIR: REPO_ROOT }),
     timeout: 25000,

@@ -1241,6 +1241,7 @@ const SOURCE_REFERENCED_HOOK_FILES = new Set([
   "context-provider-gate.js",
   "context-provider-consulted.js",
   "hook-control-plane-utils.js",
+  "kmp-test-runner-gate.js",
   "premature-execution-gate.js",
   "plan-md-write-gate.js",
   "push-authorization-gate.js",

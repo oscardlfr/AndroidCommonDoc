@@ -14,8 +14,9 @@ const { test } = require('node:test');
 const rll = require('../lib/runtime-role-lifecycle.cjs');
 const rc = require('../lib/runtime-consultation.cjs');
 const renewal = require('../lib/runtime-session-renewal.cjs');
+const claudeHost = require('../lib/runtime-host-claude.cjs');
 const { installConsumerFixture, toolkitHostContractAvailable } = require('./lib/consumer-runtime-fixture.cjs');
-const { primeClaudeId01V2ActorProof } = require('./fixtures/runtime-claude-id01-v2-fixture.cjs');
+const { primeClaudeId01V2ActorProof, primeProductionClaudeHostAdmission } = require('./fixtures/runtime-claude-id01-v2-fixture.cjs');
 
 const SKIP = toolkitHostContractAvailable() ? false : `no signed Claude host contract for ${process.platform} in this toolkit`;
 const POSIX_ONLY_SKIP = SKIP || (process.platform === 'win32' ? 'POSIX directory barrier only' : false);
@@ -85,6 +86,159 @@ function requesterRecord(root, agentId) {
   const recordPath = rll.requesterBindingPathFor(root, classified.binding.binding_id);
   return { path: recordPath, record: JSON.parse(fs.readFileSync(recordPath, 'utf8')) };
 }
+
+test('phase-scoped native hook activity keeps its verified host session alive without a persistent actor binding', { skip: SKIP }, () => {
+  const root = project(); clock.offsetMs = 0;
+  try {
+    const ctx = actor(root, 'support-agent');
+    const phaseRoles = ['quality-gater', 'planner-2', 'test-specialist-3'];
+    for (let index = 0; index < phaseRoles.length; index += 1) {
+      const qg = { sessionId: SESSION, agentId: 'native-phase-' + index, agentType: phaseRoles[index] };
+      assert.strictEqual(rll.checkClaudeId01ProofComplete(root, SESSION, ctx.worktreeId, ctx.plan.planDigest,
+        qg.agentType, qg.agentId).ok, false, 'phase actor has no persistent startup capability');
+      clock.offsetMs = (index + 1) * 30 * MIN;
+      const result = renewal.renewSessionActivityForHook(root, qg);
+      assert.strictEqual(result.renewed, true, `phase activity ${qg.agentType}: ${JSON.stringify(result)}`);
+      assert.strictEqual(result.reason, undefined);
+      assert.strictEqual(rll.peekSessionGeneration(root, { provider: 'claude-hook', runtime_session_key: SESSION }).ok, true);
+      assert.strictEqual(rll.classifyClaudeAuthorityForIdentity(root, authorityIdentity(root, qg.agentId)).state, 'ABSENT',
+        'renewal creates no actor authority');
+    }
+    assert.strictEqual(generationRecord(root).generation_id, ctx.generation.generationId);
+  } finally { clock.offsetMs = 0; }
+});
+
+test('phase-scoped renewal rejects missing or foreign host proof and an immutable actor fence', { skip: SKIP }, () => {
+  const root = project(); clock.offsetMs = 0;
+  const originalHost = claudeHost.getProductionSessionIdentity;
+  try {
+    actor(root, 'support-agent');
+    clock.offsetMs = 30 * MIN;
+    const before = generationRecord(root);
+    const qg = { sessionId: SESSION, agentId: 'native-quality-gater', agentType: 'quality-gater' };
+    claudeHost.getProductionSessionIdentity = () => ({ ok: false });
+    assert.strictEqual(renewal.renewSessionActivityForHook(root, qg).renewed, false);
+    claudeHost.getProductionSessionIdentity = () => ({ ok: true, record: { worktree_id: '0'.repeat(64), plan_digest: '1'.repeat(64) } });
+    assert.strictEqual(renewal.renewSessionActivityForHook(root, qg).renewed, false);
+    claudeHost.getProductionSessionIdentity = originalHost;
+    const identityId = rll.computeClaudeAuthorityIdentityId(root, 'claude-hook', SESSION, qg.agentId);
+    assert.strictEqual(rll.publishClaudeAuthorityFence(root, identityId).ok, true);
+    assert.strictEqual(renewal.renewSessionActivityForHook(root, qg).renewed, false);
+    assert.deepStrictEqual(generationRecord(root), before);
+  } finally { claudeHost.getProductionSessionIdentity = originalHost; clock.offsetMs = 0; }
+});
+
+test('phase-scoped verified activity cannot revive idle-expired or absolute-expired generations', { skip: SKIP }, () => {
+  clock.offsetMs = 0;
+  try {
+    const idleRoot = project(); actor(idleRoot, 'idle-support');
+    const qg = { sessionId: SESSION, agentId: 'native-quality-gater', agentType: 'quality-gater' };
+    clock.offsetMs = 61 * MIN;
+    const before = generationRecord(idleRoot);
+    assert.strictEqual(renewal.renewSessionActivityForHook(idleRoot, qg).renewed, false);
+    assert.deepStrictEqual(generationRecord(idleRoot), before);
+    clock.offsetMs = 0;
+    const absoluteRoot = project(); actor(absoluteRoot, 'absolute-support');
+    for (let minutes = 30; minutes < 12 * 60; minutes += 30) {
+      clock.offsetMs = minutes * MIN;
+      renewal.renewSessionActivityForHook(absoluteRoot, qg);
+      assert.strictEqual(rll.peekSessionGeneration(absoluteRoot, { provider: 'claude-hook', runtime_session_key: SESSION }).ok, true,
+        `generation remains live at +${minutes} until the absolute bound`);
+    }
+    clock.offsetMs = 12 * HOUR;
+    const absoluteBefore = generationRecord(absoluteRoot);
+    assert.strictEqual(renewal.renewSessionActivityForHook(absoluteRoot, qg).renewed, false);
+    assert.deepStrictEqual(generationRecord(absoluteRoot), absoluteBefore);
+  } finally { clock.offsetMs = 0; }
+});
+
+test('phase activity uses the signed production host scope for the current final PLAN and refuses later PLAN drift', { skip: SKIP }, () => {
+  const root = project(); clock.offsetMs = 0;
+  try {
+    const draft = rll.discoverPlan(root);
+    fs.writeFileSync(draft.planPath, '# final plan\n\n**Class**: STANDARD\n');
+    const final = rll.discoverPlan(root);
+    assert.notStrictEqual(final.planDigest, draft.planDigest);
+    rll.resolveSessionGeneration(root, { ok: true, provider: 'claude-hook', runtime_session_key: SESSION });
+    primeProductionClaudeHostAdmission({ projectRoot: root, sessionId: SESSION });
+    const qg = { sessionId: SESSION, agentId: 'native-quality-gater', agentType: 'quality-gater' };
+    clock.offsetMs = 30 * MIN;
+    assert.strictEqual(renewal.renewSessionActivityForHook(root, qg).renewed, true);
+    const before = generationRecord(root);
+    fs.appendFileSync(final.planPath, '\nUnapproved PLAN change\n');
+    clock.offsetMs = 45 * MIN;
+    assert.strictEqual(renewal.renewSessionActivityForHook(root, qg).renewed, false);
+    assert.deepStrictEqual(generationRecord(root), before);
+  } finally { clock.offsetMs = 0; }
+});
+
+test('phase renewal rejects malformed identity, noncanonical suffixes and corrupt authority', { skip: SKIP }, () => {
+  const root = project(); clock.offsetMs = 0;
+  try {
+    actor(root, 'support-agent');
+    clock.offsetMs = 30 * MIN;
+    const before = generationRecord(root);
+    for (const agentType of ['planner-1', 'planner-02', 'planner-x', 'arch-planner-2', 'unknown']) {
+      assert.strictEqual(renewal.renewSessionActivityForHook(root, { sessionId: SESSION, agentId: 'phase', agentType }).renewed, false);
+    }
+    for (const agentId of [undefined, '', 17, 'a'.repeat(513)]) {
+      assert.strictEqual(renewal.renewSessionActivityForHook(root, { sessionId: SESSION, agentId, agentType: 'quality-gater' }).renewed, false);
+    }
+    const dir = path.join(rll.registryRepoDir(root), 'requester-bindings');
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, 'a'.repeat(32) + '.json'), '{}');
+    assert.strictEqual(renewal.renewSessionActivityForHook(root,
+      { sessionId: SESSION, agentId: 'phase', agentType: 'quality-gater' }).renewed, false);
+    assert.deepStrictEqual(generationRecord(root), before);
+  } finally { clock.offsetMs = 0; }
+});
+
+test('phase actor proof is revalidated under the renewal lock when a stop fences the actor concurrently', { skip: SKIP }, () => {
+  const root = project(); clock.offsetMs = 0;
+  const originalMkdir = fs.mkdirSync;
+  try {
+    actor(root, 'support-agent');
+    clock.offsetMs = 30 * MIN;
+    const before = generationRecord(root);
+    const qg = { sessionId: SESSION, agentId: 'phase', agentType: 'quality-gater' };
+    let injected = false;
+    fs.mkdirSync = function fenceBeforeRenewalLock(candidate, ...args) {
+      if (!injected && String(candidate).includes('.session-renewal') && String(candidate).endsWith('.lock')) {
+        injected = true;
+        const id = rll.computeClaudeAuthorityIdentityId(root, 'claude-hook', SESSION, qg.agentId);
+        assert.strictEqual(rll.publishClaudeAuthorityFence(root, id).ok, true);
+      }
+      return originalMkdir.call(this, candidate, ...args);
+    };
+    assert.strictEqual(renewal.renewSessionActivityForHook(root, qg).renewed, false);
+    assert.strictEqual(injected, true);
+    assert.deepStrictEqual(generationRecord(root), before);
+  } finally { fs.mkdirSync = originalMkdir; clock.offsetMs = 0; }
+});
+
+test('phase renewal rechecks current PLAN after acquiring the generation lock', { skip: SKIP }, () => {
+  const root = project(); clock.offsetMs = 0;
+  const originalMkdir = fs.mkdirSync;
+  try {
+    const ctx = actor(root, 'support-agent');
+    clock.offsetMs = 30 * MIN;
+    const before = generationRecord(root);
+    let injected = false;
+    fs.mkdirSync = function changePlanBeforeRenewalLock(candidate, ...args) {
+      if (!injected && String(candidate).includes('.session-renewal') && String(candidate).endsWith('.lock')) {
+        injected = true;
+        fs.appendFileSync(ctx.plan.planPath, '\nConcurrent PLAN mutation\n');
+      }
+      return originalMkdir.call(this, candidate, ...args);
+    };
+    const result = renewal.renewSessionActivityForHook(root,
+      { sessionId: SESSION, agentId: 'phase', agentType: 'quality-gater' });
+    assert.strictEqual(result.renewed, false);
+    assert.strictEqual(result.reason, 'phase-actor-scope-drift');
+    assert.strictEqual(injected, true);
+    assert.deepStrictEqual(generationRecord(root), before);
+  } finally { fs.mkdirSync = originalMkdir; clock.offsetMs = 0; }
+});
 
 test('idle timeout: one hour without activity expires the proof, with the idle reason', { skip: SKIP }, () => {
   const root = project(); clock.offsetMs = 0;
