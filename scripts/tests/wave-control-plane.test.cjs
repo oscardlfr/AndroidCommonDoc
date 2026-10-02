@@ -179,6 +179,128 @@ test('PLAN drift invalidates persisted state', () => {
   } finally { fs.rmSync(root, { recursive: true, force: true }); }
 });
 
+// Pass A binds the wave to a DRAFT PLAN; Pass B legitimately rewrites it. The state may be re-bound ONCE to the final
+// PLAN while nothing was decided on the draft (PREP, revision 0, same HEAD, same class). Anything else stays drift.
+const DRAFT_MARKER = 'STATUS: DRAFT-CONTEXT-PENDING';
+const planPathOf = (root) => path.join(root, '.planning', 'wave-demo', 'PLAN.md');
+function asDraft(root) { fs.writeFileSync(planPathOf(root), DRAFT_MARKER + '\n' + fs.readFileSync(planPathOf(root), 'utf8')); }
+function asFinal(root, extra = 'Pass B added context.\n') {
+  fs.writeFileSync(planPathOf(root), fs.readFileSync(planPathOf(root), 'utf8').replace(DRAFT_MARKER + '\n', '') + extra);
+}
+
+test('draft rebind: a state bound to the draft is re-bound once to the final PLAN, in one initialize', () => {
+  const root = fixture();
+  try {
+    asDraft(root);
+    const draft = control.initialize(root, 'demo');
+    assert.strictEqual(draft.plan_draft, true);
+    asFinal(root);
+    const inspected = control.inspect(root, 'demo');
+    assert.strictEqual(inspected.draft_rebind, true, 'the admission can see the pending re-binding');
+    assert.strictEqual(inspected.plan_current, false);
+    const rebound = control.initialize(root, 'demo');
+    assert.strictEqual(rebound.plan_draft, false);
+    assert.notStrictEqual(rebound.plan_sha256, draft.plan_sha256);
+    assert.strictEqual(rebound.revision, 0);
+    assert.strictEqual(rebound.phase, 'PREP');
+    assert.strictEqual(control.status(root, 'demo').current, true, 'the state now follows the final PLAN');
+    assert.strictEqual(control.initialize(root, 'demo').plan_sha256, rebound.plan_sha256, 'idempotent afterwards');
+    assert.strictEqual(control.transition(root, 'demo', 'EXECUTE').phase, 'EXECUTE', 'the wave proceeds on the final digest');
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
+
+test('draft rebind: a second PLAN change after the re-binding is drift as before', () => {
+  const root = fixture();
+  try {
+    asDraft(root);
+    control.initialize(root, 'demo');
+    asFinal(root);
+    control.initialize(root, 'demo');
+    fs.appendFileSync(planPathOf(root), 'A later edit.\n');
+    assert.strictEqual(control.inspect(root, 'demo').draft_rebind, false);
+    assert.throws(() => control.initialize(root, 'demo'), /PHASE_STATE_INPUT_DRIFT/);
+    assert.throws(() => control.transition(root, 'demo', 'EXECUTE'), /PHASE_STATE_PLAN_DRIFT/);
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
+
+test('draft rebind: a final PLAN that was never a draft cannot be swapped for another final PLAN', () => {
+  const root = fixture();
+  try {
+    control.initialize(root, 'demo');
+    fs.appendFileSync(planPathOf(root), 'Another final PLAN.\n');
+    assert.throws(() => control.initialize(root, 'demo'), /PHASE_STATE_INPUT_DRIFT/);
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
+
+test('draft rebind: a draft that already made a transition is not re-bound', () => {
+  const root = fixture();
+  try {
+    asDraft(root);
+    control.initialize(root, 'demo');
+    assert.strictEqual(control.transition(root, 'demo', 'EXECUTE').phase, 'EXECUTE');
+    asFinal(root);
+    assert.strictEqual(control.inspect(root, 'demo').draft_rebind, false);
+    assert.throws(() => control.initialize(root, 'demo'), /PHASE_STATE_INPUT_DRIFT/);
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
+
+test('draft rebind: a different HEAD is not re-bound', () => {
+  const root = fixture();
+  try {
+    asDraft(root);
+    control.initialize(root, 'demo');
+    asFinal(root);
+    execFileSync('git', ['commit', '-q', '--allow-empty', '-m', 'test: move head'], { cwd: root });
+    assert.strictEqual(control.inspect(root, 'demo').draft_rebind, false);
+    assert.throws(() => control.initialize(root, 'demo'), /PHASE_STATE_INPUT_DRIFT/);
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
+
+test('draft rebind: a different class is not re-bound', () => {
+  const root = fixture();
+  try {
+    asDraft(root);
+    control.initialize(root, 'demo');
+    fs.writeFileSync(path.join(root, '.claude', 'registry', 'wave-topology.yaml'),
+      'default_class: HARNESS\nclass_artifacts:\n  FAST-PATH:\n    architects: []\n    lifecycle_roles: []\n    execution_mode: disk-only\n'
+      + '  DOC:\n    architects: declared\n    lifecycle_roles: []\n    execution_mode: disk-only\n');
+    fs.writeFileSync(planPathOf(root), '### Wave Class\n\n**Class**: DOC\n**Required-Architects**: arch-platform\n');
+    fs.writeFileSync(path.join(root, '.planning', 'wave-demo', 'CLASS'), 'DOC\n');
+    assert.strictEqual(control.inspect(root, 'demo').draft_rebind, false);
+    assert.throws(() => control.initialize(root, 'demo'), /PHASE_STATE_INPUT_DRIFT/);
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
+
+test('draft rebind: a state written before the draft flag existed is never rebindable', () => {
+  const root = fixture();
+  try {
+    asDraft(root);
+    control.initialize(root, 'demo');
+    const statePath = path.join(root, '.androidcommondoc', 'wave-control', 'demo.json');
+    const legacy = JSON.parse(fs.readFileSync(statePath, 'utf8'));
+    delete legacy.plan_draft;
+    fs.writeFileSync(statePath, JSON.stringify(legacy));
+    asFinal(root);
+    assert.strictEqual(control.inspect(root, 'demo').draft_rebind, false);
+    assert.throws(() => control.initialize(root, 'demo'), /PHASE_STATE_INPUT_DRIFT/);
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
+
+test('status and transition of a wave that was never initialized say so', () => {
+  const root = fixture();
+  try {
+    assert.throws(() => control.status(root, 'demo'), /^Error: WAVE_NOT_INITIALIZED$/);
+    assert.throws(() => control.transition(root, 'demo', 'EXECUTE'), /^Error: WAVE_NOT_INITIALIZED$/);
+    const cli = path.resolve(__dirname, '..', 'tools', 'wave-control-plane.cjs');
+    const out = spawnSync(process.execPath, [cli, 'status', '--root', root, '--slug', 'demo'], { encoding: 'utf8' });
+    assert.strictEqual(out.status, 2);
+    const body = JSON.parse(out.stdout);
+    assert.strictEqual(body.reason, 'WAVE_NOT_INITIALIZED');
+    assert.match(body.message, /^wave not initialized: run `wave-control init --slug <slug>`/);
+    assert.ok(!/ANCESTRY/.test(out.stdout), 'no path-ancestry failure is shown');
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
+
 test('lifecycle actions use only the shipped Wave-1 CLI operations and carry class mode', () => {
   const root = fixture({ className: 'HARNESS', architects: '[]', lifecycleRoles: '[arch-platform, arch-testing, context-provider]', executionMode: 'persistent' });
   try {

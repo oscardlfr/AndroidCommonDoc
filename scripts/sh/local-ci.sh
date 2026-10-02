@@ -132,7 +132,9 @@ snapshot_head() {
   [ -z "$(git -C "$PROJECT_ROOT" status --porcelain --untracked-files=no)" ] \
     || echo "local-ci: uncommitted changes are NOT validated; act runs the committed HEAD $sha" >&2
   git clone --quiet --no-checkout "$PROJECT_ROOT" "$WORK_DIR/repo" || die "could not clone $PROJECT_ROOT"
-  git -C "$WORK_DIR/repo" checkout --quiet --detach "$sha" || die "could not check out $sha"
+  # A named branch, not --detach: act copies the repo into the container with `docker cp`, which drops empty directories. A
+  # detached clone has no loose refs, so .git/refs/ is lost and git inside the container says "not a git repository".
+  git -C "$WORK_DIR/repo" checkout --quiet -b local-ci "$sha" || die "could not check out $sha"
   echo "local-ci: act runs commit $sha"
 }
 

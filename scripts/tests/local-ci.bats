@@ -177,3 +177,24 @@ write_config() { printf '%s\n' "$1" > "$PROJECT/.androidcommondoc/local-ci.json"
   grep -qF "'local-ci.sh'" "$BATS_TEST_DIRNAME/../ps1/local-ci.ps1"
   grep -qF '@ArgList' "$BATS_TEST_DIRNAME/../ps1/local-ci.ps1"
 }
+
+@test "engine act from a detached HEAD: the snapshot clone act receives carries a loose branch ref, so .git/refs survives docker cp" {
+  write_config '{"engine": "act"}'
+  ln -s "$(command -v git)" "$FAKEBIN/git"
+  git -C "$PROJECT" init -q
+  git -C "$PROJECT" -c user.email=t@t -c user.name=t add -A
+  git -C "$PROJECT" -c user.email=t@t -c user.name=t commit -q -m "chore(scripts): fixture"
+  git -C "$PROJECT" checkout -q --detach HEAD
+  printf '#!/bin/sh\nexit 0\n' > "$FAKEBIN/docker"
+  cat > "$FAKEBIN/act" <<FAKE
+#!/bin/sh
+# Records what the snapshot clone looks like at the moment act would copy it into a container.
+while [ "\$#" -gt 0 ]; do [ "\$1" = "-C" ] && { src="\$2"; break; }; shift; done
+{ [ -f "\$src/.git/refs/heads/local-ci" ] && echo present || echo missing; } > "$BATS_TEST_TMPDIR/refs-seen"
+exit 0
+FAKE
+  chmod +x "$FAKEBIN/docker" "$FAKEBIN/act"
+  local_ci --job hooks
+  [ "$status" -eq 0 ]
+  [ "$(cat "$BATS_TEST_TMPDIR/refs-seen")" = "present" ]
+}

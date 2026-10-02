@@ -6,7 +6,7 @@ model: sonnet
 domain: quality
 intent: [docs, changelog, memory, roadmap, ingest]
 token_budget: 2000
-template_version: "2.13.1"
+template_version: "2.13.2"
 skills:
   - audit-docs
   - readme-audit
@@ -47,16 +47,13 @@ SendMessage(to="doc-updater", summary="document wave 1", message="Document compl
 
 ## Pre-Write Validation (MANDATORY before ANY write)
 
-### Per-Session Gate
+### Your context comes from the dispatching architect
 
-Two gate branches apply, both mechanically enforced — know which one you're hitting:
-
-- **Grep/Glob/Bash search branch**: before your FIRST Grep, Glob, or Bash call in any session, you MUST have received a SendMessage response from context-provider in this session (or, in portable/single-use mode, an equivalent `coordination/consult/v1` disk artifact the gate's disk-read branch validates — see [coordination-artifact-schema](l0doc:docs/agents/coordination-artifact-schema.md)). Pre-Write Validation step 1 (Context check with CP) is the required trigger — but if you run a Grep scan BEFORE invoking Pre-Write Validation, the gate still applies. FORBIDDEN: Using Grep, Glob, or Bash for any scan (even a quick frontmatter check) before CP has responded in this session.
-- **Read branch (post-PLAN, T-BUG-015/BL-W35-06)**: Read on any `docs/agents/**` or `docs/adr/**` path is separately gated — it requires a genuine `consult/v2`→`result/v2`→`accepted-result.json` transaction correlated to your own `{role,agent_id,session_id}`, since `doc-updater` is not in `SPECIALIST_NAMES` (no reporting-architect shortcut applies to you). There is no CLI shortcut. If you hit this: ask context-provider to relay the exact verbatim content you need — sufficient for drafting NEW docs via Write (a non-existent-file Write needs no prior Read). For edits to an EXISTING gated file, you still cannot Edit/Write it yourself (see Edit Tool Precondition below) — escalate to team-lead with the exact diff.
+You never consult context-provider yourself: only arch-* roles may, so a consult of your own would be circular. `context-provider-gate.js` therefore exempts you from the pattern-discovery gate (Grep, Glob, Bash and Read are not blocked for you); your context arrives pre-consulted, through the same mediated pattern the planner and the specialists use. The dispatch from your arch-* owner cites the accepted consult result it obtained (an `accepted-result.json` / result path under `.planning/coordination/`, or the lifecycle-mediated answer it relays): read that and work from it. If the dispatch cites none, reply to the DISPATCHING ARCHITECT with SendMessage asking it to run the consult and cite the result, then stop. Never route this request to the orchestrator.
 
 Before writing or editing any doc file, you MUST validate:
 
-1. **Context check**: consult context-provider through the shared role-lifecycle manager — a validated response is what satisfies this step, whether obtained via lifecycle-mediated wake/reuse or accelerated by `SendMessage(to="context-provider", summary="pre-write check", message="I need to document {topic}. What docs cover this scope? Any contradictions?")`.
+1. **Context check**: the accepted consult result cited in your dispatch by the dispatching architect (see above) is your context; confirm it is cited and read it. No consult of your own, no escalation to the orchestrator.
 2. **Validate content**: Call `validate-doc-update` MCP tool with proposed content
    - **VALID** → proceed to write
    - **FIXABLE** → auto-fix (size, frontmatter) and re-validate
@@ -65,12 +62,10 @@ Before writing or editing any doc file, you MUST validate:
 
 ## Edit Tool Precondition (BL-W32-15)
 
-Edit tool precondition: Edit requires a prior Read of the target file in the same session.
-If that Read was not performed (zero-Read budget context), do NOT attempt Edit.
-Instead, escalate to team-lead: provide file path + intended change as a diff-formatted
-block. team-lead will relay via Write with full content.
+Edit tool precondition: Edit requires a prior Read of the target file in the same session. Read is not gated for you, so read the target first and then Edit.
+If a zero-Read budget really prevents the Read, do NOT attempt Edit: report to the dispatching architect (SendMessage) the file path and the intended change as a diff-formatted block, and let it decide; do not escalate to the orchestrator.
 Note: in zero-Read budget contexts, the Post-Edit verification Read is also prohibited.
-The escalation path replaces the entire Edit + verify cycle.
+The report to the architect replaces the entire Edit + verify cycle.
 
 ### Post-Compaction Re-Sync
 

@@ -108,6 +108,7 @@ function recordManagedSystemInit(sessionId) {
   // exercises the working-tree implementation, not the pre-change baseline.
   for (const relativePath of [
     '.claude/hooks/context-provider-gate.js',
+    '.claude/hooks/hook-control-plane-utils.js',
     'scripts/lib/runtime-collaboration-entrypoints.cjs',
     'scripts/lib/runtime-host-claude.cjs',
     'scripts/lib/runtime-project-context.cjs',

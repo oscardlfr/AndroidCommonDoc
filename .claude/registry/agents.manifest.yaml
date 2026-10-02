@@ -119,8 +119,8 @@ agents:
   arch-platform:
     canonical_name: arch-platform
     subagent_type: arch-platform
-    template_version: "1.36.2"
-    template_frontmatter_sha256: b22282116a16d9adbc4a4cd29d00e561c593e318966892a50bfca87aea3ee0b5
+    template_version: "1.36.3"
+    template_frontmatter_sha256: c9bbfa8da2f36cf963dc3a6df1b28f0c2ee77b67885b5e3e86432db4a2bbc0ab
     category: architect
     lifecycle: ephemeral
     description: "Platform architecture architect. Mini-orchestrator: verifies KMP patterns via MCP tools, fixes violations directly or via delegation, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict."
@@ -174,8 +174,8 @@ agents:
   arch-testing:
     canonical_name: arch-testing
     subagent_type: arch-testing
-    template_version: "1.41.2"
-    template_frontmatter_sha256: bcd51f7c30a42306f7f831b8238f83d6c55de36190240a83a1b8164325b706e5
+    template_version: "1.41.3"
+    template_frontmatter_sha256: fce057cb0d08062f2735a7607f36685bb044e844e436d761e3323a5fad1b6fd6
     category: architect
     lifecycle: ephemeral
     description: "Test quality architect. Mini-orchestrator: verifies TDD compliance, detects test gaps, delegates fixes to test-specialist, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict."
@@ -226,8 +226,8 @@ agents:
   arch-integration:
     canonical_name: arch-integration
     subagent_type: arch-integration
-    template_version: "1.32.2"
-    template_frontmatter_sha256: 268ebac42854afe0429b36fdb6fe13593ea26bbb98de493c235b51e2e61bc2f8
+    template_version: "1.32.3"
+    template_frontmatter_sha256: 1406178cc99213298c660985eaaa91da0c5af774122869bcbceb178ea5524b9c
     category: architect
     lifecycle: ephemeral
     description: "Integration architect. Mini-orchestrator: verifies compilation, DI wiring, navigation via MCP tools. Fixes wiring gaps, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict."
@@ -630,8 +630,8 @@ agents:
   doc-updater:
     canonical_name: doc-updater
     subagent_type: doc-updater
-    template_version: "2.13.1"
-    template_frontmatter_sha256: 3e5bb5112f70c1a74b95f3176e8392959cdd66b2bef8de7e21aa849401ec9875
+    template_version: "2.13.2"
+    template_frontmatter_sha256: 41d3a8b180322ac4055f7b13455990dc4ebbc192e49f6e5acffb453315b6f74e
     category: doc-owner
     lifecycle: persistent
     description: "Documentation updater. Updates roadmap, memory, CHANGELOG, specs after work. Ingests approved external patterns via MCP. Follows L0 patterns (frontmatter, line limits, hub structure)."
@@ -904,8 +904,8 @@ agents:
   quality-gater:
     canonical_name: quality-gater
     subagent_type: quality-gater
-    template_version: "2.28.1"
-    template_frontmatter_sha256: 457022c729ed50719fef3c5a23dcb2b4794a802f8673dd82181c1cd941750d33
+    template_version: "2.28.3"
+    template_frontmatter_sha256: cdd665b86beef296aa8319154899e5c9460b33b0cda73519635942383fac916f
     category: orchestrator
     lifecycle: ephemeral
     description: "QG owner (Phase 3). Runs sequential verification on the final committed HEAD after VERIFY-FINAL architect approval. Reports structured PASS/FAIL."
@@ -1618,8 +1618,8 @@ agents:
   planner:
     canonical_name: planner
     subagent_type: planner
-    template_version: "1.22.3"
-    template_frontmatter_sha256: 1db8ec2107fdecde71d58a1852e518dcac36955a453109599e9af35aad5183bb
+    template_version: "1.22.5"
+    template_frontmatter_sha256: 58224a3ad01953f3495fb71b8e509e0e3a1a5fdbb7912a0feaa9d12cbbdff156
     category: orchestrator
     lifecycle: ephemeral
     description: "Single-use planning subagent. Reads context, specs, architecture to produce structured execution plans. Spawned without team_name; results land as PLAN.md on disk. Works alongside context-provider via SendMessage."

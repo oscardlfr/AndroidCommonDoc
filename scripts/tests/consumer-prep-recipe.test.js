@@ -55,12 +55,20 @@ test('the documented PREP recipe creates an immutable verdict request in a consu
   }
 });
 
-test('tl-session-start documents the exact consumer PREP launcher forms in order', () => {
+test('tl-session-start documents the exact consumer launcher forms from PREP to COMPLETE in order', () => {
   const forms = [
     `${LAUNCHER} wave-control --project-root "$PWD" -- init --slug <slug>`,
     `${LAUNCHER} verdict-request-write --project-root "$PWD" -- --role <arch-*> --phase prep --slug <slug>`,
     `${LAUNCHER} verdict-write --project-root "$PWD" --`,
     `${LAUNCHER} wave-control --project-root "$PWD" -- transition --slug <slug> --to EXECUTE --verdict <arch-*>=<verdict-path>`,
+    `${LAUNCHER} wave-control --project-root "$PWD" -- transition --slug <slug> --to VERIFY_FINAL --rebind-head true`,
+    `${LAUNCHER} verdict-request-write --project-root "$PWD" -- --role <arch-*> --phase verify-final --slug <slug>`,
+    '--phase verify-final --slug <slug> --request <absolute-request-path> --request-sha256 <sha256> --decision approve --evidence-text "<concise evidence>"',
+    `${LAUNCHER} wave-control --project-root "$PWD" -- transition --slug <slug> --to QG --verdict <arch-*>=<verdict-path>`,
+    `${LAUNCHER} runtime-consumer-qg --project-root "$PWD" -- pre-pr --slug <slug> --project-gate PASS|FAIL`,
+    `${LAUNCHER} runtime-consumer-qg --project-root "$PWD" -- mint --slug <slug>`,
+    `${LAUNCHER} runtime-consumer-qg --project-root "$PWD" -- verify --slug <slug>`,
+    `${LAUNCHER} wave-control --project-root "$PWD" -- transition --slug <slug> --to COMPLETE`,
   ];
   let cursor = -1;
   for (const form of forms) {

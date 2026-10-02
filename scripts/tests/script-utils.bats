@@ -23,11 +23,15 @@ setup() {
         '*$$serializer'
         'ComposableSingletons$*'
     )
-    WORK_DIR=$(mktemp -d)
+    # A fixed project basename: get_project_type classifies by the directory name, and a random mktemp name can
+    # contain "kmp" and flip the result.
+    WORK_ROOT=$(mktemp -d)
+    WORK_DIR="$WORK_ROOT/project"
+    mkdir -p "$WORK_DIR"
 }
 
 teardown() {
-    rm -rf "$WORK_DIR"
+    rm -rf "$WORK_ROOT"
 }
 
 # ---------------------------------------------------------------------------

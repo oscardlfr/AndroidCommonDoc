@@ -6,7 +6,7 @@ model: sonnet
 domain: development
 intent: [plan, scope, breakdown, estimate]
 token_budget: 4000
-template_version: "1.22.3"
+template_version: "1.22.5"
 ---
 
 ## Runtime source boundary
@@ -51,9 +51,12 @@ You run the full context-gathering Process below, then write the FINALIZED plan
   ↓
 You return "plan ready" + the PLAN path; the orchestrator reads it from disk
   ↓
-Orchestrator emits ordered role-rebind actions for every healthy draft-bound support
-peer, then proceeds to execution (disk artifacts are the contract)
+Orchestrator hands the support plane over to the final digest (ensure stops the live
+draft peers, then spawns them again under the final digest), then proceeds to execution
+(disk artifacts are the contract)
 ```
+
+**Never wait with `sleep` in Pass B.** If the accepted consult result has not arrived when you need it, end your turn with exactly `NO-ACCEPTED-CONSULT-RESULT`. The orchestrator does NOT relaunch you; the arch-* owner's SendMessage carrying the accepted result path resumes THIS planner, and you then finalize the PLAN.
 
 `consult/v1` remains the unchanged TTL contact marker throughout Pass A and is never reinterpreted as a response. Architects/verdicts can bind only the marker-free final PLAN bytes Pass B produces — draft-bound consultation is planning input only.
 
@@ -136,41 +139,40 @@ After context-gathering (Process 1–7) and BEFORE writing the finalized PLAN.md
 
 ## Output Format
 
-```
-## Execution Plan: {task title}
+The finalized PLAN.md has exactly this shape. Keep the required headings verbatim and in this order; the control plane, the QG path audit and the EXECUTE gate parse them:
 
-### Scope
-- Modules: {list}
-- Files: {estimated count and key files}
-- Blast radius: low | medium | high
-
-### Steps
-1. {step} — assigned to: {architect domain}
-2. {step} — assigned to: {architect domain}
-...
-
-### Dependencies
-- Step N depends on Step M because: {reason}
-
-### Cross-Department Impact
-- Product: {impact or "none"}
-- Marketing: {impact or "none"}
-- If flagged: the orchestrator should dispatch product-strategist/content-creator for review
-
-### Risks
-- {risk}: {mitigation}
-
-### Verification
-- {how to know it worked}
+```markdown
+# Execution Plan: {task title}
 
 ### Wave Class
 - **Class**: <HARNESS|DOC|FAST-PATH>
 - **Required-Architects**: <comma-separated arch-* roles; DOC waves only>
 
-### Open Questions
-- Q1: {question for the orchestrator to resolve before architect dispatch}
-- Q2: {if any}
+## Objective
+
+{one or two sentences: what changes and why}
+
+### Path-Manifest
+
+- {repo-relative/path/one}
+- {repo-relative/path/two}
+
+### Acceptance
+
+- {observable outcome the architects verify at VERIFY_FINAL}
+
+### Spawn Table
+
+| Role | Count | Reason |
+|------|-------|--------|
+| {role} | 1 | {reason} |
 ```
+
+- `### Wave Class`: exactly one `- **Class**:` line; `- **Required-Architects**:` only for DOC.
+- `## Objective`: the goal, not the steps.
+- `### Path-Manifest`: one bare repo-relative path per `- ` bullet (no globs, spaces, prose or trailing notes). It is the allow-list the QG path audit enforces: every file the wave commits must be listed. The section ends at the next heading.
+- `### Acceptance`: checkable outcomes, one per bullet.
+- Optional sections go between `### Acceptance` and `### Spawn Table`, only when useful: `### Scope`, `### Steps` (`1. {step} — assigned to: {architect domain}`), `### Dependencies`, `### Cross-Department Impact` (Product/Marketing impact or "none"), `### Risks`, and `### Open Questions` (`- Q1: {question for the orchestrator to resolve before architect dispatch}`).
 
 ### Spawn Table (MANDATORY for all waves)
 
@@ -186,7 +188,7 @@ Every finalized PLAN.md MUST include a `### Spawn Table` section declaring the s
 | doc-updater | 1 | Doc delivery |
 | quality-gater | 1 | QG + push gate |
 
-Adjust rows to match the actual class floor. FAST-PATH waves: table contains only `context-provider`. DOC waves: `arch-platform` + `context-provider` + `doc-updater` + `quality-gater`.
+Implementation and the commit are ALWAYS assigned to the specialist layer (`doc-updater` for documentation), never to the orchestrator: the PLAN never says the orchestrator applies a diff or commits. Adjust rows to match the actual class floor. FAST-PATH waves: table contains only `context-provider`. DOC waves: `arch-platform` + `context-provider` + `doc-updater` + `quality-gater`.
 
 The `premature-execution-gate.js` Spawn-Table check (T2) blocks all specialist EXECUTE dispatches until `### Spawn Table` is present in PLAN.md. Omitting this section from the finalized plan will block the entire EXECUTE phase. The Pass A draft does not need a Spawn Table — it is not yet bindable.
 

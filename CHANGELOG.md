@@ -5,6 +5,22 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 
 ## [Unreleased]
 
+### Fixed (consumer wave flow, end to end)
+
+- `/init-session --orchestrate` re-binds the wave-control state once from the Pass A draft digest to the final PLAN digest (state was a draft, still PREP at revision 0, no transition, same HEAD and class, the new PLAN has no draft marker). Any other PLAN change stays drift.
+- Runtime commands that are recognizable but not the canonical standalone single-quoted form (chained, heredoc, piped, unquoted) are denied with an actionable `[RUNTIME-COMMAND-SHAPE]` message by one shared helper used by `context-provider-gate.js` and `runtime-consultation-target-gate.js`, instead of an opaque `AUTHORITY_INVALID`.
+- `wave-control status` of an uninitialized wave says `wave not initialized` and names the `init` command.
+- New launcher operation `specialist-dispatch-write` lets an architect create the specialist dispatch artifact in a consumer.
+- `consumer-full-wave-acceptance.test.js` runs a consumer wave (toolkit and consumer roots distinct, injectable clock) from the Pass A draft to COMPLETE with the real hooks and CLIs, across 10 and 40 minute gaps and a session-generation rotation at +65 min and +3 h that re-orchestrating and restarting the roles recovers.
+
+- The session is sliding: the session generation and an actor's bindings (role actor and requester) expire after one hour of inactivity and never live beyond twelve hours from creation. A hook renews them after the actor's identity proof passes (only when under 3000 s remain); the immutable startup trace and capability carry the absolute lifetime and are never rewritten. Past either limit `context-provider-gate.js` says `identity proof expired (session generation rotated); re-run /init-session --orchestrate <slug> and execute the returned role actions, then retry`, and `ensure` returns `role-spawn` actions for the new generation, never a stale READY.
+
+### Added (consumer quality gate, verdict evidence, launcher help)
+
+- `runtime-consumer-qg pre-pr --slug S --project-gate PASS|FAIL` produces the consumer `pre-pr.stamp` (project gate attested, tracked worktree clean, secret scan); `.androidcommondoc/` is excluded locally, and the QG-only operations are `l0Only`.
+- `write-verdict.sh --evidence-text <text>` records a verdict's evidence without a hand-written file.
+- `l0-toolkit-launcher.cjs --help` lists every operation with a one-line summary.
+
 ### Added (local CI validation)
 
 - `scripts/sh/local-ci.sh` and its PowerShell twin run the CI shell and hook tests before a push, with the engine chosen in `.androidcommondoc/local-ci.json`: `act` runs the Linux jobs of `reusable-shell-tests.yml` in Docker on a clean clone of the committed `HEAD` (so it also works from linked worktrees), one container per Bats shard in parallel (own action cache and artifact port per shard); `native` (the default) runs the sharded runner and the Node hook roster on the host with a temporary `HOME`/`TMPDIR` and no global or system git config; `none` disables it. A missing Docker or act fails with exit 2 and the install command for the current OS. The shard list and the hook skip roster are read from the workflow, which stays the only definition of the jobs. See [local-ci-validation](docs/guides/local-ci-validation.md).
@@ -12,6 +28,15 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 ### Changed (CI speed)
 
 - `reusable-shell-tests.yml` runs 8 Bats shards instead of 4, and the hook job no longer waits for the shards (`needs: bats` removed, it installs its own mcp-server and bats), so the critical path is the slowest shard instead of shard plus hooks. `ci-bats-parity.bats` and the shard-planner reality checks now follow the matrix size.
+### Fixed (consumer wave details found by a real L1/L2 run)
+
+- `write-verdict.sh` validates every input, the rationale on stdin (1 to 8192 bytes) included, before it writes anything: `--evidence-text` without a rationale no longer leaves `<role>-<phase>-evidence.md` behind, and an evidence file created by a call whose verdict was not published is removed, so a valid retry (even with different evidence text) works.
+- doc-updater template (2.13.2): in L1/L2 its context is the accepted consult result cited in the dispatch by the arch-* owner; it never consults context-provider or escalates to the orchestrator (the gates already exempt it). quality-gater template (2.28.3): a failing check is never reclassified as pre-existing to reach PASS, and a failing project validator records `--project-gate FAIL` and stops the QG. tl-session-start: the verify-final example pipes the rationale, documentation waves skip `specialist-dispatch-write` (doc-updater is exempt), and the tracked tree must be clean and committed before QG.
+
+### Fixed (plan handoff of the support plane)
+
+- `ensure` no longer asks for `role-spawn` actions that collide with still-live peers of the previous (draft) PLAN digest: an actor's identity proof is bound to its plan digest and is never migrated, so peers alive under another digest in the same worktree and session generation are replaced instead (immutable replacement). The first `ensure` returns one `role-stop-owned` action per live draft peer (a canonical `shutdown_request` for SendMessage) and spawns nothing; a pending stop is re-reported, not duplicated, and after three attempts a peer that never reaches its terminal is reported as `draft-peer-not-terminal`; once every draft peer has its terminal, `ensure` returns the `role-spawn` actions for the final digest with the same names. With no old-plan peer alive nothing changes. The planner template (1.22.5) now ends Pass B with `NO-ACCEPTED-CONSULT-RESULT` instead of waiting, and assigns implementation and the commit to the specialist layer.
+
 ### Fixed (consult lease authority)
 
 - A consultation worker that claimed in time and keeps its lease alive can renew (`lease-heartbeat`) and publish (`publish-result`) after the activation liveness window (about five minutes) instead of being denied with `request activation is not resolvable` and ending in `WORKER_LEASE_EXPIRED`. `resolveActivationForRequestPath` takes an explicit `leaseAuthority` option that the target gate passes only for those two subcommands; the activation is then accepted past its window only while the presented claim is the current attempt's canonical claim, the active lease is held by exactly that claim (`leaseHeldByClaim`, now shared with the heartbeat) and the lease and the request are live (`leaseIsLive`). `claim` keeps the strict window; the window and takeover are unchanged.

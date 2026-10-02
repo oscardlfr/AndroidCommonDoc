@@ -370,6 +370,57 @@ EOF
   grep -qE '"rationale":[[:space:]]*"final body' "$vf_file" || return 1
 }
 
+# ── Inline evidence: a role that cannot write files gives the text and the script stores it ────────
+
+_prep_verdict_for_inline() {
+  local req_prep req_prep_sha256
+  req_prep="$(_seed_request prep)"
+  req_prep_sha256="$(_real_sha256 "$req_prep")"
+  bash -c "cd '$PROJ' && printf 'prep body\n' | CLAUDE_WAVE_SLUG='$WAVE_SLUG' bash '$SCRIPT' --role arch-testing --phase prep --slug '$WAVE_SLUG' \
+    --request '$req_prep' --request-sha256 '$req_prep_sha256' --decision approve" >/dev/null 2>&1
+}
+
+@test "WV-EV-TEXT PASS: --evidence-text is stored by the script inside the wave dir under its canonical name and recorded with its real sha256" {
+  _prep_verdict_for_inline
+  local req req_sha256
+  req="$(_seed_request verify-final)"; req_sha256="$(_real_sha256 "$req")"
+  run bash -c "cd '$PROJ' && printf 'final body\n' | CLAUDE_WAVE_SLUG='$WAVE_SLUG' bash '$SCRIPT' --role arch-testing --phase verify-final --slug '$WAVE_SLUG' \
+    --request '$req' --request-sha256 '$req_sha256' --decision approve --evidence-text 'ran the target tests: 12 pass, 0 fail'"
+  [ "$status" -eq 0 ]
+  local stored="$PROJ/.planning/wave-$WAVE_SLUG/arch-testing-verify-final-evidence.md"
+  [ -f "$stored" ]
+  [ "$(cat "$stored")" = "ran the target tests: 12 pass, 0 fail" ]
+  local verdict="$PROJ/.planning/wave-$WAVE_SLUG/arch-testing-verdict-verify-final.json"
+  grep -q "arch-testing-verify-final-evidence.md" "$verdict"
+  grep -q "$(_real_sha256 "$stored")" "$verdict"
+  grep -q '"kind": *"opaque-file"' "$verdict"
+}
+
+@test "WV-EV-TEXT FAIL: a second, different evidence text for the same role and phase is refused and the first is kept" {
+  _prep_verdict_for_inline
+  local req req_sha256
+  req="$(_seed_request verify-final)"; req_sha256="$(_real_sha256 "$req")"
+  local stored="$PROJ/.planning/wave-$WAVE_SLUG/arch-testing-verify-final-evidence.md"
+  printf 'first evidence\n' > "$stored"
+  run bash -c "cd '$PROJ' && printf 'final body\n' | CLAUDE_WAVE_SLUG='$WAVE_SLUG' bash '$SCRIPT' --role arch-testing --phase verify-final --slug '$WAVE_SLUG' \
+    --request '$req' --request-sha256 '$req_sha256' --decision approve --evidence-text 'different evidence'"
+  [ "$status" -eq 2 ]
+  [ "$(cat "$stored")" = "first evidence" ]
+  [ ! -f "$PROJ/.planning/wave-$WAVE_SLUG/arch-testing-verdict-verify-final.json" ]
+}
+
+@test "WV-EV-TEXT FAIL: an empty or repeated --evidence-text is a usage error" {
+  _prep_verdict_for_inline
+  local req req_sha256
+  req="$(_seed_request verify-final)"; req_sha256="$(_real_sha256 "$req")"
+  run bash -c "cd '$PROJ' && printf 'b\n' | CLAUDE_WAVE_SLUG='$WAVE_SLUG' bash '$SCRIPT' --role arch-testing --phase verify-final --slug '$WAVE_SLUG' \
+    --request '$req' --request-sha256 '$req_sha256' --decision approve --evidence-text ''"
+  [ "$status" -eq 1 ]
+  run bash -c "cd '$PROJ' && printf 'b\n' | CLAUDE_WAVE_SLUG='$WAVE_SLUG' bash '$SCRIPT' --role arch-testing --phase verify-final --slug '$WAVE_SLUG' \
+    --request '$req' --request-sha256 '$req_sha256' --decision approve --evidence-text 'a' --evidence-text 'b'"
+  [ "$status" -eq 1 ]
+}
+
 # ── WV-10 (ports VS-1): --supersede with a fresh request + correct CAS digest replaces ──
 
 @test "WV-10 PASS: --supersede with a fresh request and correct --expected-current-sha256 replaces the target" {
@@ -836,4 +887,34 @@ process.exit(r.wellFormed === false && r.authorizes === false ? 0 : 1);
   [ "$status" -eq 2 ]
   [ ! -e "$PROJ/.planning/wave-$WAVE_SLUG/arch-testing-verdict.md" ] || return 1
   [ ! -e "$PROJ/.planning/wave-$WAVE_SLUG/arch-testing-verdict-prep.json" ] || return 1
+}
+
+# ── Atomic: every input is validated before anything is written ─────────────────────────────────────
+
+@test "WV-EV-ATOMIC FAIL: --evidence-text without the rationale on stdin writes nothing, and a valid retry with another text succeeds" {
+  _prep_verdict_for_inline
+  local req req_sha256
+  req="$(_seed_request verify-final)"; req_sha256="$(_real_sha256 "$req")"
+  local stored="$PROJ/.planning/wave-$WAVE_SLUG/arch-testing-verify-final-evidence.md"
+  run bash -c "cd '$PROJ' && CLAUDE_WAVE_SLUG='$WAVE_SLUG' bash '$SCRIPT' --role arch-testing --phase verify-final --slug '$WAVE_SLUG' \
+    --request '$req' --request-sha256 '$req_sha256' --decision approve --evidence-text 'first attempt' < /dev/null"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"rationale"* ]]
+  [ ! -e "$stored" ]
+  [ ! -f "$PROJ/.planning/wave-$WAVE_SLUG/arch-testing-verdict-verify-final.json" ]
+  run bash -c "cd '$PROJ' && printf 'final body\n' | CLAUDE_WAVE_SLUG='$WAVE_SLUG' bash '$SCRIPT' --role arch-testing --phase verify-final --slug '$WAVE_SLUG' \
+    --request '$req' --request-sha256 '$req_sha256' --decision approve --evidence-text 'second, different attempt'"
+  [ "$status" -eq 0 ]
+  [ "$(cat "$stored")" = "second, different attempt" ]
+}
+
+@test "WV-EV-ATOMIC FAIL: a rationale over 8192 bytes is refused before the evidence file is created" {
+  _prep_verdict_for_inline
+  local req req_sha256
+  req="$(_seed_request verify-final)"; req_sha256="$(_real_sha256 "$req")"
+  local stored="$PROJ/.planning/wave-$WAVE_SLUG/arch-testing-verify-final-evidence.md"
+  run bash -c "cd '$PROJ' && head -c 9000 /dev/zero | tr '\\0' 'x' | CLAUDE_WAVE_SLUG='$WAVE_SLUG' bash '$SCRIPT' --role arch-testing --phase verify-final --slug '$WAVE_SLUG' \
+    --request '$req' --request-sha256 '$req_sha256' --decision approve --evidence-text 'text'"
+  [ "$status" -eq 1 ]
+  [ ! -e "$stored" ]
 }

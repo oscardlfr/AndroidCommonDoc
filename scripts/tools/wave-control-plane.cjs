@@ -28,4 +28,9 @@ function main() {
   else if (command === 'lifecycle-actions') emit(control.lifecycleActions(args.root, args.slug, args.profile || 'auto'));
   else throw new Error('UNKNOWN_COMMAND');
 }
-try { main(); } catch (error) { emit({ status: 'REJECTED', reason: error.message }); process.exitCode = 2; }
+// Reasons that name a missing step carry the recovery, so nobody has to read the source to continue.
+const HINTS = { WAVE_NOT_INITIALIZED: 'wave not initialized: run `wave-control init --slug <slug>` for this wave first' };
+try { main(); } catch (error) {
+  emit({ status: 'REJECTED', reason: error.message, ...(HINTS[error.message] ? { message: HINTS[error.message] } : {}) });
+  process.exitCode = 2;
+}

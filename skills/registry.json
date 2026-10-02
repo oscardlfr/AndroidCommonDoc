@@ -783,7 +783,7 @@
       "description": "Show the canonical runtime readiness dashboard. Optionally ensures the persistent support plane with --orchestrate <slug>.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:0088021bd73eff7b580bf12cf6a9d10e15f2f374fa648dafcf4660c32ddcbeb9",
+      "hash": "sha256:629a519e5d302d6b79e977831fb8b3bb0b2578829330e1fe5b1301c649222d27",
       "dependencies": [],
       "frontmatter": {
         "name": "init-session",
@@ -1923,7 +1923,7 @@
       "description": "Integration architect. Mini-orchestrator: verifies compilation, DI wiring, navigation via MCP tools. Fixes wiring gaps, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:e96797927d346f607685b629a88fea0b0353f8d210b80f544f62c003a925e913",
+      "hash": "sha256:869f0c3c7a2904b021892aebcadf8b25a4861451e09880e6bcf15a326c585e8e",
       "dependencies": [],
       "frontmatter": {
         "name": "arch-integration",
@@ -1939,7 +1939,7 @@
           "compilation"
         ],
         "token_budget": 4000,
-        "template_version": "1.32.2",
+        "template_version": "1.32.3",
         "skills": [
           "test",
           "extract-errors"
@@ -1953,7 +1953,7 @@
       "description": "Platform architecture architect. Mini-orchestrator: verifies KMP patterns via MCP tools, fixes violations directly or via delegation, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:a69ddeef586043d5baec0945d263b6f622710de614b6a96d27821a222119e82e",
+      "hash": "sha256:b9ebb0d480949cbb690587e7ec6e77b4eb01abc167f3197126533a06eb35c97c",
       "dependencies": [],
       "frontmatter": {
         "name": "arch-platform",
@@ -1968,7 +1968,7 @@
           "encoding"
         ],
         "token_budget": 4000,
-        "template_version": "1.36.2",
+        "template_version": "1.36.3",
         "skills": [
           "verify-kmp",
           "validate-patterns"
@@ -1982,7 +1982,7 @@
       "description": "Test quality architect. Mini-orchestrator: verifies TDD compliance, detects test gaps, delegates fixes to test-specialist, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict.",
       "category": "testing",
       "tier": "core",
-      "hash": "sha256:3beb36792175dd818eed9880d998d6bbef9797fe955b6834a9d3c804c462c576",
+      "hash": "sha256:a49c4e8758e6de148701017ef057d0c70c5bbb993c50a7f43105fa2b22ee90df",
       "dependencies": [],
       "frontmatter": {
         "name": "arch-testing",
@@ -1997,7 +1997,7 @@
           "test-quality"
         ],
         "token_budget": 4000,
-        "template_version": "1.41.2",
+        "template_version": "1.41.3",
         "skills": [
           "test",
           "test-full-parallel",
@@ -2302,7 +2302,7 @@
       "description": "Documentation updater. Updates roadmap, memory, CHANGELOG, specs after work. Ingests approved external patterns via MCP. Follows L0 patterns (frontmatter, line limits, hub structure).",
       "category": "guides",
       "tier": "extended",
-      "hash": "sha256:65c317f1526101b688a46c9e4c6629f7b1aba19f97cc0ebf6a3271dafdab68cf",
+      "hash": "sha256:eba28aa8be500bd4dfb691f13a88ad3de862b09a7e4ecf37cd390065f8ad7216",
       "dependencies": [],
       "frontmatter": {
         "name": "doc-updater",
@@ -2538,7 +2538,7 @@
       "description": "Single-use planning subagent. Reads context, specs, architecture to produce structured execution plans. Spawned without team_name; results land as PLAN.md on disk. Works alongside context-provider via SendMessage.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:31f79b188b50b9409f3340cc134abcc2e4b6a64f932ed0352022a9db0942d0ec",
+      "hash": "sha256:9f851a05a4343a541e96ef4d9163ab273e3ecd3135eebd1c65cd9b2014cdfe85",
       "dependencies": [],
       "frontmatter": {
         "name": "planner",
@@ -2553,7 +2553,7 @@
           "estimate"
         ],
         "token_budget": 4000,
-        "template_version": "1.22.3"
+        "template_version": "1.22.4"
       }
     },
     {
@@ -2705,7 +2705,7 @@
       "description": "QG owner (Phase 3). Runs sequential verification on the final committed HEAD after VERIFY-FINAL architect approval. Reports structured PASS/FAIL.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:a2774d9bcd9fdeffc7c6dbdc1c2c9080ba808b6b433bd66492204adfdcfa8f1c",
+      "hash": "sha256:4e7864fb73a32afd613a03d347042df0294ff63be4ce7e0b49726116e5b4c083",
       "dependencies": [],
       "frontmatter": {
         "name": "quality-gater",
@@ -2721,7 +2721,7 @@
           "detekt"
         ],
         "token_budget": 3000,
-        "template_version": "2.28.1"
+        "template_version": "2.28.2"
       }
     },
     {

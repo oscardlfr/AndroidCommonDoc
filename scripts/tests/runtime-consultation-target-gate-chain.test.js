@@ -52,10 +52,19 @@ test('every target subcommand is named in its own denial', () => {
   }
 });
 
-test('the canonical single command and unrelated chained commands are not denied here', () => {
-  const single = run(`node ${cli} publish-result --request x`);
-  assert.ok(single === null || !RECOVERY.test(single.permissionDecisionReason || ''));
+test('the canonical single-quoted command and unrelated commands are not denied for the shape', () => {
+  const rll = require('../lib/runtime-role-lifecycle.cjs');
+  const single = run(rll.renderPosixDirect(['node', cli, 'publish-result', '--request', 'x']));
+  assert.ok(single === null || !RECOVERY.test(single.permissionDecisionReason || ''), 'the canonical form is judged by the grant logic, not the shape rule');
   assert.strictEqual(run('echo hi && ls'), null);
   assert.strictEqual(run(`echo ${cli} && ls`), null);
   assert.strictEqual(run(`node ${cli} consult --question q && ls`), null);
+  assert.strictEqual(run(`git commit -m "see node ${cli} publish-result"`), null, 'a mention inside a quoted message is not an invocation');
+});
+
+test('a standalone but non-canonical quoting is denied too: it parses to no grant either', () => {
+  for (const form of [`node ${cli} publish-result --request x`, `"node" "${cli}" "publish-result" "--request" "x"`]) {
+    const out = run(form);
+    assert.ok(out && out.permissionDecision === 'deny' && RECOVERY.test(out.permissionDecisionReason), form + ': ' + JSON.stringify(out));
+  }
 });

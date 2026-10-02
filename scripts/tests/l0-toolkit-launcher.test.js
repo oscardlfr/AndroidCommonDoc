@@ -79,3 +79,24 @@ test('every launcher operation target belongs to the runtime executable inventor
     }
   }
 });
+
+const fs = require('node:fs');
+test('--help lists every operation with what it does, and the L0-only ones say so', () => {
+  const { spawnSync } = require('node:child_process');
+  const launcher = path.resolve(__dirname, '..', '..', '.claude', 'runtime', 'l0-toolkit-launcher.cjs');
+  for (const args of [['--help'], ['-h'], ['help'], []]) {
+    const result = spawnSync(process.execPath, [launcher, ...args], { encoding: 'utf8' });
+    assert.strictEqual(result.status, 0, args.join(' ') + ': ' + result.stderr);
+    assert.match(result.stdout, /^Usage: node \.claude\/runtime\/l0-toolkit-launcher\.cjs/);
+    const source = fs.readFileSync(launcher, 'utf8');
+    const ids = [...source.matchAll(/^  '([a-z0-9-]+)': \{ relative/gm)].map((m) => m[1]);
+    assert.ok(ids.length >= 40, 'the operation table was found');
+    for (const id of ids) {
+      const line = result.stdout.split('\n').find((l) => l.trim().startsWith(id + ' '));
+      assert.ok(line && line.trim().length > id.length + 4, id + ' must be listed with a description: ' + JSON.stringify(line));
+    }
+    for (const id of ['qg-registry-integrity', 'qg-doc-validators', 'qg-report-freshness', 'l0-bats-sharded']) {
+      assert.match(result.stdout.split('\n').find((l) => l.trim().startsWith(id + ' ')), /L0 only/);
+    }
+  }
+});

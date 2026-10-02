@@ -18,6 +18,11 @@
   record. Once its PR ships, replace the temporary block with one concise shipped
   entry and remove the duplicated workstream detail.
 
+## Open owner decisions
+
+- `scripts/tests/runtime-claude-ready-bootstrap.test.js` (native-tool-result envelope budget) fails when the toolkit root is deeper than about 125 characters (the bootstrap embeds the resolved toolkit path five times), although its comment says the budget no longer depends on checkout depth: it fails the same way on the unmodified baseline in a deep directory. Needs an owner decision on the budget or on measuring with a synthetic toolkit root too.
+- Architect write gates (`architect-bash-write-gate`, `architect-self-edit-gate`) are not in a consumer's `HOOK_MATRIX`; whether a consumer should install them is an owner decision pending.
+
 ## Gate 0 — completed prerequisite (not counted among the seven waves)
 
 ### G0 — Reusable Workflow Input Boundary Hardening

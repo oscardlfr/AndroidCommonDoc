@@ -23,6 +23,7 @@ You do NOT know which project you're in (L0, L1, L2). You MUST discover the proj
 3. **Run `/pre-pr`** — this is the project's OWN validation pipeline. It already integrates Detekt, lint-resources, commit-lint, architecture guards, and project-specific checks dynamically.
 
 **`/pre-pr` is the PRIMARY enforcement step.** Everything else supports it.
+**L1/L2 consumer order**: the orchestrator transitions the wave to QG → you run the consumer checks (Steps 0–2.6, 4–9.5, X; Steps 3, 7.5, Y and Z are L0-only and the launcher refuses them) → Step 10 `runtime-consumer-qg … pre-pr --slug <slug> --project-gate PASS|FAIL` → `… mint --slug <slug>` → Step 11 `… verify --slug <slug>` → the orchestrator transitions the wave to COMPLETE.
 
 ## Search Dispatch Protocol (MANDATORY — T-BUG-015)
 
@@ -233,9 +234,9 @@ fi
 - **WARN** if docs/api/ is stale for modified modules (doc-updater should have regenerated in Phase 2)
 - Check `kdoc-state.json` docs_api.generated_at
 
-### Step 7.5: Doc-Validator Parity (REQUIRED — always runs)
+### Step 7.5: Doc-Validator Parity (L0 only — REQUIRED in L0)
 
-Full procedure: [quality-gater-doc-validator-parity](l0doc:docs/agents/quality-gater-doc-validator-parity.md). Run `node .claude/runtime/l0-toolkit-launcher.cjs run qg-doc-validators --project-root "$PWD" --`, then emit `doc-validator-parity` (ran=true, PASS/FAIL) into `quality-gate-report.json`. **Non-zero exit → FAIL QG.**
+Full procedure: [quality-gater-doc-validator-parity](l0doc:docs/agents/quality-gater-doc-validator-parity.md). Run `node .claude/runtime/l0-toolkit-launcher.cjs run qg-doc-validators --project-root "$PWD" --`, then emit `doc-validator-parity` (ran=true, PASS/FAIL) into `quality-gate-report.json`. **Non-zero exit → FAIL QG.** In L1/L2 skip it: it validates L0 doc conventions and the launcher refuses it.
 
 ### Step 8: Project Rule Cross-Check
 
@@ -325,31 +326,31 @@ fi
 - **FAIL QG** (exit 1, do not proceed to Step 10) if `qg-path-audit.sh` exits non-zero.
 - Escape hatch: `SKIP_PATH_AUDIT=1` passed to `qg-path-audit.sh` via env — the script exits 0 and the step emits `SKIP`.
 
-### Step Y: Registry Integrity (REQUIRED when `skills/` exists)
+### Step Y: Registry Integrity (L0 only — REQUIRED when `skills/` exists)
 
-Full procedure: [quality-gater-registry-integrity](l0doc:docs/agents/quality-gater-registry-integrity.md). Run `node .claude/runtime/l0-toolkit-launcher.cjs run qg-registry-integrity --project-root "$PWD" -- [--require-registry if skills/ exists]`, then emit `registry-hash` (ran=true, PASS/FAIL/n-a) into `quality-gate-report.json`. **Non-zero exit → FAIL QG.**
+Full procedure: [quality-gater-registry-integrity](l0doc:docs/agents/quality-gater-registry-integrity.md). Run `node .claude/runtime/l0-toolkit-launcher.cjs run qg-registry-integrity --project-root "$PWD" -- [--require-registry if skills/ exists]`, then emit `registry-hash` (ran=true, PASS/FAIL/n-a) into `quality-gate-report.json`. **Non-zero exit → FAIL QG.** In L1/L2 skip it: it checks the L0 registry shape, the launcher refuses it, and the consumer `/pre-pr` owns its own registry checks.
 
-### Step Z: Report Freshness Gate (REQUIRED — pre-mint)
+### Step Z: Report Freshness Gate (L0 only — REQUIRED pre-mint)
 
-Full procedure: [quality-gater-freshness-gate](l0doc:docs/agents/quality-gater-freshness-gate.md). Run `node .claude/runtime/l0-toolkit-launcher.cjs run qg-report-freshness --project-root "$PWD" -- .androidcommondoc/quality-gate-report.json`, then emit `report-freshness` (ran=true, PASS/FAIL) into the report. **Non-zero exit → exit 1.**
+Full procedure: [quality-gater-freshness-gate](l0doc:docs/agents/quality-gater-freshness-gate.md). Run `node .claude/runtime/l0-toolkit-launcher.cjs run qg-report-freshness --project-root "$PWD" -- .androidcommondoc/quality-gate-report.json`, then emit `report-freshness` (ran=true, PASS/FAIL) into the report. **Non-zero exit → exit 1.** In L1/L2 skip it: the launcher refuses it and `runtime-consumer-qg` binds freshness itself.
 
 ### Step S: Secret Scan (REQUIRED — pre-mint)
 
-Full procedure: [quality-gater-secret-scan](l0doc:docs/agents/quality-gater-secret-scan.md). Run `node .claude/runtime/l0-toolkit-launcher.cjs run secret-scan --project-root "$PWD" --`, capture exit, emit `secret-scan` (ran=true, PASS iff exit 0 else FAIL) into `quality-gate-report.json`. **Non-zero exit → exit 1 immediately.**
+Full procedure: [quality-gater-secret-scan](l0doc:docs/agents/quality-gater-secret-scan.md). Run `node .claude/runtime/l0-toolkit-launcher.cjs run secret-scan --project-root "$PWD" --`, capture exit, emit `secret-scan` (ran=true, PASS iff exit 0 else FAIL) into `quality-gate-report.json`. **Non-zero exit → exit 1 immediately.** In L1/L2 do not run it here: the Step 10 `pre-pr` producer runs the same scanner and records the result in the stamp.
 
 ### Step 10: Emit QG proof (if PASS)
 
-If ALL steps passed:
+If ALL steps passed (`PROJECT_GATE=PASS`; in L1/L2 a failed step means `PROJECT_GATE=FAIL`, which records a FAIL stamp and stops before the mint):
 ```bash
 if [[ "$(node .claude/runtime/l0-toolkit-launcher.cjs describe layer --project-root "$PWD")" == "L0" ]]; then
   node .claude/runtime/l0-toolkit-launcher.cjs run emit-push-proof --project-root "$PWD" -- --subcommand run-qg
 else
+  node .claude/runtime/l0-toolkit-launcher.cjs run runtime-consumer-qg --project-root "$PWD" -- pre-pr --slug "$CLAUDE_WAVE_SLUG" --project-gate "${PROJECT_GATE:?PASS or FAIL}" || exit 1
   node .claude/runtime/l0-toolkit-launcher.cjs run runtime-consumer-qg --project-root "$PWD" -- mint --slug "$CLAUDE_WAVE_SLUG"
 fi
 ```
 
-If ANY step FAILED: do NOT call run-qg. The pre-push hook will block the push.
-**The proof is your PASS/FAIL signal to the enforcement layer.** Without it, no push is possible.
+If ANY step FAILED: do NOT mint (L0: no run-qg; L1/L2: only the `pre-pr … --project-gate FAIL` record). **The proof is your PASS/FAIL signal to the enforcement layer.** Without it, no push and no COMPLETE. A failing check is never reclassified as "pre-existing" or "unrelated" to reach PASS; in L1/L2 a failure of the project's own validator sets `PROJECT_GATE=FAIL`, records the FAIL stamp and stops the QG with that reason.
 
 ### Step 11: Emit QG result signal
 
@@ -396,7 +397,7 @@ MANDATORY stash-pop + report protocol — pop before your final report, state `S
 | 9. UI Tests | PASS/FAIL/SKIP | {details} (skip if no Compose) |
 | 9.5 Runtime UI | PASS/FAIL/SKIP | {details} (skip if non-gradle or no baselines) |
 | X. Path-Manifest Audit | PASS/FAIL/SKIP | CLASS sentinel matches PLAN.md; all touched files in manifest (skip if non-wave) |
-| Z. Freshness Gate | PASS/FAIL | {all step reasons fresh for HEAD} |
+| Z. Freshness Gate | PASS/FAIL/L0-only | {all step reasons fresh for HEAD}; L1/L2 binds freshness in runtime-consumer-qg |
 | S. Secret Scan | PASS/FAIL | scanner=<tool> v<version>, <count> verified findings; absent/error → FAIL (never SKIPPED) |
 | 10. Stamp | WRITTEN/SKIPPED | .androidcommondoc/quality-gate.stamp |
 

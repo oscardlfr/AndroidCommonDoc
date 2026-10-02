@@ -2436,16 +2436,15 @@ function expectedBridgeArgvDigest(action) {
     writeLifecyclePlanFixture(proj, 'lg5-wave');
     const cmd = `node ${IMPL_RLL} ensure --project-root ${proj} --role ${LG_ROLE}`;
     const r = runMainOrchestratorBash(cmd, proj);
-    assert.strictEqual(r.exit, 0, 'LG5 (A1): an unquoted (non-canonical) command must still be ALLOWED as ordinary non-search Bash passthrough, just never injected: ' + JSON.stringify(r));
-    let hadInjection = false;
-    if (r.stdout && r.stdout.trim().length > 0) {
-      try {
-        const body = JSON.parse(r.stdout);
-        hadInjection = !!(body && body.hookSpecificOutput);
-      } catch { /* non-JSON stdout is fine here -- definitely no injection */ }
-    }
-    assert.strictEqual(hadInjection, false, 'LG5 (A1): an unquoted, non-canonical ensure command must NEVER receive a lifecycle-grant injection once the hook requires parsePosixDirect\'s closed single-quoted grammar -- pre-fix the permissive hand-written tokenizer wrongly accepts it and injects a real, live grant: ' + JSON.stringify(r));
-    console.log('LG5 (A1) non-canonical unquoted command gets NO injection (canonical-parser-only recognition): PASS');
+    assert.strictEqual(r.exit, 0, 'LG5 (A1): the hook always exits 0: ' + JSON.stringify(r));
+    // Never injected, and no longer a silent passthrough either: a recognizable runtime command that is not the
+    // canonical single-quoted form is denied with the recovery (shared shape rule), instead of failing later with an
+    // opaque AUTHORITY_INVALID.
+    const body = JSON.parse(r.stdout);
+    assert.strictEqual(body.hookSpecificOutput.permissionDecision, 'deny', 'LG5 (A1): ' + r.stdout);
+    assert.ok(!body.hookSpecificOutput.updatedInput, 'LG5 (A1): an unquoted, non-canonical ensure command must NEVER receive a lifecycle-grant injection');
+    assert.match(body.hookSpecificOutput.permissionDecisionReason, /run ensure as ONE standalone command/, 'LG5 (A1): the denial names the recovery');
+    console.log('LG5 (A1) non-canonical unquoted command is denied with the recovery, never injected: PASS');
   } finally {
     cleanupLifecycleFixture(proj);
   }

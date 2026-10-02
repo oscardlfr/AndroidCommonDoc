@@ -136,6 +136,18 @@
       }
     },
     "planner": {
+      "1.22.5": {
+        "date": "2026-10-02",
+        "breaking": false,
+        "summary": "Pass B never waits with sleep: when the accepted consult result has not arrived the planner ends with NO-ACCEPTED-CONSULT-RESULT and is resumed by the arch-* owner's SendMessage; the Spawn Table assigns implementation and the commit to the specialist layer, never to the orchestrator; the draft-to-final handoff is the stop-and-respawn of the draft peers, not a rebind.",
+        "migration_hint": "Run plain /sync-l0; runtime-enabled consumers refresh the managed agents and the toolkit launcher atomically."
+      },
+      "1.22.4": {
+        "date": "2026-10-02",
+        "breaking": false,
+        "summary": "Documents the exact final PLAN shape: ### Wave Class, ## Objective, ### Path-Manifest (one bare repo-relative path per bullet, the QG path-audit allow-list), ### Acceptance and ### Spawn Table, with the optional sections placed between Acceptance and Spawn Table.",
+        "migration_hint": "Run plain /sync-l0; runtime-enabled consumers refresh the managed agents and the toolkit launcher atomically."
+      },
       "1.22.3": {
         "date": "2026-09-30",
         "breaking": false,
@@ -269,6 +281,18 @@
       }
     },
     "quality-gater": {
+      "2.28.3": {
+        "date": "2026-10-02",
+        "breaking": false,
+        "summary": "A failing check is never reclassified as pre-existing to reach PASS; in L1/L2 a failure of the project's own validator records pre-pr --project-gate FAIL and stops the QG with the reason.",
+        "migration_hint": "Run plain /sync-l0; runtime-enabled consumers refresh the managed agents and the toolkit launcher atomically."
+      },
+      "2.28.2": {
+        "date": "2026-10-02",
+        "breaking": false,
+        "summary": "Defines the L1/L2 QG check set and order: registry integrity, doc-validator parity, report freshness and Bats are L0-only (the launcher refuses them downstream); after the consumer checks, runtime-consumer-qg pre-pr --project-gate PASS|FAIL produces the pre-pr stamp (running the secret scan), then mint and verify, then the orchestrator transitions to COMPLETE.",
+        "migration_hint": "Run plain /sync-l0; runtime-enabled consumers refresh the managed agents and the toolkit launcher atomically."
+      },
       "2.28.1": {
         "date": "2026-09-29",
         "breaking": false,
@@ -451,6 +475,12 @@
       }
     },
     "arch-testing": {
+      "1.41.3": {
+        "date": "2026-10-02",
+        "breaking": false,
+        "summary": "VERIFY_FINAL approve documents --evidence-text: write-verdict stores the text in the wave directory as <role>-verify-final-evidence.md and binds its digest, so an architect without a Write tool never creates a file. Phase tokens are exactly prep|verify-final; --evidence-file stays for an existing file inside the wave directory.",
+        "migration_hint": "Run plain /sync-l0; runtime-enabled consumers refresh the managed agents and the toolkit launcher atomically."
+      },
       "1.41.2": {
         "date": "2026-09-30",
         "breaking": false,
@@ -643,6 +673,12 @@
       }
     },
     "arch-platform": {
+      "1.36.3": {
+        "date": "2026-10-02",
+        "breaking": false,
+        "summary": "VERIFY_FINAL approve documents --evidence-text: write-verdict stores the text in the wave directory as <role>-verify-final-evidence.md and binds its digest, so an architect without a Write tool never creates a file. Phase tokens are exactly prep|verify-final; --evidence-file stays for an existing file inside the wave directory.",
+        "migration_hint": "Run plain /sync-l0; runtime-enabled consumers refresh the managed agents and the toolkit launcher atomically."
+      },
       "1.36.2": {
         "date": "2026-09-30",
         "breaking": false,
@@ -815,6 +851,12 @@
       }
     },
     "arch-integration": {
+      "1.32.3": {
+        "date": "2026-10-02",
+        "breaking": false,
+        "summary": "VERIFY_FINAL approve documents --evidence-text: write-verdict stores the text in the wave directory as <role>-verify-final-evidence.md and binds its digest, so an architect without a Write tool never creates a file. Phase tokens are exactly prep|verify-final; --evidence-file stays for an existing file inside the wave directory.",
+        "migration_hint": "Run plain /sync-l0; runtime-enabled consumers refresh the managed agents and the toolkit launcher atomically."
+      },
       "1.32.2": {
         "date": "2026-09-30",
         "breaking": false,
@@ -1069,6 +1111,12 @@
       }
     },
     "doc-updater": {
+      "2.13.2": {
+        "date": "2026-10-02",
+        "breaking": false,
+        "summary": "In L1/L2 the doc-updater no longer consults context-provider or escalates to the orchestrator: its context is the accepted consult result cited in the dispatch by the arch-* owner, and a missing citation or an impossible Edit precondition is reported to the dispatching architect.",
+        "migration_hint": "Run plain /sync-l0; runtime-enabled consumers refresh the managed agents and the toolkit launcher atomically."
+      },
       "2.13.1": {
         "date": "2026-09-29",
         "breaking": false,

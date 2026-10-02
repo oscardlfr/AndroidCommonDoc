@@ -70,3 +70,67 @@ test('mint rejects a symlinked output ancestor without writing outside the consu
   assert.equal(fs.existsSync(path.join(external, 'wave-test', 'qg-result.json')), false);
   assert.equal(fs.existsSync(path.join(root, '.androidcommondoc', 'push-proof.json')), false);
 });
+
+// pre-pr is the canonical producer of the stamp that mint requires: a consumer has no other one. The secret scanner is
+// an external binary, so these tests give the producer a stub of it (TRUFFLEHOG_BIN): the only simulation here.
+function scannerStub(t, { findings = false } = {}) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'runtime-consumer-qg-scanner-'));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const bin = path.join(dir, 'trufflehog');
+  fs.writeFileSync(bin, `#!/bin/sh\n[ "$1" = "--version" ] && { echo "stub 1.0"; exit 0; }\n${findings ? 'echo \'{"verified":true}\'' : ':'}\nexit 0\n`, { mode: 0o755 });
+  return bin;
+}
+
+function prePr(root, slug, args, env) {
+  return spawnSync(process.execPath, [SCRIPT, root, 'pre-pr', '--slug', slug, ...args], {
+    cwd: root, encoding: 'utf8', env: { ...process.env, ...env },
+  });
+}
+
+function qgFixtureWithoutStamp() {
+  const { root, head } = fixture();
+  fs.rmSync(path.join(root, '.androidcommondoc', 'pre-pr.stamp'));
+  return { root, head };
+}
+
+test('pre-pr records a PASS stamp that mint then accepts, and keeps the reports out of git status', (t) => {
+  const { root, head } = qgFixtureWithoutStamp();
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const result = prePr(root, 'test', ['--project-gate', 'PASS'], { TRUFFLEHOG_BIN: scannerStub(t) });
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  const stamp = JSON.parse(fs.readFileSync(path.join(root, '.androidcommondoc', 'pre-pr.stamp'), 'utf8'));
+  assert.deepEqual({ verdict: stamp.verdict, head: stamp.head, wave_slug: stamp.wave_slug }, { verdict: 'PASS', head, wave_slug: 'test' });
+  assert.deepEqual(stamp.checks, { project_gate: 'PASS', tracked_worktree_clean: 'PASS', secret_scan: 'PASS' });
+  assert.equal(git(root, ['status', '--porcelain']), '', 'the QG reports are ignored locally, not left untracked');
+  assert.equal(mint(root).status, 0, 'the produced stamp is exactly what mint requires');
+});
+
+test('pre-pr records FAIL and exits 1 when the project gate failed, a secret was found or the tree is dirty', (t) => {
+  for (const [label, args, env, dirty, failing] of [
+    ['project gate', ['--project-gate', 'FAIL'], { TRUFFLEHOG_BIN: null }, false, 'project_gate'],
+    ['secret found', ['--project-gate', 'PASS'], { TRUFFLEHOG_BIN: 'findings' }, false, 'secret_scan'],
+    ['dirty tree', ['--project-gate', 'PASS'], { TRUFFLEHOG_BIN: null }, true, 'tracked_worktree_clean'],
+  ]) {
+    const { root } = qgFixtureWithoutStamp();
+    t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+    if (dirty) fs.writeFileSync(path.join(root, 'tracked.txt'), 'changed\n');
+    const bin = env.TRUFFLEHOG_BIN === 'findings' ? scannerStub(t, { findings: true }) : scannerStub(t);
+    const result = prePr(root, 'test', args, { TRUFFLEHOG_BIN: bin });
+    assert.equal(result.status, 1, label + ': ' + (result.stderr || result.stdout));
+    const stamp = JSON.parse(fs.readFileSync(path.join(root, '.androidcommondoc', 'pre-pr.stamp'), 'utf8'));
+    assert.equal(stamp.verdict, 'FAIL', label);
+    assert.equal(stamp.checks[failing], 'FAIL', label);
+    if (!dirty) assert.notEqual(mint(root).status, 0, label + ': mint refuses a FAIL stamp');
+  }
+});
+
+test('pre-pr needs the project gate outcome and a wave in phase QG at the current HEAD', (t) => {
+  const { root } = qgFixtureWithoutStamp();
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const env = { TRUFFLEHOG_BIN: scannerStub(t) };
+  assert.match(prePr(root, 'test', [], env).stderr, /project-gate-required/);
+  assert.match(prePr(root, 'test', ['--project-gate', 'maybe'], env).stderr, /project-gate-required/);
+  fs.writeFileSync(path.join(root, '.androidcommondoc', 'wave-control', 'test.json'), JSON.stringify({ phase: 'EXECUTE', head: 'a'.repeat(40), plan_sha256: 'a'.repeat(64) }));
+  assert.match(prePr(root, 'test', ['--project-gate', 'PASS'], env).stderr, /wave-state-not-current/);
+  assert.equal(fs.existsSync(path.join(root, '.androidcommondoc', 'pre-pr.stamp')), false, 'no stamp when the preconditions fail');
+});
