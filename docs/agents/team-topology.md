@@ -113,10 +113,10 @@ When a core specialist is busy and the architect needs parallel work:
 
 ```
 Phase 1 — Planning (planner subagent)
-  orchestrator spawns planner (single-use Agent or background peer)
+  orchestrator spawns one wave-scoped planner actor
   planner queries context-provider for project state
   planner writes PLAN.md to disk
-  orchestrator reads PLAN.md → planner dismissed
+  orchestrator resumes that same actor across Pass A and Pass B, then retires it
 
 Phase 2 — Execution (architects dispatched per plan)
   orchestrator dispatches arch-testing/platform/integration with plan assignments
@@ -140,13 +140,13 @@ Phase 3 — Quality Gate (quality-gater subagent)
 **Purpose**: Produce a structured execution plan before any code is written.
 
 **Flow**:
-1. Orchestrator spawns planner: `Agent(subagent_type="planner", ...)` — no `team_name` required
-2. Planner queries context-provider for current state (via SendMessage if context-provider is a live background peer, or by reading its context bundle from disk)
-3. Planner reads architecture docs, specs, MODULE_MAP.md
-4. Planner produces plan with: scope, steps, architect assignments, dependencies, risks
-5. Planner writes plan to `.planning/wave-<slug>/PLAN.md` (disk artifact — authoritative)
-6. Planner notifies orchestrator: `"Plan ready: .planning/wave-<slug>/PLAN.md"` (via SendMessage if supported, or orchestrator polls the file)
-7. Orchestrator reads plan from disk, planner dismissed
+1. Orchestrator creates the wave's only planner actor: `Agent(name="planner", subagent_type="planner", ...)` — no `team_name` required
+2. Planner writes the Pass A draft and returns its stable recipient/handle
+3. Orchestrator ensures the support plane, then resumes that exact actor with `SendMessage(to="planner", ...)`; it never dispatches a second planner
+4. Planner queries context-provider for current state through the documented mediated chain
+5. Planner reads only the architecture/spec paths returned by the curated context flow
+6. Planner finalizes `.planning/wave-<slug>/PLAN.md` with scope, steps, architect assignments, dependencies and risks
+7. Orchestrator reads the final plan from disk and retires the planner; an unreachable planner fails the wave closed and requires a fresh slug/session
 
 **Cross-department check**: If planner flags product/marketing impact, orchestrator spawns product-strategist or content-creator as sub-agents for review before proceeding.
 

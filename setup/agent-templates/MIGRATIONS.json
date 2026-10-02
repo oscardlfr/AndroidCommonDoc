@@ -136,6 +136,12 @@
       }
     },
     "planner": {
+      "1.22.7": {
+        "date": "2026-10-02",
+        "breaking": false,
+        "summary": "Pass A and Pass B now share one stable planner actor: Pass A is the wave's only Agent spawn, Pass B resumes that exact actor through SendMessage, and loss of the actor fails the wave closed instead of spawning a planner-N replacement. The strict PLAN writer gate remains unchanged.",
+        "migration_hint": "Run plain /sync-l0; start a fresh wave. Orchestrators must retain the Pass A planner recipient/handle and resume it for Pass B rather than dispatching a second planner."
+      },
       "1.22.6": {
         "date": "2026-10-02",
         "breaking": false,

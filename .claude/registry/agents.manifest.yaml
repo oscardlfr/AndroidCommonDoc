@@ -1618,11 +1618,11 @@ agents:
   planner:
     canonical_name: planner
     subagent_type: planner
-    template_version: "1.22.6"
-    template_frontmatter_sha256: bab2068e3ded11d59137c9d19bf9ad9625ce2c229469f68c6f83f65662f7cd0c
+    template_version: "1.22.7"
+    template_frontmatter_sha256: 40d6f470ec217a4e3ff0bf301eb2bb42a5b0f24377834d286b2d81c024f8a94d
     category: orchestrator
     lifecycle: ephemeral
-    description: "Single-use planning subagent. Reads context, specs, architecture to produce structured execution plans. Spawned without team_name; results land as PLAN.md on disk. Works alongside context-provider via SendMessage."
+    description: "Wave-scoped planning subagent. One actor owns Pass A and Pass B, is resumed through SendMessage, and writes PLAN.md on disk. Works alongside context-provider via SendMessage."
     domain: development
     intent: [plan, scope, breakdown, estimate]
     runtime:
@@ -1645,6 +1645,7 @@ agents:
     memory: null
     notes:
       - "Phase 1 peer with context-provider — produces .planning/ plan documents."
+      - "One planner principal per wave: Pass A is the only fresh Agent spawn; Pass B resumes the same actor and fails closed if that actor is lost."
       - "OBSERVATION: tools include Bash but exclude Grep/Glob — interesting choice. Bash for file existence checks; pattern lookup goes through context-provider via SendMessage. Aligns with dev→arch→CP chain pattern (planner is its own role, not a dev specialist, but adopts the same discipline)."
     aliases: []
     superseded_by: null

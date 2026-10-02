@@ -2535,14 +2535,14 @@
       "name": "planner",
       "type": "agent",
       "path": ".claude/agents/planner.md",
-      "description": "Single-use planning subagent. Reads context, specs, architecture to produce structured execution plans. Spawned without team_name; results land as PLAN.md on disk. Works alongside context-provider via SendMessage.",
+      "description": "Wave-scoped planning subagent. One actor owns Pass A and Pass B, is resumed through SendMessage, and writes PLAN.md on disk. Works alongside context-provider via SendMessage.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:2d78f43cd5a965691b3ad549aea098298653ac05e45de3fcb5e294d0afe64cf7",
+      "hash": "sha256:77209d830c7f50a07956f9d2046b3c53562cb20e5eb68c2b006448ba698be46a",
       "dependencies": [],
       "frontmatter": {
         "name": "planner",
-        "description": "Single-use planning subagent. Reads context, specs, architecture to produce structured execution plans. Spawned without team_name; results land as PLAN.md on disk. Works alongside context-provider via SendMessage.",
+        "description": "Wave-scoped planning subagent. One actor owns Pass A and Pass B, is resumed through SendMessage, and writes PLAN.md on disk. Works alongside context-provider via SendMessage.",
         "tools": "Read, Write, Bash, SendMessage",
         "model": "sonnet",
         "domain": "development",
@@ -2553,7 +2553,7 @@
           "estimate"
         ],
         "token_budget": 4000,
-        "template_version": "1.22.6"
+        "template_version": "1.22.7"
       }
     },
     {
