@@ -6,7 +6,7 @@ model: sonnet
 domain: quality
 intent: [gate, verify, pre-pr, coverage, detekt]
 token_budget: 3000
-template_version: "2.28.5"
+template_version: "2.28.6"
 ---
 
 ## Runtime source boundary

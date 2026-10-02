@@ -2705,7 +2705,7 @@
       "description": "QG owner (Phase 3). Runs sequential verification on the final committed HEAD after VERIFY-FINAL architect approval. Reports structured PASS/FAIL.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:2103a252e6149254a2290c8fa065ba2801eba6b75978e07e2b8a4f560c64cdaf",
+      "hash": "sha256:a10128821eb82299e43474b937be1b9c7dadcc4cd902975b18b741e8fca8638e",
       "dependencies": [],
       "frontmatter": {
         "name": "quality-gater",
@@ -2721,7 +2721,7 @@
           "detekt"
         ],
         "token_budget": 3000,
-        "template_version": "2.28.5"
+        "template_version": "2.28.6"
       }
     },
     {
