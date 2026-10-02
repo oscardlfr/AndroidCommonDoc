@@ -188,6 +188,77 @@ test('resolve-active-wave fails closed when no durable state is currently in QG'
   assert.match(result.stderr, /active-qg-wave-not-found/);
 });
 
+test('resolve-active-wave preserves canonical current and historical QG attempt namespaces', (t) => {
+  for (const layer of ['L1', 'L2']) {
+    const fixture = installConsumerFixture(layer);
+    t.after(() => fs.rmSync(fixture.consumerRoot, { recursive: true, force: true }));
+    const root = fixture.consumerRoot;
+    commitWavePlans(root, ['previous'], 'previous wave');
+    promoteWaveStateToQG(root, 'previous');
+    const prior = waveControl.qgAttempt(root, 'previous', 'FAIL', { expectedRevision: 3 });
+    const priorPath = path.join(root, prior.path);
+    const priorBytes = fs.readFileSync(priorPath);
+
+    commitWavePlans(root, ['current'], 'current wave');
+    promoteWaveStateToQG(root, 'current');
+    const current = waveControl.qgAttempt(root, 'current', 'PASS', { expectedRevision: 3 });
+    const currentPath = path.join(root, current.path);
+    const currentBytes = fs.readFileSync(currentPath);
+    for (let pass = 0; pass < 2; pass += 1) {
+      const result = resolveActiveWaveThroughLauncher(fixture);
+      assert.equal(result.status, 0, `${layer}: ${result.stderr || result.stdout}`);
+      assert.equal(result.stdout, 'current\n');
+      assert.deepEqual(fs.readFileSync(priorPath), priorBytes);
+      assert.deepEqual(fs.readFileSync(currentPath), currentBytes);
+    }
+  }
+});
+
+test('resolve-active-wave treats non-state regular sidecars as non-authoritative', (t) => {
+  const fixture = installConsumerFixture('L1');
+  t.after(() => fs.rmSync(fixture.consumerRoot, { recursive: true, force: true }));
+  commitWavePlans(fixture.consumerRoot, ['current'], 'current wave');
+  promoteWaveStateToQG(fixture.consumerRoot, 'current');
+  const directory = path.join(fixture.consumerRoot, '.androidcommondoc', 'wave-control');
+  fs.writeFileSync(path.join(directory, 'current.json.tmp-123-abcdef012345'), '{"phase":"QG"}');
+  fs.mkdirSync(path.join(directory, 'other.json.lock'));
+  const result = resolveActiveWaveThroughLauncher(fixture);
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  assert.equal(result.stdout, 'current\n');
+});
+
+test('resolve-active-wave rejects malformed state records and directories masquerading as state', (t) => {
+  for (const kind of ['malformed', 'directory']) {
+    const fixture = installConsumerFixture('L2');
+    t.after(() => fs.rmSync(fixture.consumerRoot, { recursive: true, force: true }));
+    commitWavePlans(fixture.consumerRoot, ['current'], 'current wave');
+    promoteWaveStateToQG(fixture.consumerRoot, 'current');
+    const target = path.join(fixture.consumerRoot, '.androidcommondoc', 'wave-control', 'decoy.json');
+    if (kind === 'directory') fs.mkdirSync(target);
+    else fs.writeFileSync(target, '{"phase":"QG"}');
+    const result = resolveActiveWaveThroughLauncher(fixture);
+    assert.equal(result.status, 2);
+    assert.match(result.stderr, /wave-state-(?:invalid:decoy|registry-unsafe)/);
+  }
+});
+
+test('resolve-active-wave rejects symlinked records and artifact namespaces without following them', {
+  skip: process.platform === 'win32' ? 'symlink creation is privilege-dependent on Windows' : false,
+}, (t) => {
+  for (const name of ['alias.json', 'artifacts']) {
+    const fixture = installConsumerFixture('L1');
+    t.after(() => fs.rmSync(fixture.consumerRoot, { recursive: true, force: true }));
+    commitWavePlans(fixture.consumerRoot, ['current'], 'current wave');
+    promoteWaveStateToQG(fixture.consumerRoot, 'current');
+    const directory = path.join(fixture.consumerRoot, '.androidcommondoc', 'wave-control');
+    fs.symlinkSync(name.endsWith('.json') ? path.join(directory, 'current.json') : fixture.consumerRoot,
+      path.join(directory, name));
+    const result = resolveActiveWaveThroughLauncher(fixture);
+    assert.equal(result.status, 2);
+    assert.match(result.stderr, /wave-state-registry-unsafe/);
+  }
+});
+
 test('resolve-active-wave fails closed when two durable QG states are current', (t) => {
   const fixture = installConsumerFixture('L2');
   t.after(() => fs.rmSync(fixture.consumerRoot, { recursive: true, force: true }));

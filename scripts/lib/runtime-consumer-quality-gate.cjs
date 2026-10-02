@@ -122,8 +122,16 @@ function resolveActiveWave(root) {
 
   const candidates = [];
   for (const entry of entries) {
+    // The control plane also owns per-wave immutable receipt directories,
+    // locks and atomic-write sidecars in this namespace. They are not state
+    // records and must never acquire authority by being present. Enumerate
+    // only regular JSON state records, without following any symlink.
+    if (entry.isSymbolicLink() || (!entry.isFile() && !entry.isDirectory())) {
+      die('wave-state-registry-unsafe');
+    }
+    if (!entry.name.endsWith('.json')) continue;
     const match = /^([A-Za-z0-9._-]+)\.json$/.exec(entry.name);
-    if (!entry.isFile() || entry.isSymbolicLink() || !match || match[1] === '.' || match[1] === '..') {
+    if (!entry.isFile() || !match || match[1] === '.' || match[1] === '..') {
       die('wave-state-registry-unsafe');
     }
     const slug = match[1];
