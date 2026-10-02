@@ -36,10 +36,10 @@ under review when arch dispatched it. quality-gater's file access = VERIFICATION
 
 ### Step 0: Confirm activation
 
-Confirm you have been activated by team-lead for Phase 3. If activated without a specific task, SendMessage to team-lead: `SendMessage(to="team-lead", summary="Phase 3 scope?", message="Activated for Phase 3 — what is the scope of this quality gate run?")`.
+Confirm you have been activated by team-lead for Phase 3. If activated without a specific task, SendMessage to team-lead: `SendMessage(to="team-lead", summary="Phase 3 scope?", message="Activated for Phase 3 — what is the scope of this quality gate run?")`. Resolve the slug again in every Bash block that needs it: shell variables do not survive between tool calls, and persisted QG phase state — never ambient `CLAUDE_WAVE_SLUG`, directory order, or mtime — is the authority.
 
 ```bash
-: "${CLAUDE_WAVE_SLUG:?set explicit wave slug}"; QG_PLAN="$PWD/.planning/wave-${CLAUDE_WAVE_SLUG}/PLAN.md"; [[ -f "$QG_PLAN" && ! -L "$QG_PLAN" ]] || { echo "PLAN must be a regular non-symlink file: $QG_PLAN" >&2; exit 2; }; RUNTIME_LAYER=$(node .claude/runtime/l0-toolkit-launcher.cjs describe layer --project-root "$PWD"); if [[ "$RUNTIME_LAYER" == "L0" ]]; then node .claude/runtime/l0-toolkit-launcher.cjs run emit-qg-result --project-root "$PWD" -- --init --slug "$CLAUDE_WAVE_SLUG"; fi
+wave_slug="$(node .claude/runtime/l0-toolkit-launcher.cjs run runtime-consumer-qg --project-root "$PWD" -- resolve-active-wave)" || exit $?; QG_PLAN="$PWD/.planning/wave-${wave_slug}/PLAN.md"; [[ -f "$QG_PLAN" && ! -L "$QG_PLAN" ]] || { echo "PLAN must be a regular non-symlink file: $QG_PLAN" >&2; exit 2; }; RUNTIME_LAYER=$(node .claude/runtime/l0-toolkit-launcher.cjs describe layer --project-root "$PWD"); if [[ "$RUNTIME_LAYER" == "L0" ]]; then node .claude/runtime/l0-toolkit-launcher.cjs run emit-qg-result --project-root "$PWD" -- --init --slug "$wave_slug"; fi
 ```
 
 ### Step 0.5: Detect project toolchain (BL-W31.7-10)
@@ -95,7 +95,7 @@ If you suspect context compaction dropped state (stale assumptions, forgotten ta
 ### Step 2: Full Validation Pipeline
 
 ```bash
-node .claude/runtime/l0-toolkit-launcher.cjs run emit-qg-result --project-root "$PWD" -- --phase "pre-pr"
+wave_slug="$(node .claude/runtime/l0-toolkit-launcher.cjs run runtime-consumer-qg --project-root "$PWD" -- resolve-active-wave)" || exit $?; node .claude/runtime/l0-toolkit-launcher.cjs run emit-qg-result --project-root "$PWD" -- --phase "pre-pr" --slug "$wave_slug"
 /pre-pr
 ```
 
@@ -171,10 +171,10 @@ L0 runs `/test-full-parallel --fresh-daemon` plus the Bats aggregate below. L1/L
 **Bash/Shell scripts (MANDATORY — FULL suite):**
 
 ```bash
-if [[ "$(node .claude/runtime/l0-toolkit-launcher.cjs describe layer --project-root "$PWD")" == "L0" ]]; then
-  node .claude/runtime/l0-toolkit-launcher.cjs run emit-qg-result --project-root "$PWD" -- --phase "test-suite"
+wave_slug="$(node .claude/runtime/l0-toolkit-launcher.cjs run runtime-consumer-qg --project-root "$PWD" -- resolve-active-wave)" || exit $?; QG_PLAN="$PWD/.planning/wave-${wave_slug}/PLAN.md"; if [[ "$(node .claude/runtime/l0-toolkit-launcher.cjs describe layer --project-root "$PWD")" == "L0" ]]; then
+  node .claude/runtime/l0-toolkit-launcher.cjs run emit-qg-result --project-root "$PWD" -- --phase "test-suite" --slug "$wave_slug"
   # HARD: either non-zero exit => STOP+report -- NOT just ^not ok (exit 2 = incomplete/no-evidence can fire with not_ok==0). Order above (--init then bats) is load-bearing: generated_at >= started_at depends on it.
-  node .claude/runtime/l0-toolkit-launcher.cjs run l0-bats-sharded --project-root "$PWD" -- --suite-root "$PWD/scripts/tests" --shard-count 6 --max-parallel 6 --wave-slug "$CLAUDE_WAVE_SLUG" --plan "$QG_PLAN" || exit $?
+  node .claude/runtime/l0-toolkit-launcher.cjs run l0-bats-sharded --project-root "$PWD" -- --suite-root "$PWD/scripts/tests" --shard-count 6 --max-parallel 6 --wave-slug "$wave_slug" --plan "$QG_PLAN" || exit $?
 else
   echo "[STEP 3] Consumer project tests are owned by the single /pre-pr run from Step 2; the L0 Bats harness is source-only and is not repeated downstream."
 fi
@@ -273,7 +273,7 @@ See l0doc:docs/agents/quality-gater-runtime-ui-validation.md. Skip if: no baseli
 Resolve wave slug, check PLAN.md, run qg-path-audit.sh, emit result into `quality-gate-report.json`.
 
 ```bash
-wave_slug="${CLAUDE_WAVE_SLUG:?set explicit wave slug}"
+wave_slug="$(node .claude/runtime/l0-toolkit-launcher.cjs run runtime-consumer-qg --project-root "$PWD" -- resolve-active-wave)" || exit $?
 plan_path=".planning/wave-${wave_slug}/PLAN.md"
 
 REPORT_FILE=".androidcommondoc/quality-gate-report.json"
@@ -342,11 +342,11 @@ Full procedure: [quality-gater-secret-scan](l0doc:docs/agents/quality-gater-secr
 
 If ALL steps passed (`PROJECT_GATE=PASS`; in L1/L2 a failed step means `PROJECT_GATE=FAIL`, which records a FAIL stamp and stops before the mint):
 ```bash
-if [[ "$(node .claude/runtime/l0-toolkit-launcher.cjs describe layer --project-root "$PWD")" == "L0" ]]; then
-  node .claude/runtime/l0-toolkit-launcher.cjs run emit-push-proof --project-root "$PWD" -- --subcommand run-qg
+wave_slug="$(node .claude/runtime/l0-toolkit-launcher.cjs run runtime-consumer-qg --project-root "$PWD" -- resolve-active-wave)" || exit $?; if [[ "$(node .claude/runtime/l0-toolkit-launcher.cjs describe layer --project-root "$PWD")" == "L0" ]]; then
+  CLAUDE_WAVE_SLUG="$wave_slug" node .claude/runtime/l0-toolkit-launcher.cjs run emit-push-proof --project-root "$PWD" -- --subcommand run-qg
 else
-  node .claude/runtime/l0-toolkit-launcher.cjs run runtime-consumer-qg --project-root "$PWD" -- pre-pr --slug "$CLAUDE_WAVE_SLUG" --project-gate "${PROJECT_GATE:?PASS or FAIL}" || exit 1
-  node .claude/runtime/l0-toolkit-launcher.cjs run runtime-consumer-qg --project-root "$PWD" -- mint --slug "$CLAUDE_WAVE_SLUG"
+  node .claude/runtime/l0-toolkit-launcher.cjs run runtime-consumer-qg --project-root "$PWD" -- pre-pr --slug "$wave_slug" --project-gate "${PROJECT_GATE:?PASS or FAIL}" || exit 1
+  node .claude/runtime/l0-toolkit-launcher.cjs run runtime-consumer-qg --project-root "$PWD" -- mint --slug "$wave_slug"
 fi
 ```
 
@@ -355,10 +355,10 @@ If ANY step FAILED: do NOT mint (L0: no run-qg; L1/L2: only the `pre-pr … --pr
 ### Step 11: Emit QG result signal
 
 ```bash
-if [[ "$(node .claude/runtime/l0-toolkit-launcher.cjs describe layer --project-root "$PWD")" == "L0" ]]; then
-  node .claude/runtime/l0-toolkit-launcher.cjs run emit-qg-result --project-root "$PWD" --
+wave_slug="$(node .claude/runtime/l0-toolkit-launcher.cjs run runtime-consumer-qg --project-root "$PWD" -- resolve-active-wave)" || exit $?; if [[ "$(node .claude/runtime/l0-toolkit-launcher.cjs describe layer --project-root "$PWD")" == "L0" ]]; then
+  node .claude/runtime/l0-toolkit-launcher.cjs run emit-qg-result --project-root "$PWD" -- --slug "$wave_slug"
 else
-  node .claude/runtime/l0-toolkit-launcher.cjs run runtime-consumer-qg --project-root "$PWD" -- verify --slug "$CLAUDE_WAVE_SLUG" --head "$(git rev-parse HEAD)"
+  node .claude/runtime/l0-toolkit-launcher.cjs run runtime-consumer-qg --project-root "$PWD" -- verify --slug "$wave_slug" --head "$(git rev-parse HEAD)"
 fi
 ```
 

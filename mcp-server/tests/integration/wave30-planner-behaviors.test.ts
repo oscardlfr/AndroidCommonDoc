@@ -65,7 +65,8 @@ describe("planner template enforces T-BUG-015 Search Dispatch Protocol", () => {
         // 1.22.5 documents the exact final PLAN shape.
         // 1.22.6 lets runtime-rendered commands run verbatim despite the launcher rule.
         // 1.22.7 keeps one stable planner actor across Pass A and Pass B.
-        expect(frontmatter?.template_version).toBe("1.22.7");
+        // 1.22.8 makes test-only routing and specialist shift-left evidence explicit.
+        expect(frontmatter?.template_version).toBe("1.22.8");
       });
 
       it("body contains T-BUG-015", () => {

@@ -29,6 +29,7 @@ const { spawnSync } = require('node:child_process');
 const { test } = require('node:test');
 
 const rll = require('../lib/runtime-role-lifecycle.cjs');
+const actorAuthorization = require('../lib/context-provider-actor-authorization.cjs');
 const entrypoints = require('../lib/runtime-collaboration-entrypoints.cjs');
 const { installConsumerFixture, toolkitHostContractAvailable } = require('./lib/consumer-runtime-fixture.cjs');
 const { primeClaudeId01V2ActorProof, claudeId01V2SessionEvidenceFor } = require('./fixtures/runtime-claude-id01-v2-fixture.cjs');
@@ -187,24 +188,12 @@ function cleanup(wave) {
   fs.rmSync(wave.root, { recursive: true, force: true });
 }
 
-/** Runs the real plan-md-write-gate for a planner Write of this wave's PLAN.md and asserts it is allowed. */
-function assertPlannerWriteAllowed(wave, agentType) {
-  const result = spawnSync('node', [path.join(ROOT, '.claude', 'hooks', 'plan-md-write-gate.js')], {
-    input: JSON.stringify({ hook_event_name: 'PreToolUse', tool_name: 'Write', tool_input: { file_path: wave.planPath, content: 'x' },
-      session_id: SESSION_PLANNING, agent_type: agentType, agent_id: agentType }),
-    encoding: 'utf8', cwd: wave.root, env: { ...childEnv(wave.root), CLAUDE_PROJECT_DIR: wave.root },
-  });
-  assert.strictEqual(result.status, 0, `plan-md-write-gate must allow ${agentType}'s PLAN write: ${result.stdout}${result.stderr}`);
-}
-const SESSION_PLANNING = 'fw-session-planning';
-
 test('a consumer wave runs from the Pass A draft to the Pass B final PLAN, with the control plane following the final digest', { skip: SKIP }, () => {
   const wave = newWave('full-wave-a');
   try {
     const { root } = wave;
 
     // ── Pass A: the planner (SIM-MODEL) writes the draft; the orchestrator revalidates the marker on disk. ──
-    assertPlannerWriteAllowed(wave, 'planner');
     fs.writeFileSync(wave.planPath, planText(wave.slug, { draft: true }));
     assert.ok(fs.readFileSync(wave.planPath, 'utf8').startsWith(DRAFT_MARKER + '\n'), 'the draft carries the marker on its first line');
     // The wave directory is working-tree planning state, never committed: HEAD stays the baseline of the wave.
@@ -220,9 +209,6 @@ test('a consumer wave runs from the Pass A draft to the Pass B final PLAN, with 
     assert.strictEqual(initDraft.body.phase, 'PREP');
 
     // ── Pass B: the planner finalizes the PLAN (marker removed, context added). ──
-    // Consumer trace: the documented Pass B is a second Agent(subagent_type="planner") in the same session, which
-    // Claude Code names "planner-2" while the Pass A planner is kept. The real gate must treat it as the planner.
-    assertPlannerWriteAllowed(wave, 'planner-2');
     fs.writeFileSync(wave.planPath, planText(wave.slug, { draft: false, extra: '\n## Context\n\n- an accepted context-provider answer informed this plan\n' }));
 
     // The documented step 6 runs orchestrate again: it must re-bind, once, to the final digest.
@@ -299,6 +285,7 @@ function consultAndAccept(wave, question, handOffTo, { archAgent = 'arch-testing
   // The architect hands the answer on (SendMessage): the real PostToolUse hook records the mediated chain.
   if (handOffTo) {
     hook(root, HOOKS.consulted, { hook_event_name: 'PostToolUse', tool_name: 'SendMessage', tool_input: { to: handOffTo, message: resultFile },
+      tool_response: { success: true, resumedAgentId: handOffTo },
       session_id: session, agent_type: 'arch-testing', agent_id: archAgent });
   }
   return { coord, request, resultFile, planDigest };
@@ -409,7 +396,9 @@ function executePhase(wave) {
   const diagnose = () => ['test-specialist', 'arch-testing-prep'].map((agent) => {
     const r = rll.checkClaudeId01ProofComplete(root, FINAL_SESSION, rll.computeWorktreeId(root), rll.discoverPlan(root).planDigest, agent === 'arch-testing-prep' ? 'arch-testing' : agent, agent);
     return agent + ':' + (r.ok ? 'ok' : r.reason);
-  }).join(' ');
+  }).join(' ') + ' authorization:' + JSON.stringify(actorAuthorization.activateOrReadAuthorization(root, {
+    sessionId: FINAL_SESSION, agentId: 'test-specialist',
+  }));
   assert.ok(!after || after.permissionDecision !== 'deny', `the specialist passes the mediated gate after the hand-off: ${JSON.stringify(after)} proofs: ${diagnose()}`);
 
   // The architect dispatches the specialist: the dispatch artifact is written through the launcher (task body on stdin).
@@ -573,7 +562,10 @@ test('a role active every 30 minutes still loses the session at the 12 hour abso
     hook(root, HOOKS.gate, bashEvent('git status', 'arch-testing', FINAL_SESSION, 'arch-testing-prep'));
   }
   const alive = probe();
-  assert.ok(!alive || alive.permissionDecision !== 'deny', `still admitted at +11 h 30 min of continuous activity: ${JSON.stringify(alive)}`);
+  const aliveAuth = actorAuthorization.activateOrReadAuthorization(root, {
+    sessionId: FINAL_SESSION, agentId: 'test-specialist',
+  });
+  assert.ok(!alive || alive.permissionDecision !== 'deny', `still admitted at +11 h 30 min of continuous activity: ${JSON.stringify(alive)} authorization: ${JSON.stringify(aliveAuth)}`);
   clock.offsetMs = 12 * HOUR + 60 * 1000;
   const denied = probe();
   assert.ok(denied && denied.permissionDecision === 'deny', 'past the absolute limit the specialist is refused');

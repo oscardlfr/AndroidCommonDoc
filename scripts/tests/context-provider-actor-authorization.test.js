@@ -82,13 +82,7 @@ function seedRealActor(root, sessionId, agentId, role) {
     projectRoot: root, sessionId, agentId, agentType: role, actionId,
     prefix: `d5-${role}-${agentId}`,
   });
-  const identity = { ok: true, provider: 'claude-hook', runtime_session_key: sessionId };
-  const plan = rll.discoverPlan(root);
-  const binding = rll.createRequesterBinding(
-    root, identity, agentId, role, rll.computeWorktreeId(root), plan.planDigest, 600,
-  );
-  assert.strictEqual(binding.ok, true, JSON.stringify(binding));
-  return binding.binding;
+  return { actionId };
 }
 
 function hook(file, root, event, evidence) {
@@ -212,8 +206,10 @@ function hook(file, root, event, evidence) {
   console.log('D5-F unsupported role and unidentifiable target denied: PASS');
 }
 
-// Real-hook integration: genuine durable requester bindings are seeded for
-// the architect, resumed planner, and a foreign actor. The PostToolUse hook
+// Real-hook integration: genuine startup proofs are seeded for the architect,
+// resumed planner, and a foreign actor, without manufacturing requester or
+// peer bindings. This is the first-handoff boundary: a newly resumed target
+// must be resolvable before its first gated tool call. The PostToolUse hook
 // resolves the two stable actors and the PreToolUse hook consumes the same
 // authorization while the observed presentation role is numerically
 // suffixed. No production resolver seam is used in this block.

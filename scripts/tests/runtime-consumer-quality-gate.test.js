@@ -6,6 +6,8 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { execFileSync, spawnSync } = require('node:child_process');
+const waveControl = require('../lib/wave-control-plane.cjs');
+const { installConsumerFixture } = require('./lib/consumer-runtime-fixture.cjs');
 
 const SCRIPT = path.resolve(__dirname, '../lib/runtime-consumer-quality-gate.cjs');
 
@@ -86,6 +88,102 @@ function prePr(root, slug, args, env) {
     cwd: root, encoding: 'utf8', env: { ...process.env, ...env },
   });
 }
+
+function commitWavePlans(root, slugs, message) {
+  for (const slug of slugs) {
+    const waveDir = path.join(root, '.planning', `wave-${slug}`);
+    fs.mkdirSync(waveDir, { recursive: true });
+    fs.writeFileSync(path.join(waveDir, 'PLAN.md'), '### Wave Class\n\n- **Class**: HARNESS\n\n### Path-Manifest\n\n- tracked.txt\n');
+    fs.writeFileSync(path.join(waveDir, 'CLASS'), 'HARNESS\n');
+    git(root, ['add', '-f', path.relative(root, path.join(waveDir, 'PLAN.md')), path.relative(root, path.join(waveDir, 'CLASS'))]);
+  }
+  git(root, ['commit', '-qm', message]);
+}
+
+function promoteWaveStateToQG(root, slug) {
+  const state = waveControl.initialize(root, slug);
+  const now = new Date().toISOString();
+  const transition = (from, to) => ({
+    from, to, at: now, from_head: state.head, to_head: state.head, evidence: [],
+  });
+  const qg = {
+    ...state,
+    phase: 'QG',
+    revision: 3,
+    updated_at: now,
+    transitions: [
+      transition('PREP', 'EXECUTE'),
+      transition('EXECUTE', 'VERIFY_FINAL'),
+      transition('VERIFY_FINAL', 'QG'),
+    ],
+  };
+  fs.writeFileSync(path.join(root, '.androidcommondoc', 'wave-control', `${slug}.json`), `${JSON.stringify(qg, null, 2)}\n`);
+}
+
+function resolveActiveWaveThroughLauncher(fixture, env = {}) {
+  return spawnSync(process.execPath, [fixture.launcher, 'run', 'runtime-consumer-qg',
+    '--project-root', fixture.consumerRoot, '--', 'resolve-active-wave'], {
+    cwd: fixture.consumerRoot, encoding: 'utf8', env: { ...process.env, ...env },
+  });
+}
+
+test('resolve-active-wave ignores ambient slug and newer stale wave state, selecting the only current QG state', (t) => {
+  const fixture = installConsumerFixture('L2');
+  t.after(() => fs.rmSync(fixture.consumerRoot, { recursive: true, force: true }));
+
+  commitWavePlans(fixture.consumerRoot, ['stale'], 'stale wave');
+  promoteWaveStateToQG(fixture.consumerRoot, 'stale');
+  const staleState = path.join(fixture.consumerRoot, '.androidcommondoc', 'wave-control', 'stale.json');
+
+  commitWavePlans(fixture.consumerRoot, ['current'], 'current wave');
+  promoteWaveStateToQG(fixture.consumerRoot, 'current');
+  const future = new Date(Date.now() + 60_000);
+  fs.utimesSync(staleState, future, future);
+
+  const result = resolveActiveWaveThroughLauncher(fixture, { CLAUDE_WAVE_SLUG: 'stale' });
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  assert.equal(result.stdout, 'current\n');
+});
+
+test('resolve-active-wave fails closed when no durable state is currently in QG', (t) => {
+  const fixture = installConsumerFixture('L1');
+  t.after(() => fs.rmSync(fixture.consumerRoot, { recursive: true, force: true }));
+  commitWavePlans(fixture.consumerRoot, ['prep-only'], 'prep wave');
+  waveControl.initialize(fixture.consumerRoot, 'prep-only');
+
+  const result = resolveActiveWaveThroughLauncher(fixture, { CLAUDE_WAVE_SLUG: 'prep-only' });
+  assert.equal(result.status, 2);
+  assert.match(result.stderr, /active-qg-wave-not-found/);
+});
+
+test('resolve-active-wave fails closed when two durable QG states are current', (t) => {
+  const fixture = installConsumerFixture('L2');
+  t.after(() => fs.rmSync(fixture.consumerRoot, { recursive: true, force: true }));
+  commitWavePlans(fixture.consumerRoot, ['alpha', 'beta'], 'ambiguous waves');
+  promoteWaveStateToQG(fixture.consumerRoot, 'alpha');
+  promoteWaveStateToQG(fixture.consumerRoot, 'beta');
+
+  const result = resolveActiveWaveThroughLauncher(fixture);
+  assert.equal(result.status, 2);
+  assert.match(result.stderr, /active-qg-wave-ambiguous/);
+});
+
+test('every quality-gater surface resolves durable wave state per Bash block instead of reading ambient slug', () => {
+  const root = path.resolve(__dirname, '../..');
+  const canonical = fs.readFileSync(path.join(root, '.claude', 'agents', 'quality-gater.md'), 'utf8');
+  const mirror = fs.readFileSync(path.join(root, 'setup', 'agent-templates', 'quality-gater.md'), 'utf8');
+  const copilot = fs.readFileSync(path.join(root, 'setup', 'copilot-agent-templates', 'quality-gater.agent.md'), 'utf8');
+  assert.equal(canonical, mirror, 'the installed Claude agent and source template stay byte-identical');
+
+  for (const [label, contents] of [['canonical', canonical], ['copilot', copilot]]) {
+    assert.equal((contents.match(/run runtime-consumer-qg --project-root "\$PWD" -- resolve-active-wave/g) || []).length, 6, label);
+    assert.doesNotMatch(contents, /\$\{CLAUDE_WAVE_SLUG:\?/);
+    assert.doesNotMatch(contents, /--(?:wave-)?slug "\$CLAUDE_WAVE_SLUG"/);
+    assert.match(contents, /persisted QG phase state .* is the authority/);
+  }
+  assert.equal((canonical.match(/CLAUDE_WAVE_SLUG="\$wave_slug"/g) || []).length, 1,
+    'the sole remaining environment assignment is scoped to the same legacy L0 proof invocation');
+});
 
 function qgFixtureWithoutStamp() {
   const { root, head } = fixture();

@@ -78,6 +78,44 @@ function resolveStableActor(projectRoot, identity) {
     scope = currentScope(projectRoot);
   } catch { return { ok: false, reason: 'actor-scope-invalid' }; }
   if (!scope.ok) return scope;
+  // The startup proof is the owning actor identity. Besides proving current
+  // liveness, it carries the actor's absolute lifetime. Derived requester and
+  // peer bindings use the shorter sliding-idle expiry and may be renewed; an
+  // immutable handoff authorization must therefore be capped by the startup
+  // proof's absolute lifetime while re-checking live actor authority on every
+  // activation/read.
+  const startupMatches = [];
+  for (const role of rll.CANONICAL_ROLES) {
+    let proof;
+    try {
+      proof = rll.checkClaudeId01ProofComplete(
+        projectRoot,
+        identity.sessionId,
+        scope.worktreeId,
+        scope.planDigest,
+        role,
+        identity.agentId,
+      );
+    } catch {
+      proof = { ok: false };
+    }
+    if (proof && proof.ok === true) startupMatches.push({ role, proof });
+  }
+  if (startupMatches.length > 1) {
+    return { ok: false, reason: 'actor-authority-ambiguous' };
+  }
+  const startupAuthority = startupMatches.length === 1
+    ? {
+        role: startupMatches[0].role,
+        actor_instance_id: startupMatches[0].proof.binding.actor_instance_id,
+        worktree_id: startupMatches[0].proof.binding.worktree_id,
+        plan_digest: startupMatches[0].proof.binding.plan_digest,
+        expiry: Date.parse(startupMatches[0].proof.trace.expiry)
+          < Date.parse(startupMatches[0].proof.capability.expiry)
+          ? startupMatches[0].proof.trace.expiry
+          : startupMatches[0].proof.capability.expiry,
+      }
+    : null;
   const observed = {
     schema: rll.CLAUDE_AUTHORITY_IDENTITY_SCHEMA,
     provider: 'claude-hook',
@@ -125,7 +163,36 @@ function resolveStableActor(projectRoot, identity) {
       return { ok: false, reason: 'actor-authority-ambiguous' };
     }
   }
+  if (!binding && classified && classified.ok === true && classified.state === 'ABSENT') {
+    // A newly started persistent actor may receive its first mediated
+    // handoff before it performs the later tool call that materializes a
+    // ClaudePeerBinding. Requiring that derived peer index here creates a
+    // bootstrap cycle: the actor needs the handoff authorization for its
+    // first tool call, but cannot acquire the peer index until that call.
+    //
+    // The startup proof is the owning identity record at this boundary. It
+    // is already bound to the signed host session, stable agent_id, exact
+    // RoleActorBinding, worktree, PLAN digest, generation, capability and
+    // authority fence. Search the finite canonical role set without trusting
+    // the presentation agent_type, and fail closed unless exactly one proof
+    // validates for this session+agent pair.
+    if (startupAuthority) binding = startupAuthority;
+  }
   if (!binding) return { ok: false, reason: 'actor-authority-unavailable' };
+  if (startupAuthority) {
+    if (binding.role !== startupAuthority.role
+        || binding.worktree_id !== startupAuthority.worktree_id
+        || binding.plan_digest !== startupAuthority.plan_digest) {
+      return { ok: false, reason: 'actor-authority-ambiguous' };
+    }
+    // RequesterBinding.actor_instance_id and
+    // ClaudePeerBinding.actor_binding_id are identifiers in their own
+    // derived authority families; neither replaces the RoleActorBinding's
+    // actor_instance_id. The exact startup proof above authenticates that
+    // owning actor for the same session+agent and scope, so normalize every
+    // derived family back to the startup identity.
+    binding = startupAuthority;
+  }
   if (!boundedString(binding.role) || !boundedString(binding.actor_instance_id)
       || !boundedString(binding.worktree_id) || !boundedString(binding.plan_digest)
       || !boundedString(binding.expiry)) {

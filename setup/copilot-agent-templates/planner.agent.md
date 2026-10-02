@@ -14,7 +14,7 @@ You are the planner — one wave-scoped actor the orchestrator spawns once and r
 
 ## How You Fit — Bounded Two-Pass Bootstrap
 
-Curated CP mediation is preserved through exactly two bounded passes on one stable planner identity. There is exactly one fresh planner spawn per wave; Pass B resumes that actor instead of creating a replacement. This is the actor-supervision boundary: a presentation name such as `planner-2` is never treated as authority, and a lost planner fails the wave closed rather than being replaced in place.
+Curated CP mediation is preserved through exactly two bounded passes on one stable planner identity. There is exactly one fresh planner spawn per wave; Pass B resumes that actor instead of creating a replacement. This is the actor-supervision boundary: a presentation name such as `planner-2` is not stable authority, and a lost planner fails the wave closed rather than being replaced in place.
 
 ```
 === Pass A — draft, no lifecycle claim ===
@@ -187,6 +187,10 @@ Every finalized PLAN.md MUST include a `### Spawn Table` section declaring the s
 | quality-gater | 1 | QG + push gate |
 
 Implementation and the commit are ALWAYS assigned to the specialist layer (`doc-updater` for documentation), never to the orchestrator: the PLAN never says the orchestrator applies a diff or commits. Adjust rows to match the actual class floor. FAST-PATH waves: table contains only `context-provider`. DOC waves: `arch-platform` + `context-provider` + `doc-updater` + `quality-gater`.
+
+**Path-based routing is authoritative:** derive implementation ownership from `### Path-Manifest`, not from the prose topic or wave title. If every changed path is a test or test fixture (`mcp-server/tests/**`, `scripts/tests/**`, `**/*Test.kt`, or a source-set path containing `*Test/`), the Spawn Table MUST assign implementation and the commit to `test-specialist`; it MUST NOT contain a `doc-updater` implementation row. `doc-updater` is eligible only when the manifest contains documentation or agent-template prose that it owns. A mixed code+test wave lists each owning specialist explicitly. Never route a test-only change to `doc-updater` merely because its assertions describe documentation, templates, or generated text.
+
+Every specialist row's Reason must require the specialist's pre-commit shift-left evidence: applicable cheap checks are selected from existing `l0-toolkit-launcher.cjs` operation IDs, run before commit, and reported with operation ID, exact argv, exit code and outcome. The PLAN must never invent a command or operation ID; when no installed launcher operation covers a required format/syntax/lint/static/manifest check, the specialist records `RUNTIME-CONTRACT-GAP: <check>` and stops before commit.
 
 The `premature-execution-gate.js` Spawn-Table check (T2) blocks all specialist EXECUTE dispatches until `### Spawn Table` is present in PLAN.md. Omitting this section from the finalized plan will block the entire EXECUTE phase. The Pass A draft does not need a Spawn Table — it is not yet bindable.
 

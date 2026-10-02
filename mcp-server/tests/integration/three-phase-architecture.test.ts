@@ -318,8 +318,16 @@ describe('arch-platform + arch-integration — caller grep rule', () => {
     expect(platformContent).toMatch(/template_version:\s*"\d+\.\d+\.\d+"/);
   });
 
-  it('arch-integration has template version 1.32.4', () => {
-    expect(integrationContent).toContain('template_version: "1.32.4"');
+  it('arch-integration has template version 1.32.5', () => {
+    expect(integrationContent).toContain('template_version: "1.32.5"');
+  });
+
+  it('all architect requesters use the canonical 900-second await-result deadline', () => {
+    const testingContent = fs.readFileSync(path.join(TEMPLATES_DIR, 'arch-testing.md'), 'utf-8');
+    for (const content of [platformContent, integrationContent, testingContent]) {
+      expect(content).toContain("'await-result' '--coordination-root' '<ROOT>/.planning/coordination' '--request' '<artifact_ref>' '--timeout' '900'");
+      expect(content).not.toContain("'--timeout' '300'");
+    }
   });
 });
 
@@ -489,8 +497,8 @@ describe('quality-gater template — gate protocol', () => {
     expect(content).toMatch(/[Cc]ross-cutting/);
   });
 
-  it('has template version 2.28.4', () => {
-    expect(content).toContain('template_version: "2.28.4"');
+  it('has template version 2.28.5', () => {
+    expect(content).toContain('template_version: "2.28.5"');
   });
 });
 
@@ -917,8 +925,8 @@ describe('architect templates — PRE-TASK protocol', () => {
     expect(plannerContent).toMatch(/context-provider/);
   });
 
-  it('planner version 1.22.7', () => {
-    expect(plannerContent).toContain('template_version: "1.22.7"');
+  it('planner version 1.22.8', () => {
+    expect(plannerContent).toContain('template_version: "1.22.8"');
   });
 
   it('arch-testing has template_version field in frontmatter', () => {

@@ -19,6 +19,7 @@ const crypto = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
 const { execFileSync, spawnSync } = require('node:child_process');
+const waveControl = require('./wave-control-plane.cjs');
 
 const MAX_AGE_MS = 30 * 60 * 1000;
 
@@ -96,6 +97,47 @@ function validateTimestamp(value, reason) {
   const parsed = Date.parse(value);
   const now = Date.now();
   if (!Number.isFinite(parsed) || parsed > now + 120000 || now - parsed > MAX_AGE_MS) die(reason);
+}
+
+// The phase state is the durable authority for a quality-gater dispatch. Do not
+// infer the wave from ambient shell state, directory timestamps or whichever
+// PLAN happens to sort first: all of those can outlive (or predate) the Agent
+// tool call that starts this role. Exactly one initialized, current QG state is
+// required. Old states at another phase/HEAD/PLAN remain harmless history.
+function resolveActiveWave(root) {
+  const relative = '.androidcommondoc/wave-control';
+  const controlDir = confined(root, relative);
+  const head = currentHead(root);
+  let entries;
+  try {
+    const info = fs.lstatSync(controlDir);
+    if (!info.isDirectory() || info.isSymbolicLink() || fs.realpathSync(controlDir) !== controlDir) {
+      die('wave-state-registry-unsafe');
+    }
+    entries = fs.readdirSync(controlDir, { withFileTypes: true });
+  } catch (error) {
+    if (error && error.code === 'ENOENT') die('active-qg-wave-not-found');
+    die('wave-state-registry-unsafe');
+  }
+
+  const candidates = [];
+  for (const entry of entries) {
+    const match = /^([A-Za-z0-9._-]+)\.json$/.exec(entry.name);
+    if (!entry.isFile() || entry.isSymbolicLink() || !match || match[1] === '.' || match[1] === '..') {
+      die('wave-state-registry-unsafe');
+    }
+    const slug = match[1];
+    let state;
+    try { state = waveControl.status(root, slug); }
+    catch { die(`wave-state-invalid:${slug}`); }
+    if (state.phase === 'QG' && state.plan_current === true && state.head === head) candidates.push(slug);
+  }
+
+  candidates.sort();
+  if (currentHead(root) !== head) die('git-state-drift');
+  if (candidates.length === 0) die('active-qg-wave-not-found');
+  if (candidates.length !== 1) die('active-qg-wave-ambiguous');
+  process.stdout.write(`${candidates[0]}\n`);
 }
 
 function validateInputs(root, slug, expectedPhase) {
@@ -211,9 +253,14 @@ function verify(root, slug, requestedHead) {
 }
 
 const argv = process.argv.slice(2);
-if (argv.length < 3) die('usage: <project-root> <pre-pr|mint|verify> --slug <slug> [--project-gate PASS|FAIL] [--head <sha>]');
+if (argv.length < 2) die('usage: <project-root> <resolve-active-wave|pre-pr|mint|verify> [--slug <slug>] [--project-gate PASS|FAIL] [--head <sha>]');
 const root = canonicalDirectory(path.resolve(argv[0]));
 const mode = argv[1];
+if (mode === 'resolve-active-wave') {
+  if (argv.length !== 2) die(`unknown-argument:${argv[2]}`);
+  resolveActiveWave(root);
+  return;
+}
 let slug;
 let requestedHead;
 let projectGate;

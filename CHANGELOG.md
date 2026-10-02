@@ -5,9 +5,14 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 
 ## [Unreleased]
 
-### Fixed (planner Pass B identity)
+### Fixed (consumer wave authority and actor continuity)
 
-- The documented planner Pass B is a second `Agent(subagent_type="planner")` in the same session. Claude Code keeps the Pass A planner and names the second one `planner-2`. `plan-md-write-gate` accepted only the exact `planner`, so Pass B's PLAN write was blocked with `[planner-gate] team-lead/architects/specialists may NOT write .planning/wave-*/PLAN.md`. The gate now identifies the planner with the harness-suffix rule the other identity hooks already use (`<role>-<N>`, with `N` ≥ 2 in canonical decimal), and keeps the planner's write confinement. `planner-1`, `planner-02`, `planner-x` and `arch-planner-2` are still refused. The full-chain consumer contract test now drives Pass A as `planner` and Pass B as `planner-2` through the real gate.
+- Planning now uses one wave-scoped planner actor: Pass A spawns `planner` once and Pass B resumes that exact actor. A lost planner fails closed with `PLANNER-RESUME-LOST`; presentation suffixes such as `planner-2` do not grant PLAN/CLASS write authority.
+- Architect consultations use a 900-second `await-result` deadline, matching the long-lived worker protocol. Sliding-session renewal keeps locks and temporary files outside record-only registries, uses a short fenced lease, and safely recovers crashed or expired lock holders without blocking ordinary hooks.
+- Architect-to-specialist handoff authorization is bound to the durable session, actor ID, worktree, PLAN and wave rather than `SendMessage.to` or `agent_type`. Foreign actors, missing host outcomes, drift and replay fail closed.
+- `quality-gater` resolves the one current QG wave from persisted control-plane state on every Bash invocation; it no longer relies on a shell variable surviving between tool calls, directory ordering or mtimes. Zero or multiple current QG waves stop the run.
+- Wave-class parsing has one canonical implementation shared by the control plane and path audit, including fenced-code, duplicate and malformed-input negatives.
+- Planner routing assigns test-only path manifests to `test-specialist`, never `doc-updater`. Implementation roles run applicable cheap checks through existing launcher IDs before commit and record structured shift-left evidence; a missing required launcher operation is a runtime-contract stop.
 
 ### Fixed (daemon-hosted Claude sessions)
 

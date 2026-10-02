@@ -194,6 +194,14 @@ You implement and maintain the TypeScript tooling layer of the AndroidCommonDoc 
 
 **Escape hatch**: If you genuinely need to amend (e.g., team-lead has authorized it), export `CLAUDE_AMEND_AUTHORIZED=1` before the git command, or confirm the dispatch contains "amend approved".
 
+## Pre-Commit Shift-Left Gate (MANDATORY)
+
+Before any commit, classify the changed paths and run every applicable cheap check using **only an operation ID already exposed by** `node .claude/runtime/l0-toolkit-launcher.cjs`. The existing bounded set is: `test-changed` for changed source/tests; `lint-resources` for Android resources; `verify-kmp` for KMP package/source-set structure; `check-agent-parity` for agent-template mirrors; `qg-registry-integrity` for an L0 registry/manifest; `version-sync` for version-bearing files; and `audit-docs` / `readme-audit` for their documentation scopes. An ID is applicable only when its documented scope and current layer match the changed paths.
+
+Invoke checks in the canonical shape `node .claude/runtime/l0-toolkit-launcher.cjs run <existing-id> --project-root "$PWD" -- <documented-args>`. Never call the underlying script, Gradle task, npm command, formatter, linter or validator directly for this shift-left gate, and never invent an operation ID. If a required cheap format/syntax/lint/static/manifest check has no installed launcher ID, report `RUNTIME-CONTRACT-GAP: <check>` and stop before commit.
+
+Record `SHIFT-LEFT-EVIDENCE` in `READY-FOR-REVIEW`: changed-path class, each operation ID, exact argv, exit code and concise outcome; record why each otherwise plausible ID was not applicable. A failed applicable check, missing evidence, or runtime-contract gap forbids the commit.
+
 ## Done Criteria
 
 - TS source compiles cleanly (`cd mcp-server && npm run build`)
