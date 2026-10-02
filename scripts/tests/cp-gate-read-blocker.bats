@@ -113,8 +113,8 @@ HOOK="$BATS_TEST_DIRNAME/../../.claude/hooks/context-provider-gate.js"
 #
 # `--separate-stderr` (bats >=1.5.0, required at the top of this file) keeps
 # $output to stdout ONLY -- node's own [CP-GATE] audit-trail stderr writes
-# (present on several allow branches, e.g. once an arch-response flag is
-# read) would otherwise corrupt a JSON.parse($output) attempt on a row that
+# (present on several allow branches) would otherwise corrupt a
+# JSON.parse($output) attempt on a row that
 # also has stderr content; no row in this file asserts on stderr, so
 # discarding it from $output is a pure precision fix, never a behavior
 # change.
@@ -222,43 +222,35 @@ make_arch_sendmsg_input() {
 CONSULTED_HOOK="$BATS_TEST_DIRNAME/../../.claude/hooks/context-provider-consulted.js"
 
 @test "specialist Read on docs blocked when only global CP flag set (C1 regression)" {
-  # Global CP flag set (as if planner contacted CP) but no arch-response flag
+  # Global CP flag set (as if planner contacted CP) but no durable actor handoff.
   touch "$FLAG_FILE"
   make_specialist_input Read '/project/docs/di/di-patterns-modules.md'
   run --separate-stderr bash -c "cat '$INPUT_FILE' | node '$HOOK'"
   _assert_deny
 }
 
-@test "specialist Read on docs allowed when arch-response flag set (C1 happy path)" {
+@test "specialist Read on docs remains blocked when legacy arch-response flag is present" {
   local arch_flag="${TMPDIR:-/tmp}/claude-arch-responded-${SESSION_ID}-test-specialist.flag"
   touch "$arch_flag"
   make_specialist_input Read '/project/docs/di/di-patterns-modules.md'
   run --separate-stderr bash -c "cat '$INPUT_FILE' | node '$HOOK'"
-  _assert_passthrough
+  _assert_deny
   rm -f "$arch_flag"
 }
 
-# NOTE (Group C scope): the two tests below exercise context-provider-consulted.js
-# -- a DIFFERENT hook (the flag WRITER, triggered on an arch→specialist
-# SendMessage) -- never the PreToolUse gate (context-provider-gate.js, the
-# flag READER) this file's own deny/passthrough semantic helpers above are
-# about. Their own contract is "did the writer hook complete and leave the
-# correct side-effect flag file behind", which the existing
-# `[ -f "$arch_flag" ]` / `[ ! -f "$arch_flag" ]` assertions already prove --
-# strictly stronger than a bare exit-code check, and unrelated to the
-# PreToolUse allow/deny protocol. Applying _assert_deny/_assert_passthrough
-# here would be a category error (this hook never emits that shape at all),
-# so these two rows are intentionally left using the plain exit-0 idiom.
-@test "consulted hook writes arch-response flag on arch→specialist SendMessage" {
+# NOTE (Group C scope): the two tests below exercise
+# context-provider-consulted.js, not the PreToolUse gate. The retired
+# /tmp flag must never be recreated: current authority is a durable,
+# actor-bound registry record and cannot be represented by path presence.
+@test "consulted hook does NOT recreate legacy arch-response flag on arch→specialist SendMessage" {
   make_arch_sendmsg_input 'test-specialist'
   run bash -c "cat '$INPUT_FILE' | node '$CONSULTED_HOOK'"
   [ "$status" -eq 0 ]
   local arch_flag="${TMPDIR:-/tmp}/claude-arch-responded-${SESSION_ID}-test-specialist.flag"
-  [ -f "$arch_flag" ]
-  rm -f "$arch_flag"
+  [ ! -f "$arch_flag" ]
 }
 
-@test "consulted hook does NOT write arch-response flag on planner→CP SendMessage" {
+@test "consulted hook does NOT recreate legacy arch-response flag on planner→CP SendMessage" {
   printf '%s\n' "{\"tool_name\":\"SendMessage\",\"tool_input\":{\"to\":\"context-provider\",\"message\":\"query\"},\"agent_type\":\"planner\",\"session_id\":\"$SESSION_ID\"}" > "$INPUT_FILE"
   run bash -c "cat '$INPUT_FILE' | node '$CONSULTED_HOOK'"
   [ "$status" -eq 0 ]
@@ -334,7 +326,7 @@ make_grep_input() {
 
 # ── D12: specialist without arch-response flag regression guard ───────────────
 
-@test "D12: toolkit-specialist Grep on docs blocked without arch-response flag (regression)" {
+@test "D12: toolkit-specialist Grep on docs blocked without durable actor handoff (regression)" {
   # No flags set — specialist must be blocked even without an active CP flag.
   make_grep_input '/project/docs/testing/testing-patterns.md' 'toolkit-specialist'
   run --separate-stderr bash -c "cat '$INPUT_FILE' | node '$HOOK'"
@@ -654,7 +646,7 @@ _run_hook_env() {
 
 # ── Row I: specialist + valid disk consult but NO arch-responded flag -> exit 2 (specialist gating NOT bypassed) ──
 
-@test "CP-I-read: test-specialist with a valid disk consult but no arch-responded flag -> exit 2" {
+@test "CP-I-read: test-specialist with a valid disk consult but no durable actor handoff -> exit 2" {
   _setup_wave_proj
   _write_consult "$(_consult_dir)" "consult-$(_now_compact).json" "$CONSULT_WAVE_SLUG" "context-provider" "$(_now_iso)"
   make_specialist_input Read '/project/docs/di/di-patterns-modules.md'
@@ -662,7 +654,7 @@ _run_hook_env() {
   _assert_deny
 }
 
-@test "CP-I-grep: test-specialist with a valid disk consult but no arch-responded flag -> exit 2" {
+@test "CP-I-grep: test-specialist with a valid disk consult but no durable actor handoff -> exit 2" {
   _setup_wave_proj
   _write_consult "$(_consult_dir)" "consult-$(_now_compact).json" "$CONSULT_WAVE_SLUG" "context-provider" "$(_now_iso)"
   make_specialist_grep_input '/project/docs/di/di-patterns-modules.md'
@@ -821,8 +813,8 @@ _populate_all_valid_over_cap() {
 # M6 Block C + M7/WP4 dependency closure (dispatch arch-testing-20260808T142647Z,
 # Section 3): post-PLAN accepted-result fail-closed read/gate regression,
 # including disabled-override rejection. Native bats idiom for the SAME
-# proposed coordination/consult-result/v1 fixture + architect arch-response-
-# flag correlation this suite's sibling context-provider-gate.test.js
+# proposed coordination/consult-result/v1 fixture + durable actor-handoff
+# correlation this suite's sibling context-provider-gate.test.js
 # establishes in detail (PP1-PP16) -- this block is the bats-native
 # complement named explicitly by the dispatch for THIS file, not a
 # duplicate of that coverage.
@@ -868,6 +860,7 @@ _write_canonical_accepted_consultation() {
     const path = require("path");
     const crypto = require("crypto");
     const id01Fixture = require(process.argv[8]);
+    const actorAuthorization = require(process.argv[9]);
     const proj = process.argv[3];
     const waveSlug = process.argv[4];
     const planSha256 = process.argv[5];
@@ -886,11 +879,10 @@ _write_canonical_accepted_consultation() {
     // M6+M7 requester-authority closure (Group G fix): requester_instance_id
     // must be a REAL RequesterBinding actor_instance_id -- resolveArchitectRequesterBinding
     // scans requester-bindings/ for a live match, so a fabricated random hex
-    // value here (the old shape) can never resolve. "arch-testing-instance-1"
-    // matches the agent_id literal both PP-BATS-2/PP-BATS-3 own arch_flag
-    // printf already carries, so architectIdentityFromFlagMeta resolved
-    // instanceId lines up with this binding own agent_key.
-    const openerIdentity = { ok: true, provider: "claude-hook", runtime_session_key: "cp-gate-read-blocker-canonical-chain-opener-session" };
+    // value here (the old shape) can never resolve. Both actors belong to the
+    // same runtime session because the mediated handoff contract deliberately
+    // rejects cross-session presentation aliases.
+    const openerIdentity = { ok: true, provider: "claude-hook", runtime_session_key: process.env.SESSION_ID };
     const openerAgentId = "arch-testing-instance-1";
     // Prime the genuine actor-scoped CLAUDE-ID-01 v2 proof the production
     // RequesterBinding constructor now requires. The shared fixture records
@@ -943,6 +935,15 @@ _write_canonical_accepted_consultation() {
     const openerBindingResult = rll.createRequesterBinding(proj, openerIdentity, openerAgentId, role, worktreeId, planSha256, 3600);
     if (!openerBindingResult.ok) {
       throw new Error("_write_canonical_accepted_consultation: opener requester binding mint must succeed: " + JSON.stringify(openerBindingResult));
+    }
+    const handoff = actorAuthorization.recordMediatedAuthorization(proj, {
+      session_id: process.env.SESSION_ID,
+      agent_id: openerAgentId,
+      tool_input: { to: "test-specialist", message: "accepted consultation result" },
+      tool_response: { success: true, resumedAgentId: "test-specialist" },
+    });
+    if (!handoff.ok) {
+      throw new Error("_write_canonical_accepted_consultation: actor handoff authorization must succeed: " + JSON.stringify(handoff));
     }
     const requesterInstanceId = openerBindingResult.binding.actor_instance_id;
     const txnDir = path.join(coordRoot, repoId, waveSlug, planSha256, "transactions", requestId);
@@ -999,25 +1000,20 @@ _write_canonical_accepted_consultation() {
       const acceptedPath = path.join(txnDir, "accepted-result.json");
       writeDurable(acceptedPath, acceptedObj);
     }
-  ' "$RLL_IMPL_FOR_CHAIN" "$RC_IMPL_FOR_CHAIN" "$proj" "$wave_slug" "$plan_sha256" "$role" "$with_accepted" "$BATS_TEST_DIRNAME/fixtures/runtime-claude-id01-v2-fixture.cjs"
+  ' "$RLL_IMPL_FOR_CHAIN" "$RC_IMPL_FOR_CHAIN" "$proj" "$wave_slug" "$plan_sha256" "$role" "$with_accepted" "$BATS_TEST_DIRNAME/fixtures/runtime-claude-id01-v2-fixture.cjs" "$BATS_TEST_DIRNAME/../lib/context-provider-actor-authorization.cjs"
 }
 
-@test "PP-BATS-1 BLOCK: post-PLAN, specialist arch-response flag present but NO consult-result at all -> exit 2 (message/candidate-only)" {
+@test "PP-BATS-1 BLOCK: post-PLAN, specialist has NO durable actor handoff and NO consult-result at all -> exit 2" {
   _setup_wave_proj
   _write_postplan_fixture_plan >/dev/null
-  local arch_flag="${TMPDIR:-/tmp}/claude-arch-responded-${SESSION_ID}-test-specialist.flag"
-  printf '{"written_by":"context-provider-consulted","agent_id":"arch-testing-instance-1","architect_role":"arch-testing","session_id":"cp-gate-read-blocker-canonical-chain-opener-session"}' > "$arch_flag"
   make_specialist_input Read '/project/docs/di/di-patterns-modules.md'
   _run_hook_env "CLAUDE_WAVE_SLUG=$CONSULT_WAVE_SLUG"
   _assert_deny
-  rm -f "$arch_flag"
 }
 
-@test "PP-BATS-2 PASS: post-PLAN, specialist arch-response flag PLUS a REAL canonical consult/v2 -> result/v2 -> accepted-result.json chain for the exact correlated architect/PLAN -> exit 0" {
+@test "PP-BATS-2 PASS: post-PLAN, durable actor handoff PLUS a REAL canonical consult/v2 -> result/v2 -> accepted-result.json chain for the exact correlated architect/PLAN -> exit 0" {
   _setup_wave_proj
   local plan_sha256; plan_sha256="$(_write_postplan_fixture_plan)"
-  local arch_flag="${TMPDIR:-/tmp}/claude-arch-responded-${SESSION_ID}-test-specialist.flag"
-  printf '{"written_by":"context-provider-consulted","agent_id":"arch-testing-instance-1","architect_role":"arch-testing","session_id":"cp-gate-read-blocker-canonical-chain-opener-session"}' > "$arch_flag"
   # Group G (M6+M7 requester-authority closure, 2026-08-10): the canonical
   # consult/v2 -> result/v2 -> accepted-result.json chain -- never the OLD
   # self-asserted coordination/consult-result/v1 shape
@@ -1030,14 +1026,11 @@ _write_canonical_accepted_consultation() {
   make_specialist_input Read '/project/docs/di/di-patterns-modules.md'
   _run_hook_env "CLAUDE_WAVE_SLUG=$CONSULT_WAVE_SLUG"
   _assert_passthrough
-  rm -f "$arch_flag"
 }
 
 @test "PP-BATS-3 BLOCK: post-PLAN, a canonical candidate (request.json + results/<attempt>.json genuinely ANSWERED) that was never accepted -- no accepted-result.json at all -- never authorizes, even with exact correlation otherwise" {
   _setup_wave_proj
   local plan_sha256; plan_sha256="$(_write_postplan_fixture_plan)"
-  local arch_flag="${TMPDIR:-/tmp}/claude-arch-responded-${SESSION_ID}-test-specialist.flag"
-  printf '{"written_by":"context-provider-consulted","agent_id":"arch-testing-instance-1","architect_role":"arch-testing","session_id":"cp-gate-read-blocker-canonical-chain-opener-session"}' > "$arch_flag"
   # Group G: rewritten as a canonical CANDIDATE lacking accepted-result.json
   # (5th arg "false") -- never restoring consult-result/v1 authority (the OLD
   # accepted:false fixture this row used to build). isAcceptedConsultationTransactionValid
@@ -1048,7 +1041,6 @@ _write_canonical_accepted_consultation() {
   make_specialist_input Read '/project/docs/di/di-patterns-modules.md'
   _run_hook_env "CLAUDE_WAVE_SLUG=$CONSULT_WAVE_SLUG"
   _assert_deny
-  rm -f "$arch_flag"
 }
 
 @test "PP-BATS-4: CLAUDE_CP_GATE_DISABLED=1 legacy-only escape still unblocks post-PLAN too (unchanged, pre-existing top-of-hook behavior -- distinct from a NEW post-PLAN-specific bypass)" {
