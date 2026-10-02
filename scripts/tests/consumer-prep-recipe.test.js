@@ -60,15 +60,16 @@ test('tl-session-start documents the exact consumer launcher forms from PREP to 
     `${LAUNCHER} wave-control --project-root "$PWD" -- init --slug <slug>`,
     `${LAUNCHER} verdict-request-write --project-root "$PWD" -- --role <arch-*> --phase prep --slug <slug>`,
     `${LAUNCHER} verdict-write --project-root "$PWD" --`,
-    `${LAUNCHER} wave-control --project-root "$PWD" -- transition --slug <slug> --to EXECUTE --verdict <arch-*>=<verdict-path>`,
-    `${LAUNCHER} wave-control --project-root "$PWD" -- transition --slug <slug> --to VERIFY_FINAL --rebind-head true`,
+    `${LAUNCHER} wave-control --project-root "$PWD" -- transition --slug <slug> --to EXECUTE --expected-revision <revision> --verdict <arch-*>=<verdict-path>`,
+    `${LAUNCHER} wave-control --project-root "$PWD" -- preverify --slug <slug> --expected-revision <revision>`,
+    `${LAUNCHER} wave-control --project-root "$PWD" -- transition --slug <slug> --to VERIFY_FINAL --expected-revision <revision> --rebind-head true --preverify-receipt <path-from-preverify>`,
     `${LAUNCHER} verdict-request-write --project-root "$PWD" -- --role <arch-*> --phase verify-final --slug <slug>`,
-    '--phase verify-final --slug <slug> --request <absolute-request-path> --request-sha256 <sha256> --decision approve --evidence-text "<concise evidence>"',
-    `${LAUNCHER} wave-control --project-root "$PWD" -- transition --slug <slug> --to QG --verdict <arch-*>=<verdict-path>`,
-    `${LAUNCHER} runtime-consumer-qg --project-root "$PWD" -- pre-pr --slug <slug> --project-gate PASS|FAIL`,
-    `${LAUNCHER} runtime-consumer-qg --project-root "$PWD" -- mint --slug <slug>`,
+    '--phase verify-final --slug <slug> --request <absolute-request-path> --request-sha256 <sha256> --decision approve --evidence-text "<concise evidence>" --evidence-file <absolute-preverify-receipt>',
+    `${LAUNCHER} wave-control --project-root "$PWD" -- transition --slug <slug> --to QG --expected-revision <revision> --verdict <arch-*>=<verdict-path>`,
+    `${LAUNCHER} runtime-consumer-qg --project-root "$PWD" -- pre-pr --slug <slug> --expected-revision <revision> --project-gate PASS|FAIL`,
+    `${LAUNCHER} runtime-consumer-qg --project-root "$PWD" -- mint --slug <slug> --qg-attempt <PASS-attempt-path>`,
     `${LAUNCHER} runtime-consumer-qg --project-root "$PWD" -- verify --slug <slug>`,
-    `${LAUNCHER} wave-control --project-root "$PWD" -- transition --slug <slug> --to COMPLETE`,
+    `${LAUNCHER} wave-control --project-root "$PWD" -- transition --slug <slug> --to COMPLETE --expected-revision <revision> --qg-attempt <PASS-attempt-path>`,
   ];
   let cursor = -1;
   for (const form of forms) {

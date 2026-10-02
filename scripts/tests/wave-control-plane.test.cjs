@@ -9,6 +9,10 @@ const test = require('node:test');
 const control = require('../lib/wave-control-plane.cjs');
 const entrypoints = require('../lib/runtime-collaboration-entrypoints.cjs');
 
+function advance(root, to, options = {}) {
+  return control.transition(root, 'demo', to, { ...options, expectedRevision: control.readState(root, 'demo').revision });
+}
+
 function fixture({ className = 'FAST-PATH', architects = '[]', lifecycleRoles = '[]', executionMode = 'disk-only', required = '' } = {}) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'wave-control-'));
   fs.mkdirSync(path.join(root, '.planning', 'wave-demo'), { recursive: true });
@@ -64,8 +68,8 @@ test('legal transitions advance exactly one phase and illegal transitions fail c
   const root = fixture();
   try {
     control.initialize(root, 'demo');
-    assert.strictEqual(control.transition(root, 'demo', 'EXECUTE').phase, 'EXECUTE');
-    assert.throws(() => control.transition(root, 'demo', 'QG'), /ILLEGAL_PHASE_TRANSITION/);
+    assert.strictEqual(advance(root, 'EXECUTE').phase, 'EXECUTE');
+    assert.throws(() => advance(root, 'QG'), /ILLEGAL_PHASE_TRANSITION/);
   } finally { fs.rmSync(root, { recursive: true, force: true }); }
 });
 
@@ -100,7 +104,7 @@ test('a PREP transition with a real authorizing verdict persists a readable appr
     control.initialize(root, 'demo');
     const verdictPath = publishPrepApproval(root);
     assert.strictEqual(fs.existsSync(path.join(root, 'scripts', 'lib')), false);
-    const transitioned = control.transition(root, 'demo', 'EXECUTE', {
+    const transitioned = advance(root, 'EXECUTE', {
       verdicts: [{ role: 'arch-platform', path: verdictPath }],
     });
     assert.strictEqual(transitioned.transitions[0].evidence[0].decision, 'approve');
@@ -114,7 +118,7 @@ test('decisionless legacy state is atomically migrated only after its verdict so
   try {
     control.initialize(root, 'demo');
     const verdictPath = publishPrepApproval(root);
-    control.transition(root, 'demo', 'EXECUTE', { verdicts: [{ role: 'arch-platform', path: verdictPath }] });
+    advance(root, 'EXECUTE', { verdicts: [{ role: 'arch-platform', path: verdictPath }] });
     const statePath = path.join(root, '.androidcommondoc', 'wave-control', 'demo.json');
     const legacy = JSON.parse(fs.readFileSync(statePath, 'utf8'));
     delete legacy.transitions[0].evidence[0].decision;
@@ -133,7 +137,7 @@ test('decisionless legacy state fails closed and remains byte-identical when ver
   try {
     control.initialize(root, 'demo');
     const verdictPath = publishPrepApproval(root);
-    control.transition(root, 'demo', 'EXECUTE', { verdicts: [{ role: 'arch-platform', path: verdictPath }] });
+    advance(root, 'EXECUTE', { verdicts: [{ role: 'arch-platform', path: verdictPath }] });
     const statePath = path.join(root, '.androidcommondoc', 'wave-control', 'demo.json');
     const legacy = JSON.parse(fs.readFileSync(statePath, 'utf8'));
     delete legacy.transitions[0].evidence[0].decision;
@@ -161,7 +165,7 @@ test('a transition records one atomic timestamp so persisted state never invalid
       static now() { return milliseconds; }
       static parse(value) { return NativeDate.parse(value); }
     };
-    const transitioned = control.transition(root, 'demo', 'EXECUTE');
+    const transitioned = advance(root, 'EXECUTE');
     assert.strictEqual(transitioned.updated_at, transitioned.transitions[0].at);
     assert.doesNotThrow(() => control.readState(root, 'demo'));
   } finally {
@@ -205,7 +209,7 @@ test('draft rebind: a state bound to the draft is re-bound once to the final PLA
     assert.strictEqual(rebound.phase, 'PREP');
     assert.strictEqual(control.status(root, 'demo').current, true, 'the state now follows the final PLAN');
     assert.strictEqual(control.initialize(root, 'demo').plan_sha256, rebound.plan_sha256, 'idempotent afterwards');
-    assert.strictEqual(control.transition(root, 'demo', 'EXECUTE').phase, 'EXECUTE', 'the wave proceeds on the final digest');
+    assert.strictEqual(advance(root, 'EXECUTE').phase, 'EXECUTE', 'the wave proceeds on the final digest');
   } finally { fs.rmSync(root, { recursive: true, force: true }); }
 });
 
@@ -260,7 +264,7 @@ test('draft rebind: a second PLAN change after the re-binding is drift as before
     fs.appendFileSync(planPathOf(root), 'A later edit.\n');
     assert.strictEqual(control.inspect(root, 'demo').draft_rebind, false);
     assert.throws(() => control.initialize(root, 'demo'), /PHASE_STATE_INPUT_DRIFT/);
-    assert.throws(() => control.transition(root, 'demo', 'EXECUTE'), /PHASE_STATE_PLAN_DRIFT/);
+    assert.throws(() => advance(root, 'EXECUTE'), /PHASE_STATE_PLAN_DRIFT/);
   } finally { fs.rmSync(root, { recursive: true, force: true }); }
 });
 
@@ -278,7 +282,7 @@ test('draft rebind: a draft that already made a transition is not re-bound', () 
   try {
     asDraft(root);
     control.initialize(root, 'demo');
-    assert.strictEqual(control.transition(root, 'demo', 'EXECUTE').phase, 'EXECUTE');
+    assert.strictEqual(advance(root, 'EXECUTE').phase, 'EXECUTE');
     asFinal(root);
     assert.strictEqual(control.inspect(root, 'demo').draft_rebind, false);
     assert.throws(() => control.initialize(root, 'demo'), /PHASE_STATE_INPUT_DRIFT/);
@@ -351,7 +355,7 @@ test('lifecycle actions use only the shipped Wave-1 CLI operations and carry cla
       { operation: 'ensure', role: 'arch-testing', mode: 'persistent' },
       { operation: 'ensure', role: 'context-provider', mode: 'persistent' },
     ]);
-    control.transition(root, 'demo', 'EXECUTE');
+    advance(root, 'EXECUTE');
     assert.deepStrictEqual(control.lifecycleActions(root, 'demo').map(({ operation, role, mode }) => ({ operation, role, mode })), [
       { operation: 'status', role: 'arch-platform', mode: 'persistent' },
       { operation: 'status', role: 'arch-testing', mode: 'persistent' },
@@ -570,7 +574,7 @@ test('wave-scoped work keeps the exact selector when sibling plans are byte-iden
     fs.mkdirSync(path.join(root, '.planning', 'wave-copy'), { recursive: true });
     fs.copyFileSync(target, path.join(root, '.planning', 'wave-copy', 'PLAN.md'));
     control.initialize(root, 'demo');
-    control.transition(root, 'demo', 'EXECUTE');
+    advance(root, 'EXECUTE');
     const plan = entrypoints.planEntrypointStep('work', {
       role: 'toolkit-specialist',
       subject_ref: `subject:${'a'.repeat(64)}`,
@@ -632,7 +636,7 @@ test('work is EXECUTE-only and permits HEAD movement until the explicit final-HE
   try {
     control.initialize(root, 'demo');
     assert.throws(() => entrypoints.planEntrypointStep('work', intent, root), /wave-control-work-outside-execute/);
-    control.transition(root, 'demo', 'EXECUTE');
+    advance(root, 'EXECUTE');
     fs.writeFileSync(path.join(root, 'execution-change.txt'), 'change');
     execFileSync('git', ['add', '.'], { cwd: root });
     execFileSync('git', ['commit', '-qm', 'execution change'], { cwd: root });

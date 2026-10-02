@@ -1069,7 +1069,7 @@
       "description": "Run the canonical quality-gate protocol for the active wave with one full local Bats aggregate; required GitHub CI Gate remains merge authority.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:92935a3f00272eb8cd55a2ad9f8c9ddf0798166ea41361be0dcc427d5034c696",
+      "hash": "sha256:e44707ddb0b44a8df3b4363fb15f4b34188e38261a7b7002d88ff1d0cb098cb8",
       "dependencies": [],
       "frontmatter": {
         "name": "quality-gate",
@@ -2705,7 +2705,7 @@
       "description": "QG owner (Phase 3). Runs sequential verification on the final committed HEAD after VERIFY-FINAL architect approval. Reports structured PASS/FAIL.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:56eeb289346ea2dc758331422ddb459273593ceb19e1fa6d904ba051361ca5ee",
+      "hash": "sha256:44efb00e2b87cf6c5e8e3c21b99f9c1eb5c52a4224796da1f7358a8e69af8beb",
       "dependencies": [],
       "frontmatter": {
         "name": "quality-gater",

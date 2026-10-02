@@ -93,7 +93,7 @@ function main(rootArg) {
     }
   }
   const topology = fs.readFileSync(path.join(root, '.claude', 'registry', 'wave-topology.yaml'));
-  if (!topology.includes(Buffer.from('schema: wave-phase-state/v1'))) {
+  if (!topology.includes(Buffer.from('schema: wave-phase-state/v2'))) {
     violations.push({ code: 'CONTROL_PLANE_NOT_REGISTERED' });
   }
   return {

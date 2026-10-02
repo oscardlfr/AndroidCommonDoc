@@ -15,9 +15,9 @@ Use this entrypoint only after implementation and VERIFY-FINAL review are comple
 
 1. Resolve the active wave slug and call `node .claude/runtime/l0-toolkit-launcher.cjs run wave-control --project-root "$PWD" -- status --slug <slug>`. The state must be `VERIFY_FINAL`, current for the exact PLAN digest and HEAD.
 2. Validate all class-required `verdict/v1` records through `verdict-evidence-contract-cli.cjs`; prose tokens and legacy Markdown are not authority.
-3. Transition to `QG` through the same `wave-control` launcher operation, passing each required `--verdict role=verdict-path` binding.
+3. Transition to `QG` through the same `wave-control` launcher operation with `--expected-revision`, passing each required `--verdict role=verdict-path` binding. Each VERIFY_FINAL verdict must cite the current cycle's preverify receipt.
 4. Execute the canonical quality-gater procedure. In L0, this runs one canonical six-shard Bats aggregate and the L0 proof mint. In L1/L2, it runs the consumer project's `/pre-pr` exactly once and calls the allowlisted `runtime-consumer-qg` operation; the L0 harness is never copied or executed downstream.
-5. Verify the emitted proof through the layer-aware launcher, then transition `QG → COMPLETE` with `wave-control`. That transition independently requires current `quality-gate.stamp`, `pre-pr.stamp`, and `push-proof.json` artifacts and reruns the correct verifier for the active layer.
+5. Record the immutable QG attempt. A FAIL is consumed once by explicit `wave-control rework` and returns to EXECUTE (maximum three cycles). A PASS is supplied to proof mint and, after proof verification, to `QG → COMPLETE` with `--expected-revision`. That transition independently requires the current attempt, `quality-gate.stamp`, `pre-pr.stamp`, and `push-proof.json`, and reruns the correct verifier for the active layer.
 
 The local full run validates the exact branch HEAD and authorizes publishing it.
 The required GitHub `CI Gate` is the independent merge authority: strict branch
@@ -26,6 +26,6 @@ while it is absent, red, cancelled, or pending. These are deliberately different
 subjects, so do not claim GitHub tested the byte-identical local SHA. Do not rerun
 a green local full suite to manufacture a second local agreement artifact.
 
-The `EXECUTE → VERIFY_FINAL` transition is the one explicit source rebind point: after committing the completed implementation, pass `--rebind-head true`. The control plane records both heads and refuses PLAN drift; no other transition can silently adopt a different HEAD.
+The `EXECUTE → VERIFY_FINAL` transition is the one explicit source rebind point: after committing the completed implementation, first mint `wave-control preverify` for the current revision, then pass its receipt with `--rebind-head true --preverify-receipt`. The control plane requires a clean tracked tree, records both heads, and refuses PLAN drift; no other transition can silently adopt a different HEAD.
 
 The installed Git `pre-push` hook is the sole portable push authority. Runtime hooks and peer-role labels are defense-in-depth only. Never set a bypass, fabricate a stamp, treat a partial shard as a full run, or interpret a delivered message as a PASS.

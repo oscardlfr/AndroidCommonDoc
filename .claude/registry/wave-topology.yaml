@@ -3,11 +3,16 @@ manifest:
   version: 4
   description: "Wave-class artifact floors plus the persisted runtime-neutral phase control plane. Required peers are lifecycle actions, never a named-team roster."
 control_plane:
-  schema: wave-phase-state/v1
+  schema: wave-phase-state/v2
   phases: [PREP, EXECUTE, VERIFY_FINAL, QG, COMPLETE]
   state_path_template: ".androidcommondoc/wave-control/{slug}.json"
   lifecycle_transport: runtime-role-lifecycle
   final_head_rebind: EXECUTE_TO_VERIFY_FINAL_ONLY
+  cas: EXPECTED_REVISION_REQUIRED
+  rework_transition: QG_TO_EXECUTE_ON_BOUND_FAIL
+  max_rework_cycles: 3
+  qg_attempt_path_template: ".androidcommondoc/wave-control/{slug}/qg-attempts/cycle-{cycle}/attempt-{attempt}.json"
+  preverify_receipt_path_template: ".planning/wave-{slug}/control/preverify/cycle-{cycle}-revision-{revision}-{head}.json"
 # class_artifacts: the disk verdicts each wave CLASS must have present + HEAD-bound
 # before push. The artifact-floor is enforced at the PUSH BOUNDARY by
 # emit-push-proof.sh, which resolves the CLASS-aware required architect roles via

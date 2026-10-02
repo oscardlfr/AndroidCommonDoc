@@ -20,10 +20,19 @@ function main() {
   const command = process.argv[2];
   const args = flags(process.argv.slice(3));
   if (!args.root || !args.slug) throw new Error('REQUIRED_ARGUMENT_MISSING');
+  const expectedRevision = args['expected-revision'] === undefined ? undefined : Number(args['expected-revision']);
   if (command === 'init') emit(control.initialize(args.root, args.slug));
   else if (command === 'status') emit(control.status(args.root, args.slug));
   else if (command === 'transition') emit(control.transition(args.root, args.slug, args.to, {
-    verdicts: args.verdicts, rebindHead: args['rebind-head'] === 'true',
+    verdicts: args.verdicts, rebindHead: args['rebind-head'] === 'true', expectedRevision,
+    preverifyReceipt: args['preverify-receipt'], qgAttempt: args['qg-attempt'],
+  }));
+  else if (command === 'preverify') emit(control.preverify(args.root, args.slug, { expectedRevision }));
+  else if (command === 'qg-attempt') emit(control.qgAttempt(args.root, args.slug, args.verdict, {
+    expectedRevision, checks: args.checks ? JSON.parse(args.checks) : {},
+  }));
+  else if (command === 'rework') emit(control.rework(args.root, args.slug, {
+    expectedRevision, failReceipt: args['fail-receipt'],
   }));
   else if (command === 'lifecycle-actions') emit(control.lifecycleActions(args.root, args.slug, args.profile || 'auto'));
   else throw new Error('UNKNOWN_COMMAND');

@@ -148,7 +148,10 @@ function validateInputs(root, slug, expectedPhase) {
 
   const state = readRegularJson(root, `.androidcommondoc/wave-control/${slug}.json`, 'wave-state-invalid');
   if (!expectedPhase.includes(state.value.phase) || state.value.head !== head
-      || typeof state.value.plan_sha256 !== 'string' || !/^[0-9a-f]{64}$/.test(state.value.plan_sha256)) {
+      || state.value.schema !== 'wave-phase-state/v2'
+      || typeof state.value.plan_sha256 !== 'string' || !/^[0-9a-f]{64}$/.test(state.value.plan_sha256)
+      || !Number.isInteger(state.value.revision) || !Number.isInteger(state.value.cycle)
+      || !Number.isInteger(state.value.verification_epoch)) {
     die('wave-state-not-current');
   }
   return { head, prePr, state };
@@ -189,11 +192,11 @@ function secretScanResult(root) {
   return run.status === 0 ? 'PASS' : 'FAIL';
 }
 
-function prePr(root, slug, projectGate) {
+function prePr(root, slug, projectGate, expectedRevision) {
   if (projectGate !== 'PASS' && projectGate !== 'FAIL') die('project-gate-required');
   const head = currentHead(root);
   const state = readRegularJson(root, `.androidcommondoc/wave-control/${slug}.json`, 'wave-state-invalid');
-  if (state.value.phase !== 'QG' || state.value.head !== head) die('wave-state-not-current');
+  if (state.value.phase !== 'QG' || state.value.head !== head || state.value.revision !== expectedRevision) die('wave-state-not-current');
   ensureLocallyIgnored(root);
   const checks = {
     project_gate: projectGate,
@@ -203,15 +206,26 @@ function prePr(root, slug, projectGate) {
   const verdict = Object.values(checks).every((result) => result === 'PASS') ? 'PASS' : 'FAIL';
   const stamp = { verdict, timestamp: new Date().toISOString(), head, wave_slug: slug, checks };
   try { atomicWriteJson(root, '.androidcommondoc/pre-pr.stamp', stamp); } catch { die('artifact-publication-failed'); }
-  process.stdout.write(`RUNTIME_CONSUMER_PRE_PR_${verdict} ${head} ${JSON.stringify(checks)}\n`);
+  let attempt;
+  try { attempt = waveControl.qgAttempt(root, slug, verdict, { expectedRevision, checks }); }
+  catch (error) { die(`qg-attempt-publication-failed:${error.message}`); }
+  process.stdout.write(`RUNTIME_CONSUMER_PRE_PR_${verdict} ${head} ${attempt.path} ${JSON.stringify(checks)}\n`);
   if (verdict !== 'PASS') process.exit(1);
 }
 
-function mint(root, slug) {
+function mint(root, slug, qgAttemptPath) {
   ensureLocallyIgnored(root);
   const dirty = git(root, ['status', '--porcelain', '--untracked-files=no']);
   if (dirty) die('tracked-worktree-not-clean');
   const { head, prePr, state } = validateInputs(root, slug, ['QG']);
+  const qgAttempt = readRegularJson(root, qgAttemptPath, 'qg-attempt-invalid');
+  const attempt = qgAttempt.value;
+  if (attempt.schema !== 'wave-qg-attempt/v1' || attempt.verdict !== 'PASS' || attempt.wave_slug !== slug
+      || attempt.plan_sha256 !== state.value.plan_sha256 || attempt.head !== head
+      || attempt.state_revision !== state.value.revision || attempt.cycle !== state.value.cycle
+      || attempt.verification_epoch !== state.value.verification_epoch || !Number.isInteger(attempt.attempt)) {
+    die('qg-attempt-not-current');
+  }
   const generatedAt = new Date().toISOString();
   const proof = {
     schema_version: 1,
@@ -221,6 +235,11 @@ function mint(root, slug) {
     wave_slug: slug,
     plan_sha256: state.value.plan_sha256,
     pre_pr_sha256: sha256(prePr.bytes),
+    state_revision: state.value.revision,
+    cycle: state.value.cycle,
+    verification_epoch: state.value.verification_epoch,
+    qg_attempt_path: qgAttemptPath,
+    qg_attempt_sha256: sha256(qgAttempt.bytes),
     generated_at: generatedAt,
   };
   const stamp = { verdict: 'PASS', timestamp: generatedAt, head, wave_slug: slug };
@@ -247,13 +266,22 @@ function verify(root, slug, requestedHead) {
   validateTimestamp(stamp.timestamp, 'quality-gate-stamp-stale');
   if (proof.kind !== 'runtime-consumer-qg/v1' || proof.verdict !== 'PASS' || proof.head !== head
       || proof.wave_slug !== slug || proof.plan_sha256 !== state.value.plan_sha256
-      || proof.pre_pr_sha256 !== sha256(prePr.bytes)) die('push-proof-not-current');
+      || proof.pre_pr_sha256 !== sha256(prePr.bytes) || proof.state_revision !== state.value.revision
+      || proof.cycle !== state.value.cycle || proof.verification_epoch !== state.value.verification_epoch
+      || typeof proof.qg_attempt_path !== 'string' || !/^[0-9a-f]{64}$/.test(proof.qg_attempt_sha256 || '')) {
+    die('push-proof-not-current');
+  }
+  const qgAttempt = readRegularJson(root, proof.qg_attempt_path, 'qg-attempt-invalid');
+  if (sha256(qgAttempt.bytes) !== proof.qg_attempt_sha256 || qgAttempt.value.verdict !== 'PASS'
+      || qgAttempt.value.state_revision !== state.value.revision || qgAttempt.value.cycle !== state.value.cycle
+      || qgAttempt.value.verification_epoch !== state.value.verification_epoch) die('qg-attempt-not-current');
   validateTimestamp(proof.generated_at, 'push-proof-stale');
   process.stdout.write(`RUNTIME_CONSUMER_QG_VERIFIED ${head}\n`);
 }
 
 const argv = process.argv.slice(2);
-if (argv.length < 2) die('usage: <project-root> <resolve-active-wave|pre-pr|mint|verify> [--slug <slug>] [--project-gate PASS|FAIL] [--head <sha>]');
+const usage = 'usage: <project-root> <resolve-active-wave|pre-pr|mint|verify> [--slug <slug>] [--expected-revision N] [--qg-attempt PATH] [--project-gate PASS|FAIL] [--head <sha>]';
+if (argv.length < 2) die(usage);
 const root = canonicalDirectory(path.resolve(argv[0]));
 const mode = argv[1];
 if (mode === 'resolve-active-wave') {
@@ -261,18 +289,28 @@ if (mode === 'resolve-active-wave') {
   resolveActiveWave(root);
   return;
 }
+if (argv.length < 3) die(usage);
 let slug;
 let requestedHead;
 let projectGate;
+let expectedRevision;
+let qgAttemptPath;
 for (let index = 2; index < argv.length; index += 1) {
   if (argv[index] === '--slug' && argv[index + 1]) { slug = validateSlug(argv[++index]); continue; }
   if (argv[index] === '--head' && argv[index + 1]) { requestedHead = argv[++index]; continue; }
   if (argv[index] === '--project-gate' && argv[index + 1]) { projectGate = argv[++index]; continue; }
+  if (argv[index] === '--expected-revision' && argv[index + 1]) { expectedRevision = Number(argv[++index]); continue; }
+  if (argv[index] === '--qg-attempt' && argv[index + 1]) { qgAttemptPath = argv[++index]; continue; }
   die(`unknown-argument:${argv[index]}`);
 }
 if (!slug) die('wave-slug-required');
 if (requestedHead && !/^[0-9a-f]{40}$/.test(requestedHead)) die('requested-head-invalid');
-if (mode === 'pre-pr') prePr(root, slug, projectGate);
-else if (mode === 'mint') mint(root, slug);
+if (mode === 'pre-pr') {
+  if (!Number.isInteger(expectedRevision) || expectedRevision < 0) die('expected-revision-required');
+  prePr(root, slug, projectGate, expectedRevision);
+} else if (mode === 'mint') {
+  if (!qgAttemptPath) die('qg-attempt-required');
+  mint(root, slug, qgAttemptPath);
+}
 else if (mode === 'verify') verify(root, slug, requestedHead);
 else die('mode-invalid');

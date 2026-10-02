@@ -299,6 +299,12 @@
       }
     },
     "quality-gater": {
+      "2.28.6": {
+        "date": "2026-10-02",
+        "breaking": false,
+        "summary": "Bind each QG attempt to the current durable wave revision, cycle and verification epoch; record PASS or FAIL immutably, mint only from the exact PASS attempt, and hand a FAIL attempt to the bounded explicit QG-to-EXECUTE rework transition. Active-wave selection remains durable and independent of ambient shell state.",
+        "migration_hint": "Run plain /sync-l0 so runtime-enabled consumers refresh the quality-gater template, wave-control v2 state machine, launcher operations and QG proof contract atomically."
+      },
       "2.28.5": {
         "date": "2026-10-02",
         "breaking": false,

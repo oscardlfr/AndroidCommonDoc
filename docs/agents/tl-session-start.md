@@ -179,7 +179,7 @@ node .claude/runtime/l0-toolkit-launcher.cjs run verdict-request-write --project
 `verdict-request-write` prints `<absolute-request-path> <sha256>`; pass both to the architect. The architect records its decision with `node .claude/runtime/l0-toolkit-launcher.cjs run verdict-write --project-root "$PWD" -- --role <arch-*> --phase prep --slug <slug> --request <absolute-request-path> --request-sha256 <sha256> --decision <approve|escalate>` (rationale on stdin). Then:
 
 ```
-node .claude/runtime/l0-toolkit-launcher.cjs run wave-control --project-root "$PWD" -- transition --slug <slug> --to EXECUTE --verdict <arch-*>=<verdict-path>
+node .claude/runtime/l0-toolkit-launcher.cjs run wave-control --project-root "$PWD" -- transition --slug <slug> --to EXECUTE --expected-revision <revision> --verdict <arch-*>=<verdict-path>
 ```
 
 **Specialist dispatch in an L1/L2 consumer.** Before a specialist edits, its architect writes the dispatch artifact with `node .claude/runtime/l0-toolkit-launcher.cjs run specialist-dispatch-write --project-root "$PWD" -- --architect <arch-*> --specialist <specialist> --file <path> --slug <slug>` (the task text on stdin). Documentation waves, whose implementer is `doc-updater`, do not use it: `doc-updater` is exempt from the dispatch gate (D4).
@@ -187,19 +187,22 @@ node .claude/runtime/l0-toolkit-launcher.cjs run wave-control --project-root "$P
 **VERIFY_FINAL and QG in an L1/L2 consumer (orchestrator).** `--phase` accepts exactly `prep` or `verify-final`. After the final commit, freeze HEAD and request fresh verdicts:
 
 ```
-node .claude/runtime/l0-toolkit-launcher.cjs run wave-control --project-root "$PWD" -- transition --slug <slug> --to VERIFY_FINAL --rebind-head true
+node .claude/runtime/l0-toolkit-launcher.cjs run wave-control --project-root "$PWD" -- preverify --slug <slug> --expected-revision <revision>
+node .claude/runtime/l0-toolkit-launcher.cjs run wave-control --project-root "$PWD" -- transition --slug <slug> --to VERIFY_FINAL --expected-revision <revision> --rebind-head true --preverify-receipt <path-from-preverify>
 node .claude/runtime/l0-toolkit-launcher.cjs run verdict-request-write --project-root "$PWD" -- --role <arch-*> --phase verify-final --slug <slug>
 ```
 
-Each architect approves with `printf '%s\n' "<rationale>" | node .claude/runtime/l0-toolkit-launcher.cjs run verdict-write --project-root "$PWD" -- --role <arch-*> --phase verify-final --slug <slug> --request <absolute-request-path> --request-sha256 <sha256> --decision approve --evidence-text "<concise evidence>"` (the rationale arrives on stdin and is required, 1 to 8192 bytes; every input is validated before anything is written, so a failed call leaves nothing behind and the same call can be retried). A VERIFY_FINAL approve requires evidence; `--evidence-text` makes the writer store it in the wave directory as `<arch-*>-verify-final-evidence.md`, so a role without a Write tool never creates a file (`--evidence-file` still takes an absolute path inside `.planning/wave-<slug>/`). Before transitioning to QG the tracked working tree must be clean and everything committed: `pre-pr` requires it. Then, in this order:
+Each architect approves with `printf '%s\n' "<rationale>" | node .claude/runtime/l0-toolkit-launcher.cjs run verdict-write --project-root "$PWD" -- --role <arch-*> --phase verify-final --slug <slug> --request <absolute-request-path> --request-sha256 <sha256> --decision approve --evidence-text "<concise evidence>" --evidence-file <absolute-preverify-receipt>` (the rationale arrives on stdin and is required, 1 to 8192 bytes; every input is validated before anything is written, so a failed call leaves nothing behind and the same call can be retried). The preverify receipt is mandatory epoch evidence; an old cycle's verdict cannot authorize the new cycle. Before transitioning to QG the tracked working tree must be clean and everything committed: `pre-pr` requires it. Then, in this order:
 
 ```
-node .claude/runtime/l0-toolkit-launcher.cjs run wave-control --project-root "$PWD" -- transition --slug <slug> --to QG --verdict <arch-*>=<verdict-path>
-node .claude/runtime/l0-toolkit-launcher.cjs run runtime-consumer-qg --project-root "$PWD" -- pre-pr --slug <slug> --project-gate PASS|FAIL
-node .claude/runtime/l0-toolkit-launcher.cjs run runtime-consumer-qg --project-root "$PWD" -- mint --slug <slug>
+node .claude/runtime/l0-toolkit-launcher.cjs run wave-control --project-root "$PWD" -- transition --slug <slug> --to QG --expected-revision <revision> --verdict <arch-*>=<verdict-path>
+node .claude/runtime/l0-toolkit-launcher.cjs run runtime-consumer-qg --project-root "$PWD" -- pre-pr --slug <slug> --expected-revision <revision> --project-gate PASS|FAIL
+node .claude/runtime/l0-toolkit-launcher.cjs run runtime-consumer-qg --project-root "$PWD" -- mint --slug <slug> --qg-attempt <PASS-attempt-path>
 node .claude/runtime/l0-toolkit-launcher.cjs run runtime-consumer-qg --project-root "$PWD" -- verify --slug <slug>
-node .claude/runtime/l0-toolkit-launcher.cjs run wave-control --project-root "$PWD" -- transition --slug <slug> --to COMPLETE
+node .claude/runtime/l0-toolkit-launcher.cjs run wave-control --project-root "$PWD" -- transition --slug <slug> --to COMPLETE --expected-revision <revision> --qg-attempt <PASS-attempt-path>
 ```
+
+When `pre-pr` records FAIL, do not jump phases or reuse a previous proof. Consume its printed immutable attempt once with `wave-control ... rework --slug <slug> --expected-revision <revision> --fail-receipt <FAIL-attempt-path>`. The returned state is `EXECUTE` with an incremented cycle and verification epoch. A wave may rework at most three times.
 
 Between the QG transition and `pre-pr`, the phase-scoped quality-gater runs the consumer checks: the project's own `/pre-pr` plus the applicable steps of its template; the launcher refuses the L0-only registry-integrity, doc-validator, report-freshness and Bats steps in a consumer. `pre-pr` is the only producer of `.androidcommondoc/pre-pr.stamp`: it runs the secret scan, checks the tracked tree and records `--project-gate` (`PASS` only when every consumer check passed); never write the stamp by hand. `mint` binds the stamp to HEAD and PLAN, `verify` re-checks the proof, and the COMPLETE transition verifies it again. The QG reports stay out of `git status` through the clone-local `.git/info/exclude`.
 

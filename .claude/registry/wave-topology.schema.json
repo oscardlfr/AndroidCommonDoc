@@ -6,16 +6,21 @@
     "manifest": { "type": "object" },
     "control_plane": {
       "type": "object",
-      "required": ["schema", "phases", "state_path_template", "lifecycle_transport", "final_head_rebind"],
+      "required": ["schema", "phases", "state_path_template", "lifecycle_transport", "final_head_rebind", "cas", "rework_transition", "max_rework_cycles", "qg_attempt_path_template", "preverify_receipt_path_template"],
       "properties": {
-        "schema": { "const": "wave-phase-state/v1" },
+        "schema": { "const": "wave-phase-state/v2" },
         "phases": {
           "type": "array",
           "const": ["PREP", "EXECUTE", "VERIFY_FINAL", "QG", "COMPLETE"]
         },
         "state_path_template": { "const": ".androidcommondoc/wave-control/{slug}.json" },
         "lifecycle_transport": { "const": "runtime-role-lifecycle" },
-        "final_head_rebind": { "const": "EXECUTE_TO_VERIFY_FINAL_ONLY" }
+        "final_head_rebind": { "const": "EXECUTE_TO_VERIFY_FINAL_ONLY" },
+        "cas": { "const": "EXPECTED_REVISION_REQUIRED" },
+        "rework_transition": { "const": "QG_TO_EXECUTE_ON_BOUND_FAIL" },
+        "max_rework_cycles": { "const": 3 },
+        "qg_attempt_path_template": { "const": ".androidcommondoc/wave-control/{slug}/qg-attempts/cycle-{cycle}/attempt-{attempt}.json" },
+        "preverify_receipt_path_template": { "const": ".planning/wave-{slug}/control/preverify/cycle-{cycle}-revision-{revision}-{head}.json" }
       },
       "additionalProperties": false
     },
