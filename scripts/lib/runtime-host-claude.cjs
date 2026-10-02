@@ -1308,6 +1308,29 @@ function observeClaudeExecutablePin(options) {
   // `nohup`/`setsid` `claude` (reparented to launchd) already had exactly one
   // match, so that rule never resisted detachment; it only ever blocked naive
   // nesting through a shell (claude -> zsh -> claude), which is still blocked.
+  // An on-demand daemon host runs its PTY host from the bundle wrapper
+  // `.../ClaudeCode.app/Contents/MacOS/claude`, a hard link to the versioned
+  // binary. `codesign --strict` at a bundle path demands bundle resources and
+  // fails although the Mach-O and its embedded signature are byte-identical. A
+  // row whose executable is the SAME file object (st_dev, st_ino) as a row that
+  // verified in this walk is that signed binary, not a copy, so it is vendor too.
+  const verifiedFiles = new Map();
+  for (const entry of vendorRows) {
+    if (entry === null) continue;
+    try {
+      const stat = fs.statSync(entry.resolved);
+      verifiedFiles.set(stat.dev + ':' + stat.ino, entry);
+    } catch { /* an unreadable verified row contributes no identity */ }
+  }
+  for (let index = 0; index < before.length; index += 1) {
+    if (vendorRows[index] !== null || !path.isAbsolute(before[index].executable_path)) continue;
+    try {
+      const resolved = fs.realpathSync(before[index].executable_path);
+      const stat = fs.statSync(resolved);
+      const same = stat.isFile() ? verifiedFiles.get(stat.dev + ':' + stat.ino) : undefined;
+      if (same) vendorRows[index] = { row: before[index], resolved, cliVersion: same.cliVersion };
+    } catch { /* not the same file as a verified vendor binary */ }
+  }
   const hostIndex = vendorRows.findIndex((entry) => entry !== null);
   if (hostIndex === -1) {
     return { ok: false, reason: 'HOST_PIN_UNPROVEN', detail: 'HOST_PIN_VENDOR_MATCH_COUNT_0' };

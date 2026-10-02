@@ -2662,7 +2662,7 @@ test('MACOS-PIN-06b the 8-ancestor bound and an empty process table are unchange
   assert.equal(hostClaude.__TEST_ONLY__queryDarwinParentChain(20, 10000, () => ({ status: 1, stdout: '', stderr: '' })), null);
 });
 
-function observeWithProbes(label, chainRows, signedPaths, afterRows) {
+function observeWithProbes(label, chainRows, signedPaths, afterRows, hardLinks = {}) {
   const fixture = writeHostContractFixture(label);
   try {
     const published = hostClaude.publishClaudeHostContractPackage({
@@ -2677,6 +2677,12 @@ function observeWithProbes(label, chainRows, signedPaths, afterRows) {
       return { ...row, executable_path: file };
     });
     const resolved = materialize(chainRows);
+    // `hardLinks` maps an image to the image it is a hard link of (the same file object, like the bundle wrapper).
+    for (const [linkName, targetName] of Object.entries(hardLinks)) {
+      const link = path.join(fixture.projectRoot, linkName);
+      fs.rmSync(link, { force: true });
+      fs.linkSync(path.join(fixture.projectRoot, targetName), link);
+    }
     // The first walk sees `chainRows`; the stability re-walk sees `afterRows` when given.
     const walks = [resolved, afterRows ? materialize(afterRows) : resolved];
     let walk = 0;
@@ -2917,3 +2923,22 @@ test('PIN-DIAG-03 a recorded pin clears the diagnostic and live re-observation f
       { ok: false, reason: 'HOST_PIN_UNPROVEN', detail: 'HOST_PIN_SESSION_RECORD_INVALID' });
   } finally { cleanupHostContractFixture(fixture); }
 });
+
+test('MACOS-PIN-12 an on-demand daemon host whose PTY host runs from a hard-linked bundle wrapper is admitted',
+  { skip: process.platform !== 'darwin' }, () => {
+    // Captured from Claude Code 2.1.287 `bg spawned` (no spare): worker (versions/<v>) -> pty host
+    // (ClaudeCode.app/Contents/MacOS/claude, a hard link that fails codesign --strict at the bundle path) -> daemon.
+    const chain = [
+      chainRow(900, 800, '/bin/bash'), chainRow(800, 700, '/bin/zsh'),
+      chainRow(700, 600, 'claude-versioned', 'claude-versioned'),
+      chainRow(600, 500, 'claude-bundle-wrapper', 'claude-bundle-wrapper'),
+      chainRow(500, 1, 'claude-daemon', 'claude-daemon'),
+    ];
+    const linked = observeWithProbes('bundle-wrapper', chain, ['claude-versioned', 'claude-daemon'], null,
+      { 'claude-bundle-wrapper': 'claude-versioned' });
+    assert.equal(linked.ok, true, JSON.stringify(linked));
+    assert.equal(linked.processId, 700, 'the session worker is the pinned host');
+    // The same layout where the wrapper is a different (unsigned) file stays a non-vendor gap: nested host.
+    const copied = observeWithProbes('bundle-copy', chain, ['claude-versioned', 'claude-daemon']);
+    assert.deepEqual([copied.ok, copied.detail], [false, 'HOST_PIN_NESTED_VENDOR_HOST']);
+  });
