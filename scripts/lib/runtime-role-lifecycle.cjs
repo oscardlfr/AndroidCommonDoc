@@ -7,8 +7,7 @@
  * recovery and Claude lifecycle observations. Live authority is always derived from
  * validated host evidence; this module never fabricates model state. Also exports
  * `renderPosixDirect(argv)`/`parsePosixDirect(command)`, the canonical POSIX
- * host-action renderer/parser frozen at PLAN.md ~L578, for direct import by
- * `context-provider-gate.js` (no model reimplements quoting).
+ * host-action renderer/parser for `context-provider-gate.js` (no model reimplements quoting).
  */
 const fs = require('fs');
 const path = require('path');
@@ -62,6 +61,7 @@ const { createSupervisorLifecycleOwner } = require('./runtime-role-lifecycle/sup
 const { createSupervisorBatchMint } = require('./runtime-role-lifecycle/supervisor-batch-mint.cjs');
 const { createTeamEnsure } = require('./runtime-role-lifecycle/team-ensure.cjs');
 const { createResumeCheckpoint } = require('./runtime-role-lifecycle/resume-checkpoint.cjs');
+const { createClaudeResumeRegistryLock } = require('./runtime-role-lifecycle/claude-resume-registry-lock.cjs');
 const { createEnsureActiveRouting } = require('./runtime-role-lifecycle/ensure-active-routing.cjs');
 const { createEnsureHandler } = require('./runtime-role-lifecycle/ensure-handler.cjs');
 const { createCliNotifyHandler } = require('./runtime-role-lifecycle/cli-notify-handler.cjs');
@@ -804,6 +804,7 @@ const {
   validateClaudePeerExpected, scanClaudePeerBindingsForExpected, findUniqueLiveClaudePeerAction,
   validateClaudePeerBindingFor, findUniqueClaudePeerBindingForTarget, ensureClaudePeerBindingForObservedActor,
 } = claudePeerBinding;
+const { withClaudeResumeHandleRegistryLock } = createClaudeResumeRegistryLock({ path, registryRepoDir, withRegistryLock });
 const claudeResumeRecord = createClaudeResumeRecord({
   CANONICAL_ROLES, canonicalJSONStringify, CLAUDE_STARTUP_ACTOR_KEYS, CLAUDE_STARTUP_ACTOR_SCHEMA,
   claudeStartupActorPathFor, computeClaudeAuthorityIdentityId, computeWorktreeId,
@@ -811,7 +812,7 @@ const claudeResumeRecord = createClaudeResumeRecord({
   fs, ensureSecureRegistryDir, hasExactKeys, isCanonicalIsoUtc, isHexActionId, isHexCsprng32,
   isHexDigest64, isClaudeId01RawTraceWellFormed, isoToMsForRegistry, path, peekSessionGeneration,
   publishNoClobber, readClaudeAuthorityFence, readRegistryRecord, registryRepoDir,
-  sha256String, validateRoleActorBindingFor,
+  sha256String, validateRoleActorBindingFor, withClaudeResumeHandleRegistryLock,
 });
 const {
   CLAUDE_RESUME_HANDLE_SCHEMA,
@@ -846,7 +847,7 @@ const {
   indexClaudeLivenessProbeAction,
 } = claudeLivenessProbe;
 const claudeResumeDelivery = createClaudeResumeDelivery({
-  ...claudeResumeRecord,
+  ...claudeResumeRecord, withClaudeResumeHandleRegistryLock,
   actionPathFor, canonicalJSONStringify, computeClaudeAuthorityIdentityId, currentClockMsForRegistry,
   hasExactKeys, isCanonicalIsoUtc, isHexActionId, isoToMsForRegistry, nowIsoForRegistry, path,
   publishNoClobber, readClaudeAuthorityFence, readLiveSessionGenerationById, readRegistryRecord,
@@ -855,7 +856,7 @@ const claudeResumeDelivery = createClaudeResumeDelivery({
 });
 const { consumeNativeResumeNotificationBeforeDelivery, settleNativeResumeNotificationFailure } = claudeResumeDelivery;
 const claudeResumeLifecycle = createClaudeResumeLifecycle({
-  ...claudeResumeRecord,
+  ...claudeResumeRecord, withClaudeResumeHandleRegistryLock,
   canonicalJSONStringify, computeClaudeAuthorityIdentityId, consumeNativeResumeNotificationBeforeDelivery,
   currentClockMsForRegistry, ensureSecureRegistryDir, fs, generateActionId, hasExactKeys,
   isCanonicalIsoUtc, isHexCsprng32, isoPlusSecondsForRegistry, isoToMsForRegistry, nowIsoForRegistry,
@@ -987,7 +988,7 @@ const resumeCheckpoint = createResumeCheckpoint({
   buildRoleSpawnPayload, claudeReadyBootstrapMessageFor,
   claudeResumeHandlePathFor, computeActionTtlSeconds, computeRepoId, futureIsoForRegistry, generateActionId,
   interpretedActionMarkerPathFor, isClaudeResumeHandleConsumed, mintRoleLifecycleAction, readClaudeResumeHandle,
-  validateClaudeResumeHandleRecord,
+  validateClaudeResumeHandleRecord, withClaudeResumeHandleRegistryLock,
 });
 const {
   roleBindingForEnvelope, respawnBudgetExceeded, legacyResumeCheckpointMessage, resumeCheckpointMessage,
@@ -1463,9 +1464,8 @@ ROLE_BINDING_ALLOWED_KEYS,
   readClaudeAuthorityFence,
   publishClaudeAuthorityFence,
 };
-// Private in-process seams for host hooks. These are deliberately excluded
-// from the stable enumerable CommonJS ABI; configurability preserves existing
-// hook tests that temporarily replace a seam and then restore it.
+// Private host-hook seams stay outside the stable enumerable ABI; configurable
+// properties preserve tests that temporarily replace a seam and restore it.
 Object.defineProperties(module.exports, {
   settleNativeResumeNotificationFailure: { value: settleNativeResumeNotificationFailure, enumerable: false, writable: true, configurable: true },
   classifyClaudeSupportRoleLiveness: { value: classifyClaudeSupportRoleLiveness, enumerable: false, writable: true, configurable: true },

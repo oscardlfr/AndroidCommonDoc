@@ -28,6 +28,7 @@ function createClaudeResumeRecord(deps) {
     publishNoClobber,
     sha256String,
     validateRoleActorBindingFor,
+    withClaudeResumeHandleRegistryLock,
   } = deps;
 const CLAUDE_RESUME_HANDLE_SCHEMA = 'runtime/claude-resume-handle/v1';
 const CLAUDE_RESUME_HANDLE_KEYS = Object.freeze([
@@ -344,6 +345,7 @@ function isClaudeResumeHandleConsumed(projectRootOrRepoDescriptor, handleId) {
  * check and consume's own lookup share ONE scan implementation).
  */
 function findClaudeResumeHandlesForActor(projectRoot, expected) {
+  return withClaudeResumeHandleRegistryLock(projectRoot, () => {
   const dir = path.join(registryRepoDir(projectRoot), 'claude-resume-handles');
   let entries;
   try {
@@ -379,6 +381,7 @@ function findClaudeResumeHandlesForActor(projectRoot, expected) {
     records.push(live.record);
   }
   return { ok: true, records };
+  });
 }
 
 /**
@@ -474,8 +477,6 @@ function resolveClaudeResumeRoleActorScope(projectRoot, event) {
     return { ok: false, reason: 'INVALID' };
   }
 }
-
-
   return Object.freeze({
     CLAUDE_RESUME_HANDLE_SCHEMA,
     CLAUDE_RESUME_HANDLE_KEYS,
@@ -495,5 +496,4 @@ function resolveClaudeResumeRoleActorScope(projectRoot, event) {
     publishClaudeSupportRoleTerminal,
   });
 }
-
 module.exports = Object.freeze({ createClaudeResumeRecord });

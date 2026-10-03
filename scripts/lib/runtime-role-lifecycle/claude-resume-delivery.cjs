@@ -26,6 +26,7 @@ function createClaudeResumeDelivery(deps) {
     transitionRoleBinding,
     validateRoleActorBindingFor,
     withRegistryLock,
+    withClaudeResumeHandleRegistryLock,
   } = deps;
 
   function consumeNativeResumeNotificationBeforeDelivery(projectRoot, event) {
@@ -78,11 +79,15 @@ function createClaudeResumeDelivery(deps) {
       }
       const consumedAt = nowIsoForRegistry();
       try {
-        publishNoClobber(claudeResumeHandleConsumedMarkerPathFor(projectRoot, handleId), Buffer.from(canonicalJSONStringify({
-          schema: 'runtime/native-resume-delivery/v1', action_id: actionId, handle_id: handleId,
-          session_digest: sha256String(event.sessionId), tool_use_digest: sha256String(event.toolUseId),
-          consumed_at: consumedAt,
-        }), 'utf8'), {});
+        const published = withClaudeResumeHandleRegistryLock(projectRoot, () => {
+          publishNoClobber(claudeResumeHandleConsumedMarkerPathFor(projectRoot, handleId), Buffer.from(canonicalJSONStringify({
+            schema: 'runtime/native-resume-delivery/v1', action_id: actionId, handle_id: handleId,
+            session_digest: sha256String(event.sessionId), tool_use_digest: sha256String(event.toolUseId),
+            consumed_at: consumedAt,
+          }), 'utf8'), {});
+          return { ok: true };
+        });
+        if (!published.ok) return published;
       } catch {
         return { ok: false, reason: 'resume-delivery-replay' };
       }

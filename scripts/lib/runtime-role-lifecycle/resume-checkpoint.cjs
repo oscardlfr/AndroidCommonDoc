@@ -20,6 +20,7 @@ path, fs, canonicalJSONStringify, sha256String, isCanonicalIsoUtc, isoToMsForReg
   claudeResumeHandlePathFor, computeActionTtlSeconds, computeRepoId, futureIsoForRegistry, generateActionId,
   interpretedActionMarkerPathFor, isClaudeResumeHandleConsumed, mintRoleLifecycleAction, readClaudeResumeHandle,
   validateClaudeResumeHandleRecord,
+  withClaudeResumeHandleRegistryLock,
 }) {
 
 // ── ensure (Frozen CLI ABI, PLAN.md ~L141) ──────────────────────────────────────
@@ -66,6 +67,11 @@ function resumeCheckpointMessage(checkpointRef, handleId, actionId) {
 }
 
 function findLiveResumeHandlesForLifecycleRole(projectRoot, expected) {
+  return withClaudeResumeHandleRegistryLock(projectRoot,
+    () => findLiveResumeHandlesForLifecycleRoleUnlocked(projectRoot, expected));
+}
+
+function findLiveResumeHandlesForLifecycleRoleUnlocked(projectRoot, expected) {
   const dir = path.join(registryRepoDir(projectRoot), 'claude-resume-handles');
   let entries;
   try {

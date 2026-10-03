@@ -37,6 +37,7 @@ function createClaudeResumeLifecycle(deps) {
     validateClaudeResumeHandleRecordShape,
     validateRoleActorBindingFor,
     withRegistryLock,
+    withClaudeResumeHandleRegistryLock,
   } = deps;
 
   const CLAUDE_RESUME_HANDLE_TTL_SECONDS = 3600;
@@ -120,7 +121,11 @@ function parkClaudeResumeHandleForRoleActor(projectRoot, event) {
       const dirResult = ensureSecureRegistryDir(path.dirname(handlePath));
       if (!dirResult.ok) return { ok: false, reason: 'INVALID' };
       try {
-        publishNoClobber(handlePath, Buffer.from(canonicalJSONStringify(record), 'utf8'), {});
+        const published = withClaudeResumeHandleRegistryLock(projectRoot, () => {
+          publishNoClobber(handlePath, Buffer.from(canonicalJSONStringify(record), 'utf8'), {});
+          return { ok: true };
+        });
+        if (!published.ok) return published;
       } catch (err) {
         return { ok: false, reason: 'INVALID' };
       }
@@ -187,7 +192,11 @@ function consumeClaudeResumeHandleForObservedActor(projectRoot, event) {
 
       const markerPath = claudeResumeHandleConsumedMarkerPathFor(projectRoot, handleRecord.binding_id);
       try {
-        publishNoClobber(markerPath, Buffer.from(canonicalJSONStringify({ consumed_at: nowIsoForRegistry() }), 'utf8'), {});
+        const published = withClaudeResumeHandleRegistryLock(projectRoot, () => {
+          publishNoClobber(markerPath, Buffer.from(canonicalJSONStringify({ consumed_at: nowIsoForRegistry() }), 'utf8'), {});
+          return { ok: true };
+        });
+        if (!published.ok) return published;
       } catch (err) {
         return { ok: false, reason: 'INVALID' };
       }
@@ -217,6 +226,11 @@ function consumeClaudeResumeHandleForObservedActor(projectRoot, event) {
  * @returns {{ok:true,record:object}|{ok:false,reason:string}}
  */
 function findUniqueClaudeResumeHandleForTarget(projectRoot, expected) {
+  return withClaudeResumeHandleRegistryLock(projectRoot,
+    () => findUniqueClaudeResumeHandleForTargetUnlocked(projectRoot, expected));
+}
+
+function findUniqueClaudeResumeHandleForTargetUnlocked(projectRoot, expected) {
   try {
     const expectedKeys = ['generationId', 'planDigest', 'sessionDigest', 'targetRole', 'worktreeId'];
     if (!expected || typeof expected !== 'object' || Array.isArray(expected)
@@ -318,6 +332,11 @@ function findUniqueClaudeResumeHandleForTarget(projectRoot, expected) {
  * checked and cannot poison a later session. Ambiguity fails closed.
  */
 function findUniqueConsumedClaudeResumeHandleForBusyTarget(projectRoot, expected, busyRoleBinding) {
+  return withClaudeResumeHandleRegistryLock(projectRoot,
+    () => findUniqueConsumedClaudeResumeHandleForBusyTargetUnlocked(projectRoot, expected, busyRoleBinding));
+}
+
+function findUniqueConsumedClaudeResumeHandleForBusyTargetUnlocked(projectRoot, expected, busyRoleBinding) {
   try {
     const expectedKeys = ['generationId', 'planDigest', 'sessionDigest', 'targetRole', 'worktreeId'];
     if (!expected || typeof expected !== 'object' || Array.isArray(expected)
