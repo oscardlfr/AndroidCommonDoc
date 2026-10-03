@@ -1042,6 +1042,49 @@ test('SubagentStart reports the initiating resume projection cause in the host t
   });
 });
 
+test('SubagentStop keeps non-applicable parking silent for actors without persistent bindings', () => {
+  for (const agentType of ['arch-testing', 'ordinary-ad-hoc-agent']) {
+    withProject((project) => {
+      const outcome = spawnSync(process.execPath, [
+        path.resolve(__dirname, '../../.claude/hooks/subagent-start-context-bundle.js'),
+      ], {
+        env: { ...process.env, CLAUDE_PROJECT_DIR: project }, encoding: 'utf8',
+        input: JSON.stringify({ hook_event_name: 'SubagentStop', agent_type: agentType,
+          session_id: 'no-persistent-binding-session', agent_id: 'no-persistent-binding-agent' }),
+      });
+      assert.strictEqual(outcome.status, 0, outcome.stderr);
+      assert.strictEqual(outcome.stderr, '', 'an inapplicable park is not a diagnostic error');
+      assert.strictEqual(outcome.stdout, '', 'the unchanged non-blocking stop has no JSON decision');
+    });
+  }
+});
+
+test('SubagentStop retains concrete park diagnostics without skipping the terminal fence', () => {
+  withProject((project) => {
+    const base = setupReadyBaseWithClaudeSendMessageRoleBinding(project);
+    const preload = path.join(project, 'park-cause-preload.cjs');
+    fs.writeFileSync(preload, `const rll = require(${JSON.stringify(IMPL)});\n` +
+      'rll.parkClaudeResumeHandleForRoleActor = () => ({ok:false, reason:"INVALID", cause:"lock-timeout"});\n');
+    const outcome = spawnSync(process.execPath, ['-r', preload,
+      path.resolve(__dirname, '../../.claude/hooks/subagent-start-context-bundle.js'),
+    ], {
+      env: { ...process.env, CLAUDE_PROJECT_DIR: project }, encoding: 'utf8',
+      input: JSON.stringify({ hook_event_name: 'SubagentStop', agent_type: base.event.agentType,
+        session_id: base.event.sessionId, agent_id: base.event.agentId }),
+    });
+    assert.strictEqual(outcome.status, 0, outcome.stderr);
+    assert.match(outcome.stderr, /SubagentStop: resumable park failed: INVALID \(lock-timeout\)/);
+    assert.strictEqual(outcome.stdout, '', 'a diagnostic must not alter the stdout protocol');
+    const identityId = rll.computeClaudeAuthorityIdentityId(
+      project, 'claude-hook', base.event.sessionId, base.event.agentId,
+    );
+    const fence = rll.readClaudeAuthorityFence(project, identityId);
+    assert.strictEqual(fence.ok, true);
+    assert.strictEqual(fence.absent, false,
+      'a failed park must still fall through to the real terminal fence');
+  });
+});
+
 test('RED resume: wrong agent, wrong session, wrong role, an expired handle, a present identity fence, ambiguity, and a no-longer-live actor binding are all fail-closed for consumeClaudeResumeHandleForObservedActor', () => {
   withProject((project) => {
     const base = setupReadyBaseWithClaudeSendMessageRoleBinding(project);
