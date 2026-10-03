@@ -13,8 +13,10 @@
 #     --decision <approve|escalate> [--reason-code <code>]
 #     [--evidence-file <path> [--evidence-schema <name>]]...
 #     [--evidence-text <text>]
+#     [--rationale <text>]
 #     [--supersede --expected-current-sha256 <64hex>]
-#   Rationale is read from stdin.
+#   Rationale comes from --rationale or stdin (mutually exclusive).
+#   CLI request/evidence paths are resolved from the invocation working directory.
 #
 # EVIDENCE
 #   Repeatable --evidence-file, each optionally followed by its own
@@ -89,6 +91,8 @@ EVIDENCE_SCHEMAS=()
 EVIDENCE_TEXT=""
 EVIDENCE_TEXT_SET=0
 EVIDENCE_TEXT_CREATED=0
+RATIONALE=""
+RATIONALE_SET=0
 PUBLICATION_NONCE=""
 PUBLICATION_NONCE_SET=0
 
@@ -101,6 +105,18 @@ while [[ $# -gt 0 ]]; do
     --request-sha256) REQUEST_SHA256="${2:-}"; shift 2 ;;
     --decision) DECISION="${2:-}"; shift 2 ;;
     --reason-code) REASON_CODE="${2:-}"; REASON_CODE_SET=1; shift 2 ;;
+    --rationale)
+      if [[ "$RATIONALE_SET" -eq 1 ]]; then
+        echo "[write-verdict] ERROR: --rationale may be given once" >&2
+        exit 1
+      fi
+      if [[ $# -lt 2 || -z "${2:-}" ]]; then
+        echo "[write-verdict] ERROR: --rationale requires a non-empty value" >&2
+        exit 1
+      fi
+      RATIONALE="$2"; RATIONALE_SET=1
+      shift 2
+      ;;
     --evidence-text)
       if [[ $# -lt 2 || -z "${2:-}" ]]; then
         echo "[write-verdict] ERROR: --evidence-text requires a non-empty value" >&2
@@ -175,8 +191,8 @@ fi
 # verdict/v1 JSON contract.
 if [[ "$PUBLICATION_NONCE_SET" -eq 1 ]]; then
   if [[ -n "$REQUEST_PATH" || -n "$REQUEST_SHA256" || -n "$DECISION" || "$REASON_CODE_SET" -eq 1 \
-        || "${#EVIDENCE_FILES[@]}" -gt 0 || "$SUPERSEDE" -eq 1 || -n "$EXPECTED_CURRENT_SHA256" ]]; then
-    echo "[write-verdict] ERROR: --publication-nonce (legacy compat mode) cannot be combined with --request/--request-sha256/--decision/--reason-code/--evidence-file/--supersede/--expected-current-sha256" >&2
+        || "${#EVIDENCE_FILES[@]}" -gt 0 || "$SUPERSEDE" -eq 1 || -n "$EXPECTED_CURRENT_SHA256" || "$RATIONALE_SET" -eq 1 ]]; then
+    echo "[write-verdict] ERROR: --publication-nonce (legacy compat mode) cannot be combined with --request/--request-sha256/--decision/--reason-code/--evidence-file/--supersede/--expected-current-sha256/--rationale" >&2
     exit 2
   fi
   if [[ "$PHASE" != "prep" ]]; then
@@ -344,6 +360,17 @@ fi
 
 STORE_LIB="$SCRIPT_DIR/../lib/verdict-artifact-store.cjs"
 
+# The shell CLI reads user paths from cwd; the store's relative paths instead
+# refer to the wave directory. Convert only the CLI boundary to absolute
+# lexical paths, leaving realpath/symlink decisions to the existing guard.
+_absolute_from_cwd() {
+  node -e 'process.stdout.write(require("path").resolve(process.argv[1]))' "$1"
+}
+REQUEST_PATH="$(_absolute_from_cwd "$REQUEST_PATH")"
+for (( evidence_index=0; evidence_index<${#EVIDENCE_FILES[@]}; evidence_index++ )); do
+  EVIDENCE_FILES[$evidence_index]="$(_absolute_from_cwd "${EVIDENCE_FILES[$evidence_index]}")"
+done
+
 _confine_under_wave() {
   local target="$1"
   local include_leaf="${2:-false}"
@@ -433,18 +460,29 @@ if [[ "$PHASE" == "verify-final" && ! -f "$PREP_VERDICT_FILE" ]]; then
   exit 2
 fi
 
-# ── Rationale from stdin ──────────────────────────────────────────────────────
+# ── Rationale from explicit argv or backward-compatible stdin ────────────────
 
-RATIONALE=""
+STDIN_RATIONALE=""
 if [[ ! -t 0 ]]; then
-  RATIONALE="$(cat)"
+  # The sentinel retains trailing newlines long enough to detect ANY nonempty
+  # stdin conflicting with --rationale. The legacy stdin path below keeps its
+  # established command-substitution trimming behavior.
+  STDIN_RATIONALE="$(cat; printf '.')"
+  STDIN_RATIONALE="${STDIN_RATIONALE%.}"
+fi
+if [[ "$RATIONALE_SET" -eq 1 && -n "$STDIN_RATIONALE" ]]; then
+  echo "[write-verdict] ERROR: --rationale cannot be combined with non-empty stdin" >&2
+  exit 1
+fi
+if [[ "$RATIONALE_SET" -ne 1 ]]; then
+  RATIONALE="$(printf '%s' "$STDIN_RATIONALE")"
 fi
 
 # Validate every input BEFORE anything is written: the verdict contract takes a rationale of 1..8192 bytes, so a missing or
 # oversized one is refused here, not after the inline evidence file has already been created.
 RATIONALE_BYTES="$(printf '%s' "$RATIONALE" | wc -c | tr -d ' \t\r\n')"
 if [[ "$RATIONALE_BYTES" -lt 1 || "$RATIONALE_BYTES" -gt 8192 ]]; then
-  echo "[write-verdict] ERROR: the rationale (stdin) must be 1..8192 bytes, got $RATIONALE_BYTES; pipe it in, for example: printf '%s\\n' 'approved after reading the plan' | ..." >&2
+  echo "[write-verdict] ERROR: the rationale (--rationale or stdin) must be 1..8192 bytes, got $RATIONALE_BYTES" >&2
   exit 1
 fi
 

@@ -241,6 +241,158 @@ EOF
   printf '%s' "$req_path"
 }
 
+# Exercise the public CLI as a standalone argv call, with no shell interpolation
+# of user rationale (quotes, Unicode and newlines stay argument bytes).
+_standalone_verdict() {
+  local phase="$1" request="$2" digest="$3"; shift 3
+  run bash -c 'cd "$1"; shift; exec bash "$@" < /dev/null' _ "$PROJ" "$SCRIPT" \
+    --role arch-testing --phase "$phase" --slug "$WAVE_SLUG" \
+    --request "$request" --request-sha256 "$digest" --decision approve "$@"
+}
+
+@test "WV-CLI PREP standalone rationale preserves Unicode quotes and newlines" {
+  local req digest rationale
+  req="$(_seed_request prep)"; digest="$(_real_sha256 "$req")"
+  rationale=$'Revisión "aprobada"; literal '\''quote'\'' y € 🚀\nsecond line'
+  _standalone_verdict prep "$req" "$digest" --rationale "$rationale"
+  [ "$status" -eq 0 ]
+  run node -e 'const v=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")); process.exit(v.rationale===process.argv[2] && v.phase==="prep" ? 0:1)' \
+    "$PROJ/.planning/wave-$WAVE_SLUG/arch-testing-verdict-prep.json" "$rationale"
+  [ "$status" -eq 0 ]
+}
+
+@test "WV-CLI VERIFY_FINAL standalone rationale and evidence publish without stdin" {
+  local req digest
+  req="$(_seed_request prep)"; digest="$(_real_sha256 "$req")"
+  _standalone_verdict prep "$req" "$digest" --rationale "Plan approved"
+  [ "$status" -eq 0 ]
+  req="$(_seed_request verify-final)"; digest="$(_real_sha256 "$req")"
+  _standalone_verdict verify-final "$req" "$digest" --rationale "Changes verified" --evidence-text '48 tests passed'
+  [ "$status" -eq 0 ]
+  [ -f "$PROJ/.planning/wave-$WAVE_SLUG/arch-testing-verdict-verify-final.json" ]
+}
+
+@test "WV-CLI relative request and evidence resolve from invocation cwd and retain wave-relative stored refs" {
+  local req digest ev relreq relev
+  req="$(_seed_request prep)"; digest="$(_real_sha256 "$req")"
+  relreq="${req#"$PROJ/"}"
+  ev="$PROJ/.planning/wave-$WAVE_SLUG/evidence.txt"; printf 'verified\n' > "$ev"
+  relev="${ev#"$PROJ/"}"
+  run bash -c 'cd "$1"; shift; printf "approved\n" | bash "$@"' _ "$PROJ" "$SCRIPT" \
+    --role arch-testing --phase prep --slug "$WAVE_SLUG" --request "$relreq" --request-sha256 "$digest" \
+    --decision approve --evidence-file "$relev"
+  [ "$status" -eq 0 ]
+  run node -e 'const v=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")); process.exit(v.request_ref.path===process.argv[2] && v.evidence[0].path==="evidence.txt" ? 0:1)' \
+    "$PROJ/.planning/wave-$WAVE_SLUG/arch-testing-verdict-prep.json" "verdict-requests/$(basename "$req")"
+  [ "$status" -eq 0 ]
+}
+
+@test "WV-CLI rationale rejects duplicate empty and missing values before publication" {
+  local req digest
+  req="$(_seed_request prep)"; digest="$(_real_sha256 "$req")"
+  _standalone_verdict prep "$req" "$digest" --rationale first --rationale second
+  [ "$status" -eq 1 ]; [[ "$output" == *"once"* ]]
+  _standalone_verdict prep "$req" "$digest" --rationale ''
+  [ "$status" -eq 1 ]; [[ "$output" == *"non-empty"* ]]
+  _standalone_verdict prep "$req" "$digest" --rationale
+  [ "$status" -eq 1 ]; [[ "$output" == *"non-empty"* ]]
+  [ ! -f "$PROJ/.planning/wave-$WAVE_SLUG/arch-testing-verdict-prep.json" ]
+}
+
+@test "WV-CLI overlong UTF-8 rationale is rejected before inline evidence is written" {
+  local req digest rationale
+  req="$(_seed_request prep)"; digest="$(_real_sha256 "$req")"
+  rationale="$(node -e 'process.stdout.write("€".repeat(2731))')"
+  _standalone_verdict prep "$req" "$digest" --rationale "$rationale" --evidence-text 'not published'
+  [ "$status" -eq 1 ]; [[ "$output" == *"8192"* ]]
+  [ ! -f "$PROJ/.planning/wave-$WAVE_SLUG/arch-testing-prep-evidence.md" ]
+  [ ! -f "$PROJ/.planning/wave-$WAVE_SLUG/arch-testing-verdict-prep.json" ]
+}
+
+@test "WV-CLI exact 8192-byte UTF-8 rationale remains accepted" {
+  local req digest rationale
+  req="$(_seed_request prep)"; digest="$(_real_sha256 "$req")"
+  rationale="$(node -e 'process.stdout.write("€".repeat(2730)+"aa")')"
+  _standalone_verdict prep "$req" "$digest" --rationale "$rationale"
+  [ "$status" -eq 0 ]
+  run node -e 'const v=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")); process.exit(Buffer.byteLength(v.rationale)===8192 ? 0:1)' \
+    "$PROJ/.planning/wave-$WAVE_SLUG/arch-testing-verdict-prep.json"
+  [ "$status" -eq 0 ]
+}
+
+@test "WV-CLI relative request and evidence from a nested cwd retain the same canonical refs" {
+  local req digest ev
+  req="$(_seed_request prep)"; digest="$(_real_sha256 "$req")"
+  _standalone_verdict prep "$req" "$digest" --rationale approved
+  [ "$status" -eq 0 ]
+  req="$(_seed_request verify-final)"; digest="$(_real_sha256 "$req")"
+  ev="$PROJ/.planning/wave-$WAVE_SLUG/evidence.txt"; printf 'verified\n' > "$ev"
+  mkdir -p "$PROJ/nested"
+  run bash -c 'cd "$1"; shift; exec bash "$@" < /dev/null' _ "$PROJ/nested" "$SCRIPT" \
+    --role arch-testing --phase verify-final --slug "$WAVE_SLUG" --request "../${req#"$PROJ/"}" \
+    --request-sha256 "$digest" --decision approve --rationale verified --evidence-file "../${ev#"$PROJ/"}"
+  [ "$status" -eq 0 ]
+  run node -e 'const v=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")); process.exit(v.request_ref.path===process.argv[2] && v.evidence[0].path==="evidence.txt" ? 0:1)' \
+    "$PROJ/.planning/wave-$WAVE_SLUG/arch-testing-verdict-verify-final.json" "verdict-requests/$(basename "$req")"
+  [ "$status" -eq 0 ]
+}
+
+@test "WV-CLI explicit rationale conflicts with nonempty stdin before publication" {
+  local req digest
+  req="$(_seed_request prep)"; digest="$(_real_sha256 "$req")"
+  run bash -c 'cd "$1"; shift; printf "stdin rationale\n" | bash "$@"' _ "$PROJ" "$SCRIPT" \
+    --role arch-testing --phase prep --slug "$WAVE_SLUG" --request "$req" --request-sha256 "$digest" \
+    --decision approve --rationale "argv rationale" --evidence-text 'not published'
+  [ "$status" -eq 1 ]; [[ "$output" == *"stdin"* ]]
+  [ ! -f "$PROJ/.planning/wave-$WAVE_SLUG/arch-testing-prep-evidence.md" ]
+  [ ! -f "$PROJ/.planning/wave-$WAVE_SLUG/arch-testing-verdict-prep.json" ]
+}
+
+@test "WV-CLI rationale conflicts with newline-only stdin and legacy publication mode" {
+  local req digest
+  req="$(_seed_request prep)"; digest="$(_real_sha256 "$req")"
+  run bash -c 'cd "$1"; shift; printf "\n" | bash "$@"' _ "$PROJ" "$SCRIPT" \
+    --role arch-testing --phase prep --slug "$WAVE_SLUG" --request "$req" --request-sha256 "$digest" \
+    --decision approve --rationale "argv rationale"
+  [ "$status" -eq 1 ]; [[ "$output" == *"stdin"* ]]
+  run bash -c 'cd "$1"; shift; exec bash "$@" < /dev/null' _ "$PROJ" "$SCRIPT" \
+    --role arch-testing --phase prep --slug "$WAVE_SLUG" --publication-nonce 0123456789abcdef0123456789abcdef --rationale rationale
+  [ "$status" -eq 2 ]; [[ "$output" == *"cannot be combined"* ]]
+  [ ! -f "$PROJ/.planning/wave-$WAVE_SLUG/arch-testing-verdict-prep.json" ]
+  [ ! -f "$PROJ/.planning/wave-$WAVE_SLUG/arch-testing-verdict.md" ]
+}
+
+@test "WV-CLI normalized relative request traversal remains confined to the active wave" {
+  local req digest outside
+  req="$(_seed_request prep)"; digest="$(_real_sha256 "$req")"
+  outside="$PROJ/request.json"; cp "$req" "$outside"
+  _standalone_verdict prep ".planning/wave-$WAVE_SLUG/../../request.json" "$digest" --rationale approved
+  [ "$status" -eq 2 ]; [[ "$output" == *"Traversal guard"* ]]
+  [ ! -f "$PROJ/.planning/wave-$WAVE_SLUG/arch-testing-verdict-prep.json" ]
+}
+
+@test "WV-CLI normalized relative evidence traversal and symlink are rejected" {
+  local req digest
+  req="$(_seed_request prep)"; digest="$(_real_sha256 "$req")"
+  printf 'outside\n' > "$PROJ/outside.txt"
+  _standalone_verdict prep "$req" "$digest" --rationale approved \
+    --evidence-file ".planning/wave-$WAVE_SLUG/../../outside.txt"
+  [ "$status" -eq 2 ]; [[ "$output" == *"Traversal guard"* ]]
+  ln -s "$PROJ/outside.txt" "$PROJ/.planning/wave-$WAVE_SLUG/linked.txt"
+  _standalone_verdict prep "$req" "$digest" --rationale approved --evidence-file ".planning/wave-$WAVE_SLUG/linked.txt"
+  [ "$status" -eq 2 ]; [[ "$output" == *"Traversal guard"* ]]
+  [ ! -f "$PROJ/.planning/wave-$WAVE_SLUG/arch-testing-verdict-prep.json" ]
+}
+
+@test "WV-CLI normalized relative request symlink is rejected before reading" {
+  local req digest
+  req="$(_seed_request prep)"; digest="$(_real_sha256 "$req")"
+  ln -s "$req" "$PROJ/.planning/wave-$WAVE_SLUG/linked-request.json"
+  _standalone_verdict prep ".planning/wave-$WAVE_SLUG/linked-request.json" "$digest" --rationale approved
+  [ "$status" -eq 2 ]; [[ "$output" == *"Traversal guard"* ]]
+  [ ! -f "$PROJ/.planning/wave-$WAVE_SLUG/arch-testing-verdict-prep.json" ]
+}
+
 # ── WV-1/2 (ports ★V1): prep creates a well-formed verdict/v1 JSON at the correct path ──
 
 @test "WV-1 PASS: prep with --decision approve creates a well-formed verdict/v1 JSON bound to its request" {

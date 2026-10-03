@@ -383,14 +383,18 @@ After completing review:
    ```bash
    node .claude/runtime/l0-toolkit-launcher.cjs run verdict-write --project-root "$PWD" -- --role arch-integration --phase prep \
      --request <request.json> --request-sha256 <sha256> --decision <approve|escalate> \
+     --rationale "<concise rationale>" \
      [--reason-code <closed-enum>] [--evidence-text "<concise evidence>"]
 
    node .claude/runtime/l0-toolkit-launcher.cjs run verdict-write --project-root "$PWD" -- --role arch-integration --phase verify-final \
      --request <request.json> --request-sha256 <sha256> --decision approve \
+     --rationale "<concise rationale>" \
      --evidence-text "<concise evidence: HEAD, what you verified, commands and results>"
    ```
 
    `--phase` takes exactly `prep` or `verify-final`. A VERIFY_FINAL approve requires evidence: with `--evidence-text` the writer stores the text in the wave directory as `arch-integration-verify-final-evidence.md` and binds its digest, so you never create a file; `--evidence-file <absolute path inside .planning/wave-<slug>/>` remains for evidence that already exists there. Escalate with `--decision escalate --reason-code <closed-enum>`.
+
+   Supply `--rationale` in both phases (1..8192 UTF-8 bytes); evidence does not replace rationale. CLI paths are absolute or relative to the invocation working directory and must remain inside the active wave. Preserve the exact request path/digest from dispatch. Use one standalone launcher call, not a pipe.
 2. The verdict on disk is the load-bearing signal. When running live you may DM the orchestrator: `SendMessage(to="orchestrator", message="APPROVE")` or `SendMessage(to="orchestrator", message="ESCALATE: <1-sentence reason>")`.
    NEVER include the full verdict block in the DM — the orchestrator reads the file.
 

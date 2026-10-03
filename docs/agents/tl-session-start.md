@@ -176,7 +176,7 @@ node .claude/runtime/l0-toolkit-launcher.cjs run wave-control --project-root "$P
 node .claude/runtime/l0-toolkit-launcher.cjs run verdict-request-write --project-root "$PWD" -- --role <arch-*> --phase prep --slug <slug>
 ```
 
-`verdict-request-write` prints `<absolute-request-path> <sha256>`; pass both to the architect. The architect records its decision with `node .claude/runtime/l0-toolkit-launcher.cjs run verdict-write --project-root "$PWD" -- --role <arch-*> --phase prep --slug <slug> --request <absolute-request-path> --request-sha256 <sha256> --decision <approve|escalate>` (rationale on stdin). Then:
+`verdict-request-write` prints `<absolute-request-path> <sha256>`; pass both unchanged to the architect. The architect records its decision with one standalone call: `node .claude/runtime/l0-toolkit-launcher.cjs run verdict-write --project-root "$PWD" -- --role <arch-*> --phase prep --slug <slug> --request <absolute-request-path> --request-sha256 <sha256> --decision <approve|escalate> --rationale "<concise rationale>"`. Then:
 
 ```
 node .claude/runtime/l0-toolkit-launcher.cjs run wave-control --project-root "$PWD" -- transition --slug <slug> --to EXECUTE --expected-revision <revision> --verdict <arch-*>=<verdict-path>
@@ -192,7 +192,7 @@ node .claude/runtime/l0-toolkit-launcher.cjs run wave-control --project-root "$P
 node .claude/runtime/l0-toolkit-launcher.cjs run verdict-request-write --project-root "$PWD" -- --role <arch-*> --phase verify-final --slug <slug>
 ```
 
-Each architect approves with `printf '%s\n' "<rationale>" | node .claude/runtime/l0-toolkit-launcher.cjs run verdict-write --project-root "$PWD" -- --role <arch-*> --phase verify-final --slug <slug> --request <absolute-request-path> --request-sha256 <sha256> --decision approve --evidence-text "<concise evidence>" --evidence-file <absolute-preverify-receipt>` (the rationale arrives on stdin and is required, 1 to 8192 bytes; every input is validated before anything is written, so a failed call leaves nothing behind and the same call can be retried). The preverify receipt is mandatory epoch evidence; an old cycle's verdict cannot authorize the new cycle. Before transitioning to QG the tracked working tree must be clean and everything committed: `pre-pr` requires it. Then, in this order:
+Each architect approves with one standalone call: `node .claude/runtime/l0-toolkit-launcher.cjs run verdict-write --project-root "$PWD" -- --role <arch-*> --phase verify-final --slug <slug> --request <absolute-request-path> --request-sha256 <sha256> --decision approve --rationale "<concise rationale>" --evidence-text "<concise evidence>" --evidence-file <absolute-preverify-receipt>`. Rationale is required (1..8192 UTF-8 bytes); evidence is separate. Every input is validated before anything is written, so invalid input leaves no partial publication. The preverify receipt is mandatory epoch evidence; an old cycle's verdict cannot authorize the new cycle. Before transitioning to QG the tracked working tree must be clean and everything committed: `pre-pr` requires it. Then, in this order:
 
 ```
 node .claude/runtime/l0-toolkit-launcher.cjs run wave-control --project-root "$PWD" -- transition --slug <slug> --to QG --expected-revision <revision> --verdict <arch-*>=<verdict-path>
