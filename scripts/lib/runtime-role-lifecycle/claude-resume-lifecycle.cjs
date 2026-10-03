@@ -129,11 +129,11 @@ function parkClaudeResumeHandleForRoleActor(projectRoot, event) {
         projectRoot, current.worktreeId, current.planDigest, profileDigest, current.generationId, current.role,
         stateResult.state, 'WAITING', stateResult.record, {},
       );
-      if (!parked.ok) return { ok: false, reason: 'INVALID' };
+      if (!parked.ok) return { ok: false, reason: 'INVALID', cause: parked.reason };
 
       return readClaudeResumeHandle(projectRoot, handleId);
     }, { maxWaitMs: 5000 });
-    if (!locked.ok || !locked.value) return { ok: false, reason: 'INVALID' };
+    if (!locked.ok || !locked.value) return { ok: false, reason: 'INVALID', cause: locked.reason || 'park-lock-result-absent' };
     return locked.value;
   } catch (err) {
     return { ok: false, reason: 'INVALID' };
@@ -196,11 +196,11 @@ function consumeClaudeResumeHandleForObservedActor(projectRoot, event) {
         projectRoot, scope.worktreeId, scope.planDigest, profileDigest, scope.generationId, scope.role,
         'WAITING', 'BUSY', stateResult.record, {},
       );
-      if (!busy.ok) return { ok: false, reason: 'INVALID' };
+      if (!busy.ok) return { ok: false, reason: 'INVALID', cause: busy.reason };
 
       return { ok: true, record: reread.record };
     }, { maxWaitMs: 5000 });
-    if (!locked.ok || !locked.value) return { ok: false, reason: 'INVALID' };
+    if (!locked.ok || !locked.value) return { ok: false, reason: 'INVALID', cause: locked.reason || 'consume-lock-result-absent' };
     return locked.value;
   } catch (err) {
     return { ok: false, reason: 'INVALID' };

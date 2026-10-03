@@ -950,6 +950,98 @@ test('RED resume: consumeClaudeResumeHandleForObservedActor admits the exact liv
   });
 });
 
+test('resume waits for a contended role-state lock before completing the consumed-handle projection', async () => {
+  await withProjectAsync(async (project) => {
+    const base = setupReadyBaseWithClaudeSendMessageRoleBinding(project);
+    const parked = rll.parkClaudeResumeHandleForRoleActor(project, base.event);
+    assert.strictEqual(parked.ok, true);
+    const profileDigest = rll.roleProfileDigestFor(base.event.agentType);
+    const statePath = rll.roleBindingPathFor(
+      project, base.worktreeId, base.planDigest, profileDigest, base.generationId, base.event.agentType,
+    );
+    const lockPath = statePath + '.lock';
+    // A separate process holds the production lock. No mocked transition:
+    // the consumer publishes its immutable marker, then must wait for the
+    // state writer instead of leaving a consumed handle paired with WAITING.
+    const holder = spawn(process.execPath, ['-e',
+      'const fs = require("node:fs"); fs.mkdirSync(process.argv[1], {mode: 0o700});' +
+      'process.stdout.write("LOCKED\\n"); setTimeout(() => fs.rmdirSync(process.argv[1]), 400);',
+      lockPath,
+    ], { stdio: ['ignore', 'pipe', 'pipe'] });
+    const exited = new Promise((resolve, reject) => {
+      holder.once('error', reject);
+      holder.once('exit', (code) => code === 0 ? resolve() : reject(new Error('lock holder exit ' + code)));
+    });
+    try {
+      await new Promise((resolve, reject) => {
+        holder.stdout.once('data', resolve);
+        holder.once('error', reject);
+        holder.once('exit', (code) => reject(new Error('lock holder exited before readiness: ' + code)));
+      });
+      const consumed = rll.consumeClaudeResumeHandleForObservedActor(project, base.event);
+      assert.strictEqual(consumed.ok, true, 'temporary lock contention must not orphan the consumed handle: ' + JSON.stringify(consumed));
+      const busy = rll.readRoleBindingState(
+        project, base.worktreeId, base.planDigest, profileDigest, base.generationId, base.event.agentType,
+      );
+      assert.strictEqual(busy.state, 'BUSY');
+      const reparking = rll.parkClaudeResumeHandleForRoleActor(project, base.event);
+      assert.strictEqual(reparking.ok, true, 'ordinary idle return must park the same actor');
+      assert.notStrictEqual(reparking.record.binding_id, parked.record.binding_id);
+      assert.strictEqual(reparking.record.actor_binding_id, base.actorBinding.binding_id);
+      assert.strictEqual(rll.consumeClaudeResumeHandleForObservedActor(project, {
+        ...base.event, agentId: 'foreign-actor',
+      }).ok, false, 'waiting for a lock must not admit a foreign actor');
+    } finally {
+      await exited;
+    }
+  });
+});
+
+test('resume preserves the exhausted state-writer cause without reporting successful consumption', () => {
+  const { createClaudeResumeLifecycle } = require('../lib/runtime-role-lifecycle/claude-resume-lifecycle.cjs');
+  const scope = { role: 'arch-testing', worktreeId: 'worktree', planDigest: 'plan', generationId: 'generation', actorBinding: { binding_id: 'actor' } };
+  const event = { agentType: scope.role, sessionId: 'session', agentId: 'agent' };
+  const record = { binding_id: 'handle', session: event.sessionId, agent_id: event.agentId,
+    role: scope.role, actor_binding_id: 'actor', worktree_id: scope.worktreeId, plan_digest: scope.planDigest };
+  let markerWrites = 0;
+  const resume = createClaudeResumeLifecycle({
+    resolveClaudeResumeRoleActorScope: () => ({ ok: true, scope }),
+    roleProfileDigestFor: () => 'profile',
+    findClaudeResumeHandlesForActor: () => ({ ok: true, records: [record] }),
+    isClaudeResumeHandleConsumed: () => false,
+    path, registryRepoDir: () => '/fixture-registry',
+    withRegistryLock: (_lock, fn) => ({ ok: true, value: fn() }),
+    readClaudeResumeHandle: () => ({ ok: true, record }),
+    readRoleBindingState: () => ({ ok: true, state: 'WAITING', record: {} }),
+    claudeResumeHandleConsumedMarkerPathFor: () => '/fixture-marker',
+    nowIsoForRegistry: () => '2026-01-01T00:00:00Z', canonicalJSONStringify: JSON.stringify,
+    publishNoClobber: () => { markerWrites += 1; },
+    transitionRoleBinding: () => ({ ok: false, reason: 'lock-timeout' }),
+  });
+  assert.deepStrictEqual(resume.consumeClaudeResumeHandleForObservedActor('/fixture-project', event), {
+    ok: false, reason: 'INVALID', cause: 'lock-timeout',
+  });
+  assert.strictEqual(markerWrites, 1, 'the cause must survive the consumed-marker boundary');
+});
+
+test('SubagentStart reports the initiating resume projection cause in the host transcript', () => {
+  withProject((project) => {
+    const base = setupReadyBaseWithClaudeSendMessageRoleBinding(project);
+    const preload = path.join(project, 'resume-cause-preload.cjs');
+    fs.writeFileSync(preload, `const rll = require(${JSON.stringify(IMPL)});\n` +
+      'rll.consumeClaudeResumeHandleForObservedActor = () => ({ok:false, reason:"INVALID", cause:"lock-timeout"});\n');
+    const outcome = spawnSync(process.execPath, ['-r', preload,
+      path.resolve(__dirname, '../../.claude/hooks/subagent-start-context-bundle.js'),
+    ], {
+      env: { ...process.env, CLAUDE_PROJECT_DIR: project }, encoding: 'utf8',
+      input: JSON.stringify({ hook_event_name: 'SubagentStart', agent_type: base.event.agentType,
+        session_id: base.event.sessionId, agent_id: base.event.agentId }),
+    });
+    assert.strictEqual(outcome.status, 0, outcome.stderr);
+    assert.match(outcome.stderr, /SubagentStart: resume projection failed: INVALID \(lock-timeout\)/);
+  });
+});
+
 test('RED resume: wrong agent, wrong session, wrong role, an expired handle, a present identity fence, ambiguity, and a no-longer-live actor binding are all fail-closed for consumeClaudeResumeHandleForObservedActor', () => {
   withProject((project) => {
     const base = setupReadyBaseWithClaudeSendMessageRoleBinding(project);

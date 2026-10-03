@@ -671,6 +671,10 @@ function handleSubagentStop(data) {
       process.exit(0);
       return;
     }
+    // Preserve the actual park failure in the host transcript. A terminal
+    // fence alone cannot explain whether parking failed on scope or on a
+    // contended state writer; never silently discard that distinction.
+    process.stderr.write(`[subagent-start-context-bundle] SubagentStop: resumable park failed: ${(parkResult && parkResult.reason) || 'park-threw'}${parkResult && parkResult.cause ? ` (${parkResult.cause})` : ''}\n`);
   }
 
   // ── READ-ONLY RESOLUTION: the classifier scans every Claude-actor
@@ -1139,6 +1143,8 @@ process.stdin.on('end', () => {
         }
         if (resumeResult && resumeResult.ok === true) {
           resumedViaHandle = true;
+        } else if (resumeResult && resumeResult.cause) {
+          process.stderr.write(`[subagent-start-context-bundle] SubagentStart: resume projection failed: ${resumeResult.reason} (${resumeResult.cause})\n`);
         }
       }
 

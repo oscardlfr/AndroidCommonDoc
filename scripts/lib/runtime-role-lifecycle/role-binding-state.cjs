@@ -314,7 +314,10 @@ function transitionRoleBindingUnchecked(projectRoot, worktreeId, planDigest, pro
     const writeResult = writeRegistryRecordReplace(recordPath, Buffer.from(canonicalJSONStringify(nextRecord), 'utf8'));
     if (!writeResult.ok) return { ok: false, reason: writeResult.reason };
     return { ok: true, record: nextRecord };
-  });
+  // A transient writer must not orphan a resume-consumption marker before
+  // its WAITING -> BUSY projection. Wait within the lifecycle lock budget;
+  // the unchanged CAS/scope checks still reject stale or foreign writes.
+  }, { maxWaitMs: 5000 });
   if (!result.ok) return { ok: false, reason: result.reason };
   return result.value;
 }
