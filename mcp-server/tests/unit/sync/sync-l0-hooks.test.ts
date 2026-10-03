@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { mkdtemp, rm, mkdir, writeFile, readFile, chmod, stat, readdir } from "node:fs/promises";
+import { mkdtemp, rm, mkdir, writeFile, readFile, chmod, stat, readdir, realpath } from "node:fs/promises";
 import { join, relative, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import { spawnSync } from "node:child_process";
@@ -1058,9 +1058,31 @@ describe("source-referenced runtime installation", () => {
       .rejects.toThrow();
   });
 
-  it("mints and verifies a downstream QG receipt without copying the L0 harness", async () => {
+  it.each([
+    { scanner: "clean", exit: 0, output: "", reason: "OK" },
+    { scanner: "error", exit: 42, output: "", reason: "SCANNER_ERROR" },
+    { scanner: "findings", exit: 0, output: '{"verified":true}', reason: "SECRETS_FOUND" },
+  ])("uses a $scanner external scanner for downstream QG receipts without copying the L0 harness", async (scenario) => {
     const installed = await installRuntimeConsumer(projectRoot, REAL_L0_ROOT);
     expect(installed.ok).toBe(true);
+    // Only the external binary is a fixture. Launcher, scan producer, immutable
+    // attempt, mint and verification stay real and must remain fail-closed.
+    const scanner = join(projectRoot, "fixture-trufflehog");
+    await writeFile(scanner, [
+      "#!/bin/sh",
+      'if [ "$1" = "--version" ]; then echo "fixture-trufflehog 1.0"; exit 0; fi',
+      '[ "$#" -eq 5 ] && [ "$1" = "filesystem" ] && [ "$2" = "$SCANNER_EXPECTED_ROOT" ] || exit 64',
+      '[ "$3" = "--only-verified" ] && [ "$4" = "--json" ] && [ "$5" = "--no-update" ] || exit 64',
+      scenario.output ? `printf '%s\\n' '${scenario.output}'` : ":",
+      `exit ${scenario.exit}`,
+      "",
+    ].join("\n"), { mode: 0o755 });
+    await chmod(scanner, 0o755);
+    const scannerEnv = {
+      ...process.env,
+      TRUFFLEHOG_BIN: scanner.replace(/\\/g, "/"),
+      SCANNER_EXPECTED_ROOT: await realpath(projectRoot),
+    };
     await mkdir(join(projectRoot, ".planning", "wave-runtime"), { recursive: true });
     await writeFile(
       join(projectRoot, ".planning", "wave-runtime", "PLAN.md"),
@@ -1090,11 +1112,27 @@ describe("source-referenced runtime installation", () => {
     const launcher = join(projectRoot, ".claude", "runtime", "l0-toolkit-launcher.cjs");
     const prePr = spawnSync(process.execPath, [launcher, "run", "runtime-consumer-qg", "--project-root", projectRoot,
       "--", "pre-pr", "--slug", "runtime", "--expected-revision", "3", "--project-gate", "PASS"], {
-      cwd: projectRoot, encoding: "utf8",
+      cwd: projectRoot, encoding: "utf8", env: scannerEnv,
     });
-    expect(prePr.status, prePr.stderr || prePr.stdout).toBe(0);
+    expect(prePr.status, prePr.stderr || prePr.stdout).toBe(scenario.reason === "OK" ? 0 : 1);
+    const scanReport = JSON.parse(await readFile(
+      join(projectRoot, ".androidcommondoc", "secret-scan-report.json"), "utf8",
+    ));
+    expect(scanReport.reason_code).toBe(scenario.reason);
+    expect(scanReport.head).toBe(head);
     const qgAttempt = prePr.stdout.trim().split(/\s+/)[2];
     expect(qgAttempt).toMatch(/qg-attempts/);
+    if (scenario.reason !== "OK") {
+      const attempt = JSON.parse(await readFile(join(projectRoot, qgAttempt), "utf8"));
+      expect(attempt.verdict).toBe("FAIL");
+      expect(attempt.checks.secret_scan).toBe("FAIL");
+      const mintRejected = spawnSync(process.execPath, [launcher, "run", "runtime-consumer-qg", "--project-root", projectRoot,
+        "--", "mint", "--slug", "runtime", "--qg-attempt", qgAttempt], { cwd: projectRoot, encoding: "utf8" });
+      expect(mintRejected.status).not.toBe(0);
+      await expect(readFile(join(projectRoot, ".androidcommondoc", "push-proof.json"), "utf8"))
+        .rejects.toThrow();
+      return;
+    }
     const mint = spawnSync(process.execPath, [launcher, "run", "runtime-consumer-qg", "--project-root", projectRoot,
       "--", "mint", "--slug", "runtime", "--qg-attempt", qgAttempt], { cwd: projectRoot, encoding: "utf8" });
     expect(mint.status, mint.stderr || mint.stdout).toBe(0);
