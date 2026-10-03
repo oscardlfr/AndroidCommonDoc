@@ -318,8 +318,16 @@ describe('arch-platform + arch-integration — caller grep rule', () => {
     expect(platformContent).toMatch(/template_version:\s*"\d+\.\d+\.\d+"/);
   });
 
-  it('arch-integration has template version 1.32.4', () => {
-    expect(integrationContent).toContain('template_version: "1.32.4"');
+  it('arch-integration has template version 1.32.5', () => {
+    expect(integrationContent).toContain('template_version: "1.32.5"');
+  });
+
+  it('all architect requesters use the canonical 900-second await-result deadline', () => {
+    const testingContent = fs.readFileSync(path.join(TEMPLATES_DIR, 'arch-testing.md'), 'utf-8');
+    for (const content of [platformContent, integrationContent, testingContent]) {
+      expect(content).toContain("'await-result' '--coordination-root' '<ROOT>/.planning/coordination' '--request' '<artifact_ref>' '--timeout' '900'");
+      expect(content).not.toContain("'--timeout' '300'");
+    }
   });
 });
 
@@ -370,10 +378,10 @@ describe('arch templates — pattern search delegation rule', () => {
 describe('planner template — peer role', () => {
   const content = fs.readFileSync(path.join(TEMPLATES_DIR, 'planner.md'), 'utf-8');
 
-  it('BL-W48: describes itself as single-use subagent (not team peer)', () => {
-    // BL-W48: planner is now a single-use subagent, not a session team peer.
+  it('describes itself as a wave-scoped single actor (not team peer)', () => {
+    // The planner is wave-scoped and resumed across both passes, not duplicated.
     // "Planning Team" and "team peer" concepts are retired.
-    expect(content).toMatch(/single-use subagent|single-use planning subagent/i);
+    expect(content).toMatch(/wave-scoped actor|wave-scoped planning subagent/i);
     expect(content).not.toMatch(/team peer/i);
   });
 
@@ -408,7 +416,7 @@ describe('planner template — peer role', () => {
   });
 
   it('BL-W48: returns plan path naturally (no explicit SendMessage to team-lead required)', () => {
-    // BL-W48: planner is a single-use subagent — it returns "plan ready" + path as its
+    // The planner returns "plan ready" + path as its
     // natural result. No explicit SendMessage(to="team-lead") call required (the orchestrator
     // reads from disk). The old session-peer model required explicit notification.
     expect(content).toMatch(/plan ready|PLAN-WRITTEN|return.*path|\.planning\/wave-.*PLAN\.md/i);
@@ -489,8 +497,8 @@ describe('quality-gater template — gate protocol', () => {
     expect(content).toMatch(/[Cc]ross-cutting/);
   });
 
-  it('has template version 2.28.4', () => {
-    expect(content).toContain('template_version: "2.28.4"');
+  it('has template version 2.28.6', () => {
+    expect(content).toContain('template_version: "2.28.6"');
   });
 });
 
@@ -917,8 +925,8 @@ describe('architect templates — PRE-TASK protocol', () => {
     expect(plannerContent).toMatch(/context-provider/);
   });
 
-  it('planner version 1.22.6', () => {
-    expect(plannerContent).toContain('template_version: "1.22.6"');
+  it('planner version 1.22.8', () => {
+    expect(plannerContent).toContain('template_version: "1.22.8"');
   });
 
   it('arch-testing has template_version field in frontmatter', () => {

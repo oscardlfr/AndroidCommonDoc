@@ -17,7 +17,7 @@ These are **starting points** — adapt to your project's specific modules, cons
 
 | Template | Purpose |
 |----------|---------|
-| `planner.md` | Single-use planning subagent — produces structured plans, writes to `.planning/wave-<slug>/PLAN.md` |
+| `planner.md` | Wave-scoped planning subagent — one actor owns both passes and writes `.planning/wave-<slug>/PLAN.md` |
 | `quality-gater.md` | Quality-gate subagent (Phase 3) — runs sequential verification (tests, coverage, pre-pr) |
 | `context-provider.md` | Read-only cross-layer context oracle (single-use subagent or optional background peer) |
 | `doc-updater.md` | Updates docs, CHANGELOG, memory after work |

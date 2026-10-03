@@ -46,3 +46,38 @@ test('reports intent kinds explicitly', () => {
   assert.strictEqual(hasIntent('gh pr create', 'gh-pr-create'), true);
   assert.strictEqual(hasIntent('git push', 'gh-pr-create'), false);
 });
+
+test('detects executable Gradle test intent across wrappers and nested shells', () => {
+  const commands = [
+    './gradlew test',
+    'gradle check --rerun-tasks',
+    'rtk ./gradlew :core:jvmTest',
+    'bash -c "./gradlew allTests"',
+    'gradlew.bat connectedAndroidTest',
+  ];
+  for (const command of commands) {
+    assert.strictEqual(hasIntent(command, 'gradle-test'), true, command);
+  }
+});
+
+test('does not classify Gradle-shaped argument data or non-test tasks', () => {
+  const commands = [
+    "printf '%s\\n' 'All checks passed with no raw gradle test tasks.' | node launcher.cjs run verdict-write",
+    "gh pr create --body 'run ./gradlew test to verify'",
+    'cat <<EOF\n./gradlew test\nEOF\necho safe',
+    './gradlew assembleAndroidTest koverXmlReport dependencyInsight',
+    './gradlew help --tests ExampleTest',
+    'cat docs/gradle/agp9-kmp-host-test-source-set.md',
+  ];
+  for (const command of commands) {
+    assert.strictEqual(hasIntent(command, 'gradle-test'), false, command);
+  }
+});
+
+test('reports JS and Wasm Gradle test intent explicitly', () => {
+  const intents = parseCommandIntent('./gradlew jsBrowserTest wasmJsTest')
+    .filter((intent) => intent.kind === 'gradle-test');
+  assert.strictEqual(intents.length, 1);
+  assert.strictEqual(intents[0].jsWasm, true);
+  assert.deepStrictEqual(intents[0].tasks, ['jsBrowserTest', 'wasmJsTest']);
+});

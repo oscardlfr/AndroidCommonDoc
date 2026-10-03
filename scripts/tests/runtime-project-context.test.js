@@ -126,6 +126,9 @@ test('P3-RUNTIME-INVENTORY includes every modular runtime dependency tree', () =
   assert.strictEqual(inventory.ok, true, JSON.stringify(inventory));
   const paths = new Set(inventory.entries.map((entry) => entry.relative_path));
   assert.ok(paths.has('scripts/lib/runtime-consultation.cjs'));
+  assert.ok(paths.has('scripts/lib/runtime-session-renewal.cjs'));
+  assert.ok(paths.has('scripts/lib/runtime-session-lifetime.cjs'));
+  assert.ok(paths.has('scripts/lib/shell-command-intent.cjs'));
   assert.ok(paths.has('scripts/lib/runtime-consultation/primitives.cjs'));
   assert.ok(paths.has('scripts/lib/runtime-consultation/cli-argv.cjs'));
   assert.ok(paths.has('scripts/lib/runtime-consultation/git-identity.cjs'));
@@ -159,6 +162,24 @@ function synthesizeToolkitRoot() {
   }
   return root;
 }
+
+test('P3-RUNTIME-INVENTORY pins renewal, lifetime and shell-intent dependencies by content', () => {
+  const root = synthesizeToolkitRoot();
+  try {
+    let previous = computeRuntimeToolkitInventory(root);
+    assert.strictEqual(previous.ok, true, JSON.stringify(previous));
+    for (const relative of ['scripts/lib/runtime-session-renewal.cjs',
+      'scripts/lib/runtime-session-lifetime.cjs', 'scripts/lib/shell-command-intent.cjs']) {
+      fs.writeFileSync(path.join(root, relative), 'changed dependency\n');
+      const current = computeRuntimeToolkitInventory(root);
+      assert.strictEqual(current.ok, true, JSON.stringify(current));
+      assert.notStrictEqual(current.digest, previous.digest, relative + ' must change the content pin');
+      previous = current;
+    }
+    fs.unlinkSync(path.join(root, 'scripts/lib/runtime-session-renewal.cjs'));
+    assert.strictEqual(computeRuntimeToolkitInventory(root).ok, false, 'a missing dependency fails closed');
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
 
 test('P3-RUNTIME-INVENTORY-HOSTCERT covers every platform-scoped host certificate present, and nothing that merely looks like one', () => {
   const root = synthesizeToolkitRoot();

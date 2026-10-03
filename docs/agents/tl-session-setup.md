@@ -18,7 +18,7 @@ Session setup is driven by the active PLAN and persisted control-plane state.
 There is no fixed spawn-everything roster.
 
 1. Resolve the repository, active wave slug, PLAN, class, and current phase.
-2. Initialize or read `wave-phase-state/v1`.
+2. Initialize or read `wave-phase-state/v2`.
 3. Request `lifecycle-actions` from the control plane.
 4. Execute those actions through the existing Wave-1 lifecycle and selected
    runtime connector.
@@ -46,4 +46,3 @@ Use the PLAN Spawn Table and accepted PREP findings. Assign each file to one
 owner and write a specialist dispatch before mutation. Independent tasks may run
 concurrently; overlapping ownership is serialized. Task lists track completion
 but grant no authority.
-

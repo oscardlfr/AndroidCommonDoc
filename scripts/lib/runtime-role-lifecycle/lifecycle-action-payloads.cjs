@@ -52,19 +52,24 @@ function resolvedNodePath() {
   return cachedResolvedNodePath;
 }
 
-function claudeReadyBootstrapMessageFor(actionId, role, projectRoot) {
+function validateClaudeReadyBootstrapScope(actionId, role, projectRoot) {
   if (!isHexActionId(actionId)) throw new TypeError('invalid-action-id');
   if (!CANONICAL_ROLES.includes(role)) throw new TypeError('invalid-role');
   if (typeof projectRoot !== 'string' || !path.isAbsolute(projectRoot)) {
     throw new TypeError('invalid-project-root');
   }
-  const nodePath = resolvedNodePath();
+}
+
+function claudeReadyBootstrapMessageForPaths(actionId, role, projectRoot, nodePath, toolkitRoot) {
+  validateClaudeReadyBootstrapScope(actionId, role, projectRoot);
+  if (typeof nodePath !== 'string' || !path.isAbsolute(nodePath)) throw new TypeError('invalid-node-path');
+  if (typeof toolkitRoot !== 'string' || !path.isAbsolute(toolkitRoot)) throw new TypeError('invalid-toolkit-root');
   // Runtime executables belong to the qualified L0 toolkit that loaded this
   // facade. `projectRoot` is the operated L1/L2 consumer and owns only the
   // coordination state. Resolving executable paths below that consumer made
   // generated actions target missing -- or attacker-controlled decoy -- files.
-  const lifecycleCliPath = path.join(facadeDirname, 'runtime-role-lifecycle.cjs');
-  const consultationCliPath = path.join(facadeDirname, 'runtime-consultation.cjs');
+  const lifecycleCliPath = path.join(toolkitRoot, 'scripts', 'lib', 'runtime-role-lifecycle.cjs');
+  const consultationCliPath = path.join(toolkitRoot, 'scripts', 'lib', 'runtime-consultation.cjs');
   const readyCommand = renderPosixDirect([
     nodePath,
     lifecycleCliPath,
@@ -84,17 +89,29 @@ function claudeReadyBootstrapMessageFor(actionId, role, projectRoot) {
   // the already-bound consumer root also identifies the toolkit scripts.
   // External consumers must instead receive the qualified absolute toolkit
   // executable; deriving it from `p` is exactly the cross-layer bug fixed here.
-  const consultationAssignment = realpathOrSelf(projectRoot) === realpathOrSelf(path.resolve(facadeDirname, '..', '..'))
+  const consultationAssignment = realpathOrSelf(projectRoot) === realpathOrSelf(toolkitRoot)
     ? 'C=p+"/scripts/lib/runtime-consultation.cjs"'
     : 'C=' + JSON.stringify(consultationCliPath);
-  return [
+  const targetRecipe = consultationTargetCommandLine();
+  const message = [
     `FIRST Bash=${readyCommand};require READY else report/stop;WAIT.`,
     receiverContract,
-    'Only COORDINATION_CONSULT/v1\\nJSON exact{artifact_path,kind,request_id,role,target_role};kind=consult;target_role=r;A=artifact_path;'
+    'Only COORDINATION_CONSULT/v1\\nJSON exact{artifact_path,kind,request_id,role,target_role};kind=consult;target_role=r;'
       + consultationAssignment
-      + ';Q=p+"/.planning/coordination";X=[n,C];Y=["--coordination-root",Q,"--request",A].',
-    consultationTargetCommandLine(),
+      + ';Q=p+"/.planning/coordination";X=[n,C];Y=["--coordination-root",Q,"--request",artifact_path]',
+    targetRecipe,
   ].join('\n');
+  return message;
+}
+
+function claudeReadyBootstrapMessageFor(actionId, role, projectRoot) {
+  return claudeReadyBootstrapMessageForPaths(
+    actionId,
+    role,
+    projectRoot,
+    resolvedNodePath(),
+    path.resolve(facadeDirname, '..', '..')
+  );
 }
 
 function buildSupervisorStartPayload(nodePath, bridgePath, actionId, coordRoot, roles, sessionExpiry) {
@@ -217,7 +234,8 @@ function buildSupervisorStopOwnedPayload(bindingId, role, reason) {
 
   return Object.freeze({
     buildTeamEnsurePayload, buildRoleSpawnPayload, buildRoleRebindClaudeNativePayload, buildRoleRebindHostProcessPayload, buildRoleNotifyPayload, buildRoleStopOwnedPayload, resolvedNodePath,
-    claudeReadyBootstrapMessageFor, buildSupervisorStartPayload, ROLE_LIFECYCLE_ACTION_KEYS_SORTED, SUPERVISOR_START_PAYLOAD_KEYS_SORTED, validateSupervisorStartAction,
+    claudeReadyBootstrapMessageFor, claudeReadyBootstrapMessageForPaths, buildSupervisorStartPayload,
+    ROLE_LIFECYCLE_ACTION_KEYS_SORTED, SUPERVISOR_START_PAYLOAD_KEYS_SORTED, validateSupervisorStartAction,
     buildSupervisorStopOwnedPayload,
   });
 }

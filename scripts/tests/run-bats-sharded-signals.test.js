@@ -64,7 +64,7 @@ test.afterEach(() => {
     let entries = [];
     try { entries = fs.readdirSync(dir); } catch { continue; }
     for (const f of entries) {
-      if (!f.endsWith('.alive')) continue;
+      if (!f.endsWith('.alive') && !f.endsWith('.starting')) continue;
       let pid;
       try { pid = Number(fs.readFileSync(path.join(dir, f), 'utf8').trim().split(' ')[1]); } catch { continue; }
       if (Number.isInteger(pid) && pid > 0) { try { process.kill(-pid, 'SIGKILL'); } catch { /* already gone */ } }
@@ -102,7 +102,7 @@ function initFakeGitRepo(root) {
 /** A throwaway project root: real planner (symlinked, untouched), a fake
  * run-bats.sh this test fully controls, one real *.bats file so discovery
  * has something to shard. */
-function makeFakeProjectRoot(trapMode) {
+function makeFakeProjectRoot(trapMode, { startupDelayMs = 0 } = {}) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'rbs-signal-fixture-'));
   created.push(root);
   initFakeGitRepo(root);
@@ -141,7 +141,14 @@ function makeFakeProjectRoot(trapMode) {
     'TMPDIR_LIKE="${LOG}.tmpdir"',
     'GRANDCHILD_MARKER="${LOG}.grandchild-alive"',
     'mkdir -p "$SHIM_DIR" "$TMPDIR_LIKE"',
-    'echo "alive $$" > "$MARKER"',
+    // Keep a PID witness for cleanup if setup fails before readiness.
+    'echo "starting $$" > "${LOG}.starting"',
+    // Deterministically exercise scheduling delay before trap installation.
+    // Readiness must not be observable until signal handling is established.
+    `sleep ${startupDelayMs / 1000}`,
+    trapMode === 'graceful'
+      ? 'trap \'rm -f "$MARKER" "${LOG}.starting"; rm -rf "$SHIM_DIR" "$TMPDIR_LIKE"; exit 143\' TERM'
+      : 'trap \'\' TERM',
     // A real grandchild, not just this one process: run-bats.sh's own real
     // descendant chain is bash -> npm -> bats -> bats-exec-suite ->
     // bats-exec-file -> bats-exec-test (observed directly during this
@@ -152,12 +159,14 @@ function makeFakeProjectRoot(trapMode) {
     // its own could not tell the two apart: a lone process's "group" and
     // "itself" are the same thing, so this line is load-bearing for the test,
     // not decoration.
-    '(echo "grandchild-alive $$" > "$GRANDCHILD_MARKER"; trap \'rm -f "$GRANDCHILD_MARKER"; exit 143\' TERM; while true; do sleep 0.05; done) &',
+    '(trap \'rm -f "$GRANDCHILD_MARKER"; exit 143\' TERM; echo "grandchild-alive $$" > "$GRANDCHILD_MARKER"; while true; do sleep 0.05; done) &',
     'GRANDCHILD_PID=$!',
     'echo "$GRANDCHILD_PID" > "${LOG}.grandchild-pid"',
-    trapMode === 'graceful'
-      ? 'trap \'rm -f "$MARKER"; rm -rf "$SHIM_DIR" "$TMPDIR_LIKE"; exit 143\' TERM'
-      : 'trap \'\' TERM',
+    // Readiness is a barrier, not evidence that bash merely started: both
+    // signal handlers must be installed before any test sends a signal.
+    'while [[ ! -f "$GRANDCHILD_MARKER" ]]; do sleep 0.01; done',
+    'echo "alive $$" > "$MARKER"',
+    'rm -f "${LOG}.starting"',
     'while true; do sleep 0.05; done',
     '',
   ].join('\n');
@@ -282,7 +291,7 @@ for (const [label, signal, expectedExitCode] of [['SIGINT', 'SIGINT', 130], ['SI
 }
 
 test('a STUBBORN child (ignores SIGTERM) is escalated to SIGKILL, not left running forever', async () => {
-  const root = makeFakeProjectRoot('stubborn');
+  const root = makeFakeProjectRoot('stubborn', { startupDelayMs: 1000 });
   const child = runOrchestrator(root, { RUN_BATS_SHARDED_GRACEFUL_WAIT_MS: '500', RUN_BATS_SHARDED_KILL_WAIT_MS: '1500' });
 
   let paths = markerPathsFor(root);
@@ -306,6 +315,8 @@ test('a STUBBORN child (ignores SIGTERM) is escalated to SIGKILL, not left runni
   // escalating) but nowhere near the 10s outer bound (escalation, not a hang).
   assert.ok(elapsedMs >= 450, 'exited suspiciously fast (' + elapsedMs + 'ms) -- did it even attempt the graceful phase before killing?');
   assert.ok(elapsedMs < 6000, 'took ' + elapsedMs + 'ms -- escalation is not actually bounded');
+  assert.match(child.__stderr, /survived SIGTERM within 500ms -- escalating to SIGKILL/,
+    'the stubborn child must actually survive TERM and require KILL, not merely exit slowly');
   assert.equal(isPidAlive(childPid), false, 'the stubborn child survived even SIGKILL to its process group');
 });
 
@@ -476,7 +487,6 @@ test('a shard that finishes with a genuinely VALID handoff in the exact instant 
     // `state.shuttingDown = true;` and seeing it stay green.
     'printf "1..1\\nok 1 irrelevant\\n" > "$LOG"',
     'MARKER="${LOG}.alive"',
-    'echo "alive $$" > "$MARKER"',
     'RUNID="race-$$"',
     'HANDOFF=".androidcommondoc/bats-result.${RUNID}.env"',
     // Written entirely INSIDE the TERM trap: this handoff must not exist
@@ -505,6 +515,7 @@ test('a shard that finishes with a genuinely VALID handoff in the exact instant 
       // of whatever run-scoped cleanup correctly did to the handoff itself.
       'echo "RACE_HANDOFF_WRITTEN" > "${LOG}.race-evidence";' + ' ' +
       'rm -f "$MARKER"; exit 143; }\' TERM',
+    'echo "alive $$" > "$MARKER"',
     'while true; do sleep 0.05; done',
     '',
   ].join('\n');

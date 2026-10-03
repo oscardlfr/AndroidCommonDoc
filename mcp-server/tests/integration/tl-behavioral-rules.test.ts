@@ -370,10 +370,10 @@ describe('dev dispatch correctness', () => {
 // Group 8: Planner spawning as team peer
 // ---------------------------------------------------------------------------
 
-describe('planner spawning as single-use subagent (BL-W48)', () => {
-  it('BL-W48: planner spawned as bare Agent() without team_name (canonical single-use model)', () => {
+describe('planner spawning as one wave-scoped actor (BL-W48)', () => {
+  it('BL-W48: planner has one Agent() spawn without team_name', () => {
     // BL-W48: team_name is deprecated/ignored; bare Agent(subagent_type="planner") is canonical.
-    // The guide must describe planner dispatch as a plain single-use Agent() call.
+    // The guide must describe the initial planner dispatch as a plain Agent() call.
     // Accept either bare Agent() syntax or a reference to planner + PLAN.md delivery.
     expect(content).toMatch(/Agent\(subagent_type="planner"|Agent\(subagent_type='planner'|planner.*PLAN\.md|PLAN\.md.*planner/i);
   });

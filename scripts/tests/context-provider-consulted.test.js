@@ -107,7 +107,10 @@ runHook({
 assert.ok(fs.existsSync(flagPath('t7')), 'TC7: session flag written regardless of agent_type format');
 console.log('TC7 session flag written regardless of agent_type format: PASS');
 
-// TC8-TC11: arch-response flag — written when arch → specialist
+// TC8-TC11: the retired role-keyed arch-response flag must never be written.
+// Durable stable-actor authorization is covered by
+// context-provider-actor-authorization.test.js; these hook-level negatives
+// keep presentation names from regaining authority here.
 function archFlagPath(sessionId, to) {
   return path.join(os.tmpdir(), `claude-arch-responded-${sessionId}-${sanitize(to)}.flag`);
 }
@@ -115,7 +118,7 @@ function clearArchFlag(sessionId, to) {
   try { fs.unlinkSync(archFlagPath(sessionId, to)); } catch {}
 }
 
-// TC8: arch-platform → test-specialist → arch-response flag written
+// TC8: arch-platform → test-specialist does not mint a role-keyed flag.
 clearArchFlag('t8', 'test-specialist');
 runHook({
   tool_name: 'SendMessage',
@@ -123,19 +126,20 @@ runHook({
   session_id: 't8',
   agent_type: 'arch-platform'
 });
-assert.ok(fs.existsSync(archFlagPath('t8', 'test-specialist')), 'TC8: arch-platform→test-specialist writes arch-response flag');
-console.log('TC8 arch-platform→test-specialist writes arch-response flag: PASS');
+assert.ok(!fs.existsSync(archFlagPath('t8', 'test-specialist')), 'TC8: role-keyed arch-response flag is retired');
+console.log('TC8 arch-platform→test-specialist does not write legacy role flag: PASS');
 
-// TC9: arch-testing → toolkit-specialist → arch-response flag written
+// TC9: a suffixed presentation route also cannot mint the retired flag.
 clearArchFlag('t9', 'toolkit-specialist');
 runHook({
   tool_name: 'SendMessage',
-  tool_input: { to: 'toolkit-specialist', message: 'dispatch' },
+  tool_input: { to: 'toolkit-specialist-2', message: 'dispatch' },
   session_id: 't9',
   agent_type: 'arch-testing'
 });
-assert.ok(fs.existsSync(archFlagPath('t9', 'toolkit-specialist')), 'TC9: arch-testing→toolkit-specialist writes arch-response flag');
-console.log('TC9 arch-testing→toolkit-specialist writes arch-response flag: PASS');
+assert.ok(!fs.existsSync(archFlagPath('t9', 'toolkit-specialist')), 'TC9: suffixed presentation route cannot mint a role flag');
+assert.ok(!fs.existsSync(archFlagPath('t9', 'toolkit-specialist-2')), 'TC9: suffixed route itself is not an authority key');
+console.log('TC9 suffixed presentation route does not write legacy role flag: PASS');
 
 // TC10: non-arch sender → specialist → NO arch-response flag
 clearArchFlag('t10', 'test-specialist');

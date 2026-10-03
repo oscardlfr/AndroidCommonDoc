@@ -8,8 +8,8 @@ parent: agents-hub
 status: active
 layer: L0
 description: "Request-bound structured architect verdict publication and validation protocol."
-version: 3
-last_updated: "2026-09-21"
+version: 4
+last_updated: "2026-10-03"
 ---
 
 # Agent Verdict Protocol
@@ -33,6 +33,10 @@ Architect phase authority is a machine-validated JSON exchange. A conversational
 ```
 
 Legacy `.md` verdicts remain historical and are never a fallback.
+
+CLI `--request` and `--evidence-file` paths are absolute or relative to the invocation working directory. The writer resolves them before applying the unchanged active-wave confinement checks; durable record references remain wave-relative. Pass the request writer's exact absolute path and digest in architect dispatches.
+
+For standalone launcher calls, supply `--rationale "<concise rationale>"` in both PREP and VERIFY-FINAL. The rationale must be 1..8192 UTF-8 bytes and is independent of `--evidence-text`. Legacy stdin rationale remains supported, but combining it with `--rationale` is rejected as ambiguous. Empty rationale still rejects before publication.
 
 ## Decisions
 

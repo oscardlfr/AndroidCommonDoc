@@ -29,6 +29,7 @@ const { spawnSync } = require('node:child_process');
 const { test } = require('node:test');
 
 const rll = require('../lib/runtime-role-lifecycle.cjs');
+const actorAuthorization = require('../lib/context-provider-actor-authorization.cjs');
 const entrypoints = require('../lib/runtime-collaboration-entrypoints.cjs');
 const { installConsumerFixture, toolkitHostContractAvailable } = require('./lib/consumer-runtime-fixture.cjs');
 const { primeClaudeId01V2ActorProof, claudeId01V2SessionEvidenceFor } = require('./fixtures/runtime-claude-id01-v2-fixture.cjs');
@@ -284,6 +285,7 @@ function consultAndAccept(wave, question, handOffTo, { archAgent = 'arch-testing
   // The architect hands the answer on (SendMessage): the real PostToolUse hook records the mediated chain.
   if (handOffTo) {
     hook(root, HOOKS.consulted, { hook_event_name: 'PostToolUse', tool_name: 'SendMessage', tool_input: { to: handOffTo, message: resultFile },
+      tool_response: { success: true, resumedAgentId: handOffTo },
       session_id: session, agent_type: 'arch-testing', agent_id: archAgent });
   }
   return { coord, request, resultFile, planDigest };
@@ -336,7 +338,7 @@ function assertArchitectCannotWriteVerdictByHand(root, slug, role) {
 }
 
 /** The orchestrator creates each request through the launcher; each architect records its verdict through it. */
-function verdictRound(wave, phase, { evidenceText } = {}) {
+function verdictRound(wave, phase, { evidenceText, preverifyReceipt } = {}) {
   const { root, slug } = wave;
   const verdicts = {};
   for (const role of ARCHITECTS) {
@@ -353,6 +355,7 @@ function verdictRound(wave, phase, { evidenceText } = {}) {
     // its rationale piped in; no hook may stand in its way, and it still cannot write the verdict file by hand.
     const verdictArgs = ['--role', role, '--phase', phase, '--slug', slug, '--request', requestPath, '--request-sha256', requestSha, '--decision', 'approve'];
     if (evidenceText) verdictArgs.push('--evidence-text', `${role}: ${evidenceText}`);
+    if (preverifyReceipt) verdictArgs.push('--evidence-file', preverifyReceipt);
     const pipeline = `printf '%s\\n' 'approved after reading the plan' | ${launcherCommand(root, 'verdict-write', verdictArgs)}`;
     assertNoHookDenies(root, pipeline, role, SESSION);
     assertNoHookDenies(root, pipeline, role, SESSION, ARCHITECT_WRITE_GATES);
@@ -379,7 +382,7 @@ test('PREP: Pass B rebinds the digest, three architects record verdicts through 
     assert.strictEqual(waveControl(root, 'status', '--slug', slug).body.current, true);
 
     const prep = verdictRound(wave, 'prep');
-    const toExecute = waveControl(root, 'transition', '--slug', slug, '--to', 'EXECUTE', ...verdictFlags(prep));
+    const toExecute = waveControl(root, 'transition', '--slug', slug, '--to', 'EXECUTE', '--expected-revision', '0', ...verdictFlags(prep));
     assert.strictEqual(toExecute.body.phase, 'EXECUTE', JSON.stringify(toExecute));
     assert.strictEqual(toExecute.body.transitions[0].evidence.length, 3, 'three architect verdicts are the evidence');
   } finally { cleanup(wave); }
@@ -394,7 +397,9 @@ function executePhase(wave) {
   const diagnose = () => ['test-specialist', 'arch-testing-prep'].map((agent) => {
     const r = rll.checkClaudeId01ProofComplete(root, FINAL_SESSION, rll.computeWorktreeId(root), rll.discoverPlan(root).planDigest, agent === 'arch-testing-prep' ? 'arch-testing' : agent, agent);
     return agent + ':' + (r.ok ? 'ok' : r.reason);
-  }).join(' ');
+  }).join(' ') + ' authorization:' + JSON.stringify(actorAuthorization.activateOrReadAuthorization(root, {
+    sessionId: FINAL_SESSION, agentId: 'test-specialist',
+  }));
   assert.ok(!after || after.permissionDecision !== 'deny', `the specialist passes the mediated gate after the hand-off: ${JSON.stringify(after)} proofs: ${diagnose()}`);
 
   // The architect dispatches the specialist: the dispatch artifact is written through the launcher (task body on stdin).
@@ -424,12 +429,13 @@ function executePhase(wave) {
 }
 
 /** QG -> COMPLETE in a consumer: pre-pr stamp, mint, verify, then the control plane verifies the proof. */
-function qualityGatePhase(wave, scannerDir) {
+function qualityGatePhase(wave, scannerDir, revision) {
   const { root, slug } = wave;
   const env = { TRUFFLEHOG_BIN: scannerStub(scannerDir) }; // SIM-SCAN
-  const stamp = launcher(root, 'runtime-consumer-qg', ['pre-pr', '--slug', slug, '--project-gate', 'PASS'], env);
+  const stamp = launcher(root, 'runtime-consumer-qg', ['pre-pr', '--slug', slug, '--expected-revision', String(revision), '--project-gate', 'PASS'], env);
   assert.strictEqual(stamp.exit, 0, `pre-pr: ${stamp.stdout}${stamp.stderr}`);
-  const minted = launcher(root, 'runtime-consumer-qg', ['mint', '--slug', slug], env);
+  const attemptPath = stamp.stdout.trim().split(/\s+/)[2];
+  const minted = launcher(root, 'runtime-consumer-qg', ['mint', '--slug', slug, '--qg-attempt', attemptPath], env);
   assert.strictEqual(minted.exit, 0, `mint: ${minted.stdout}${minted.stderr}`);
   const head = git(root, 'rev-parse', 'HEAD');
   const verified = launcher(root, 'runtime-consumer-qg', ['verify', '--slug', slug, '--head', head], env);
@@ -438,6 +444,7 @@ function qualityGatePhase(wave, scannerDir) {
   // write (.androidcommondoc/, reports) must not add to the status.
   const status = git(root, 'status', '--porcelain').split('\n');
   assert.deepStrictEqual(status.filter((line) => /\.androidcommondoc\/|report/i.test(line)), [], 'the QG stamps, proofs and reports stay out of the consumer status');
+  return attemptPath;
 }
 
 /**
@@ -477,20 +484,23 @@ function wholeWave(t, slug, gapMs, gaps = [gapMs, gapMs], { activity = false } =
   // Risk: a long planning session. More than an hour passes before PREP; nothing may die of time alone.
   idle(gaps[0]);
   const prep = verdictRound(wave, 'prep');
-  assert.strictEqual(waveControl(root, 'transition', '--slug', slug, '--to', 'EXECUTE', ...verdictFlags(prep)).body.phase, 'EXECUTE');
+  assert.strictEqual(waveControl(root, 'transition', '--slug', slug, '--to', 'EXECUTE', '--expected-revision', '0', ...verdictFlags(prep)).body.phase, 'EXECUTE');
 
   const committedHead = executePhase(wave);
 
   // Risk: a long EXECUTE. More than an hour passes before VERIFY_FINAL.
   idle(gaps[1]);
-  const verifyFinal = waveControl(root, 'transition', '--slug', slug, '--to', 'VERIFY_FINAL', '--rebind-head', 'true');
+  const preverify = waveControl(root, 'preverify', '--slug', slug, '--expected-revision', '1');
+  assert.strictEqual(preverify.exit, 0, JSON.stringify(preverify));
+  const preverifyPath = path.join(root, preverify.body.path);
+  const verifyFinal = waveControl(root, 'transition', '--slug', slug, '--to', 'VERIFY_FINAL', '--expected-revision', '1', '--rebind-head', 'true', '--preverify-receipt', preverify.body.path);
   assert.strictEqual(verifyFinal.body.phase, 'VERIFY_FINAL', JSON.stringify(verifyFinal));
   assert.strictEqual(verifyFinal.body.head, committedHead, 'the wave follows the specialist commit');
-  const final = verdictRound(wave, 'verify-final', { evidenceText: 'target tests pass; the diff is inside the Path-Manifest' });
-  assert.strictEqual(waveControl(root, 'transition', '--slug', slug, '--to', 'QG', ...verdictFlags(final)).body.phase, 'QG');
+  const final = verdictRound(wave, 'verify-final', { evidenceText: 'target tests pass; the diff is inside the Path-Manifest', preverifyReceipt: preverifyPath });
+  assert.strictEqual(waveControl(root, 'transition', '--slug', slug, '--to', 'QG', '--expected-revision', '2', ...verdictFlags(final)).body.phase, 'QG');
 
-  qualityGatePhase(wave, scannerDir);
-  const complete = waveControl(root, 'transition', '--slug', slug, '--to', 'COMPLETE');
+  const qgAttempt = qualityGatePhase(wave, scannerDir, 3);
+  const complete = waveControl(root, 'transition', '--slug', slug, '--to', 'COMPLETE', '--expected-revision', '3', '--qg-attempt', qgAttempt);
   assert.strictEqual(complete.body.phase, 'COMPLETE', JSON.stringify(complete));
   assert.strictEqual(complete.body.transitions.length, 4, 'PREP, EXECUTE, VERIFY_FINAL and QG each advanced exactly once');
 }
@@ -558,7 +568,10 @@ test('a role active every 30 minutes still loses the session at the 12 hour abso
     hook(root, HOOKS.gate, bashEvent('git status', 'arch-testing', FINAL_SESSION, 'arch-testing-prep'));
   }
   const alive = probe();
-  assert.ok(!alive || alive.permissionDecision !== 'deny', `still admitted at +11 h 30 min of continuous activity: ${JSON.stringify(alive)}`);
+  const aliveAuth = actorAuthorization.activateOrReadAuthorization(root, {
+    sessionId: FINAL_SESSION, agentId: 'test-specialist',
+  });
+  assert.ok(!alive || alive.permissionDecision !== 'deny', `still admitted at +11 h 30 min of continuous activity: ${JSON.stringify(alive)} authorization: ${JSON.stringify(aliveAuth)}`);
   clock.offsetMs = 12 * HOUR + 60 * 1000;
   const denied = probe();
   assert.ok(denied && denied.permissionDecision === 'deny', 'past the absolute limit the specialist is refused');

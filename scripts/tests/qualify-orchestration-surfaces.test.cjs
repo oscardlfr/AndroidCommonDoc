@@ -15,7 +15,7 @@ function fixture() {
     fs.writeFileSync(path.join(root, '.claude', 'commands', name + '.md'), `$SKILL_DIR/${name}/SKILL.md\n`);
   }
   fs.mkdirSync(path.join(root, '.claude', 'registry'), { recursive: true });
-  fs.writeFileSync(path.join(root, '.claude', 'registry', 'wave-topology.yaml'), 'control_plane:\n  schema: wave-phase-state/v1\n');
+  fs.writeFileSync(path.join(root, '.claude', 'registry', 'wave-topology.yaml'), 'control_plane:\n  schema: wave-phase-state/v2\n');
   return root;
 }
 

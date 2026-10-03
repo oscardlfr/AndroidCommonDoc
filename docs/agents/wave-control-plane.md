@@ -8,8 +8,8 @@ layer: L0
 parent: agents-hub
 category: agents
 description: "Class-aware persisted PREP-to-COMPLETE control plane built on the portable Wave-1 lifecycle."
-version: 2
-last_updated: "2026-09-28"
+version: 3
+last_updated: "2026-10-02"
 ---
 
 # Wave Control Plane
@@ -18,9 +18,15 @@ The control plane owns one fail-closed state machine:
 
 ```text
 PREP -> EXECUTE -> VERIFY_FINAL -> QG -> COMPLETE
+          ^                         |
+          +------ rework (FAIL) ----+
 ```
 
-State is stored at `.androidcommondoc/wave-control/<slug>.json` and is bound to the exact PLAN digest and Git HEAD. Illegal transitions, unknown phases, source drift, missing verdicts, or missing QG artifacts reject. Callers cannot skip a phase.
+State uses `wave-phase-state/v2` at `.androidcommondoc/wave-control/<slug>.json` and is bound to the exact PLAN digest and Git HEAD. Every mutation uses revision compare-and-swap (`--expected-revision`); stale callers cannot overwrite a newer decision. Illegal transitions, unknown phases, source drift, missing verdicts, or missing QG artifacts reject. Callers cannot skip a phase.
+
+`EXECUTE -> VERIFY_FINAL` is the only HEAD-rebind boundary. It requires a clean tracked tree and an immutable `preverify` receipt bound to the current slug, PLAN, HEAD, revision, cycle and `verification_epoch`. VERIFY_FINAL verdicts must include that receipt as evidence, so a verdict from a prior cycle stays auditable but is not authority for the current cycle.
+
+QG outcomes are immutable attempts at `.androidcommondoc/wave-control/<slug>/qg-attempts/cycle-<n>/attempt-<k>.json`. Each attempt is bound to slug, PLAN, HEAD, state revision, cycle and verification epoch. A FAIL attempt may be consumed exactly once by the explicit `rework` command, which moves `QG -> EXECUTE`, increments both cycle and epoch, and is capped at three rework cycles. A PASS attempt is required for `QG -> COMPLETE`. Prior attempts, verdicts and proofs are never deleted or overwritten; current-state bindings make them inert.
 
 Every claimed phase advance must come from the successful transition receipt for
 the active wave and agree with a subsequent persisted status read. Operational
@@ -38,7 +44,7 @@ Verdict architects and lifecycle roles are separate fields in `.claude/registry/
 - `DOC`: the architects explicitly declared by the PLAN; context-provider and doc-updater in ephemeral lifecycle mode.
 - `FAST-PATH`: no architect verdict floor and no retained support roles; disk-only mode, but QG remains mandatory.
 
-PREP and VERIFY_FINAL transitions validate `verdict/v1` artifacts for every required role. QG-to-COMPLETE requires the genuine quality-gate stamp and push proof for the current source.
+PREP and VERIFY_FINAL transitions validate `verdict/v1` artifacts for every required role. VERIFY_FINAL additionally requires the current preverify receipt in each verdict's evidence. QG-to-COMPLETE requires the genuine quality-gate stamp and push proof plus the current immutable PASS attempt.
 
 ## Lifecycle integration
 

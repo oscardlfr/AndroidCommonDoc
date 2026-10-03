@@ -6,8 +6,11 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { execFileSync, spawnSync } = require('node:child_process');
+const waveControl = require('../lib/wave-control-plane.cjs');
+const { installConsumerFixture } = require('./lib/consumer-runtime-fixture.cjs');
 
 const SCRIPT = path.resolve(__dirname, '../lib/runtime-consumer-quality-gate.cjs');
+const WAVE_SCRIPT = path.resolve(__dirname, '../tools/wave-control-plane.cjs');
 
 function git(root, args) {
   return execFileSync('git', args, { cwd: root, encoding: 'utf8' }).trim();
@@ -19,25 +22,61 @@ function fixture() {
   git(root, ['config', 'user.email', 'runtime-qg@example.invalid']);
   git(root, ['config', 'user.name', 'Runtime QG']);
   fs.writeFileSync(path.join(root, 'tracked.txt'), 'fixture\n');
-  git(root, ['add', 'tracked.txt']);
+  fs.mkdirSync(path.join(root, '.planning', 'wave-test'), { recursive: true });
+  fs.mkdirSync(path.join(root, '.claude', 'registry'), { recursive: true });
+  fs.writeFileSync(path.join(root, '.planning', 'wave-test', 'PLAN.md'), '## Wave Class\n\n- **Class**: FAST-PATH\n');
+  fs.writeFileSync(path.join(root, '.planning', 'wave-test', 'CLASS'), 'FAST-PATH\n');
+  fs.writeFileSync(path.join(root, '.claude', 'registry', 'wave-topology.yaml'), [
+    'class_artifacts:', '  FAST-PATH:', '    architects: []', '    lifecycle_roles: []',
+    '    execution_mode: disk-only', '',
+  ].join('\n'));
+  git(root, ['add', '.']);
   git(root, ['commit', '-qm', 'fixture']);
   const head = git(root, ['rev-parse', 'HEAD']);
-  const control = path.join(root, '.androidcommondoc', 'wave-control');
-  fs.mkdirSync(control, { recursive: true });
+  waveControl.initialize(root, 'test');
+  waveControl.transition(root, 'test', 'EXECUTE', { expectedRevision: 0 });
+  const preverify = waveControl.preverify(root, 'test', { expectedRevision: 1 });
+  waveControl.transition(root, 'test', 'VERIFY_FINAL', {
+    expectedRevision: 1, rebindHead: true, preverifyReceipt: preverify.path,
+  });
+  waveControl.transition(root, 'test', 'QG', { expectedRevision: 2 });
   fs.writeFileSync(path.join(root, '.androidcommondoc', 'pre-pr.stamp'), `${JSON.stringify({
     verdict: 'PASS', timestamp: new Date().toISOString(), head,
-  })}\n`);
-  fs.writeFileSync(path.join(control, 'test.json'), `${JSON.stringify({
-    phase: 'QG', head, plan_sha256: 'a'.repeat(64),
   })}\n`);
   return { root, head };
 }
 
-function mint(root) {
-  return spawnSync(process.execPath, [SCRIPT, root, 'mint', '--slug', 'test'], {
+function mint(root, qgAttemptPath) {
+  const receipt = qgAttemptPath || waveControl.qgAttempt(root, 'test', 'PASS', { expectedRevision: 3 }).path;
+  return spawnSync(process.execPath, [SCRIPT, root, 'mint', '--slug', 'test', '--qg-attempt', receipt], {
     cwd: root, encoding: 'utf8',
   });
 }
+
+test('wave-control CLI accepts scalar PASS and FAIL verdicts for qg-attempt', (t) => {
+  for (const verdict of ['PASS', 'FAIL']) {
+    const { root } = fixture();
+    t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+    const result = spawnSync(process.execPath, [WAVE_SCRIPT, 'qg-attempt', '--root', root, '--slug', 'test',
+      '--expected-revision', '3', '--verdict', verdict, '--checks', JSON.stringify({ project_gate: verdict })], {
+      cwd: root, encoding: 'utf8',
+    });
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    const receipt = JSON.parse(result.stdout);
+    assert.equal(receipt.verdict, verdict);
+    assert.equal(receipt.checks.project_gate, verdict);
+    assert.equal(fs.existsSync(path.join(root, receipt.path)), true);
+  }
+});
+
+test('wave-control CLI keeps architect verdicts role=path shaped outside qg-attempt', (t) => {
+  const { root } = fixture();
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const result = spawnSync(process.execPath, [WAVE_SCRIPT, 'transition', '--root', root, '--slug', 'test',
+    '--to', 'COMPLETE', '--expected-revision', '3', '--verdict', 'PASS'], { cwd: root, encoding: 'utf8' });
+  assert.equal(result.status, 2);
+  assert.match(result.stdout, /INVALID_VERDICT_ARGUMENT/);
+});
 
 test('mint confines every artifact to regular consumer-owned ancestors', (t) => {
   const { root } = fixture();
@@ -61,9 +100,12 @@ test('mint rejects a symlinked output ancestor without writing outside the consu
     fs.rmSync(root, { recursive: true, force: true });
     fs.rmSync(external, { recursive: true, force: true });
   });
+  const attempt = waveControl.qgAttempt(root, 'test', 'PASS', { expectedRevision: 3 });
+  git(root, ['update-index', '--assume-unchanged', '.planning/wave-test/PLAN.md', '.planning/wave-test/CLASS']);
+  fs.rmSync(path.join(root, '.planning'), { recursive: true, force: true });
   fs.symlinkSync(external, path.join(root, '.planning'));
 
-  const result = mint(root);
+  const result = mint(root, attempt.path);
 
   assert.notEqual(result.status, 0);
   assert.match(result.stderr, /path-ancestor-unsafe/);
@@ -82,10 +124,169 @@ function scannerStub(t, { findings = false } = {}) {
 }
 
 function prePr(root, slug, args, env) {
-  return spawnSync(process.execPath, [SCRIPT, root, 'pre-pr', '--slug', slug, ...args], {
+  return spawnSync(process.execPath, [SCRIPT, root, 'pre-pr', '--slug', slug, '--expected-revision', '3', ...args], {
     cwd: root, encoding: 'utf8', env: { ...process.env, ...env },
   });
 }
+
+function commitWavePlans(root, slugs, message) {
+  for (const slug of slugs) {
+    const waveDir = path.join(root, '.planning', `wave-${slug}`);
+    fs.mkdirSync(waveDir, { recursive: true });
+    fs.writeFileSync(path.join(waveDir, 'PLAN.md'), '### Wave Class\n\n- **Class**: FAST-PATH\n\n### Path-Manifest\n\n- tracked.txt\n');
+    fs.writeFileSync(path.join(waveDir, 'CLASS'), 'FAST-PATH\n');
+    git(root, ['add', '-f', path.relative(root, path.join(waveDir, 'PLAN.md')), path.relative(root, path.join(waveDir, 'CLASS'))]);
+  }
+  git(root, ['commit', '-qm', message]);
+}
+
+function promoteWaveStateToQG(root, slug) {
+  waveControl.initialize(root, slug);
+  waveControl.transition(root, slug, 'EXECUTE', { expectedRevision: 0 });
+  const preverify = waveControl.preverify(root, slug, { expectedRevision: 1 });
+  waveControl.transition(root, slug, 'VERIFY_FINAL', {
+    expectedRevision: 1,
+    rebindHead: true,
+    preverifyReceipt: preverify.path,
+  });
+  waveControl.transition(root, slug, 'QG', { expectedRevision: 2 });
+}
+
+function resolveActiveWaveThroughLauncher(fixture, env = {}) {
+  return spawnSync(process.execPath, [fixture.launcher, 'run', 'runtime-consumer-qg',
+    '--project-root', fixture.consumerRoot, '--', 'resolve-active-wave'], {
+    cwd: fixture.consumerRoot, encoding: 'utf8', env: { ...process.env, ...env },
+  });
+}
+
+test('resolve-active-wave ignores ambient slug and newer stale wave state, selecting the only current QG state', (t) => {
+  const fixture = installConsumerFixture('L2');
+  t.after(() => fs.rmSync(fixture.consumerRoot, { recursive: true, force: true }));
+
+  commitWavePlans(fixture.consumerRoot, ['stale'], 'stale wave');
+  promoteWaveStateToQG(fixture.consumerRoot, 'stale');
+  const staleState = path.join(fixture.consumerRoot, '.androidcommondoc', 'wave-control', 'stale.json');
+
+  commitWavePlans(fixture.consumerRoot, ['current'], 'current wave');
+  promoteWaveStateToQG(fixture.consumerRoot, 'current');
+  const future = new Date(Date.now() + 60_000);
+  fs.utimesSync(staleState, future, future);
+
+  const result = resolveActiveWaveThroughLauncher(fixture, { CLAUDE_WAVE_SLUG: 'stale' });
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  assert.equal(result.stdout, 'current\n');
+});
+
+test('resolve-active-wave fails closed when no durable state is currently in QG', (t) => {
+  const fixture = installConsumerFixture('L1');
+  t.after(() => fs.rmSync(fixture.consumerRoot, { recursive: true, force: true }));
+  commitWavePlans(fixture.consumerRoot, ['prep-only'], 'prep wave');
+  waveControl.initialize(fixture.consumerRoot, 'prep-only');
+
+  const result = resolveActiveWaveThroughLauncher(fixture, { CLAUDE_WAVE_SLUG: 'prep-only' });
+  assert.equal(result.status, 2);
+  assert.match(result.stderr, /active-qg-wave-not-found/);
+});
+
+test('resolve-active-wave preserves canonical current and historical QG attempt namespaces', (t) => {
+  for (const layer of ['L1', 'L2']) {
+    const fixture = installConsumerFixture(layer);
+    t.after(() => fs.rmSync(fixture.consumerRoot, { recursive: true, force: true }));
+    const root = fixture.consumerRoot;
+    commitWavePlans(root, ['previous'], 'previous wave');
+    promoteWaveStateToQG(root, 'previous');
+    const prior = waveControl.qgAttempt(root, 'previous', 'FAIL', { expectedRevision: 3 });
+    const priorPath = path.join(root, prior.path);
+    const priorBytes = fs.readFileSync(priorPath);
+
+    commitWavePlans(root, ['current'], 'current wave');
+    promoteWaveStateToQG(root, 'current');
+    const current = waveControl.qgAttempt(root, 'current', 'PASS', { expectedRevision: 3 });
+    const currentPath = path.join(root, current.path);
+    const currentBytes = fs.readFileSync(currentPath);
+    for (let pass = 0; pass < 2; pass += 1) {
+      const result = resolveActiveWaveThroughLauncher(fixture);
+      assert.equal(result.status, 0, `${layer}: ${result.stderr || result.stdout}`);
+      assert.equal(result.stdout, 'current\n');
+      assert.deepEqual(fs.readFileSync(priorPath), priorBytes);
+      assert.deepEqual(fs.readFileSync(currentPath), currentBytes);
+    }
+  }
+});
+
+test('resolve-active-wave treats non-state regular sidecars as non-authoritative', (t) => {
+  const fixture = installConsumerFixture('L1');
+  t.after(() => fs.rmSync(fixture.consumerRoot, { recursive: true, force: true }));
+  commitWavePlans(fixture.consumerRoot, ['current'], 'current wave');
+  promoteWaveStateToQG(fixture.consumerRoot, 'current');
+  const directory = path.join(fixture.consumerRoot, '.androidcommondoc', 'wave-control');
+  fs.writeFileSync(path.join(directory, 'current.json.tmp-123-abcdef012345'), '{"phase":"QG"}');
+  fs.mkdirSync(path.join(directory, 'other.json.lock'));
+  const result = resolveActiveWaveThroughLauncher(fixture);
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  assert.equal(result.stdout, 'current\n');
+});
+
+test('resolve-active-wave rejects malformed state records and directories masquerading as state', (t) => {
+  for (const kind of ['malformed', 'directory']) {
+    const fixture = installConsumerFixture('L2');
+    t.after(() => fs.rmSync(fixture.consumerRoot, { recursive: true, force: true }));
+    commitWavePlans(fixture.consumerRoot, ['current'], 'current wave');
+    promoteWaveStateToQG(fixture.consumerRoot, 'current');
+    const target = path.join(fixture.consumerRoot, '.androidcommondoc', 'wave-control', 'decoy.json');
+    if (kind === 'directory') fs.mkdirSync(target);
+    else fs.writeFileSync(target, '{"phase":"QG"}');
+    const result = resolveActiveWaveThroughLauncher(fixture);
+    assert.equal(result.status, 2);
+    assert.match(result.stderr, /wave-state-(?:invalid:decoy|registry-unsafe)/);
+  }
+});
+
+test('resolve-active-wave rejects symlinked records and artifact namespaces without following them', {
+  skip: process.platform === 'win32' ? 'symlink creation is privilege-dependent on Windows' : false,
+}, (t) => {
+  for (const name of ['alias.json', 'artifacts']) {
+    const fixture = installConsumerFixture('L1');
+    t.after(() => fs.rmSync(fixture.consumerRoot, { recursive: true, force: true }));
+    commitWavePlans(fixture.consumerRoot, ['current'], 'current wave');
+    promoteWaveStateToQG(fixture.consumerRoot, 'current');
+    const directory = path.join(fixture.consumerRoot, '.androidcommondoc', 'wave-control');
+    fs.symlinkSync(name.endsWith('.json') ? path.join(directory, 'current.json') : fixture.consumerRoot,
+      path.join(directory, name));
+    const result = resolveActiveWaveThroughLauncher(fixture);
+    assert.equal(result.status, 2);
+    assert.match(result.stderr, /wave-state-registry-unsafe/);
+  }
+});
+
+test('resolve-active-wave fails closed when two durable QG states are current', (t) => {
+  const fixture = installConsumerFixture('L2');
+  t.after(() => fs.rmSync(fixture.consumerRoot, { recursive: true, force: true }));
+  commitWavePlans(fixture.consumerRoot, ['alpha', 'beta'], 'ambiguous waves');
+  promoteWaveStateToQG(fixture.consumerRoot, 'alpha');
+  promoteWaveStateToQG(fixture.consumerRoot, 'beta');
+
+  const result = resolveActiveWaveThroughLauncher(fixture);
+  assert.equal(result.status, 2);
+  assert.match(result.stderr, /active-qg-wave-ambiguous/);
+});
+
+test('every quality-gater surface resolves durable wave state per Bash block instead of reading ambient slug', () => {
+  const root = path.resolve(__dirname, '../..');
+  const canonical = fs.readFileSync(path.join(root, '.claude', 'agents', 'quality-gater.md'), 'utf8');
+  const mirror = fs.readFileSync(path.join(root, 'setup', 'agent-templates', 'quality-gater.md'), 'utf8');
+  const copilot = fs.readFileSync(path.join(root, 'setup', 'copilot-agent-templates', 'quality-gater.agent.md'), 'utf8');
+  assert.equal(canonical, mirror, 'the installed Claude agent and source template stay byte-identical');
+
+  for (const [label, contents] of [['canonical', canonical], ['copilot', copilot]]) {
+    assert.equal((contents.match(/run runtime-consumer-qg --project-root "\$PWD" -- resolve-active-wave/g) || []).length, 6, label);
+    assert.doesNotMatch(contents, /\$\{CLAUDE_WAVE_SLUG:\?/);
+    assert.doesNotMatch(contents, /--(?:wave-)?slug "\$CLAUDE_WAVE_SLUG"/);
+    assert.match(contents, /persisted QG phase state .* is the authority/);
+  }
+  assert.doesNotMatch(canonical, /CLAUDE_WAVE_SLUG="\$wave_slug"/,
+    'quality-gater must not recreate ambient wave-slug authority');
+});
 
 function qgFixtureWithoutStamp() {
   const { root, head } = fixture();
@@ -102,7 +303,8 @@ test('pre-pr records a PASS stamp that mint then accepts, and keeps the reports 
   assert.deepEqual({ verdict: stamp.verdict, head: stamp.head, wave_slug: stamp.wave_slug }, { verdict: 'PASS', head, wave_slug: 'test' });
   assert.deepEqual(stamp.checks, { project_gate: 'PASS', tracked_worktree_clean: 'PASS', secret_scan: 'PASS' });
   assert.equal(git(root, ['status', '--porcelain']), '', 'the QG reports are ignored locally, not left untracked');
-  assert.equal(mint(root).status, 0, 'the produced stamp is exactly what mint requires');
+  const attemptPath = result.stdout.trim().split(/\s+/)[2];
+  assert.equal(mint(root, attemptPath).status, 0, 'the produced stamp and immutable attempt are exactly what mint requires');
 });
 
 test('pre-pr records FAIL and exits 1 when the project gate failed, a secret was found or the tree is dirty', (t) => {
@@ -120,7 +322,10 @@ test('pre-pr records FAIL and exits 1 when the project gate failed, a secret was
     const stamp = JSON.parse(fs.readFileSync(path.join(root, '.androidcommondoc', 'pre-pr.stamp'), 'utf8'));
     assert.equal(stamp.verdict, 'FAIL', label);
     assert.equal(stamp.checks[failing], 'FAIL', label);
-    if (!dirty) assert.notEqual(mint(root).status, 0, label + ': mint refuses a FAIL stamp');
+    if (!dirty) {
+      const attemptPath = result.stdout.trim().split(/\s+/)[2];
+      assert.notEqual(mint(root, attemptPath).status, 0, label + ': mint refuses a FAIL attempt');
+    }
   }
 });
 
@@ -130,7 +335,37 @@ test('pre-pr needs the project gate outcome and a wave in phase QG at the curren
   const env = { TRUFFLEHOG_BIN: scannerStub(t) };
   assert.match(prePr(root, 'test', [], env).stderr, /project-gate-required/);
   assert.match(prePr(root, 'test', ['--project-gate', 'maybe'], env).stderr, /project-gate-required/);
-  fs.writeFileSync(path.join(root, '.androidcommondoc', 'wave-control', 'test.json'), JSON.stringify({ phase: 'EXECUTE', head: 'a'.repeat(40), plan_sha256: 'a'.repeat(64) }));
+  const statePath = path.join(root, '.androidcommondoc', 'wave-control', 'test.json');
+  const state = JSON.parse(fs.readFileSync(statePath, 'utf8'));
+  state.phase = 'EXECUTE';
+  fs.writeFileSync(statePath, JSON.stringify(state));
   assert.match(prePr(root, 'test', ['--project-gate', 'PASS'], env).stderr, /wave-state-not-current/);
   assert.equal(fs.existsSync(path.join(root, '.androidcommondoc', 'pre-pr.stamp')), false, 'no stamp when the preconditions fail');
+});
+
+test('a prior cycle push proof remains on disk but cannot verify in the next epoch', (t) => {
+  const { root, head } = qgFixtureWithoutStamp();
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const env = { TRUFFLEHOG_BIN: scannerStub(t) };
+  const passed = prePr(root, 'test', ['--project-gate', 'PASS'], env);
+  assert.equal(passed.status, 0, passed.stderr);
+  const passAttempt = passed.stdout.trim().split(/\s+/)[2];
+  assert.equal(mint(root, passAttempt).status, 0);
+  const oldProof = fs.readFileSync(path.join(root, '.androidcommondoc', 'push-proof.json'));
+
+  const failed = waveControl.qgAttempt(root, 'test', 'FAIL', { expectedRevision: 3, checks: { retry: 'FAIL' } });
+  waveControl.rework(root, 'test', { expectedRevision: 3, failReceipt: failed.path });
+  const preverify = waveControl.preverify(root, 'test', { expectedRevision: 4 });
+  waveControl.transition(root, 'test', 'VERIFY_FINAL', {
+    expectedRevision: 4, rebindHead: true, preverifyReceipt: preverify.path,
+  });
+  waveControl.transition(root, 'test', 'QG', { expectedRevision: 5 });
+
+  assert.deepEqual(fs.readFileSync(path.join(root, '.androidcommondoc', 'push-proof.json')), oldProof,
+    'the prior proof remains immutable audit evidence');
+  const verify = spawnSync(process.execPath, [SCRIPT, root, 'verify', '--slug', 'test', '--head', head], {
+    cwd: root, encoding: 'utf8',
+  });
+  assert.notEqual(verify.status, 0);
+  assert.match(verify.stderr, /push-proof-not-current/);
 });

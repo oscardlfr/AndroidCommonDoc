@@ -1,0 +1,21 @@
+[
+  {"name":"h3 bullet harness","plan":"### Wave Class\n\n- **Class**: HARNESS\n","class":"HARNESS"},
+  {"name":"h2 bare doc","plan":"## Wave Class\n**Class**: DOC\n","class":"DOC"},
+  {"name":"backticked fast path","plan":"### Wave Class\n- **Class**: `FAST-PATH`.\n","class":"FAST-PATH"},
+  {"name":"bounded punctuation","plan":"### Wave Class\n**Class**: HARNESS;\n","class":"HARNESS"},
+  {"name":"decoy before section","plan":"### Context\n- **Class**: DOC\n\n## Wave Class\n- **Class**: HARNESS\n","class":"HARNESS"},
+  {"name":"fenced decoy","plan":"```markdown\n## Wave Class\n- **Class**: DOC\n```\n\n### Wave Class\n- **Class**: HARNESS\n","class":"HARNESS"},
+  {"name":"crlf input","plan":"### Wave Class\r\n\r\n- **Class**: DOC\r\n","class":"DOC"},
+  {"name":"missing section","plan":"### Context\n- **Class**: HARNESS\n","error":"WAVE_CLASS_SECTION_MISSING"},
+  {"name":"h4 is not canonical","plan":"#### Wave Class\n- **Class**: HARNESS\n","error":"WAVE_CLASS_SECTION_MISSING"},
+  {"name":"duplicate sections","plan":"## Wave Class\n- **Class**: HARNESS\n\n### Wave Class\n- **Class**: HARNESS\n","error":"WAVE_CLASS_SECTION_AMBIGUOUS"},
+  {"name":"missing declaration","plan":"### Wave Class\nNo class here.\n","error":"PLAN_WAVE_CLASS_MISSING"},
+  {"name":"duplicate declarations","plan":"### Wave Class\n- **Class**: HARNESS\n- **Class**: DOC\n","error":"PLAN_WAVE_CLASS_AMBIGUOUS"},
+  {"name":"unsupported class","plan":"### Wave Class\n- **Class**: UNKNOWN\n","error":"INVALID_WAVE_CLASS"},
+  {"name":"prefix is rejected","plan":"### Wave Class\n- **Class**: HARNESS-extra\n","error":"INVALID_WAVE_CLASS"},
+  {"name":"trailing prose is rejected","plan":"### Wave Class\n- **Class**: HARNESS production wave\n","error":"INVALID_WAVE_CLASS"},
+  {"name":"parenthetical annotation is rejected","plan":"### Wave Class\n- **Class**: HARNESS (explanation)\n","error":"INVALID_WAVE_CLASS"},
+  {"name":"lowercase is rejected","plan":"### Wave Class\n- **Class**: harness\n","error":"INVALID_WAVE_CLASS"},
+  {"name":"fenced declaration only","plan":"```markdown\n### Wave Class\n- **Class**: HARNESS\n```\n","error":"WAVE_CLASS_SECTION_MISSING"},
+  {"name":"fake closing fence keeps declaration fenced","plan":"```markdown\n```not-a-close\n### Wave Class\n- **Class**: HARNESS\n```\n","error":"WAVE_CLASS_SECTION_MISSING"}
+]

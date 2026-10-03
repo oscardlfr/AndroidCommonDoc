@@ -5,23 +5,31 @@ const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
 const runtimeProjectContext = require('./runtime-project-context.cjs');
+const wavePlanClass = require('./wave-plan-class.cjs');
+const verdictStore = require('./verdict-artifact-store.cjs');
 
-const SCHEMA = 'wave-phase-state/v1';
+const SCHEMA = 'wave-phase-state/v2';
+const LEGACY_SCHEMA = 'wave-phase-state/v1';
 const PHASES = Object.freeze(['PREP', 'EXECUTE', 'VERIFY_FINAL', 'QG', 'COMPLETE']);
 const NEXT = Object.freeze({ PREP: 'EXECUTE', EXECUTE: 'VERIFY_FINAL', VERIFY_FINAL: 'QG', QG: 'COMPLETE' });
 const SLUG_RE = /^[A-Za-z0-9._-]+$/;
 const ROLE_RE = /^arch-[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/;
 const LIFECYCLE_ROLE_RE = /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/;
 const ISO_UTC_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/;
-const STATE_KEYS = Object.freeze(['baseline_head', 'created_at', 'execution_mode', 'head', 'lifecycle_roles',
-  'phase', 'plan_sha256', 'required_roles', 'revision', 'schema', 'transitions', 'updated_at', 'wave_class', 'wave_slug'].sort());
+const STATE_KEYS = Object.freeze(['baseline_head', 'created_at', 'cycle', 'execution_mode', 'head', 'lifecycle_roles',
+  'phase', 'plan_sha256', 'required_roles', 'revision', 'schema', 'transitions', 'updated_at', 'verification_epoch',
+  'wave_class', 'wave_slug'].sort());
 // A state initialized from a Pass A draft also records that fact, so the one legitimate re-binding to the final PLAN can
 // be recognized. States written before this key existed simply lack it and are never rebindable.
 const STATE_KEYS_WITH_DRAFT = Object.freeze(STATE_KEYS.concat(['plan_draft']).sort());
 const DRAFT_PLAN_MARKER = 'STATUS: DRAFT-CONTEXT-PENDING';
-const TRANSITION_KEYS = Object.freeze(['at', 'evidence', 'from', 'from_head', 'to', 'to_head']);
+const TRANSITION_KEYS = Object.freeze(['at', 'cycle', 'evidence', 'from', 'from_head', 'kind', 'revision', 'to',
+  'to_head', 'verification_epoch']);
 const LOCK_WAIT_MS = 2000;
-const WAVE_CLASSES = Object.freeze(['HARNESS', 'DOC', 'FAST-PATH']);
+const MAX_REWORK_CYCLES = 3;
+const QG_ATTEMPT_SCHEMA = 'wave-qg-attempt/v1';
+const PREVERIFY_SCHEMA = 'wave-preverify-receipt/v1';
+const WAVE_CLASSES = wavePlanClass.WAVE_CLASSES;
 
 function sha256(bytes) { return crypto.createHash('sha256').update(bytes).digest('hex'); }
 function canonicalRoot(root) { return fs.realpathSync(path.resolve(root)); }
@@ -130,6 +138,24 @@ function atomicWrite(target, value) {
     }
   } finally { try { if (fs.existsSync(tmp)) fs.unlinkSync(tmp); } catch { /* private temp cleanup */ } }
 }
+function atomicCreate(root, target, value) {
+  ensureStateDirectory(root, path.dirname(target));
+  const noFollow = typeof fs.constants.O_NOFOLLOW === 'number' ? fs.constants.O_NOFOLLOW : 0;
+  const fd = fs.openSync(target, fs.constants.O_CREAT | fs.constants.O_EXCL | fs.constants.O_WRONLY | noFollow, 0o600);
+  let complete = false;
+  try {
+    fs.writeFileSync(fd, JSON.stringify(value, null, 2) + '\n', 'utf8');
+    fs.fsyncSync(fd);
+    complete = true;
+  } finally {
+    fs.closeSync(fd);
+    if (!complete) { try { fs.unlinkSync(target); } catch { /* failed publication stays fail-closed */ } }
+  }
+  if (process.platform !== 'win32') {
+    const parent = fs.openSync(path.dirname(target), fs.constants.O_RDONLY);
+    try { fs.fsyncSync(parent); } finally { fs.closeSync(parent); }
+  }
+}
 function pathsFor(root, slug) {
   assertSlug(slug);
   const canonical = canonicalRoot(root);
@@ -174,31 +200,7 @@ function isDraftPlan(planText) {
   const structural = structuralLineFlags(lines);
   return lines.some((line, index) => structural[index] && line.trim() === DRAFT_PLAN_MARKER);
 }
-function parsePlanClass(planText) {
-  const lines = planText.split(/\r?\n/);
-  const structural = structuralLineFlags(lines);
-
-  const headings = [];
-  for (let index = 0; index < lines.length; index += 1) {
-    if (structural[index] && /^#{2,3}[ \t]+Wave[ \t]+Class[ \t]*$/.test(lines[index])) headings.push(index);
-  }
-  if (headings.length === 0) throw new Error('WAVE_CLASS_SECTION_MISSING');
-  if (headings.length !== 1) throw new Error('WAVE_CLASS_SECTION_AMBIGUOUS');
-
-  const declarations = [];
-  for (let index = headings[0] + 1; index < lines.length; index += 1) {
-    if (!structural[index]) continue;
-    if (/^#{1,6}[ \t]+/.test(lines[index])) break;
-    if (/^[ \t]*(?:-[ \t]+)?\*\*Class\*\*:/.test(lines[index])) declarations.push(lines[index]);
-  }
-  if (declarations.length === 0) throw new Error('PLAN_WAVE_CLASS_MISSING');
-  if (declarations.length !== 1) throw new Error('PLAN_WAVE_CLASS_AMBIGUOUS');
-
-  const match = /^[ \t]*(?:-[ \t]+)?\*\*Class\*\*:[ \t]*(?:`([A-Za-z0-9][A-Za-z0-9_-]*)`|([A-Za-z0-9][A-Za-z0-9_-]*))[ \t]*[.,;:!?]?[ \t]*$/.exec(declarations[0]);
-  const className = match && (match[1] || match[2]);
-  if (!className || !WAVE_CLASSES.includes(className)) throw new Error('INVALID_WAVE_CLASS');
-  return className;
-}
+const parsePlanClass = wavePlanClass.parsePlanClass;
 function readClassSentinel(root, sentinelPath) {
   if (!fs.existsSync(sentinelPath)) throw new Error('WAVE_CLASS_SENTINEL_MISSING');
   let value;
@@ -261,7 +263,7 @@ function lifecycleRoles(root, className, declaredArchitects) {
 function currentInputs(root, slug) {
   const p = pathsFor(root, slug);
   const planBytes = readRootFile(p.root, p.plan);
-  const planText = planBytes.toString('utf8');
+  const planText = wavePlanClass.decodePlanBytes(planBytes);
   const planClass = parsePlanClass(planText);
   const sentinelClass = readClassSentinel(p.root, p.classSentinel);
   if (sentinelClass !== planClass) {
@@ -286,13 +288,20 @@ function validateStateShape(state) {
     || typeof state.wave_class !== 'string' || !SLUG_RE.test(state.wave_class)
     || !Number.isInteger(state.revision) || state.revision < 0 || !Array.isArray(state.transitions)
     || state.revision !== state.transitions.length
+    || !Number.isInteger(state.cycle) || state.cycle < 0 || state.cycle > MAX_REWORK_CYCLES
+    || !Number.isInteger(state.verification_epoch) || state.verification_epoch < 0
     || !ISO_UTC_RE.test(state.created_at || '') || !ISO_UTC_RE.test(state.updated_at || '')
     || !['persistent', 'ephemeral', 'disk-only'].includes(state.execution_mode)) {
     throw new Error('INVALID_PHASE_STATE');
   }
   for (const transition of state.transitions) {
     if (!exactKeys(transition, TRANSITION_KEYS) || !PHASES.includes(transition.from) || !PHASES.includes(transition.to)
-      || NEXT[transition.from] !== transition.to || !ISO_UTC_RE.test(transition.at || '')
+      || !['advance', 'rework'].includes(transition.kind)
+      || (transition.kind === 'advance' ? NEXT[transition.from] !== transition.to : transition.from !== 'QG' || transition.to !== 'EXECUTE')
+      || !Number.isInteger(transition.revision) || transition.revision < 1
+      || !Number.isInteger(transition.cycle) || transition.cycle < 0 || transition.cycle > MAX_REWORK_CYCLES
+      || !Number.isInteger(transition.verification_epoch) || transition.verification_epoch < 0
+      || !ISO_UTC_RE.test(transition.at || '')
       || !/^[0-9a-f]{40}$/.test(transition.from_head || '') || !/^[0-9a-f]{40}$/.test(transition.to_head || '')
       || !Array.isArray(transition.evidence)) throw new Error('INVALID_PHASE_STATE');
     for (const evidence of transition.evidence) {
@@ -300,24 +309,67 @@ function validateStateShape(state) {
         && evidence.decision === 'approve' && ROLE_RE.test(evidence.role || '') && typeof evidence.path === 'string';
       const qgEvidence = exactKeys(evidence, ['path', 'sha256'])
         && typeof evidence.path === 'string' && /^[0-9a-f]{64}$/.test(evidence.sha256 || '');
-      if (!verdictEvidence && !qgEvidence) throw new Error('INVALID_PHASE_STATE');
+      const receiptEvidence = exactKeys(evidence, ['attempt', 'kind', 'path', 'sha256'])
+        && evidence.kind === 'qg-attempt' && Number.isInteger(evidence.attempt) && evidence.attempt > 0
+        && typeof evidence.path === 'string' && /^[0-9a-f]{64}$/.test(evidence.sha256 || '');
+      const preverifyEvidence = exactKeys(evidence, ['kind', 'path', 'sha256'])
+        && evidence.kind === 'preverify' && typeof evidence.path === 'string'
+        && /^[0-9a-f]{64}$/.test(evidence.sha256 || '');
+      if (!verdictEvidence && !qgEvidence && !receiptEvidence && !preverifyEvidence) throw new Error('INVALID_PHASE_STATE');
     }
   }
   let expectedPhase = 'PREP';
   let expectedHead = state.baseline_head;
+  let expectedCycle = 0;
+  let expectedEpoch = 0;
+  let expectedRevision = 1;
   let previousTime = new Date(state.created_at).getTime();
   for (const transition of state.transitions) {
     const at = new Date(transition.at).getTime();
-    if (transition.from !== expectedPhase || transition.from_head !== expectedHead || at < previousTime) {
+    if (transition.from !== expectedPhase || transition.from_head !== expectedHead || at < previousTime
+      || transition.revision !== expectedRevision) {
+      throw new Error('INVALID_PHASE_STATE');
+    }
+    if (transition.kind === 'rework') { expectedCycle += 1; expectedEpoch += 1; }
+    if (transition.cycle !== expectedCycle || transition.verification_epoch !== expectedEpoch) {
       throw new Error('INVALID_PHASE_STATE');
     }
     expectedPhase = transition.to;
     expectedHead = transition.to_head;
+    expectedRevision += 1;
     previousTime = at;
   }
-  if (state.phase !== expectedPhase || state.head !== expectedHead
+  if (state.phase !== expectedPhase || state.head !== expectedHead || state.cycle !== expectedCycle
+    || state.verification_epoch !== expectedEpoch
     || new Date(state.updated_at).getTime() < previousTime) throw new Error('INVALID_PHASE_STATE');
   return state;
+}
+
+function migrateV1State(root, slug, statePath, rawState) {
+  if (!rawState || rawState.schema !== LEGACY_SCHEMA || !Array.isArray(rawState.transitions)) return null;
+  let cycle = 0;
+  let verificationEpoch = 0;
+  let decisionless = false;
+  const transitions = rawState.transitions.map((transition, index) => ({
+    ...transition,
+    evidence: (transition.evidence || []).map((entry) => {
+      if (exactKeys(entry, ['path', 'role'])) { decisionless = true; return { ...entry, decision: 'approve' }; }
+      return entry;
+    }),
+    kind: 'advance', revision: index + 1, cycle, verification_epoch: verificationEpoch,
+  }));
+  const candidate = { ...rawState, schema: SCHEMA, cycle, verification_epoch: verificationEpoch, transitions };
+  validateStateShape(candidate);
+  if (decisionless) {
+    for (const transition of candidate.transitions.filter((item) => item.from === 'PREP' || item.from === 'VERIFY_FINAL')) {
+      for (const evidence of transition.evidence) {
+        const validation = validateVerdictSource(root, slug, candidate, transition, evidence);
+        if (!validation.ok) throw new Error(`LEGACY_PHASE_STATE_VERDICT_INVALID:${evidence.role}:${validation.reason}`);
+      }
+    }
+  }
+  atomicWrite(statePath, candidate);
+  return candidate;
 }
 function validateVerdictSource(root, slug, state, transition, evidence) {
   const phase = transition.from === 'PREP' ? 'prep' : 'verify-final';
@@ -380,6 +432,8 @@ function migrateLegacyDecisionlessState(root, slug, statePath, rawState) {
 function readStateUnlocked(root, slug) {
   const p = pathsFor(root, slug);
   const rawState = JSON.parse(readRootFile(p.root, p.state).toString('utf8'));
+  const upgraded = migrateV1State(p.root, slug, p.state, rawState);
+  if (upgraded) return upgraded;
   try { return validateStateShape(rawState); }
   catch (originalError) {
     const migrated = migrateLegacyDecisionlessState(p.root, slug, p.state, rawState);
@@ -431,10 +485,161 @@ function initialize(root, slug, expectedPlanDigest = null) {
       plan_sha256: inputs.planDigest, baseline_head: inputs.head, head: inputs.head, phase: 'PREP',
       required_roles: inputs.roles, lifecycle_roles: inputs.lifecycleRoles, execution_mode: inputs.executionMode,
       plan_draft: inputs.planDraft, revision: 0, created_at: now, updated_at: now,
+      cycle: 0, verification_epoch: 0,
       transitions: [],
     };
     atomicWrite(inputs.state, state);
     return state;
+  });
+}
+function assertExpectedRevision(state, expectedRevision) {
+  if (!Number.isInteger(expectedRevision) || expectedRevision < 0) throw new Error('EXPECTED_REVISION_REQUIRED');
+  if (state.revision !== expectedRevision) throw new Error(`PHASE_STATE_CAS_MISMATCH:expected=${expectedRevision}:actual=${state.revision}`);
+}
+function trackedTreeClean(root) {
+  const result = spawnSync('git', ['status', '--porcelain', '--untracked-files=no'], { cwd: root, encoding: 'utf8', timeout: 5000 });
+  if (result.status !== 0) throw new Error('GIT_STATUS_UNAVAILABLE');
+  return (result.stdout || '').trim() === '';
+}
+function ensureWaveControlIgnored(root, slug) {
+  const result = spawnSync('git', ['rev-parse', '--git-common-dir'], { cwd: root, encoding: 'utf8', timeout: 5000 });
+  if (result.status !== 0) throw new Error('GIT_COMMON_DIR_UNAVAILABLE');
+  const commonDir = path.resolve(root, result.stdout.trim());
+  const exclude = path.join(commonDir, 'info', 'exclude');
+  const rule = `.planning/wave-${slug}/control/`;
+  const current = fs.existsSync(exclude) ? fs.readFileSync(exclude, 'utf8') : '';
+  if (current.split(/\r?\n/).some((line) => line.trim() === rule)) return;
+  fs.mkdirSync(path.dirname(exclude), { recursive: true });
+  fs.appendFileSync(exclude, `${current && !current.endsWith('\n') ? '\n' : ''}${rule}\n`);
+}
+function relativeReceiptPath(root, target) {
+  const relative = path.relative(root, target).split(path.sep).join('/');
+  if (!relative || relative.startsWith('../') || path.isAbsolute(relative)) throw new Error('RECEIPT_OUTSIDE_ROOT');
+  return relative;
+}
+function preverify(root, slug, options = {}) {
+  const inputs = currentInputs(root, slug);
+  assertInitialized(inputs);
+  return withStateLock(inputs.root, inputs.state, () => {
+    const state = readStateUnlocked(root, slug);
+    assertExpectedRevision(state, options.expectedRevision);
+    if (state.phase !== 'EXECUTE') throw new Error('PREVERIFY_OUTSIDE_EXECUTE');
+    if (state.plan_sha256 !== inputs.planDigest) throw new Error('PHASE_STATE_PLAN_DRIFT');
+    if (!trackedTreeClean(inputs.root)) throw new Error('PREVERIFY_TRACKED_TREE_DIRTY');
+    ensureWaveControlIgnored(inputs.root, slug);
+    const receipt = {
+      schema: PREVERIFY_SCHEMA, wave_slug: slug, plan_sha256: state.plan_sha256, head: inputs.head,
+      state_revision: state.revision, cycle: state.cycle, verification_epoch: state.verification_epoch,
+      created_at: new Date().toISOString(),
+    };
+    const target = path.join(inputs.root, '.planning', `wave-${slug}`, 'control', 'preverify',
+      `cycle-${state.cycle}-revision-${state.revision}-${inputs.head}.json`);
+    try { atomicCreate(inputs.root, target, receipt); } catch (error) {
+      if (error && error.code === 'EEXIST') {
+        const existing = readBoundReceipt(inputs.root, target, {
+          schema: PREVERIFY_SCHEMA, wave_slug: slug, plan_sha256: state.plan_sha256, head: inputs.head,
+          state_revision: state.revision, cycle: state.cycle, verification_epoch: state.verification_epoch,
+        }, 'PREVERIFY_RECEIPT_CONFLICT');
+        return { ...existing.value, path: existing.path };
+      }
+      throw error;
+    }
+    return { ...receipt, path: relativeReceiptPath(inputs.root, target) };
+  });
+}
+function readBoundReceipt(root, receiptPath, expected, invalidReason) {
+  if (typeof receiptPath !== 'string' || receiptPath.length === 0) throw new Error(invalidReason + ':missing');
+  const target = path.isAbsolute(receiptPath || '') ? receiptPath : path.resolve(root, receiptPath || '');
+  const bytes = readRootFile(root, target);
+  let value;
+  try { value = JSON.parse(bytes.toString('utf8')); } catch { throw new Error(invalidReason); }
+  if (!exactKeys(value, Object.keys(expected).concat(['created_at']).sort())
+    || !ISO_UTC_RE.test(value.created_at || '')
+    || !bytes.equals(Buffer.from(JSON.stringify(value, null, 2) + '\n', 'utf8'))) throw new Error(invalidReason);
+  for (const [key, expectedValue] of Object.entries(expected)) {
+    if (value[key] !== expectedValue) throw new Error(invalidReason + ':' + key);
+  }
+  return { bytes, value, path: relativeReceiptPath(root, target) };
+}
+function readQGAttemptReceipt(root, slug, receiptPath, expected, invalidReason) {
+  if (typeof receiptPath !== 'string' || receiptPath.length === 0) throw new Error(invalidReason + ':missing');
+  const target = path.isAbsolute(receiptPath || '') ? receiptPath : path.resolve(root, receiptPath || '');
+  const bytes = readRootFile(root, target);
+  let value;
+  try { value = JSON.parse(bytes.toString('utf8')); } catch { throw new Error(invalidReason); }
+  const keys = ['attempt', 'checks', 'created_at', 'cycle', 'head', 'plan_sha256', 'schema', 'state_revision',
+    'verification_epoch', 'verdict', 'wave_slug'].sort();
+  if (!exactKeys(value, keys) || !ISO_UTC_RE.test(value.created_at || '') || !Number.isInteger(value.attempt)
+    || value.attempt < 1 || !value.checks || typeof value.checks !== 'object' || Array.isArray(value.checks)
+    || !bytes.equals(Buffer.from(JSON.stringify(value, null, 2) + '\n', 'utf8'))) throw new Error(invalidReason);
+  for (const [key, expectedValue] of Object.entries(expected)) {
+    if (value[key] !== expectedValue) throw new Error(invalidReason + ':' + key);
+  }
+  const canonicalTarget = path.join(root, '.androidcommondoc', 'wave-control', slug, 'qg-attempts',
+    `cycle-${value.cycle}`, `attempt-${value.attempt}.json`);
+  if (path.resolve(target) !== path.resolve(canonicalTarget)) throw new Error(invalidReason + ':path');
+  return { bytes, value, path: relativeReceiptPath(root, target) };
+}
+function qgAttempt(root, slug, verdict, options = {}) {
+  if (!['PASS', 'FAIL'].includes(verdict)) throw new Error('INVALID_QG_VERDICT');
+  const inputs = currentInputs(root, slug);
+  assertInitialized(inputs);
+  return withStateLock(inputs.root, inputs.state, () => {
+    const state = readStateUnlocked(root, slug);
+    assertExpectedRevision(state, options.expectedRevision);
+    if (state.phase !== 'QG') throw new Error('QG_ATTEMPT_OUTSIDE_QG');
+    if (state.plan_sha256 !== inputs.planDigest || state.head !== inputs.head) throw new Error('PHASE_STATE_INPUT_DRIFT');
+    const directory = path.join(inputs.root, '.androidcommondoc', 'wave-control', slug, 'qg-attempts', `cycle-${state.cycle}`);
+    ensureStateDirectory(inputs.root, directory);
+    const entries = fs.readdirSync(directory);
+    if (entries.some((name) => !/^attempt-[1-9][0-9]*\.json$/.test(name))) throw new Error('QG_ATTEMPT_DIRECTORY_INVALID');
+    const numbers = entries.map((name) => Number(/^attempt-([1-9][0-9]*)\.json$/.exec(name)[1])).sort((a, b) => a - b);
+    if (numbers.some((number, index) => number !== index + 1)) throw new Error('QG_ATTEMPT_SEQUENCE_INVALID');
+    const attempt = numbers.length + 1;
+    const receipt = {
+      schema: QG_ATTEMPT_SCHEMA, verdict, wave_slug: slug, plan_sha256: state.plan_sha256, head: state.head,
+      state_revision: state.revision, cycle: state.cycle, verification_epoch: state.verification_epoch, attempt,
+      created_at: new Date().toISOString(), checks: options.checks && typeof options.checks === 'object' ? options.checks : {},
+    };
+    const target = path.join(directory, `attempt-${attempt}.json`);
+    atomicCreate(inputs.root, target, receipt);
+    return { ...receipt, path: relativeReceiptPath(inputs.root, target) };
+  });
+}
+function rework(root, slug, options = {}) {
+  const inputs = currentInputs(root, slug);
+  assertInitialized(inputs);
+  return withStateLock(inputs.root, inputs.state, () => {
+    const state = readStateUnlocked(root, slug);
+    assertExpectedRevision(state, options.expectedRevision);
+    if (state.phase !== 'QG') throw new Error('REWORK_OUTSIDE_QG');
+    if (state.cycle >= MAX_REWORK_CYCLES) throw new Error('REWORK_CYCLE_LIMIT');
+    if (state.plan_sha256 !== inputs.planDigest || state.head !== inputs.head) throw new Error('PHASE_STATE_INPUT_DRIFT');
+    const receipt = readQGAttemptReceipt(inputs.root, slug, options.failReceipt, {
+      schema: QG_ATTEMPT_SCHEMA, verdict: 'FAIL', wave_slug: slug, plan_sha256: state.plan_sha256,
+      head: state.head, state_revision: state.revision, cycle: state.cycle,
+      verification_epoch: state.verification_epoch,
+    }, 'QG_FAIL_RECEIPT_INVALID');
+    const digest = sha256(receipt.bytes);
+    if (state.transitions.some((item) => item.evidence.some((entry) => entry.sha256 === digest))) {
+      throw new Error('QG_FAIL_RECEIPT_REPLAY');
+    }
+    const now = new Date().toISOString();
+    const updated = {
+      ...state, phase: 'EXECUTE', cycle: state.cycle + 1, verification_epoch: state.verification_epoch + 1,
+      revision: state.revision + 1, updated_at: now,
+      transitions: state.transitions.concat([{
+        kind: 'rework', revision: state.revision + 1, from: 'QG', to: 'EXECUTE', at: now,
+        from_head: state.head, to_head: state.head, cycle: state.cycle + 1,
+        verification_epoch: state.verification_epoch + 1,
+        evidence: [{ kind: 'qg-attempt', attempt: receipt.value.attempt, path: receipt.path, sha256: digest }],
+      }]),
+    };
+    // The CAS state write is the sole commit point. Prior verdicts and proofs remain immutable audit evidence; they
+    // become inert because the next VERIFY_FINAL verdict must cite the new cycle's preverify receipt and QG authority
+    // accepts only attempts bound to the current cycle/epoch/revision.
+    atomicWrite(inputs.state, updated);
+    return updated;
   });
 }
 // Read-only admission preflight. Unlike initialize(), this never creates the
@@ -471,6 +676,22 @@ function verifyVerdicts(root, slug, state, phase, verdicts) {
       { from: phase === 'prep' ? 'PREP' : 'VERIFY_FINAL', from_head: state.head },
       { role, path: resolvedVerdictPath });
     if (!validation.ok) throw new Error('VERDICT_NOT_AUTHORIZING:' + role + ':' + validation.reason);
+    if (phase === 'verify-final') {
+      const boundary = [...state.transitions].reverse().find((item) => item.kind === 'advance'
+        && item.to === 'VERIFY_FINAL' && item.cycle === state.cycle
+        && item.verification_epoch === state.verification_epoch);
+      const preverifyEvidence = boundary && boundary.evidence.find((item) => item.kind === 'preverify');
+      if (!preverifyEvidence) throw new Error('VERIFY_FINAL_PREVERIFY_BINDING_MISSING');
+      const canonical = canonicalRoot(root);
+      const waveDir = path.join(canonical, '.planning', `wave-${slug}`);
+      let verdict;
+      try { verdict = JSON.parse(verdictStore.readConfinedFile(waveDir, resolvedVerdictPath).bytes.toString('utf8')); }
+      catch { throw new Error('VERDICT_NOT_AUTHORIZING:' + role + ':preverify-binding'); }
+      const expectedPath = path.relative(waveDir, path.join(canonical, preverifyEvidence.path)).split(path.sep).join('/');
+      const bound = Array.isArray(verdict.evidence) && verdict.evidence.some((entry) => entry.kind === 'opaque-file'
+        && entry.path === expectedPath && entry.sha256 === preverifyEvidence.sha256);
+      if (!bound) throw new Error('VERDICT_NOT_AUTHORIZING:' + role + ':preverify-binding');
+    }
     // The validator intentionally exposes only binding booleans plus
     // `authorizes`; it does not echo the source decision. Once `authorizes` is
     // true, the closed verdict contract has already proven decision=approve.
@@ -509,15 +730,37 @@ function transition(root, slug, to, options = {}) {
   assertInitialized(inputs);
   return withStateLock(inputs.root, inputs.state, () => {
   const state = readStateUnlocked(root, slug);
+  assertExpectedRevision(state, options.expectedRevision);
   if (state.plan_sha256 !== inputs.planDigest) throw new Error('PHASE_STATE_PLAN_DRIFT');
   if (NEXT[state.phase] !== to) throw new Error('ILLEGAL_PHASE_TRANSITION:' + state.phase + '->' + to);
   const headChanged = state.head !== inputs.head;
+  const isFinalBoundary = state.phase === 'EXECUTE' && to === 'VERIFY_FINAL';
   const permitsFinalRebind = state.phase === 'EXECUTE' && to === 'VERIFY_FINAL' && options.rebindHead === true;
   if (headChanged && !permitsFinalRebind) throw new Error('PHASE_STATE_HEAD_DRIFT');
   let evidence = [];
   if (state.phase === 'PREP') evidence = verifyVerdicts(inputs.root, slug, state, 'prep', options.verdicts);
   if (state.phase === 'VERIFY_FINAL') evidence = verifyVerdicts(inputs.root, slug, state, 'verify-final', options.verdicts);
+  if (isFinalBoundary) {
+    if (!trackedTreeClean(inputs.root)) throw new Error('FINAL_HEAD_REBIND_TRACKED_TREE_DIRTY');
+    const receipt = readBoundReceipt(inputs.root, options.preverifyReceipt, {
+      schema: PREVERIFY_SCHEMA, wave_slug: slug, plan_sha256: state.plan_sha256, head: inputs.head,
+      state_revision: state.revision, cycle: state.cycle, verification_epoch: state.verification_epoch,
+    }, 'PREVERIFY_RECEIPT_INVALID');
+    evidence.push({ kind: 'preverify', path: receipt.path, sha256: sha256(receipt.bytes) });
+  }
   if (state.phase === 'QG') {
+    const attemptReceipt = readQGAttemptReceipt(inputs.root, slug, options.qgAttempt, {
+      schema: QG_ATTEMPT_SCHEMA, verdict: 'PASS', wave_slug: slug, plan_sha256: state.plan_sha256,
+      head: state.head, state_revision: state.revision, cycle: state.cycle,
+      verification_epoch: state.verification_epoch,
+    }, 'QG_PASS_RECEIPT_INVALID');
+    evidence.push({ kind: 'qg-attempt', attempt: attemptReceipt.value.attempt,
+      path: attemptReceipt.path, sha256: sha256(attemptReceipt.bytes) });
+    const qgBoundary = [...state.transitions].reverse().find((item) => item.kind === 'advance'
+      && item.to === 'QG' && item.cycle === state.cycle && item.verification_epoch === state.verification_epoch);
+    if (!qgBoundary || Date.parse(attemptReceipt.value.created_at) < Date.parse(qgBoundary.at)) {
+      throw new Error('QG_PASS_RECEIPT_STALE');
+    }
     for (const rel of ['.androidcommondoc/quality-gate.stamp', '.androidcommondoc/pre-pr.stamp', '.androidcommondoc/push-proof.json']) {
       const target = path.join(inputs.root, rel);
       let bytes;
@@ -529,6 +772,16 @@ function transition(root, slug, to, options = {}) {
       try { stamp = JSON.parse(readRootFile(inputs.root, path.join(inputs.root, rel)).toString('utf8')); }
       catch { throw new Error('QG_STAMP_MALFORMED:' + rel); }
       if (stamp.verdict !== 'PASS' || stamp.head !== inputs.head) throw new Error('QG_STAMP_NOT_CURRENT:' + rel);
+      if (!ISO_UTC_RE.test(stamp.timestamp || '') || Date.parse(stamp.timestamp) < Date.parse(qgBoundary.at)) {
+        throw new Error('QG_STAMP_STALE_FOR_CYCLE:' + rel);
+      }
+    }
+    let proof;
+    try { proof = JSON.parse(readRootFile(inputs.root, path.join(inputs.root, '.androidcommondoc/push-proof.json')).toString('utf8')); }
+    catch { throw new Error('QG_PROOF_INVALID'); }
+    const proofTime = proof.generated_at || proof.generatedAt;
+    if (!ISO_UTC_RE.test(proofTime || '') || Date.parse(proofTime) < Date.parse(qgBoundary.at)) {
+      throw new Error('QG_PROOF_STALE_FOR_CYCLE');
     }
     const invocation = qualityGateProofInvocation(inputs.root, slug, inputs.head);
     const proofCheck = spawnSync(invocation.executable, invocation.args,
@@ -539,7 +792,8 @@ function transition(root, slug, to, options = {}) {
   const updated = {
     ...state, head: permitsFinalRebind ? inputs.head : state.head,
     phase: to, revision: state.revision + 1, updated_at: transitionAt,
-    transitions: state.transitions.concat([{ from: state.phase, to, at: transitionAt,
+    transitions: state.transitions.concat([{ kind: 'advance', revision: state.revision + 1,
+      from: state.phase, to, at: transitionAt, cycle: state.cycle, verification_epoch: state.verification_epoch,
       from_head: state.head, to_head: permitsFinalRebind ? inputs.head : state.head, evidence }]),
   };
   atomicWrite(inputs.state, updated);
@@ -568,5 +822,6 @@ function lifecycleActions(root, slug, profile = 'auto') {
     mode: state.execution_mode, transport: 'runtime-role-lifecycle' }));
 }
 
-module.exports = { SCHEMA, PHASES, NEXT, initialize, inspect, readState, transition, status, lifecycleActions,
-  parsePlanClass, requiredRoles, lifecycleRoles, executionMode, qualityGateProofInvocation };
+module.exports = { SCHEMA, PHASES, NEXT, MAX_REWORK_CYCLES, initialize, inspect, readState, transition, rework,
+  preverify, qgAttempt, status, lifecycleActions, parsePlanClass, requiredRoles, lifecycleRoles, executionMode,
+  qualityGateProofInvocation };

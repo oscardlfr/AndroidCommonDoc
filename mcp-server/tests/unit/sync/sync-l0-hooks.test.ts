@@ -550,13 +550,18 @@ describe("source-referenced runtime installation", () => {
     expect(first.toolkitContentDigest).toMatch(/^[0-9a-f]{64}$/);
     const inventoryPaths = new Set(first.inventory?.map((entry) => entry.relative_path));
     expect(inventoryPaths.has("scripts/lib/runtime-consultation.cjs")).toBe(true);
+    expect(inventoryPaths.has("scripts/lib/runtime-session-renewal.cjs")).toBe(true);
+    expect(inventoryPaths.has("scripts/lib/runtime-session-lifetime.cjs")).toBe(true);
+    expect(inventoryPaths.has("scripts/lib/shell-command-intent.cjs")).toBe(true);
     expect(inventoryPaths.has("scripts/lib/runtime-consultation/primitives.cjs")).toBe(true);
     expect(inventoryPaths.has("scripts/lib/runtime-consultation/cli-argv.cjs")).toBe(true);
     expect(inventoryPaths.has("scripts/lib/runtime-consultation/git-identity.cjs")).toBe(true);
     expect(inventoryPaths.has("scripts/lib/runtime-consultation/coordination-paths.cjs")).toBe(true);
     expect(inventoryPaths.has("scripts/lib/runtime-role-lifecycle/claude-id01-startup.cjs")).toBe(true);
     expect(inventoryPaths.has("scripts/lib/runtime-bridge-codex/process-identity.cjs")).toBe(true);
+    expect(inventoryPaths.has("scripts/lib/context-provider-actor-authorization.cjs")).toBe(true);
     expect(inventoryPaths.has("scripts/lib/wave-control-plane.cjs")).toBe(true);
+    expect(inventoryPaths.has("scripts/lib/wave-plan-class.cjs")).toBe(true);
     expect(inventoryPaths.has("scripts/lib/verdict-evidence-contract-cli.cjs")).toBe(true);
     expect(inventoryPaths.has("scripts/lib/verdict-evidence-contract.cjs")).toBe(true);
     expect(inventoryPaths.has("scripts/lib/verdict-artifact-confinement.cjs")).toBe(true);
@@ -1056,6 +1061,13 @@ describe("source-referenced runtime installation", () => {
   it("mints and verifies a downstream QG receipt without copying the L0 harness", async () => {
     const installed = await installRuntimeConsumer(projectRoot, REAL_L0_ROOT);
     expect(installed.ok).toBe(true);
+    await mkdir(join(projectRoot, ".planning", "wave-runtime"), { recursive: true });
+    await writeFile(
+      join(projectRoot, ".planning", "wave-runtime", "PLAN.md"),
+      "### Wave Class\n\n- **Class**: FAST-PATH\n",
+      "utf8",
+    );
+    await writeFile(join(projectRoot, ".planning", "wave-runtime", "CLASS"), "FAST-PATH\n", "utf8");
     for (const args of [
       ["init", "-q"],
       ["config", "user.email", "test@example.invalid"],
@@ -1067,18 +1079,24 @@ describe("source-referenced runtime installation", () => {
       expect(git.status, git.stderr).toBe(0);
     }
     const head = spawnSync("git", ["rev-parse", "HEAD"], { cwd: projectRoot, encoding: "utf8" }).stdout.trim();
-    await mkdir(join(projectRoot, ".androidcommondoc", "wave-control"), { recursive: true });
-    await mkdir(join(projectRoot, ".planning", "wave-runtime"), { recursive: true });
-    await writeFile(join(projectRoot, ".androidcommondoc", "pre-pr.stamp"), JSON.stringify({
-      verdict: "PASS", timestamp: new Date().toISOString(), head,
-    }) + "\n");
-    await writeFile(join(projectRoot, ".androidcommondoc", "wave-control", "runtime.json"), JSON.stringify({
-      phase: "QG", head, plan_sha256: "a".repeat(64),
-    }) + "\n");
+    waveControl.initialize(projectRoot, "runtime");
+    waveControl.transition(projectRoot, "runtime", "EXECUTE", { expectedRevision: 0 });
+    const preverify = waveControl.preverify(projectRoot, "runtime", { expectedRevision: 1 });
+    waveControl.transition(projectRoot, "runtime", "VERIFY_FINAL", {
+      expectedRevision: 1, rebindHead: true, preverifyReceipt: preverify.path,
+    });
+    waveControl.transition(projectRoot, "runtime", "QG", { expectedRevision: 2 });
 
     const launcher = join(projectRoot, ".claude", "runtime", "l0-toolkit-launcher.cjs");
+    const prePr = spawnSync(process.execPath, [launcher, "run", "runtime-consumer-qg", "--project-root", projectRoot,
+      "--", "pre-pr", "--slug", "runtime", "--expected-revision", "3", "--project-gate", "PASS"], {
+      cwd: projectRoot, encoding: "utf8",
+    });
+    expect(prePr.status, prePr.stderr || prePr.stdout).toBe(0);
+    const qgAttempt = prePr.stdout.trim().split(/\s+/)[2];
+    expect(qgAttempt).toMatch(/qg-attempts/);
     const mint = spawnSync(process.execPath, [launcher, "run", "runtime-consumer-qg", "--project-root", projectRoot,
-      "--", "mint", "--slug", "runtime"], { cwd: projectRoot, encoding: "utf8" });
+      "--", "mint", "--slug", "runtime", "--qg-attempt", qgAttempt], { cwd: projectRoot, encoding: "utf8" });
     expect(mint.status, mint.stderr || mint.stdout).toBe(0);
     expect(mint.stdout).toContain("RUNTIME_CONSUMER_QG_MINTED");
     const verify = spawnSync(process.execPath, [launcher, "run", "runtime-consumer-qg", "--project-root", projectRoot,

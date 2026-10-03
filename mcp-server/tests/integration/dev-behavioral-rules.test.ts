@@ -169,11 +169,13 @@ describe('dev template structural invariants', () => {
     // Wave 1 (2026-08-24): +5 lines to test-specialist.md only — the planned
     // "Runtime Messaging Adapters" pointer section (cross-runtime consultation
     // routing doc reference) — test 382→387. ui/domain/data untouched.
+    // Runtime closure (2026-10-02): +8 lines per specialist for the launcher-
+    // routed pre-commit shift-left gate.
     const PER_TEMPLATE_LIMIT: Record<string, number> = {
-      'test-specialist.md': 387,
-      'ui-specialist.md': 334,
-      'domain-model-specialist.md': 234,
-      'data-layer-specialist.md': 228,
+      'test-specialist.md': 395,
+      'ui-specialist.md': 342,
+      'domain-model-specialist.md': 242,
+      'data-layer-specialist.md': 236,
     };
     for (const t of DEV_TEMPLATES) {
       const c = fs.readFileSync(path.join(TEMPLATES_DIR, t), 'utf-8');

@@ -1069,7 +1069,7 @@
       "description": "Run the canonical quality-gate protocol for the active wave with one full local Bats aggregate; required GitHub CI Gate remains merge authority.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:92935a3f00272eb8cd55a2ad9f8c9ddf0798166ea41361be0dcc427d5034c696",
+      "hash": "sha256:e44707ddb0b44a8df3b4363fb15f4b34188e38261a7b7002d88ff1d0cb098cb8",
       "dependencies": [],
       "frontmatter": {
         "name": "quality-gate",
@@ -1923,7 +1923,7 @@
       "description": "Integration architect. Mini-orchestrator: verifies compilation, DI wiring, navigation via MCP tools. Fixes wiring gaps, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:7b7529885a912992bfa1a743ef4284a490ab10989e40c011440e54d66cc58bdc",
+      "hash": "sha256:bbf1e4e9366aa14ae8dfa3f9adaaac00fbf136f220a3e8c2bc4ae2996c927065",
       "dependencies": [],
       "frontmatter": {
         "name": "arch-integration",
@@ -1939,7 +1939,7 @@
           "compilation"
         ],
         "token_budget": 4000,
-        "template_version": "1.32.4",
+        "template_version": "1.32.5",
         "skills": [
           "test",
           "extract-errors"
@@ -1953,7 +1953,7 @@
       "description": "Platform architecture architect. Mini-orchestrator: verifies KMP patterns via MCP tools, fixes violations directly or via delegation, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:9090cf17da9f0736aadad10993dd4cb2c2bd5cfaccf1f223102b37587e7ad5c2",
+      "hash": "sha256:e21e1c111e3daba5b2839019dde6f228378d6db2a510e72808ab0f916c7accef",
       "dependencies": [],
       "frontmatter": {
         "name": "arch-platform",
@@ -1968,7 +1968,7 @@
           "encoding"
         ],
         "token_budget": 4000,
-        "template_version": "1.36.4",
+        "template_version": "1.36.5",
         "skills": [
           "verify-kmp",
           "validate-patterns"
@@ -1982,7 +1982,7 @@
       "description": "Test quality architect. Mini-orchestrator: verifies TDD compliance, detects test gaps, delegates fixes to test-specialist, cross-verifies with other architects. Produces APPROVE/ESCALATE verdict.",
       "category": "testing",
       "tier": "core",
-      "hash": "sha256:661052bade0f805177b167e8597009a31a459bd4d15ca5bee95634ced60efc35",
+      "hash": "sha256:f7acfdbf3dfc06451fa6a701d0b8d10a77a4727a43cc403a03edf31890ac48b2",
       "dependencies": [],
       "frontmatter": {
         "name": "arch-testing",
@@ -1997,7 +1997,7 @@
           "test-quality"
         ],
         "token_budget": 4000,
-        "template_version": "1.41.4",
+        "template_version": "1.41.5",
         "skills": [
           "test",
           "test-full-parallel",
@@ -2156,7 +2156,7 @@
       "description": "Implements data layer — repositories, database, network, caching. Reports to arch-platform and arch-integration.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:e6e866274d783adb4bc1ad864a8da51a23bf3da5194e445d2aefdd58a5175993",
+      "hash": "sha256:996de62c2ec6852606448c91e418c875717c64ff778386d1643aac813b786558",
       "dependencies": [],
       "frontmatter": {
         "name": "data-layer-specialist",
@@ -2172,7 +2172,7 @@
           "caching"
         ],
         "token_budget": 3000,
-        "template_version": "1.20.0",
+        "template_version": "1.20.1",
         "memory": "project",
         "skills": [
           "test",
@@ -2302,7 +2302,7 @@
       "description": "Documentation updater. Updates roadmap, memory, CHANGELOG, specs after work. Ingests approved external patterns via MCP. Follows L0 patterns (frontmatter, line limits, hub structure).",
       "category": "guides",
       "tier": "extended",
-      "hash": "sha256:18b9f42f598b92d9a188b8a32f9d36200286b8b61c8647bd71769aeaf72b569a",
+      "hash": "sha256:1ddbd704a5585d25dbad587358f833ebdf07119e01f9559febf1555ecbd1bc56",
       "dependencies": [],
       "frontmatter": {
         "name": "doc-updater",
@@ -2318,7 +2318,7 @@
           "ingest"
         ],
         "token_budget": 2000,
-        "template_version": "2.13.3",
+        "template_version": "2.13.4",
         "skills": [
           "audit-docs",
           "readme-audit",
@@ -2333,7 +2333,7 @@
       "description": "Implements domain layer — models, use cases, business logic. Reports to arch-platform.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:397334f8e388746cc9b8045811246cfbbcd2562a20a427a9529c896fe9cdbc55",
+      "hash": "sha256:05fe2fc8cabefada334919bd80e6dcb2d0dfdf05e26f55c3f501ba12a3d1396a",
       "dependencies": [],
       "frontmatter": {
         "name": "domain-model-specialist",
@@ -2348,7 +2348,7 @@
           "business-logic"
         ],
         "token_budget": 3000,
-        "template_version": "1.20.0",
+        "template_version": "1.20.1",
         "memory": "project",
         "skills": [
           "test",
@@ -2363,7 +2363,7 @@
       "description": "Reviews {{DOMAIN}} layer for architecture compliance in {{PROJECT_NAME}}. Use when modifying {{MODULES}}.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:e3cd2abbc80c0d5886ac4268fa0b46ebe96c2169868ea99c70cfcb2a40779362",
+      "hash": "sha256:7c8e120edf1e89db106e442262452b7a7adc6cd941e7e4b920eb265d099109d9",
       "dependencies": [],
       "frontmatter": {
         "name": "feature-domain-specialist",
@@ -2377,7 +2377,7 @@
           "compliance"
         ],
         "token_budget": 3000,
-        "template_version": "1.2.0",
+        "template_version": "1.2.1",
         "memory": "project",
         "skills": [
           "test",
@@ -2535,14 +2535,14 @@
       "name": "planner",
       "type": "agent",
       "path": ".claude/agents/planner.md",
-      "description": "Single-use planning subagent. Reads context, specs, architecture to produce structured execution plans. Spawned without team_name; results land as PLAN.md on disk. Works alongside context-provider via SendMessage.",
+      "description": "Wave-scoped planning subagent. One actor owns Pass A and Pass B, is resumed through SendMessage, and writes PLAN.md on disk. Works alongside context-provider via SendMessage.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:2d78f43cd5a965691b3ad549aea098298653ac05e45de3fcb5e294d0afe64cf7",
+      "hash": "sha256:ca931d8c7f097ad04bf0acd544a75a04a8ce88c41f05f3759ff36f2423b54e5a",
       "dependencies": [],
       "frontmatter": {
         "name": "planner",
-        "description": "Single-use planning subagent. Reads context, specs, architecture to produce structured execution plans. Spawned without team_name; results land as PLAN.md on disk. Works alongside context-provider via SendMessage.",
+        "description": "Wave-scoped planning subagent. One actor owns Pass A and Pass B, is resumed through SendMessage, and writes PLAN.md on disk. Works alongside context-provider via SendMessage.",
         "tools": "Read, Write, Bash, SendMessage",
         "model": "sonnet",
         "domain": "development",
@@ -2553,7 +2553,7 @@
           "estimate"
         ],
         "token_budget": 4000,
-        "template_version": "1.22.6"
+        "template_version": "1.22.8"
       }
     },
     {
@@ -2705,7 +2705,7 @@
       "description": "QG owner (Phase 3). Runs sequential verification on the final committed HEAD after VERIFY-FINAL architect approval. Reports structured PASS/FAIL.",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:283d2741dc16528081fb6ef9f3a63f2f96c6e29bf3c7c4bc90072da80330a6aa",
+      "hash": "sha256:a10128821eb82299e43474b937be1b9c7dadcc4cd902975b18b741e8fca8638e",
       "dependencies": [],
       "frontmatter": {
         "name": "quality-gater",
@@ -2721,7 +2721,7 @@
           "detekt"
         ],
         "token_budget": 3000,
-        "template_version": "2.28.4"
+        "template_version": "2.28.6"
       }
     },
     {
@@ -2867,7 +2867,7 @@
       "description": "Implements quality tests and audits test patterns. Writes unit, integration, e2e, and Compose tests. Validates coverage, previews, hardcoded strings, and UDF patterns. Use for test audits and test implementation.",
       "category": "testing",
       "tier": "core",
-      "hash": "sha256:1d5779be78ffe7c4e5d43e4b60fc1aefa250e8fd022f42fb96c8b37aba0c7faf",
+      "hash": "sha256:d9e5e55462d648b733be03e1c699a20d83044d60143f8a23bc6ab0ce38f19dca",
       "dependencies": [],
       "frontmatter": {
         "name": "test-specialist",
@@ -2882,7 +2882,7 @@
           "tdd"
         ],
         "token_budget": 3000,
-        "template_version": "1.32.1",
+        "template_version": "1.32.2",
         "memory": "project",
         "skills": [
           "test",
@@ -2905,7 +2905,7 @@
       "description": "Owns mcp-server TypeScript source, .claude/hooks/*.js runtime code, scripts/lib runtime facades and internal CommonJS modules, and non-test shell tooling. Reports to arch-platform. Does NOT write test files (test-specialist's domain).",
       "category": "domain",
       "tier": "extended",
-      "hash": "sha256:80e697b6cba46ec96995d14f07ef2049515a8394b6f0e14fc4955f23b2c6865b",
+      "hash": "sha256:74b6f89829710c3fa4e7d8c09ee9aa87baa2effb2681f402e36a7a285b296a62",
       "dependencies": [],
       "frontmatter": {
         "name": "toolkit-specialist",
@@ -2924,7 +2924,7 @@
           "validator"
         ],
         "token_budget": 3000,
-        "template_version": "1.10.2"
+        "template_version": "1.10.3"
       }
     },
     {
@@ -2934,7 +2934,7 @@
       "description": "Reviews and implements Compose UI — accessibility, Material3, design system, previews, resource compliance. Audits and implements fixes for hardcoded strings, missing previews, broken UDF patterns, and a11y violations.",
       "category": "ui",
       "tier": "extended",
-      "hash": "sha256:867597ee810d770522d7ddcd3ffe48dd1d95fb1f650331d14a641726d0d5bd25",
+      "hash": "sha256:1364c555f1a209dece9b2cf657804517a1768095529f8c8614ce511552cd2e4b",
       "dependencies": [],
       "frontmatter": {
         "name": "ui-specialist",
@@ -2949,7 +2949,7 @@
           "material3"
         ],
         "token_budget": 3000,
-        "template_version": "1.22.0",
+        "template_version": "1.22.1",
         "memory": "project",
         "skills": [
           "accessibility",

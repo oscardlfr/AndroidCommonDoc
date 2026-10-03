@@ -30,7 +30,8 @@ test('the persistent bootstrap and the one-shot recipe embed the identical comma
 test('the one-shot recipe names the canonical CLI, the request, the coordination root and every target command', () => {
   const recipe = oneShotConsultationRecipe(INPUT);
   for (const fragment of [INPUT.consultationCliPath, INPUT.requestPath, INPUT.coordinationRoot, INPUT.role,
-    '["claim"]', '["lease-heartbeat"]', '["publish-result"]', 'no chain', 'b64url(result)']) {
+    '["claim"]', '["lease-heartbeat"]', '["publish-result"]', 'no-chain',
+    'Z=["--claim",artifact_ref]', 'b64url(result)', 'invalid:stop']) {
     assert.ok(recipe.includes(fragment), 'recipe must contain ' + fragment + ': ' + recipe);
   }
   assert.deepStrictEqual(JSON.parse(recipe.split('\n')[0]), { n: 'node', p: INPUT.projectRoot, r: INPUT.role });

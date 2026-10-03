@@ -22,7 +22,7 @@ description: "Agent roster and specialist ownership map for the main-agent orche
 | **Guardians** | `release-guardian-agent`, `cross-platform-validator`, `privacy-auditor`, `api-rate-limit-auditor`, `doc-alignment-agent` | Architects, main agent |
 | **Cross-cutting** | `context-provider`, `doc-updater` | main agent (single-use `Agent` subagents; optional background peers) |
 | **Quality Gate** | `quality-gater` | main agent (single-use `Agent` subagent, Phase 3; optional background peer) |
-| **Planning** | `planner` | main agent (single-use `Agent` subagent) |
+| **Planning** | `planner` | main agent (one wave-scoped `Agent`, resumed across both planning passes) |
 | **Support** | `debugger`, `verifier`, `advisor`, `researcher`, `codebase-mapper` | main agent (direct invocation) |
 | **Business** | `{{product-strategist}}`, `{{content-creator}}`, `{{landing-page-strategist}}` | team-lead (sub-agents for cross-dept) |
 

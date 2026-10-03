@@ -7,8 +7,8 @@
 // per-agent flags (old behavior) never matched between PostToolUse (SendMessage)
 // and PreToolUse (Bash/Grep). Session-scoped flag restores dev autonomy.
 //
-// BL-W35-06 fix tag: per-agent arch-response flag for specialists.
-// Specialists require per-agent arch-responded flag (written by consulted.js on arch→specialist).
+// BL-W35-06 successor: mediated recipients require a durable authorization
+// bound to their exact session_id + agent_id and current wave/PLAN.
 // Non-specialist non-exempt agents use global session flag as before.
 //
 // Exempt via agent_type prefix match: context-provider, project-manager, team-lead.
@@ -16,7 +16,6 @@
 // Fail open on any error (never block due to script failure).
 // Emergency escape:
 //   rm "$(node -e "console.log(require('os').tmpdir())")/claude-cp-consulted-*.flag"
-//   rm "$(node -e "console.log(require('os').tmpdir())")/claude-arch-responded-*.flag"
 // Or: CLAUDE_CP_GATE_DISABLED=1 (fail-open).
 
 const fs = require('fs');
@@ -36,18 +35,21 @@ let runtimeConsultationLib = null;
 let runtimeHostClaude = null;
 let runtimeCollaborationEntrypoints = null;
 let runtimeProjectContext = null;
+let actorAuthorization = null;
 try {
   runtimeRoleLifecycle = require('../../scripts/lib/runtime-role-lifecycle.cjs');
   runtimeConsultationLib = require('../../scripts/lib/runtime-consultation.cjs');
   runtimeHostClaude = require('../../scripts/lib/runtime-host-claude.cjs');
   runtimeCollaborationEntrypoints = require('../../scripts/lib/runtime-collaboration-entrypoints.cjs');
   runtimeProjectContext = require('../../scripts/lib/runtime-project-context.cjs');
+  actorAuthorization = require('../../scripts/lib/context-provider-actor-authorization.cjs');
 } catch {
   runtimeRoleLifecycle = null;
   runtimeConsultationLib = null;
   runtimeHostClaude = null;
   runtimeCollaborationEntrypoints = null;
   runtimeProjectContext = null;
+  actorAuthorization = null;
 }
 
 function sanitizeId(id) {
@@ -624,26 +626,6 @@ function hasCurrentAcceptedConsultation(ctx, architectIdentity, callerIdentity) 
     }
   }
   return false;
-}
-
-// The architect identity a specialist's arch-response flag JSON payload
-// carries: role preferentially from `architect_role` (test-fixture shape),
-// falling back to `written_by` (the REAL context-provider-consulted.js flag
-// shape, where written_by already IS the sending architect's own
-// agent_type); instance from `agent_id`, identical field/semantics in both
-// shapes. M6+M7 requester-authority closure (Group D): `sessionId` from
-// `session_id` -- both shapes already carry it (context-provider-consulted.js
-// stamps the architect's own PostToolUse session_id when it writes the
-// flag) -- required alongside role/instanceId so the caller can resolve the
-// exact host-private RequesterBinding this identity must correlate against.
-function architectIdentityFromFlagMeta(meta) {
-  if (!meta || typeof meta !== 'object') return null;
-  const role = (typeof meta.architect_role === 'string' && meta.architect_role)
-    || (typeof meta.written_by === 'string' && meta.written_by) || null;
-  const instanceId = typeof meta.agent_id === 'string' ? meta.agent_id : null;
-  const sessionId = typeof meta.session_id === 'string' ? meta.session_id : null;
-  if (!role || !instanceId || !sessionId) return null;
-  return { role, instanceId, sessionId };
 }
 
 // Given the LEGACY mechanism's own allow/deny (`legacyAllowed`), decides
@@ -2462,8 +2444,26 @@ process.stdin.on('end', () => {
       }
       process.exit(0);
     }
-    // Mediated recipients (specialists and the planner) rely on an arch-* answer, not on a consult of their own.
-    const isSpecialist = MEDIATED_RECIPIENT_ROLES.some(s => agentType === s || agentType.startsWith(s));
+    // Mediated recipients (specialists and the planner) rely on an arch-*
+    // answer, not on a consult of their own. Positive classification comes
+    // from the stable actor registry, never from agent_type. The legacy
+    // presentation-name check is retained only as a restrictive fail-closed
+    // claim: an unbound caller claiming such a name still enters the stricter
+    // branch, but the name can never make authorization succeed.
+    let stableMediatedRecipient = false;
+    try {
+      const stableActor = actorAuthorization && actorAuthorization.resolveStableActor(
+        process.env.CLAUDE_PROJECT_DIR || process.cwd(),
+        { sessionId: data.session_id, agentId: data.agent_id },
+      );
+      stableMediatedRecipient = !!(
+        stableActor && stableActor.ok && MEDIATED_RECIPIENT_ROLES.includes(stableActor.role)
+      );
+    } catch { stableMediatedRecipient = false; }
+    const restrictiveMediatedClaim = MEDIATED_RECIPIENT_ROLES.some(
+      (role) => agentType === role || agentType.startsWith(role),
+    );
+    const isSpecialist = stableMediatedRecipient || restrictiveMediatedClaim;
     const tmpDir = process.env.TMPDIR || process.env.TMP || os.tmpdir();
     // team-lead exemption removed: main is now caught by empty agent_type check above
     const EXEMPT_TYPES = ['context-provider', 'project-manager'];
@@ -2515,20 +2515,26 @@ process.stdin.on('end', () => {
             let allowed = false;
             let identity = null;
             if (isSpecialist) {
-              // BL-W35-06: specialists require per-agent arch-response flag
-              const agentFlag = path.join(tmpDir,
-                'claude-arch-responded-' + sessionId + '-' + sanitizeId(agentType) + '.flag');
-              allowed = fs.existsSync(agentFlag);
-              if (allowed) {
-                try {
-                  const raw = fs.readFileSync(agentFlag, 'utf8');
-                  const meta = JSON.parse(raw);
-                  identity = architectIdentityFromFlagMeta(meta);
+              // Exact durable actor authorization. agent_type is never an
+              // authority lookup key, so host suffixes cannot lose or steal
+              // another actor's handoff.
+              try {
+                const auth = actorAuthorization && actorAuthorization.activateOrReadAuthorization(
+                  process.env.CLAUDE_PROJECT_DIR || process.cwd(),
+                  { sessionId: data.session_id, agentId: data.agent_id },
+                );
+                allowed = !!(auth && auth.ok);
+                if (allowed) {
+                  identity = {
+                    role: auth.record.issuer_role,
+                    instanceId: auth.record.issuer_agent_id,
+                    sessionId: auth.record.issuer_session_id,
+                  };
                   process.stderr.write(
-                    `[CP-GATE] session=${sessionId} flag_writer=${meta.written_by} flag_ts=${meta.ts} tool=${toolName}\n`
+                    `[CP-GATE] session=${sessionId} authorization_id=${auth.authorizationId} tool=${toolName}\n`
                   );
-                } catch { /* legacy ISO string — ignore */ }
-              }
+                }
+              } catch { allowed = false; }
             } else {
               const flagPath = path.join(tmpDir, 'claude-cp-consulted-' + sessionId + '.flag');
               // M6+M7 requester-authority closure (Group D, Codex-relayed
@@ -2595,18 +2601,22 @@ process.stdin.on('end', () => {
 
     // 3. Check consultation flag — specialists use per-agent arch-response flag (BL-W35-06)
     if (isSpecialist) {
-      const agentFlag = path.join(tmpDir,
-        'claude-arch-responded-' + sessionId + '-' + sanitizeId(agentType) + '.flag');
-      if (fs.existsSync(agentFlag)) {
-        let identity = null;
-        try {
-          const raw = fs.readFileSync(agentFlag, 'utf8');
-          const meta = JSON.parse(raw);
-          identity = architectIdentityFromFlagMeta(meta);
-          process.stderr.write(
-            `[CP-GATE] session=${sessionId} flag_writer=${meta.written_by} flag_ts=${meta.ts} tool=${toolName}\n`
-          );
-        } catch { /* legacy ISO string — ignore */ }
+      let actorAuth = null;
+      try {
+        actorAuth = actorAuthorization && actorAuthorization.activateOrReadAuthorization(
+          process.env.CLAUDE_PROJECT_DIR || process.cwd(),
+          { sessionId: data.session_id, agentId: data.agent_id },
+        );
+      } catch { actorAuth = null; }
+      if (actorAuth && actorAuth.ok) {
+        const identity = {
+          role: actorAuth.record.issuer_role,
+          instanceId: actorAuth.record.issuer_agent_id,
+          sessionId: actorAuth.record.issuer_session_id,
+        };
+        process.stderr.write(
+          `[CP-GATE] session=${sessionId} authorization_id=${actorAuth.authorizationId} tool=${toolName}\n`
+        );
         // M6 Block C + M7/WP4: post-PLAN branches additionally require a
         // correlated, accepted consult-result -- pre-PLAN this is a pure
         // passthrough.
