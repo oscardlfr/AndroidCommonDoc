@@ -17,6 +17,26 @@ const localRequire = createRequire(import.meta.url);
 const runtimeContext = localRequire(join(REAL_L0_ROOT, "scripts", "lib", "runtime-project-context.cjs"));
 const waveControl = localRequire(join(REAL_L0_ROOT, "scripts", "lib", "wave-control-plane.cjs"));
 
+async function writeScannerFixture(projectRoot: string, scenario: { output: string; exit: number }): Promise<string> {
+  const scanner = join(projectRoot, "fixture-trufflehog");
+  await writeFile(scanner, [
+    "#!/bin/sh",
+    'if [ "$1" = "--version" ]; then echo "fixture-trufflehog 1.0"; exit 0; fi',
+    '[ "$#" -eq 5 ] && [ "$1" = "filesystem" ] || exit 64',
+    // Compare physical directories in the shell's namespace: Git Bash may
+    // render a native Windows argument as /c/... while the environment keeps C:\\....
+    'actual_root=$(cd "$2" && pwd -P) || exit 64',
+    'expected_root=$(cd "$SCANNER_EXPECTED_ROOT" && pwd -P) || exit 64',
+    '[ "$actual_root" = "$expected_root" ] || exit 64',
+    '[ "$3" = "--only-verified" ] && [ "$4" = "--json" ] && [ "$5" = "--no-update" ] || exit 64',
+    scenario.output ? `printf '%s\\n' '${scenario.output}'` : ":",
+    `exit ${scenario.exit}`,
+    "",
+  ].join("\n"), { mode: 0o755 });
+  await chmod(scanner, 0o755);
+  return scanner;
+}
+
 async function writeRuntimeManifest(projectRoot: string, consumerLayer?: "L1" | "L2"): Promise<void> {
   await writeFile(join(projectRoot, "l0-manifest.json"), JSON.stringify({
     version: 2,
@@ -1067,17 +1087,7 @@ describe("source-referenced runtime installation", () => {
     expect(installed.ok).toBe(true);
     // Only the external binary is a fixture. Launcher, scan producer, immutable
     // attempt, mint and verification stay real and must remain fail-closed.
-    const scanner = join(projectRoot, "fixture-trufflehog");
-    await writeFile(scanner, [
-      "#!/bin/sh",
-      'if [ "$1" = "--version" ]; then echo "fixture-trufflehog 1.0"; exit 0; fi',
-      '[ "$#" -eq 5 ] && [ "$1" = "filesystem" ] && [ "$2" = "$SCANNER_EXPECTED_ROOT" ] || exit 64',
-      '[ "$3" = "--only-verified" ] && [ "$4" = "--json" ] && [ "$5" = "--no-update" ] || exit 64',
-      scenario.output ? `printf '%s\\n' '${scenario.output}'` : ":",
-      `exit ${scenario.exit}`,
-      "",
-    ].join("\n"), { mode: 0o755 });
-    await chmod(scanner, 0o755);
+    const scanner = await writeScannerFixture(projectRoot, scenario);
     const scannerEnv = {
       ...process.env,
       TRUFFLEHOG_BIN: scanner.replace(/\\/g, "/"),
@@ -1114,11 +1124,12 @@ describe("source-referenced runtime installation", () => {
       "--", "pre-pr", "--slug", "runtime", "--expected-revision", "3", "--project-gate", "PASS"], {
       cwd: projectRoot, encoding: "utf8", env: scannerEnv,
     });
-    expect(prePr.status, prePr.stderr || prePr.stdout).toBe(scenario.reason === "OK" ? 0 : 1);
     const scanReport = JSON.parse(await readFile(
       join(projectRoot, ".androidcommondoc", "secret-scan-report.json"), "utf8",
     ));
-    expect(scanReport.reason_code).toBe(scenario.reason);
+    const scanEvidence = JSON.stringify({ prePr: prePr.stderr || prePr.stdout, scanReport });
+    expect(prePr.status, scanEvidence).toBe(scenario.reason === "OK" ? 0 : 1);
+    expect(scanReport.reason_code, scanEvidence).toBe(scenario.reason);
     expect(scanReport.head).toBe(head);
     const qgAttempt = prePr.stdout.trim().split(/\s+/)[2];
     expect(qgAttempt).toMatch(/qg-attempts/);
@@ -1151,6 +1162,23 @@ describe("source-referenced runtime installation", () => {
       "--", "verify", "--slug", "runtime", "--head", head], { cwd: projectRoot, encoding: "utf8" });
     expect(rejected.status).not.toBe(0);
     expect(rejected.stderr).toContain("pre-pr-stamp-not-current");
+  });
+
+  it("scanner fixture accepts the same directory's shell spelling but rejects a foreign root or changed flags", async () => {
+    const scanner = await writeScannerFixture(projectRoot, { output: "", exit: 0 });
+    const env = { ...process.env, SCANNER_EXPECTED_ROOT: await realpath(projectRoot) };
+    // pwd -P is also Git Bash's /c/... spelling of Node's C:\\... root.
+    const shellRoot = spawnSync("bash", ["-c", 'cd "$1" && pwd -P', "fixture", projectRoot], {
+      encoding: "utf8", env,
+    });
+    expect(shellRoot.status, shellRoot.stderr).toBe(0);
+    const scan = (root: string, jsonFlag = "--json") => spawnSync("bash", [
+      scanner, "filesystem", root, "--only-verified", jsonFlag, "--no-update",
+    ], { encoding: "utf8", env });
+    const sameDirectory = scan(`${shellRoot.stdout.trim()}/.`);
+    expect(sameDirectory.status, sameDirectory.stderr).toBe(0);
+    expect(scan(REAL_L0_ROOT).status).toBe(64);
+    expect(scan(shellRoot.stdout.trim(), "--not-json").status).toBe(64);
   });
 
   it("upgrades an in-place runtime role when its bytes match the previously recorded checksum", async () => {
