@@ -250,6 +250,164 @@ _standalone_verdict() {
     --request "$request" --request-sha256 "$digest" --decision approve "$@"
 }
 
+# Real request producers and an actual PREP publication establish the final
+# writer's input contract; the regression does not hand-author verdicts.
+_prepare_open_stdin_final_request() {
+  local request_line prep_request prep_digest
+  mkdir -p "$PROJ/.planning/wave-$WAVE_SLUG"
+  printf '# Plan\n\nOpen stdin writer regression.\n' > "$PROJ/.planning/wave-$WAVE_SLUG/PLAN.md"
+  request_line="$(cd "$PROJ" && bash "$BATS_TEST_DIRNAME/../sh/write-verdict-request.sh" \
+    --role arch-testing --phase prep --slug "$WAVE_SLUG")" || return 1
+  read -r prep_request prep_digest <<< "$request_line"
+  _standalone_verdict prep "$prep_request" "$prep_digest" --rationale 'Plan approved'
+  [ "$status" -eq 0 ] || return 1
+  git -C "$PROJ" update-ref refs/remotes/origin/develop HEAD
+  request_line="$(cd "$PROJ" && bash "$BATS_TEST_DIRNAME/../sh/write-verdict-request.sh" \
+    --role arch-testing --phase verify-final --slug "$WAVE_SLUG")" || return 1
+  read -r OPEN_REQUEST OPEN_DIGEST <<< "$request_line"
+}
+
+# Keep the writer's stdin open until its exit has been observed. Only this
+# test's detached process group is killed on timeout; no live host is touched.
+_open_stdin_verdict() {
+  local transport="$1" payload="$2" expected="$3"
+  run node - "$PROJ" "$SCRIPT" "$WAVE_SLUG" "$OPEN_REQUEST" "$OPEN_DIGEST" \
+    "$transport" "$payload" "$expected" <<'NODE'
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+const net = require('node:net');
+const {spawn} = require('node:child_process');
+const [root, script, slug, requestPath, requestHash, transport, payload, expected] = process.argv.slice(2);
+const wave = path.join(root, '.planning', 'wave-' + slug);
+const target = path.join(wave, 'arch-testing-verdict-verify-final.json');
+const evidence = path.join(wave, 'arch-testing-verify-final-evidence.md');
+const argv = [script, '--role', 'arch-testing', '--phase', 'verify-final', '--slug', slug,
+  '--request', requestPath, '--request-sha256', requestHash, '--decision', 'approve',
+  '--rationale', 'Changes verified', '--evidence-text', 'Supplemental test evidence'];
+let child, server, sender, receiver, timer;
+let stdout = '', stderr = '', timedOut = false;
+function stopOwnedChild() {
+  if (!child || child.exitCode !== null || child.signalCode !== null) return;
+  try {
+    if (process.platform === 'win32') child.kill('SIGKILL');
+    else process.kill(-child.pid, 'SIGKILL');
+  } catch (error) { if (error.code !== 'ESRCH') throw error; }
+}
+async function main() {
+  try {
+    let input = 'pipe';
+    if (transport === 'unix-socket') {
+      assert.notEqual(process.platform, 'win32');
+      // pauseOnConnect prevents the parent from consuming kernel-queued bytes
+      // before the writer inherits the socket descriptor.
+      server = net.createServer({pauseOnConnect: true});
+      const accepted = new Promise((resolve, reject) => {
+        server.once('connection', resolve);
+        server.once('error', reject);
+      });
+      await new Promise((resolve, reject) => {
+        server.once('error', reject);
+        server.listen(path.join(root, 'stdin.sock'), resolve);
+      });
+      sender = net.createConnection(path.join(root, 'stdin.sock'));
+      sender.on('error', () => {});
+      receiver = await accepted;
+      // Keep bytes in the inherited socket's kernel queue, not Node's reader.
+      receiver.pause();
+      if (payload) await new Promise((resolve, reject) => sender.write(payload, error => error ? reject(error) : resolve()));
+      input = receiver;
+    }
+    child = spawn('bash', argv, {cwd: root, detached: process.platform !== 'win32', stdio: [input, 'pipe', 'pipe']});
+    child.stdout.on('data', chunk => { stdout += chunk; });
+    child.stderr.on('data', chunk => { stderr += chunk; });
+    if (child.stdin) child.stdin.on('error', () => {});
+    const result = new Promise((resolve, reject) => {
+      child.once('error', reject);
+      child.once('close', (code, signal) => resolve({code, signal}));
+    });
+    timer = setTimeout(() => {
+      timedOut = true;
+      // Windows has no POSIX process group. Release its test-owned pipe on
+      // timeout so an inherited reader cannot hold stdout open after Bash dies.
+      if (process.platform === 'win32' && child.stdin) child.stdin.destroy();
+      stopOwnedChild();
+    }, 4000);
+    if (transport === 'pipe' && payload) child.stdin.write(payload);
+    const {code, signal} = await result;
+    const stdinStayedOpen = transport === 'pipe' ? !child.stdin.writableEnded : !sender.writableEnded;
+    console.log(JSON.stringify({transport, expected, timedOut, code, signal, stdinStayedOpen, published: fs.existsSync(target), stderr}));
+    assert.equal(timedOut, false, 'writer waited for EOF on open stdin');
+    assert.equal(stdinStayedOpen, true, 'fixture must not close stdin to obtain a result');
+    assert.equal(signal, null, 'writer must exit normally');
+    assert.equal(code, expected === 'approve' ? 0 : 1);
+    if (expected === 'approve') {
+      const verdict = JSON.parse(fs.readFileSync(target, 'utf8'));
+      const request = JSON.parse(fs.readFileSync(requestPath, 'utf8'));
+      assert.equal(verdict.phase, 'verify-final');
+      assert.equal(verdict.decision, 'approve');
+      assert.equal(verdict.rationale, 'Changes verified');
+      assert.equal(verdict.in_reply_to, request.request_id);
+      assert.equal(verdict.request_ref.sha256, requestHash);
+      assert.equal(fs.existsSync(evidence), true);
+    } else {
+      assert.match(stderr, /cannot be combined with non-empty stdin/);
+      assert.equal(fs.existsSync(target), false);
+      assert.equal(fs.existsSync(evidence), false);
+    }
+  } finally {
+    clearTimeout(timer);
+    stopOwnedChild();
+    if (child && child.stdin) child.stdin.destroy();
+    if (sender) sender.destroy();
+    if (receiver) receiver.destroy();
+    if (server) server.close();
+  }
+}
+main().catch(error => { console.error(error.stack); process.exitCode = 1; });
+NODE
+  if [ "$status" -ne 0 ]; then printf '%s\n' "$output" >&3; fi
+}
+
+@test "WV-CLI open pipe stdin accepts explicit rationale without waiting for EOF" {
+  _prepare_open_stdin_final_request
+  _open_stdin_verdict pipe '' approve
+  [ "$status" -eq 0 ]
+}
+
+@test "WV-CLI open pipe stdin rejects immediately available nonempty bytes" {
+  _prepare_open_stdin_final_request
+  _open_stdin_verdict pipe 'stdin rationale' reject
+  [ "$status" -eq 0 ]
+}
+
+@test "WV-CLI open pipe stdin rejects immediately available newline-only bytes" {
+  _prepare_open_stdin_final_request
+  _open_stdin_verdict pipe $'\n' reject
+  [ "$status" -eq 0 ]
+}
+
+@test "WV-CLI open UNIX socket stdin accepts explicit rationale without waiting for EOF" {
+  [ "$(node -p 'process.platform')" != win32 ] || skip 'UNIX sockets unavailable on Windows; pipe cases still run'
+  _prepare_open_stdin_final_request
+  _open_stdin_verdict unix-socket '' approve
+  [ "$status" -eq 0 ]
+}
+
+@test "WV-CLI open UNIX socket stdin rejects immediately available nonempty bytes" {
+  [ "$(node -p 'process.platform')" != win32 ] || skip 'UNIX sockets unavailable on Windows; pipe cases still run'
+  _prepare_open_stdin_final_request
+  _open_stdin_verdict unix-socket 'stdin rationale' reject
+  [ "$status" -eq 0 ]
+}
+
+@test "WV-CLI open UNIX socket stdin rejects immediately available newline-only bytes" {
+  [ "$(node -p 'process.platform')" != win32 ] || skip 'UNIX sockets unavailable on Windows; pipe cases still run'
+  _prepare_open_stdin_final_request
+  _open_stdin_verdict unix-socket $'\n' reject
+  [ "$status" -eq 0 ]
+}
+
 @test "WV-CLI PREP standalone rationale preserves Unicode quotes and newlines" {
   local req digest rationale
   req="$(_seed_request prep)"; digest="$(_real_sha256 "$req")"
