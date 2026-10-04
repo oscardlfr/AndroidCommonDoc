@@ -123,7 +123,7 @@ describe('Wave 1 BUG 6 (BL-W48 migration): post-wave closure documented in orche
 // 8. Wave 1: template_version bumped in architects
 // ---------------------------------------------------------------------------
 describe('Wave 1: template_version bumped in architects', () => {
-  it('arch-testing.md template_version is "1.41.5"', () => {
+  it('arch-testing.md template_version is "1.41.6"', () => {
     // BL-W47-prep-14 C2: bumped from 1.35.0 → 1.36.0 (kmp-test-runner v0.10.1 bump)
     // wave cancellation-detekt: bumped from 1.36.0 → 1.37.0 (kmp-test-runner v0.14.0 bump)
     // BL-W47-hook-surgery P13: bumped from 1.37.0 → 1.38.0 (hook-surgery ceremony)
@@ -136,10 +136,11 @@ describe('Wave 1: template_version bumped in architects', () => {
     // Runtime-rendered commands exception: bumped from 1.41.3 → 1.41.4.
     const content = fs.readFileSync(path.join(TEMPLATES_DIR, 'arch-testing.md'), 'utf-8');
     // Runtime closure shift-left contract: 1.41.4 → 1.41.5.
-    expect(content).toMatch(/template_version:\s*"1.41.5"/);
+    // Mandatory current-boundary preverify receipt: 1.41.5 → 1.41.6.
+    expect(content).toMatch(/template_version:\s*"1.41.6"/);
   });
 
-  it('arch-platform.md template_version is "1.36.5"', () => {
+  it('arch-platform.md template_version is "1.36.6"', () => {
     // BL-W47-prep-10 F1b: bumped from 1.31.0 → 1.32.0 (Task Completion Protocol reference)
     // BL-W47-hook-surgery P13: bumped from 1.32.0 → 1.33.0 (hook-surgery ceremony)
     // BL-W48 team-model migration: bumped from 1.33.0 → 1.34.0
@@ -151,10 +152,11 @@ describe('Wave 1: template_version bumped in architects', () => {
     // Runtime-rendered commands exception: bumped from 1.36.3 → 1.36.4.
     const content = fs.readFileSync(path.join(TEMPLATES_DIR, 'arch-platform.md'), 'utf-8');
     // Runtime closure shift-left contract: 1.36.4 → 1.36.5.
-    expect(content).toMatch(/template_version:\s*"1.36.5"/);
+    // Mandatory current-boundary preverify receipt: 1.36.5 → 1.36.6.
+    expect(content).toMatch(/template_version:\s*"1.36.6"/);
   });
 
-  it('arch-integration.md template_version is "1.32.5"', () => {
+  it('arch-integration.md template_version is "1.32.6"', () => {
     // BL-W47-prep-10 F1b: bumped from 1.27.0 → 1.28.0 (Task Completion Protocol reference)
     // BL-W47-hook-surgery P13: bumped from 1.28.0 → 1.29.0 (hook-surgery ceremony)
     // BL-W48 team-model migration: bumped from 1.29.0 → 1.30.0
@@ -165,7 +167,8 @@ describe('Wave 1: template_version bumped in architects', () => {
     // Runtime-rendered commands exception: bumped from 1.32.3 → 1.32.4.
     const content = fs.readFileSync(path.join(TEMPLATES_DIR, 'arch-integration.md'), 'utf-8');
     // Runtime closure shift-left contract: 1.32.4 → 1.32.5.
-    expect(content).toMatch(/template_version:\s*"1.32.5"/);
+    // Mandatory current-boundary preverify receipt: 1.32.5 → 1.32.6.
+    expect(content).toMatch(/template_version:\s*"1.32.6"/);
   });
 
   it('MIGRATIONS.json has W31.6 RETIRED entry for team-lead (W31.6: retired)', () => {

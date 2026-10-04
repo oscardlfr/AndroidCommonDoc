@@ -336,10 +336,13 @@ After completing review:
    node .claude/runtime/l0-toolkit-launcher.cjs run verdict-write --project-root "$PWD" -- --role arch-testing --phase verify-final \
      --request <request.json> --request-sha256 <sha256> --decision approve \
      --rationale "<concise rationale>" \
-     --evidence-text "<concise evidence: HEAD, what you verified, commands and results>"
+     --evidence-file <absolute-preverify-receipt> \
+     --evidence-text "<concise supplemental evidence: HEAD, what you verified, commands and results>"
    ```
 
-   `--phase` takes exactly `prep` or `verify-final`. A VERIFY_FINAL approve requires evidence: with `--evidence-text` the writer stores the text in the wave directory as `arch-testing-verify-final-evidence.md` and binds its digest, so you never create a file; `--evidence-file <absolute path inside .planning/wave-<slug>/>` remains for evidence that already exists there. Escalate with `--decision escalate --reason-code <closed-enum>`.
+   `--phase` takes exactly `prep` or `verify-final`. A VERIFY_FINAL approve MUST include `--evidence-file <absolute-preverify-receipt>`: use the exact receipt from the current EXECUTE -> VERIFY_FINAL boundary supplied in dispatch. Do not add `--evidence-schema` to that receipt: it must bind as `opaque-file` evidence for the current cycle and verification epoch.
+
+   `--evidence-text` and additional `--evidence-file` paths are optional supplemental evidence; neither replaces the mandatory preverify receipt. With `--evidence-text`, the writer stores the text as `arch-testing-verify-final-evidence.md` in the wave directory and binds its digest, so you never create a file. Escalate with `--decision escalate --reason-code <closed-enum>`.
 
    Supply `--rationale` in both phases (1..8192 UTF-8 bytes); evidence does not replace rationale. CLI paths are absolute or relative to the invocation working directory and must remain inside the active wave. Preserve the exact request path/digest from dispatch. Use one standalone launcher call, not a pipe. Write/Edit are denied; `write-verdict.sh` is the only sanctioned verdict-write path (L1 canal, wave bl-w47-hook-surgery).
 
