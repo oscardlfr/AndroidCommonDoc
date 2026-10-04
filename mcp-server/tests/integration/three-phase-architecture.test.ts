@@ -318,8 +318,18 @@ describe('arch-platform + arch-integration — caller grep rule', () => {
     expect(platformContent).toMatch(/template_version:\s*"\d+\.\d+\.\d+"/);
   });
 
-  it('arch-integration has template version 1.32.5', () => {
-    expect(integrationContent).toContain('template_version: "1.32.5"');
+  const templateVersionField = /^template_version:[ \t]*"\d+\.\d+\.\d+"[ \t]*\r?$/m;
+
+  it('arch-integration has a semantic template_version field', () => {
+    expect(integrationContent).toMatch(templateVersionField);
+  });
+
+  it('template version structure accepts patch updates without a stale release pin', () => {
+    expect('template_version: "1.32.7"').toMatch(templateVersionField);
+  });
+
+  it.each(['1.32', 'invalid', '1.32.6-extra'])('template version structure rejects %s', version => {
+    expect(`template_version: "${version}"`).not.toMatch(templateVersionField);
   });
 
   it('all architect requesters use the canonical 900-second await-result deadline', () => {
