@@ -15,7 +15,8 @@
 #     [--evidence-text <text>]
 #     [--rationale <text>]
 #     [--supersede --expected-current-sha256 <64hex>]
-#   Rationale comes from --rationale or stdin (mutually exclusive).
+#   Rationale comes from --rationale or stdin. With explicit argv, reject data
+#   available during a bounded stdin probe; never wait for an unused input's EOF.
 #   CLI request/evidence paths are resolved from the invocation working directory.
 #
 # EVIDENCE
@@ -463,16 +464,47 @@ fi
 # ── Rationale from explicit argv or backward-compatible stdin ────────────────
 
 STDIN_RATIONALE=""
-if [[ ! -t 0 ]]; then
+if [[ "$RATIONALE_SET" -eq 1 && ! -t 0 ]]; then
+  # Agent hosts may leave an empty pipe/socket open for the command's lifetime.
+  # Explicit argv does not select stdin as the rationale source, so draining it
+  # to EOF deadlocks. Probe only for already available conflicting bytes, with
+  # a fixed 100ms budget; data arriving after that window is not an input to this
+  # invocation. Node's stream API handles pipes, files and host sockets on every
+  # supported platform (Bash 3.2's read -t 0 misses ready pipe/socket bytes).
+  if node -e '
+    let timer;
+    try {
+      const input = process.stdin;
+      const finish = code => {
+        clearTimeout(timer);
+        input.pause();
+        process.exit(code);
+      };
+      timer = setTimeout(() => finish(0), 100);
+      input.once("data", () => finish(1));
+      input.once("end", () => finish(0));
+      input.once("error", () => finish(2));
+      input.resume();
+    } catch (_) {
+      process.exit(2);
+    }
+  '; then
+    :
+  else
+    STDIN_PROBE_STATUS=$?
+    if [[ "$STDIN_PROBE_STATUS" -eq 1 ]]; then
+      echo "[write-verdict] ERROR: --rationale cannot be combined with non-empty stdin" >&2
+      exit 1
+    fi
+    echo "[write-verdict] ERROR: unable to inspect stdin for conflicting rationale input" >&2
+    exit 2
+  fi
+elif [[ ! -t 0 ]]; then
   # The sentinel retains trailing newlines long enough to detect ANY nonempty
   # stdin conflicting with --rationale. The legacy stdin path below keeps its
   # established command-substitution trimming behavior.
   STDIN_RATIONALE="$(cat; printf '.')"
   STDIN_RATIONALE="${STDIN_RATIONALE%.}"
-fi
-if [[ "$RATIONALE_SET" -eq 1 && -n "$STDIN_RATIONALE" ]]; then
-  echo "[write-verdict] ERROR: --rationale cannot be combined with non-empty stdin" >&2
-  exit 1
 fi
 if [[ "$RATIONALE_SET" -ne 1 ]]; then
   RATIONALE="$(printf '%s' "$STDIN_RATIONALE")"
