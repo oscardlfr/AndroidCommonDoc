@@ -511,6 +511,12 @@
       }
     },
     "arch-testing": {
+      "1.41.6": {
+        "date": "2026-10-04",
+        "breaking": false,
+        "summary": "Require the current preverify receipt as opaque-file evidence in the executable VERIFY_FINAL verdict command. Rationale and supplemental evidence text do not replace that receipt.",
+        "migration_hint": "Run plain /sync-l0 to refresh managed templates. Supply the exact current preverify receipt with --evidence-file and do not add --evidence-schema."
+      },
       "1.41.5": {
         "date": "2026-10-02",
         "breaking": false,
@@ -721,6 +727,12 @@
       }
     },
     "arch-platform": {
+      "1.36.6": {
+        "date": "2026-10-04",
+        "breaking": false,
+        "summary": "Require the current preverify receipt as opaque-file evidence in the executable VERIFY_FINAL verdict command. Rationale and supplemental evidence text do not replace that receipt.",
+        "migration_hint": "Run plain /sync-l0 to refresh managed templates. Supply the exact current preverify receipt with --evidence-file and do not add --evidence-schema."
+      },
       "1.36.5": {
         "date": "2026-10-02",
         "breaking": false,
@@ -911,6 +923,12 @@
       }
     },
     "arch-integration": {
+      "1.32.6": {
+        "date": "2026-10-04",
+        "breaking": false,
+        "summary": "Require the current preverify receipt as opaque-file evidence in the executable VERIFY_FINAL verdict command. Rationale and supplemental evidence text do not replace that receipt.",
+        "migration_hint": "Run plain /sync-l0 to refresh managed templates. Supply the exact current preverify receipt with --evidence-file and do not add --evidence-schema."
+      },
       "1.32.5": {
         "date": "2026-10-02",
         "breaking": false,

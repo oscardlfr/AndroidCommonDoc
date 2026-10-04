@@ -5,6 +5,14 @@ import { describe, expect, it } from 'vitest';
 const ROOT = path.resolve(__dirname, '../../..');
 const ROLES = ['arch-platform', 'arch-testing', 'arch-integration'];
 
+type MigrationRegistry = { templates: Record<string, Record<string, unknown>> };
+
+function requireMigration(registry: MigrationRegistry, role: string, version: string): void {
+  if (registry.templates[role]?.[version] == null) {
+    throw new Error('missing-role-version-migration');
+  }
+}
+
 // Inspect executable examples, not a receipt mention elsewhere in the prose.
 function finalCommands(content: string): string[] {
   return [...content.matchAll(/```(?:bash)?\n([\s\S]*?)```/g)]
@@ -83,5 +91,29 @@ describe('preverify command regression controls', () => {
   it('rejects schema annotation that would turn the receipt into json-record evidence', () => {
     expect(() => requireReceiptCommand(command + ' --evidence-schema wave-preverify-receipt/v1'))
       .toThrow('preverify-must-be-opaque-file');
+  });
+});
+
+describe('architect receipt template version registration', () => {
+  const registry: MigrationRegistry = JSON.parse(readFileSync(
+    path.join(ROOT, 'setup/agent-templates/MIGRATIONS.json'), 'utf8'));
+
+  for (const role of ROLES) {
+    it(`${role} registers the actual canonical template version`, () => {
+      const content = readFileSync(path.join(ROOT, `setup/agent-templates/${role}.md`), 'utf8');
+      const version = content.match(/^template_version:\s*"([^"]+)"/m)?.[1];
+      expect(version).toBeDefined();
+      expect(() => requireMigration(registry, role, version!)).not.toThrow();
+    });
+  }
+
+  it('rejects a version registered for a different role', () => {
+    expect(() => requireMigration({ templates: { 'arch-testing': { '1.0.0': {} } } },
+      'arch-platform', '1.0.0')).toThrow('missing-role-version-migration');
+  });
+
+  it('rejects a missing version even when the role has another registration', () => {
+    expect(() => requireMigration({ templates: { 'arch-platform': { '1.0.0': {} } } },
+      'arch-platform', '1.0.1')).toThrow('missing-role-version-migration');
   });
 });
