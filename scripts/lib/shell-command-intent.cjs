@@ -32,6 +32,19 @@ const GIT_FLAG_OPTIONS = new Set([
   '--literal-pathspecs', '--no-optional-locks', '--no-lazy-fetch', '-v',
   '--version', '-h', '--help', '--html-path', '--man-path', '--info-path',
 ]);
+const GRADLE_EXECUTABLES = new Set(['gradle', 'gradlew']);
+const GRADLE_OPTION_VALUES = new Set([
+  '-b', '--build-file', '-c', '--settings-file', '-g', '--gradle-user-home',
+  '-I', '--init-script', '-p', '--project-dir', '--include-build',
+  '--max-workers', '--priority', '--warning-mode', '--console', '--tests',
+  '--dependency-verification', '--write-verification-metadata',
+  '--configuration-cache-problems',
+]);
+const GRADLE_NON_TEST_TASKS = new Set([
+  'assembleAndroidTest', 'koverXmlReport', 'koverHtmlReport',
+  'createDebugCoverageReport', 'dependencyInsight', 'outgoingVariants',
+  'testRuntimeClasspath',
+]);
 
 function decodeAnsiCString(value) {
   return value.replace(/\\([\\'"abefnrtv])/g, (_m, c) => ({
@@ -241,7 +254,40 @@ function gitSubcommand(words) {
 function executableName(token) {
   const normalized = String(token || '').replaceAll('\\', '/');
   const base = normalized.slice(normalized.lastIndexOf('/') + 1).toLowerCase();
-  return base.endsWith('.exe') ? base.slice(0, -4) : base;
+  return /\.(?:exe|cmd|bat)$/.test(base) ? base.slice(0, base.lastIndexOf('.')) : base;
+}
+
+function gradleTaskTokens(words) {
+  const tasks = [];
+  for (let index = 1; index < words.length; index += 1) {
+    const token = words[index];
+    const option = token.split('=', 1)[0];
+    if (token.startsWith('-')) {
+      if (!token.includes('=') && GRADLE_OPTION_VALUES.has(option)) index += 1;
+      continue;
+    }
+    tasks.push(token);
+  }
+  return tasks;
+}
+
+function gradleTestIntent(words) {
+  if (!GRADLE_EXECUTABLES.has(executableName(words[0]))) return null;
+  const matchedTasks = [];
+  for (const token of gradleTaskTokens(words)) {
+    const task = token.slice(token.lastIndexOf(':') + 1);
+    if (!task || GRADLE_NON_TEST_TASKS.has(task) || /(PrintCommand|DryRun)$/.test(task)) continue;
+    if (task === 'test' || task === 'allTests' || task === 'check' || /Test$/.test(task)) {
+      matchedTasks.push(task);
+    }
+  }
+  if (!matchedTasks.length) return null;
+  return {
+    kind: 'gradle-test',
+    argv: words,
+    tasks: matchedTasks,
+    jsWasm: matchedTasks.some((task) => /^(?:js|wasm).*Test$/.test(task)),
+  };
 }
 
 function classifySegment(rawWords, nested) {
@@ -252,6 +298,8 @@ function classifySegment(rawWords, nested) {
   if (executableName(words[0]) === 'gh' && words[1] === 'pr' && words[2] === 'create') {
     intents.push({ kind: 'gh-pr-create', argv: words });
   }
+  const gradleIntent = gradleTestIntent(words);
+  if (gradleIntent) intents.push(gradleIntent);
   const executable = executableName(words[0]);
   let shellPayloadIndex = -1;
   if (SHELLS.has(executable)) {

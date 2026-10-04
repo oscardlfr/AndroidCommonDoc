@@ -14,6 +14,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 const { test } = require('node:test');
+const { runOrphanedSessionStart } = require('./lib/orphaned-session-start.cjs');
 
 const REPO_ROOT = path.resolve(__dirname, '../..');
 const GATE_HOOK = path.join(REPO_ROOT, '.claude/hooks/context-provider-gate.js');
@@ -91,34 +92,13 @@ test('PIN-DIAG-HOOK-02 a non-code detail is never echoed by the denial', () => {
   } finally { fs.rmSync(diagnosticPath(id), { force: true }); }
 });
 
-// The genuine SessionStart hook is run orphaned (its launching shell exits, so it is reparented to launchd) to make
-// its ancestry deterministic: no signed Claude host, even when this suite itself runs inside a Claude session.
-function runOrphanedSessionStart(event) {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pin-diagnostic-orphan-'));
-  try {
-    const files = { input: path.join(dir, 'in.json'), out: path.join(dir, 'out'), err: path.join(dir, 'err'),
-      status: path.join(dir, 'status') };
-    fs.writeFileSync(files.input, JSON.stringify(event));
-    const q = (value) => "'" + value.replace(/'/g, "'\\''") + "'";
-    const launched = spawnSync('/bin/sh', ['-c', '( ' + q(process.execPath) + ' ' + q(SESSION_START_HOOK)
-      + ' < ' + q(files.input) + ' > ' + q(files.out) + ' 2> ' + q(files.err) + '; echo $? > ' + q(files.status)
-      + ' ) > /dev/null 2>&1 &'], { cwd: REPO_ROOT, env: { ...process.env, CLAUDE_PROJECT_DIR: REPO_ROOT } });
-    assert.strictEqual(launched.status, 0);
-    const deadline = Date.now() + 25000;
-    while (!fs.existsSync(files.status) || fs.readFileSync(files.status, 'utf8').trim() === '') {
-      assert.ok(Date.now() < deadline, 'orphaned SessionStart hook did not finish');
-      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 50);
-    }
-    return { status: Number(fs.readFileSync(files.status, 'utf8').trim()),
-      stdout: fs.readFileSync(files.out, 'utf8'), stderr: fs.readFileSync(files.err, 'utf8') };
-  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
-}
-
 test('PIN-DIAG-HOOK-03 the genuine SessionStart hook persists the code it reports and the gate repeats it',
   { skip: process.platform !== 'darwin' }, () => {
     const id = sessionId();
     try {
-      const started = runOrphanedSessionStart(sessionStartEvent(id));
+      const started = runOrphanedSessionStart({
+        event: sessionStartEvent(id), hookPath: SESSION_START_HOOK, projectRoot: REPO_ROOT,
+      });
       assert.strictEqual(started.status, 0);
       assert.strictEqual(started.stdout.trim(), '');
       assert.strictEqual(started.stderr, '[runtime-host-session-start] HOST_PIN_VENDOR_MATCH_COUNT_0\n',

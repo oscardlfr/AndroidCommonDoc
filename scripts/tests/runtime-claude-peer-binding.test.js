@@ -950,6 +950,236 @@ test('RED resume: consumeClaudeResumeHandleForObservedActor admits the exact liv
   });
 });
 
+test('park and target selectors wait for another actor handle publication instead of reading its intermediate hard link', async () => {
+  for (const mode of ['park', 'waiting-target', 'busy-target']) {
+  await withProjectAsync(async (project) => {
+    const base = setupReadyBaseWithClaudeSendMessageRoleBinding(project);
+    const expected = { generationId: base.generationId, worktreeId: base.worktreeId,
+      planDigest: base.planDigest, targetRole: base.event.agentType,
+      sessionDigest: crypto.createHash('sha256').update(base.sessionId).digest('hex') };
+    let busy;
+    if (mode !== 'park') {
+      assert.strictEqual(rll.parkClaudeResumeHandleForRoleActor(project, base.event).ok, true);
+      if (mode === 'busy-target') {
+        assert.strictEqual(rll.consumeClaudeResumeHandleForObservedActor(project, base.event).ok, true);
+        busy = rll.readRoleBindingState(project, base.worktreeId, base.planDigest,
+          rll.roleProfileDigestFor(base.event.agentType), base.generationId, base.event.agentType).record;
+      }
+    }
+    const otherEvent = { sessionId: base.sessionId, agentId: 'parallel-publisher', agentType: 'arch-platform' };
+    primeCompleteProof(project, base.sessionId, base.worktreeId, base.planDigest, base.generationId,
+      otherEvent.agentId, otherEvent.agentType);
+    // Pause the real durable writer between link and cleanup: target nlink=2
+    // is a legitimate publication intermediate, never reader authority.
+    const source = [
+      'const fs=require("node:fs"),path=require("node:path");',
+      'const link=fs.linkSync;',
+      'fs.linkSync=function(from,to){link(from,to);',
+      'if(path.basename(path.dirname(to))==="claude-resume-handles"&&to.endsWith(".json")){',
+      'process.stdout.write("LINKED\\n"); Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,400);}};',
+      'process.env.NODE_ENV="test";process.env.RUNTIME_ROLE_LIFECYCLE_TEST_CAPABILITY="peer-custody-fixture";',
+      'const rll=require(process.argv[1]);',
+      'const result=rll.parkClaudeResumeHandleForRoleActor(process.argv[2],JSON.parse(process.argv[3]));',
+      'if(!result.ok){process.stderr.write(JSON.stringify(result));process.exitCode=1;}',
+    ].join('\n');
+    const holder = spawn(process.execPath, ['-r', path.resolve(__dirname, 'lib/private-registry-tmpdir-preload.cjs'),
+      '-e', source, IMPL, project, JSON.stringify(otherEvent)], { stdio: ['ignore', 'pipe', 'pipe'] });
+    let stderr = '';
+    holder.stderr.on('data', (bytes) => { stderr += bytes; });
+    const exited = new Promise((resolve, reject) => {
+      holder.once('error', reject);
+      holder.once('exit', (code) => code === 0 ? resolve() : reject(new Error('publisher exit ' + code + ': ' + stderr)));
+    });
+    try {
+      await new Promise((resolve, reject) => {
+        holder.stdout.once('data', (bytes) => bytes.toString().includes('LINKED') ? resolve() : reject(new Error('unexpected publisher output')));
+        holder.once('error', reject);
+        holder.once('exit', (code) => reject(new Error('publisher exited before link: ' + code + ': ' + stderr)));
+      });
+      const selected = mode === 'park' ? rll.parkClaudeResumeHandleForRoleActor(project, base.event)
+        : mode === 'waiting-target' ? rll.findUniqueClaudeResumeHandleForTarget(project, expected)
+          : rll.findUniqueConsumedClaudeResumeHandleForBusyTarget(project, expected, busy);
+      assert.strictEqual(selected.ok, true, mode + ': concurrent publication must not invalidate authority: ' + JSON.stringify(selected));
+      const state = rll.readRoleBindingState(project, base.worktreeId, base.planDigest,
+        rll.roleProfileDigestFor(base.event.agentType), base.generationId, base.event.agentType);
+      assert.strictEqual(state.state, mode === 'busy-target' ? 'BUSY' : 'WAITING');
+      assert.strictEqual(selected.record.actor_binding_id, base.actorBinding.binding_id);
+    } finally {
+      await exited;
+    }
+  });
+  }
+});
+
+test('park still rejects a persistent foreign hard-linked handle after the publication lock is released', () => {
+  withProject((project) => {
+    const base = setupReadyBaseWithClaudeSendMessageRoleBinding(project);
+    const otherEvent = { sessionId: base.sessionId, agentId: 'orphan-publisher', agentType: 'arch-platform' };
+    primeCompleteProof(project, base.sessionId, base.worktreeId, base.planDigest, base.generationId,
+      otherEvent.agentId, otherEvent.agentType);
+    const other = rll.parkClaudeResumeHandleForRoleActor(project, otherEvent);
+    assert.strictEqual(other.ok, true);
+    const handlePath = rll.claudeResumeHandlePathFor(project, other.record.binding_id);
+    const bytes = fs.readFileSync(handlePath);
+    fs.linkSync(handlePath, path.join(path.dirname(handlePath), '.orphan.tmp-owner'));
+    assert.strictEqual(fs.statSync(handlePath).nlink, 2);
+    const denied = rll.parkClaudeResumeHandleForRoleActor(project, base.event);
+    assert.deepStrictEqual(denied, { ok: false, reason: 'INVALID' }, 'a released lock cannot accredit unproven durability');
+    assert.deepStrictEqual(fs.readFileSync(handlePath), bytes, 'corrupt/orphan evidence must not be rewritten');
+    assert.strictEqual(rll.readRoleBindingState(project, base.worktreeId, base.planDigest,
+      rll.roleProfileDigestFor(base.event.agentType), base.generationId, base.event.agentType).state, 'READY');
+  });
+});
+
+test('park exhausts the namespace wait fail-closed without publishing a handle or changing role state', () => {
+  withProject((project) => {
+    const base = setupReadyBaseWithClaudeSendMessageRoleBinding(project);
+    const lockPath = path.join(rll.registryRepoDir(project), 'locks', 'claude-resume-handles-publication.lock');
+    fs.mkdirSync(lockPath, { recursive: true, mode: 0o700 });
+    const denied = rll.parkClaudeResumeHandleForRoleActor(project, base.event);
+    assert.deepStrictEqual(denied, { ok: false, reason: 'INVALID', cause: 'lock-timeout' });
+    assert.strictEqual(listResumeHandleFiles(project).length, 0);
+    assert.strictEqual(rll.readRoleBindingState(project, base.worktreeId, base.planDigest,
+      rll.roleProfileDigestFor(base.event.agentType), base.generationId, base.event.agentType).state, 'READY');
+  });
+});
+
+test('resume waits for a contended role-state lock before completing the consumed-handle projection', async () => {
+  await withProjectAsync(async (project) => {
+    const base = setupReadyBaseWithClaudeSendMessageRoleBinding(project);
+    const parked = rll.parkClaudeResumeHandleForRoleActor(project, base.event);
+    assert.strictEqual(parked.ok, true);
+    const profileDigest = rll.roleProfileDigestFor(base.event.agentType);
+    const statePath = rll.roleBindingPathFor(
+      project, base.worktreeId, base.planDigest, profileDigest, base.generationId, base.event.agentType,
+    );
+    const lockPath = statePath + '.lock';
+    // A separate process holds the production lock. No mocked transition:
+    // the consumer publishes its immutable marker, then must wait for the
+    // state writer instead of leaving a consumed handle paired with WAITING.
+    const holder = spawn(process.execPath, ['-e',
+      'const fs = require("node:fs"); fs.mkdirSync(process.argv[1], {mode: 0o700});' +
+      'process.stdout.write("LOCKED\\n"); setTimeout(() => fs.rmdirSync(process.argv[1]), 400);',
+      lockPath,
+    ], { stdio: ['ignore', 'pipe', 'pipe'] });
+    const exited = new Promise((resolve, reject) => {
+      holder.once('error', reject);
+      holder.once('exit', (code) => code === 0 ? resolve() : reject(new Error('lock holder exit ' + code)));
+    });
+    try {
+      await new Promise((resolve, reject) => {
+        holder.stdout.once('data', resolve);
+        holder.once('error', reject);
+        holder.once('exit', (code) => reject(new Error('lock holder exited before readiness: ' + code)));
+      });
+      const consumed = rll.consumeClaudeResumeHandleForObservedActor(project, base.event);
+      assert.strictEqual(consumed.ok, true, 'temporary lock contention must not orphan the consumed handle: ' + JSON.stringify(consumed));
+      const busy = rll.readRoleBindingState(
+        project, base.worktreeId, base.planDigest, profileDigest, base.generationId, base.event.agentType,
+      );
+      assert.strictEqual(busy.state, 'BUSY');
+      const reparking = rll.parkClaudeResumeHandleForRoleActor(project, base.event);
+      assert.strictEqual(reparking.ok, true, 'ordinary idle return must park the same actor');
+      assert.notStrictEqual(reparking.record.binding_id, parked.record.binding_id);
+      assert.strictEqual(reparking.record.actor_binding_id, base.actorBinding.binding_id);
+      assert.strictEqual(rll.consumeClaudeResumeHandleForObservedActor(project, {
+        ...base.event, agentId: 'foreign-actor',
+      }).ok, false, 'waiting for a lock must not admit a foreign actor');
+    } finally {
+      await exited;
+    }
+  });
+});
+
+test('resume preserves the exhausted state-writer cause without reporting successful consumption', () => {
+  const { createClaudeResumeLifecycle } = require('../lib/runtime-role-lifecycle/claude-resume-lifecycle.cjs');
+  const scope = { role: 'arch-testing', worktreeId: 'worktree', planDigest: 'plan', generationId: 'generation', actorBinding: { binding_id: 'actor' } };
+  const event = { agentType: scope.role, sessionId: 'session', agentId: 'agent' };
+  const record = { binding_id: 'handle', session: event.sessionId, agent_id: event.agentId,
+    role: scope.role, actor_binding_id: 'actor', worktree_id: scope.worktreeId, plan_digest: scope.planDigest };
+  let markerWrites = 0;
+  const resume = createClaudeResumeLifecycle({
+    resolveClaudeResumeRoleActorScope: () => ({ ok: true, scope }),
+    roleProfileDigestFor: () => 'profile',
+    findClaudeResumeHandlesForActor: () => ({ ok: true, records: [record] }),
+    isClaudeResumeHandleConsumed: () => false,
+    path, registryRepoDir: () => '/fixture-registry',
+    withRegistryLock: (_lock, fn) => ({ ok: true, value: fn() }),
+    withClaudeResumeHandleRegistryLock: (_project, fn) => fn(),
+    readClaudeResumeHandle: () => ({ ok: true, record }),
+    readRoleBindingState: () => ({ ok: true, state: 'WAITING', record: {} }),
+    claudeResumeHandleConsumedMarkerPathFor: () => '/fixture-marker',
+    nowIsoForRegistry: () => '2026-01-01T00:00:00Z', canonicalJSONStringify: JSON.stringify,
+    publishNoClobber: () => { markerWrites += 1; },
+    transitionRoleBinding: () => ({ ok: false, reason: 'lock-timeout' }),
+  });
+  assert.deepStrictEqual(resume.consumeClaudeResumeHandleForObservedActor('/fixture-project', event), {
+    ok: false, reason: 'INVALID', cause: 'lock-timeout',
+  });
+  assert.strictEqual(markerWrites, 1, 'the cause must survive the consumed-marker boundary');
+});
+
+test('SubagentStart reports the initiating resume projection cause in the host transcript', () => {
+  withProject((project) => {
+    const base = setupReadyBaseWithClaudeSendMessageRoleBinding(project);
+    const preload = path.join(project, 'resume-cause-preload.cjs');
+    fs.writeFileSync(preload, `const rll = require(${JSON.stringify(IMPL)});\n` +
+      'rll.consumeClaudeResumeHandleForObservedActor = () => ({ok:false, reason:"INVALID", cause:"lock-timeout"});\n');
+    const outcome = spawnSync(process.execPath, ['-r', preload,
+      path.resolve(__dirname, '../../.claude/hooks/subagent-start-context-bundle.js'),
+    ], {
+      env: { ...process.env, CLAUDE_PROJECT_DIR: project }, encoding: 'utf8',
+      input: JSON.stringify({ hook_event_name: 'SubagentStart', agent_type: base.event.agentType,
+        session_id: base.event.sessionId, agent_id: base.event.agentId }),
+    });
+    assert.strictEqual(outcome.status, 0, outcome.stderr);
+    assert.match(outcome.stderr, /SubagentStart: resume projection failed: INVALID \(lock-timeout\)/);
+  });
+});
+
+test('SubagentStop keeps non-applicable parking silent for actors without persistent bindings', () => {
+  for (const agentType of ['arch-testing', 'ordinary-ad-hoc-agent']) {
+    withProject((project) => {
+      const outcome = spawnSync(process.execPath, [
+        path.resolve(__dirname, '../../.claude/hooks/subagent-start-context-bundle.js'),
+      ], {
+        env: { ...process.env, CLAUDE_PROJECT_DIR: project }, encoding: 'utf8',
+        input: JSON.stringify({ hook_event_name: 'SubagentStop', agent_type: agentType,
+          session_id: 'no-persistent-binding-session', agent_id: 'no-persistent-binding-agent' }),
+      });
+      assert.strictEqual(outcome.status, 0, outcome.stderr);
+      assert.strictEqual(outcome.stderr, '', 'an inapplicable park is not a diagnostic error');
+      assert.strictEqual(outcome.stdout, '', 'the unchanged non-blocking stop has no JSON decision');
+    });
+  }
+});
+
+test('SubagentStop retains concrete park diagnostics without skipping the terminal fence', () => {
+  withProject((project) => {
+    const base = setupReadyBaseWithClaudeSendMessageRoleBinding(project);
+    const preload = path.join(project, 'park-cause-preload.cjs');
+    fs.writeFileSync(preload, `const rll = require(${JSON.stringify(IMPL)});\n` +
+      'rll.parkClaudeResumeHandleForRoleActor = () => ({ok:false, reason:"INVALID", cause:"lock-timeout"});\n');
+    const outcome = spawnSync(process.execPath, ['-r', preload,
+      path.resolve(__dirname, '../../.claude/hooks/subagent-start-context-bundle.js'),
+    ], {
+      env: { ...process.env, CLAUDE_PROJECT_DIR: project }, encoding: 'utf8',
+      input: JSON.stringify({ hook_event_name: 'SubagentStop', agent_type: base.event.agentType,
+        session_id: base.event.sessionId, agent_id: base.event.agentId }),
+    });
+    assert.strictEqual(outcome.status, 0, outcome.stderr);
+    assert.match(outcome.stderr, /SubagentStop: resumable park failed: INVALID \(lock-timeout\)/);
+    assert.strictEqual(outcome.stdout, '', 'a diagnostic must not alter the stdout protocol');
+    const identityId = rll.computeClaudeAuthorityIdentityId(
+      project, 'claude-hook', base.event.sessionId, base.event.agentId,
+    );
+    const fence = rll.readClaudeAuthorityFence(project, identityId);
+    assert.strictEqual(fence.ok, true);
+    assert.strictEqual(fence.absent, false,
+      'a failed park must still fall through to the real terminal fence');
+  });
+});
+
 test('RED resume: wrong agent, wrong session, wrong role, an expired handle, a present identity fence, ambiguity, and a no-longer-live actor binding are all fail-closed for consumeClaudeResumeHandleForObservedActor', () => {
   withProject((project) => {
     const base = setupReadyBaseWithClaudeSendMessageRoleBinding(project);

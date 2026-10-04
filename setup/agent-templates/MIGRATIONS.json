@@ -136,6 +136,18 @@
       }
     },
     "planner": {
+      "1.22.8": {
+        "date": "2026-10-02",
+        "breaking": false,
+        "summary": "Route test-only Path-Manifests to test-specialist, never doc-updater, and require each specialist row to produce launcher-only pre-commit shift-left evidence without inventing operation IDs.",
+        "migration_hint": "Run plain /sync-l0; new waves retain one resumed planner while gaining path-based specialist routing and launcher-bounded shift-left checks."
+      },
+      "1.22.7": {
+        "date": "2026-10-02",
+        "breaking": false,
+        "summary": "Pass A and Pass B now share one stable planner actor: Pass A is the wave's only Agent spawn, Pass B resumes that exact actor through SendMessage, and loss of the actor fails the wave closed instead of spawning a planner-N replacement. The strict PLAN writer gate remains unchanged.",
+        "migration_hint": "Run plain /sync-l0; start a fresh wave. Orchestrators must retain the Pass A planner recipient/handle and resume it for Pass B rather than dispatching a second planner."
+      },
       "1.22.6": {
         "date": "2026-10-02",
         "breaking": false,
@@ -287,6 +299,18 @@
       }
     },
     "quality-gater": {
+      "2.28.6": {
+        "date": "2026-10-02",
+        "breaking": false,
+        "summary": "Bind each QG attempt to the current durable wave revision, cycle and verification epoch; record PASS or FAIL immutably, mint only from the exact PASS attempt, and hand a FAIL attempt to the bounded explicit QG-to-EXECUTE rework transition. Active-wave selection remains durable and independent of ambient shell state.",
+        "migration_hint": "Run plain /sync-l0 so runtime-enabled consumers refresh the quality-gater template, wave-control v2 state machine, launcher operations and QG proof contract atomically."
+      },
+      "2.28.5": {
+        "date": "2026-10-02",
+        "breaking": false,
+        "summary": "Resolve the active wave independently in every Bash tool call from the single durable, current wave-control state in phase QG. Ambient CLAUDE_WAVE_SLUG, directory ordering and modification time are no longer selection authority; zero or multiple current QG states fail closed.",
+        "migration_hint": "Run plain /sync-l0 so runtime-enabled consumers refresh the quality-gater template, launcher and runtime-consumer-qg operation atomically."
+      },
       "2.28.4": {
         "date": "2026-10-02",
         "breaking": false,
@@ -487,6 +511,12 @@
       }
     },
     "arch-testing": {
+      "1.41.5": {
+        "date": "2026-10-02",
+        "breaking": false,
+        "summary": "Align the requester await-result deadline with the canonical runtime bootstrap at 900 seconds, so a worker that renews its live lease beyond five minutes can still publish and be accepted.",
+        "migration_hint": "Run plain /sync-l0; runtime-enabled consumers refresh the managed architect templates atomically."
+      },
       "1.41.4": {
         "date": "2026-10-02",
         "breaking": false,
@@ -691,6 +721,12 @@
       }
     },
     "arch-platform": {
+      "1.36.5": {
+        "date": "2026-10-02",
+        "breaking": false,
+        "summary": "Align the requester await-result deadline with the canonical runtime bootstrap at 900 seconds, so a worker that renews its live lease beyond five minutes can still publish and be accepted.",
+        "migration_hint": "Run plain /sync-l0; runtime-enabled consumers refresh the managed architect templates atomically."
+      },
       "1.36.4": {
         "date": "2026-10-02",
         "breaking": false,
@@ -875,6 +911,12 @@
       }
     },
     "arch-integration": {
+      "1.32.5": {
+        "date": "2026-10-02",
+        "breaking": false,
+        "summary": "Align the requester await-result deadline with the canonical runtime bootstrap at 900 seconds, so a worker that renews its live lease beyond five minutes can still publish and be accepted.",
+        "migration_hint": "Run plain /sync-l0; runtime-enabled consumers refresh the managed architect templates atomically."
+      },
       "1.32.4": {
         "date": "2026-10-02",
         "breaking": false,
@@ -1147,6 +1189,12 @@
       }
     },
     "doc-updater": {
+      "2.13.4": {
+        "date": "2026-10-02",
+        "breaking": false,
+        "summary": "Add the launcher-only pre-commit shift-left gate with explicit evidence and fail-closed handling when an applicable cheap check has no installed operation ID.",
+        "migration_hint": "Run plain /sync-l0; specialists must record launcher operation, argv, exit and outcome before committing."
+      },
       "2.13.3": {
         "date": "2026-10-02",
         "breaking": false,
@@ -1368,6 +1416,12 @@
       }
     },
     "feature-domain-specialist": {
+      "1.2.1": {
+        "date": "2026-10-02",
+        "breaking": false,
+        "summary": "Add the launcher-only pre-commit shift-left gate with explicit evidence and fail-closed handling when an applicable cheap check has no installed operation ID.",
+        "migration_hint": "Run plain /sync-l0; specialists must record launcher operation, argv, exit and outcome before committing."
+      },
       "1.2.0": {
         "date": "2026-06-18",
         "breaking": false,
@@ -1391,6 +1445,12 @@
       }
     },
     "test-specialist": {
+      "1.32.2": {
+        "date": "2026-10-02",
+        "breaking": false,
+        "summary": "Add the launcher-only pre-commit shift-left gate and evidence contract; test-only Path-Manifests are owned here rather than by doc-updater.",
+        "migration_hint": "Run plain /sync-l0; specialists must record launcher operation, argv, exit and outcome before committing."
+      },
       "1.32.1": {
         "date": "2026-09-29",
         "breaking": false,
@@ -1553,6 +1613,12 @@
       }
     },
     "ui-specialist": {
+      "1.22.1": {
+        "date": "2026-10-02",
+        "breaking": false,
+        "summary": "Add the launcher-only pre-commit shift-left gate with explicit evidence and fail-closed handling when an applicable cheap check has no installed operation ID.",
+        "migration_hint": "Run plain /sync-l0; specialists must record launcher operation, argv, exit and outcome before committing."
+      },
       "1.22.0": {
         "date": "2026-06-18",
         "breaking": false,
@@ -1653,6 +1719,12 @@
       }
     },
     "domain-model-specialist": {
+      "1.20.1": {
+        "date": "2026-10-02",
+        "breaking": false,
+        "summary": "Add the launcher-only pre-commit shift-left gate with explicit evidence and fail-closed handling when an applicable cheap check has no installed operation ID.",
+        "migration_hint": "Run plain /sync-l0; specialists must record launcher operation, argv, exit and outcome before committing."
+      },
       "1.20.0": {
         "date": "2026-06-18",
         "breaking": false,
@@ -1743,6 +1815,12 @@
       }
     },
     "data-layer-specialist": {
+      "1.20.1": {
+        "date": "2026-10-02",
+        "breaking": false,
+        "summary": "Add the launcher-only pre-commit shift-left gate with explicit evidence and fail-closed handling when an applicable cheap check has no installed operation ID.",
+        "migration_hint": "Run plain /sync-l0; specialists must record launcher operation, argv, exit and outcome before committing."
+      },
       "1.20.0": {
         "date": "2026-06-18",
         "breaking": false,
@@ -2059,6 +2137,12 @@
       }
     },
     "toolkit-specialist": {
+      "1.10.3": {
+        "date": "2026-10-02",
+        "breaking": false,
+        "summary": "Add the launcher-only pre-commit shift-left gate with explicit evidence and fail-closed handling when an applicable cheap check has no installed operation ID.",
+        "migration_hint": "Run plain /sync-l0; specialists must record launcher operation, argv, exit and outcome before committing."
+      },
       "1.10.2": {
         "date": "2026-10-02",
         "breaking": false,

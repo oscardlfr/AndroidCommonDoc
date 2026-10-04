@@ -671,6 +671,12 @@ function handleSubagentStop(data) {
       process.exit(0);
       return;
     }
+    // Non-applicable parking is ordinary for actors without a persistent
+    // binding and must remain silent. Preserve concrete lock/state-writer
+    // failures, without changing the terminal classifier or fence below.
+    if (parkResult && parkResult.cause) {
+      process.stderr.write(`[subagent-start-context-bundle] SubagentStop: resumable park failed: ${parkResult.reason} (${parkResult.cause})\n`);
+    }
   }
 
   // ── READ-ONLY RESOLUTION: the classifier scans every Claude-actor
@@ -1139,6 +1145,8 @@ process.stdin.on('end', () => {
         }
         if (resumeResult && resumeResult.ok === true) {
           resumedViaHandle = true;
+        } else if (resumeResult && resumeResult.cause) {
+          process.stderr.write(`[subagent-start-context-bundle] SubagentStart: resume projection failed: ${resumeResult.reason} (${resumeResult.cause})\n`);
         }
       }
 

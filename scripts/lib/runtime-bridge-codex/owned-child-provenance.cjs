@@ -253,8 +253,29 @@ function createOwnedChildProvenance({
     const fixedEnv = { LC_ALL: 'C', LANG: 'C', TZ: 'UTC', PATH: getIsolatedPathPosix() };
     const boundNow = () => Math.max(0, Math.min(2000, deadlineMs - Date.now()));
 
-    const firstBirth = await runBoundedOwnedObserverProcess(psPath, ['-o', 'lstart=', '-p', String(pid)], fixedEnv, boundNow(), observerJobs, deadlineMs);
-    if (!firstBirth.ok || firstBirth.text.length === 0) return { ok: false };
+    // A just-spawned process can be alive before Darwin's `ps` snapshot makes
+    // it visible. Treat only that pre-observation absence as a readiness
+    // condition: retry with capped exponential backoff inside both a 500 ms
+    // readiness window and the caller's existing startup deadline. Every
+    // successful attempt still has to pass the full birth/pgid/executable/
+    // birth correlation below; mismatches and later disappearance remain
+    // immediate fail-closed outcomes.
+    const readinessDeadlineMs = Math.min(deadlineMs, Date.now() + 500);
+    let firstBirth = { ok: false };
+    let readinessDelayMs = 10;
+    while (Date.now() < readinessDeadlineMs) {
+      firstBirth = await runBoundedOwnedObserverProcess(
+        psPath, ['-o', 'lstart=', '-p', String(pid)], fixedEnv, boundNow(), observerJobs, deadlineMs,
+      );
+      if (firstBirth.ok && firstBirth.text.length > 0) break;
+      try { process.kill(pid, 0); } catch { break; }
+      const delayMs = Math.max(0, Math.min(readinessDelayMs, readinessDeadlineMs - Date.now()));
+      if (delayMs > 0) await new Promise((resolve) => { setTimeout(resolve, delayMs); });
+      readinessDelayMs = Math.min(readinessDelayMs * 2, 100);
+    }
+    if (!firstBirth.ok || firstBirth.text.length === 0) {
+      return { ok: false, reason: 'first-observation-unavailable', subReason: 'startup-readiness-timeout' };
+    }
 
     // P1-A (section5) / sequence143 correction (finding P1A-142-03): PGID is
     // now observed against the exact CHILD pid section5 requires -- a prior
@@ -267,7 +288,9 @@ function createOwnedChildProvenance({
     // race stage1 in practice.
     const pgidObservation = await runBoundedOwnedObserverProcess(psPath, ['-o', 'pgid=', '-p', String(pid)], fixedEnv, boundNow(), observerJobs, deadlineMs);
     const parsedPgid = pgidObservation.ok ? parseInt(pgidObservation.text, 10) : NaN;
-    if (!Number.isInteger(parsedPgid) || parsedPgid <= 0) return { ok: false };
+    if (!Number.isInteger(parsedPgid) || parsedPgid <= 0) {
+      return { ok: false, reason: 'pgid-observation-unavailable' };
+    }
 
     // P1-A (section5): "match the host-approved executable to observed BORN
     // provenance". Linux returns through its procfs branch above; macOS uses
@@ -287,13 +310,17 @@ function createOwnedChildProvenance({
     // is a genuine proof failure, never a crash.
     let observedExecutableRealpath;
     const executableObservation = await runBoundedOwnedObserverProcess(psPath, ['-o', 'comm=', '-p', String(pid)], fixedEnv, boundNow(), observerJobs, deadlineMs);
-    if (!executableObservation.ok || executableObservation.text.length === 0) return { ok: false };
+    if (!executableObservation.ok || executableObservation.text.length === 0) {
+      return { ok: false, reason: 'executable-observation-unavailable' };
+    }
     try {
       observedExecutableRealpath = fs.realpathSync(executableObservation.text);
     } catch (err) {
-      return { ok: false };
+      return { ok: false, reason: 'observed-executable-unresolved' };
     }
-    if (observedExecutableRealpath !== expectedExecutableIdentity) return { ok: false };
+    if (observedExecutableRealpath !== expectedExecutableIdentity) {
+      return { ok: false, reason: 'expected-executable-mismatch' };
+    }
 
     // P1-A (section5): "Reobserve birth around PGID and require consistency
     // with the original BORN observation" -- a SECOND, independent lstart=
@@ -306,7 +333,10 @@ function createOwnedChildProvenance({
     // this whole probe closed, never to fabricate a completed proof from an
     // incomplete one.
     const secondBirth = await runBoundedOwnedObserverProcess(psPath, ['-o', 'lstart=', '-p', String(pid)], fixedEnv, boundNow(), observerJobs, deadlineMs);
-    if (!secondBirth.ok || secondBirth.text.length === 0 || secondBirth.text !== firstBirth.text) return { ok: false };
+    if (!secondBirth.ok || secondBirth.text.length === 0) {
+      return { ok: false, reason: 'second-observation-unavailable' };
+    }
+    if (secondBirth.text !== firstBirth.text) return { ok: false, reason: 'birth-token-drift' };
 
     return { ok: true, birthToken: firstBirth.text, pgid: parsedPgid, executableIdentity: observedExecutableRealpath };
   }

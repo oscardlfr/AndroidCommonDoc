@@ -23,7 +23,7 @@ You do NOT know which project you're in (L0, L1, L2). You MUST discover the proj
 3. **Run `/pre-pr`** — this is the project's OWN validation pipeline. It already integrates Detekt, lint-resources, commit-lint, architecture guards, and project-specific checks dynamically.
 
 **`/pre-pr` is the PRIMARY enforcement step.** Everything else supports it.
-**L1/L2 consumer order**: the orchestrator transitions the wave to QG → you run the consumer checks (Steps 0–2.6, 4–9.5, X; Steps 3, 7.5, Y and Z are L0-only and the launcher refuses them) → Step 10 `runtime-consumer-qg … pre-pr --slug <slug> --project-gate PASS|FAIL` → `… mint --slug <slug>` → Step 11 `… verify --slug <slug>` → the orchestrator transitions the wave to COMPLETE.
+**L1/L2 consumer order**: the orchestrator transitions the wave to QG → read its exact revision → run the consumer checks (Steps 0–2.6, 4–9.5, X; Steps 3, 7.5, Y and Z are L0-only and the launcher refuses them) → Step 10 `runtime-consumer-qg … pre-pr --slug <slug> --expected-revision <revision> --project-gate PASS|FAIL` creates the immutable attempt → on PASS, `… mint --slug <slug> --qg-attempt <attempt-path>` → Step 11 `… verify --slug <slug>` → the orchestrator supplies that PASS attempt and the same revision to COMPLETE. On FAIL it supplies the FAIL attempt once to explicit `wave-control rework`; neither side reuses an old proof.
 
 ## Search Dispatch Protocol (MANDATORY — T-BUG-015)
 
@@ -36,10 +36,10 @@ under review when arch dispatched it. quality-gater's file access = VERIFICATION
 
 ### Step 0: Confirm activation
 
-Confirm you have been activated by team-lead for Phase 3. If activated without a specific task, SendMessage to team-lead: `SendMessage(to="team-lead", summary="Phase 3 scope?", message="Activated for Phase 3 — what is the scope of this quality gate run?")`.
+Confirm you have been activated by team-lead for Phase 3. If activated without a specific task, SendMessage to team-lead: `SendMessage(to="team-lead", summary="Phase 3 scope?", message="Activated for Phase 3 — what is the scope of this quality gate run?")`. Resolve the slug again in every Bash block that needs it: shell variables do not survive between tool calls, and persisted QG phase state — never ambient `CLAUDE_WAVE_SLUG`, directory order, or mtime — is the authority.
 
 ```bash
-: "${CLAUDE_WAVE_SLUG:?set explicit wave slug}"; QG_PLAN="$PWD/.planning/wave-${CLAUDE_WAVE_SLUG}/PLAN.md"; [[ -f "$QG_PLAN" && ! -L "$QG_PLAN" ]] || { echo "PLAN must be a regular non-symlink file: $QG_PLAN" >&2; exit 2; }; RUNTIME_LAYER=$(node .claude/runtime/l0-toolkit-launcher.cjs describe layer --project-root "$PWD"); if [[ "$RUNTIME_LAYER" == "L0" ]]; then node .claude/runtime/l0-toolkit-launcher.cjs run emit-qg-result --project-root "$PWD" -- --init --slug "$CLAUDE_WAVE_SLUG"; fi
+wave_slug="$(node .claude/runtime/l0-toolkit-launcher.cjs run runtime-consumer-qg --project-root "$PWD" -- resolve-active-wave)" || exit $?; QG_PLAN="$PWD/.planning/wave-${wave_slug}/PLAN.md"; [[ -f "$QG_PLAN" && ! -L "$QG_PLAN" ]] || { echo "PLAN must be a regular non-symlink file: $QG_PLAN" >&2; exit 2; }; RUNTIME_LAYER=$(node .claude/runtime/l0-toolkit-launcher.cjs describe layer --project-root "$PWD"); if [[ "$RUNTIME_LAYER" == "L0" ]]; then node .claude/runtime/l0-toolkit-launcher.cjs run emit-qg-result --project-root "$PWD" -- --init --slug "$wave_slug"; fi
 ```
 
 ### Step 0.5: Detect project toolchain (BL-W31.7-10)
@@ -95,7 +95,7 @@ If you suspect context compaction dropped state (stale assumptions, forgotten ta
 ### Step 2: Full Validation Pipeline
 
 ```bash
-node .claude/runtime/l0-toolkit-launcher.cjs run emit-qg-result --project-root "$PWD" -- --phase "pre-pr"
+wave_slug="$(node .claude/runtime/l0-toolkit-launcher.cjs run runtime-consumer-qg --project-root "$PWD" -- resolve-active-wave)" || exit $?; node .claude/runtime/l0-toolkit-launcher.cjs run emit-qg-result --project-root "$PWD" -- --phase "pre-pr" --slug "$wave_slug"
 /pre-pr
 ```
 
@@ -171,10 +171,10 @@ L0 runs `/test-full-parallel --fresh-daemon` plus the Bats aggregate below. L1/L
 **Bash/Shell scripts (MANDATORY — FULL suite):**
 
 ```bash
-if [[ "$(node .claude/runtime/l0-toolkit-launcher.cjs describe layer --project-root "$PWD")" == "L0" ]]; then
-  node .claude/runtime/l0-toolkit-launcher.cjs run emit-qg-result --project-root "$PWD" -- --phase "test-suite"
+wave_slug="$(node .claude/runtime/l0-toolkit-launcher.cjs run runtime-consumer-qg --project-root "$PWD" -- resolve-active-wave)" || exit $?; QG_PLAN="$PWD/.planning/wave-${wave_slug}/PLAN.md"; if [[ "$(node .claude/runtime/l0-toolkit-launcher.cjs describe layer --project-root "$PWD")" == "L0" ]]; then
+  node .claude/runtime/l0-toolkit-launcher.cjs run emit-qg-result --project-root "$PWD" -- --phase "test-suite" --slug "$wave_slug"
   # HARD: either non-zero exit => STOP+report -- NOT just ^not ok (exit 2 = incomplete/no-evidence can fire with not_ok==0). Order above (--init then bats) is load-bearing: generated_at >= started_at depends on it.
-  node .claude/runtime/l0-toolkit-launcher.cjs run l0-bats-sharded --project-root "$PWD" -- --suite-root "$PWD/scripts/tests" --shard-count 6 --max-parallel 6 --wave-slug "$CLAUDE_WAVE_SLUG" --plan "$QG_PLAN" || exit $?
+  node .claude/runtime/l0-toolkit-launcher.cjs run l0-bats-sharded --project-root "$PWD" -- --suite-root "$PWD/scripts/tests" --shard-count 6 --max-parallel 6 --wave-slug "$wave_slug" --plan "$QG_PLAN" || exit $?
 else
   echo "[STEP 3] Consumer project tests are owned by the single /pre-pr run from Step 2; the L0 Bats harness is source-only and is not repeated downstream."
 fi
@@ -273,7 +273,7 @@ See l0doc:docs/agents/quality-gater-runtime-ui-validation.md. Skip if: no baseli
 Resolve wave slug, check PLAN.md, run qg-path-audit.sh, emit result into `quality-gate-report.json`.
 
 ```bash
-wave_slug="${CLAUDE_WAVE_SLUG:?set explicit wave slug}"
+wave_slug="$(node .claude/runtime/l0-toolkit-launcher.cjs run runtime-consumer-qg --project-root "$PWD" -- resolve-active-wave)" || exit $?
 plan_path=".planning/wave-${wave_slug}/PLAN.md"
 
 REPORT_FILE=".androidcommondoc/quality-gate-report.json"
@@ -332,33 +332,33 @@ Full procedure: [quality-gater-registry-integrity](l0doc:docs/agents/quality-gat
 
 ### Step Z: Report Freshness Gate (L0 only — REQUIRED pre-mint)
 
-Full procedure: [quality-gater-freshness-gate](l0doc:docs/agents/quality-gater-freshness-gate.md). Run `node .claude/runtime/l0-toolkit-launcher.cjs run qg-report-freshness --project-root "$PWD" -- .androidcommondoc/quality-gate-report.json`, then emit `report-freshness` (ran=true, PASS/FAIL) into the report. **Non-zero exit → exit 1.** In L1/L2 skip it: the launcher refuses it and `runtime-consumer-qg` binds freshness itself.
+Full procedure: [quality-gater-freshness-gate](l0doc:docs/agents/quality-gater-freshness-gate.md). Load it with launcher `read-doc` and execute its **Canonical Step Z Bash Block exactly**; do not abbreviate the script's required `--report`, `--head`, `--bats-count`, or `--repo-root` arguments. Emit `report-freshness` (ran=true, PASS/FAIL) into the report. **Non-zero exit → exit 1.** In L1/L2 skip it: the launcher refuses it and `runtime-consumer-qg` binds freshness itself.
 
 ### Step S: Secret Scan (REQUIRED — pre-mint)
 
 Full procedure: [quality-gater-secret-scan](l0doc:docs/agents/quality-gater-secret-scan.md). Run `node .claude/runtime/l0-toolkit-launcher.cjs run secret-scan --project-root "$PWD" --`, capture exit, emit `secret-scan` (ran=true, PASS iff exit 0 else FAIL) into `quality-gate-report.json`. **Non-zero exit → exit 1 immediately.** In L1/L2 do not run it here: the Step 10 `pre-pr` producer runs the same scanner and records the result in the stamp.
 
 ### Step 10: Emit QG proof (if PASS)
-
 If ALL steps passed (`PROJECT_GATE=PASS`; in L1/L2 a failed step means `PROJECT_GATE=FAIL`, which records a FAIL stamp and stops before the mint):
 ```bash
+wave_slug="$(node .claude/runtime/l0-toolkit-launcher.cjs run runtime-consumer-qg --project-root "$PWD" -- resolve-active-wave)" || exit $?
+QG_STATE="$(node .claude/runtime/l0-toolkit-launcher.cjs run wave-control --project-root "$PWD" -- status --slug "$wave_slug")"; QG_REVISION="$(printf '%s' "$QG_STATE" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const v=JSON.parse(s);if(!Number.isInteger(v.revision))process.exit(2);process.stdout.write(String(v.revision));})')"
 if [[ "$(node .claude/runtime/l0-toolkit-launcher.cjs describe layer --project-root "$PWD")" == "L0" ]]; then
   node .claude/runtime/l0-toolkit-launcher.cjs run emit-push-proof --project-root "$PWD" -- --subcommand run-qg
+  QG_ATTEMPT="$(node .claude/runtime/l0-toolkit-launcher.cjs run wave-control --project-root "$PWD" -- qg-attempt --slug "$wave_slug" --expected-revision "$QG_REVISION" --verdict PASS --checks '{"project_gate":"PASS"}')"
 else
-  node .claude/runtime/l0-toolkit-launcher.cjs run runtime-consumer-qg --project-root "$PWD" -- pre-pr --slug "$CLAUDE_WAVE_SLUG" --project-gate "${PROJECT_GATE:?PASS or FAIL}" || exit 1
-  node .claude/runtime/l0-toolkit-launcher.cjs run runtime-consumer-qg --project-root "$PWD" -- mint --slug "$CLAUDE_WAVE_SLUG"
+  QG_PRE_PR="$(node .claude/runtime/l0-toolkit-launcher.cjs run runtime-consumer-qg --project-root "$PWD" -- pre-pr --slug "$wave_slug" --expected-revision "$QG_REVISION" --project-gate "${PROJECT_GATE:?PASS or FAIL}")" || { printf '%s\n' "$QG_PRE_PR"; exit 1; }
+  QG_ATTEMPT_PATH="$(printf '%s\n' "$QG_PRE_PR" | awk '{print $3}')"
+  node .claude/runtime/l0-toolkit-launcher.cjs run runtime-consumer-qg --project-root "$PWD" -- mint --slug "$wave_slug" --qg-attempt "$QG_ATTEMPT_PATH"
 fi
 ```
-
-If ANY step FAILED: do NOT mint (L0: no run-qg; L1/L2: only the `pre-pr … --project-gate FAIL` record). **The proof is your PASS/FAIL signal to the enforcement layer.** Without it, no push and no COMPLETE. A failing check is never reclassified as "pre-existing" or "unrelated" to reach PASS; in L1/L2 a failure of the project's own validator sets `PROJECT_GATE=FAIL`, records the FAIL stamp and stops the QG with that reason.
-
+If ANY step FAILED: do NOT mint (L0: no run-qg, but publish `wave-control qg-attempt ... --verdict FAIL`; L1/L2: only the `pre-pr … --expected-revision "$QG_REVISION" --project-gate FAIL` record). Report the exact immutable attempt path to the orchestrator; it is the sole input to `wave-control rework`. **The proof is your PASS signal to the enforcement layer.** Without it, no push and no COMPLETE. A failing check is never reclassified as "pre-existing" or "unrelated" to reach PASS.
 ### Step 11: Emit QG result signal
-
 ```bash
-if [[ "$(node .claude/runtime/l0-toolkit-launcher.cjs describe layer --project-root "$PWD")" == "L0" ]]; then
-  node .claude/runtime/l0-toolkit-launcher.cjs run emit-qg-result --project-root "$PWD" --
+wave_slug="$(node .claude/runtime/l0-toolkit-launcher.cjs run runtime-consumer-qg --project-root "$PWD" -- resolve-active-wave)" || exit $?; if [[ "$(node .claude/runtime/l0-toolkit-launcher.cjs describe layer --project-root "$PWD")" == "L0" ]]; then
+  node .claude/runtime/l0-toolkit-launcher.cjs run emit-qg-result --project-root "$PWD" -- --slug "$wave_slug"
 else
-  node .claude/runtime/l0-toolkit-launcher.cjs run runtime-consumer-qg --project-root "$PWD" -- verify --slug "$CLAUDE_WAVE_SLUG" --head "$(git rev-parse HEAD)"
+  node .claude/runtime/l0-toolkit-launcher.cjs run runtime-consumer-qg --project-root "$PWD" -- verify --slug "$wave_slug" --head "$(git rev-parse HEAD)"
 fi
 ```
 

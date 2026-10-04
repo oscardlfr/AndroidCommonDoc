@@ -25,6 +25,7 @@ if [ "$1" = "--version" ]; then echo "Bats 1.0.0"; exit 0; fi
 if [ "$1" = "--count" ]; then echo 1; exit 0; fi
 { mktemp --version 2>/dev/null | head -n 1; } > "$FAKE_BATS_MKTEMP_WITNESS" || true
 printf '%s\n' "${TMPDIR:-}" > "$FAKE_BATS_TMPDIR_WITNESS" || true
+printf '%s|%s\n' "${FORCE_COLOR-unset}" "${NO_COLOR-unset}" > "$FAKE_BATS_COLOR_WITNESS" || true
 echo "1..1"
 echo "ok 1 fake"
 FAKE
@@ -54,6 +55,9 @@ FAKE
   TMPDIR_WITNESS="$BATS_TEST_TMPDIR/tmpdir-witness.txt"
   : > "$TMPDIR_WITNESS"
   export FAKE_BATS_TMPDIR_WITNESS="$TMPDIR_WITNESS"
+  COLOR_WITNESS="$BATS_TEST_TMPDIR/color-witness.txt"
+  : > "$COLOR_WITNESS"
+  export FAKE_BATS_COLOR_WITNESS="$COLOR_WITNESS"
   LOG="$BATS_TEST_TMPDIR/out.log"
   # Expose exactly Node, not its entire host bin directory. On Homebrew systems
   # that directory may also contain gmktemp, which would invalidate the
@@ -202,6 +206,13 @@ _child_tmpdir() { cat "$TMPDIR_WITNESS"; }
   TMPDIR="$short_tmp" _run_runbats "$PROJ/x.bats"
   [ "$status" -eq 0 ]
   [ "$(_child_tmpdir)" = "$short_tmp" ]
+}
+
+@test "RUN-BATS-COLOR-01 the child TAP environment is non-colored regardless of host variables" {
+  _make_gnu mktemp
+  NO_COLOR=1 FORCE_COLOR=3 _run_runbats "$PROJ/x.bats"
+  [ "$status" -eq 0 ]
+  [ "$(cat "$COLOR_WITNESS")" = "0|unset" ]
 }
 
 @test "TMPDIR-BUDGET-03 a run-scoped short TMPDIR is removed when the run ends" {

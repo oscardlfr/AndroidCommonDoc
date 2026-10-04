@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { mkdtemp, rm, mkdir, writeFile, readFile, chmod, stat, readdir } from "node:fs/promises";
+import { mkdtemp, rm, mkdir, writeFile, readFile, chmod, stat, readdir, realpath } from "node:fs/promises";
 import { join, relative, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import { spawnSync } from "node:child_process";
@@ -16,6 +16,26 @@ const REAL_L0_ROOT = resolve(import.meta.dirname, "../../../..");
 const localRequire = createRequire(import.meta.url);
 const runtimeContext = localRequire(join(REAL_L0_ROOT, "scripts", "lib", "runtime-project-context.cjs"));
 const waveControl = localRequire(join(REAL_L0_ROOT, "scripts", "lib", "wave-control-plane.cjs"));
+
+async function writeScannerFixture(projectRoot: string, scenario: { output: string; exit: number }): Promise<string> {
+  const scanner = join(projectRoot, "fixture-trufflehog");
+  await writeFile(scanner, [
+    "#!/bin/sh",
+    'if [ "$1" = "--version" ]; then echo "fixture-trufflehog 1.0"; exit 0; fi',
+    '[ "$#" -eq 5 ] && [ "$1" = "filesystem" ] || exit 64',
+    // Compare physical directories in the shell's namespace: Git Bash may
+    // render a native Windows argument as /c/... while the environment keeps C:\\....
+    'actual_root=$(cd "$2" && pwd -P) || exit 64',
+    'expected_root=$(cd "$SCANNER_EXPECTED_ROOT" && pwd -P) || exit 64',
+    '[ "$actual_root" = "$expected_root" ] || exit 64',
+    '[ "$3" = "--only-verified" ] && [ "$4" = "--json" ] && [ "$5" = "--no-update" ] || exit 64',
+    scenario.output ? `printf '%s\\n' '${scenario.output}'` : ":",
+    `exit ${scenario.exit}`,
+    "",
+  ].join("\n"), { mode: 0o755 });
+  await chmod(scanner, 0o755);
+  return scanner;
+}
 
 async function writeRuntimeManifest(projectRoot: string, consumerLayer?: "L1" | "L2"): Promise<void> {
   await writeFile(join(projectRoot, "l0-manifest.json"), JSON.stringify({
@@ -550,13 +570,18 @@ describe("source-referenced runtime installation", () => {
     expect(first.toolkitContentDigest).toMatch(/^[0-9a-f]{64}$/);
     const inventoryPaths = new Set(first.inventory?.map((entry) => entry.relative_path));
     expect(inventoryPaths.has("scripts/lib/runtime-consultation.cjs")).toBe(true);
+    expect(inventoryPaths.has("scripts/lib/runtime-session-renewal.cjs")).toBe(true);
+    expect(inventoryPaths.has("scripts/lib/runtime-session-lifetime.cjs")).toBe(true);
+    expect(inventoryPaths.has("scripts/lib/shell-command-intent.cjs")).toBe(true);
     expect(inventoryPaths.has("scripts/lib/runtime-consultation/primitives.cjs")).toBe(true);
     expect(inventoryPaths.has("scripts/lib/runtime-consultation/cli-argv.cjs")).toBe(true);
     expect(inventoryPaths.has("scripts/lib/runtime-consultation/git-identity.cjs")).toBe(true);
     expect(inventoryPaths.has("scripts/lib/runtime-consultation/coordination-paths.cjs")).toBe(true);
     expect(inventoryPaths.has("scripts/lib/runtime-role-lifecycle/claude-id01-startup.cjs")).toBe(true);
     expect(inventoryPaths.has("scripts/lib/runtime-bridge-codex/process-identity.cjs")).toBe(true);
+    expect(inventoryPaths.has("scripts/lib/context-provider-actor-authorization.cjs")).toBe(true);
     expect(inventoryPaths.has("scripts/lib/wave-control-plane.cjs")).toBe(true);
+    expect(inventoryPaths.has("scripts/lib/wave-plan-class.cjs")).toBe(true);
     expect(inventoryPaths.has("scripts/lib/verdict-evidence-contract-cli.cjs")).toBe(true);
     expect(inventoryPaths.has("scripts/lib/verdict-evidence-contract.cjs")).toBe(true);
     expect(inventoryPaths.has("scripts/lib/verdict-artifact-confinement.cjs")).toBe(true);
@@ -1053,9 +1078,28 @@ describe("source-referenced runtime installation", () => {
       .rejects.toThrow();
   });
 
-  it("mints and verifies a downstream QG receipt without copying the L0 harness", async () => {
+  it.each([
+    { scanner: "clean", exit: 0, output: "", reason: "OK" },
+    { scanner: "error", exit: 42, output: "", reason: "SCANNER_ERROR" },
+    { scanner: "findings", exit: 0, output: '{"verified":true}', reason: "SECRETS_FOUND" },
+  ])("uses a $scanner external scanner for downstream QG receipts without copying the L0 harness", async (scenario) => {
     const installed = await installRuntimeConsumer(projectRoot, REAL_L0_ROOT);
     expect(installed.ok).toBe(true);
+    // Only the external binary is a fixture. Launcher, scan producer, immutable
+    // attempt, mint and verification stay real and must remain fail-closed.
+    const scanner = await writeScannerFixture(projectRoot, scenario);
+    const scannerEnv = {
+      ...process.env,
+      TRUFFLEHOG_BIN: scanner.replace(/\\/g, "/"),
+      SCANNER_EXPECTED_ROOT: await realpath(projectRoot),
+    };
+    await mkdir(join(projectRoot, ".planning", "wave-runtime"), { recursive: true });
+    await writeFile(
+      join(projectRoot, ".planning", "wave-runtime", "PLAN.md"),
+      "### Wave Class\n\n- **Class**: FAST-PATH\n",
+      "utf8",
+    );
+    await writeFile(join(projectRoot, ".planning", "wave-runtime", "CLASS"), "FAST-PATH\n", "utf8");
     for (const args of [
       ["init", "-q"],
       ["config", "user.email", "test@example.invalid"],
@@ -1067,18 +1111,41 @@ describe("source-referenced runtime installation", () => {
       expect(git.status, git.stderr).toBe(0);
     }
     const head = spawnSync("git", ["rev-parse", "HEAD"], { cwd: projectRoot, encoding: "utf8" }).stdout.trim();
-    await mkdir(join(projectRoot, ".androidcommondoc", "wave-control"), { recursive: true });
-    await mkdir(join(projectRoot, ".planning", "wave-runtime"), { recursive: true });
-    await writeFile(join(projectRoot, ".androidcommondoc", "pre-pr.stamp"), JSON.stringify({
-      verdict: "PASS", timestamp: new Date().toISOString(), head,
-    }) + "\n");
-    await writeFile(join(projectRoot, ".androidcommondoc", "wave-control", "runtime.json"), JSON.stringify({
-      phase: "QG", head, plan_sha256: "a".repeat(64),
-    }) + "\n");
+    waveControl.initialize(projectRoot, "runtime");
+    waveControl.transition(projectRoot, "runtime", "EXECUTE", { expectedRevision: 0 });
+    const preverify = waveControl.preverify(projectRoot, "runtime", { expectedRevision: 1 });
+    waveControl.transition(projectRoot, "runtime", "VERIFY_FINAL", {
+      expectedRevision: 1, rebindHead: true, preverifyReceipt: preverify.path,
+    });
+    waveControl.transition(projectRoot, "runtime", "QG", { expectedRevision: 2 });
 
     const launcher = join(projectRoot, ".claude", "runtime", "l0-toolkit-launcher.cjs");
+    const prePr = spawnSync(process.execPath, [launcher, "run", "runtime-consumer-qg", "--project-root", projectRoot,
+      "--", "pre-pr", "--slug", "runtime", "--expected-revision", "3", "--project-gate", "PASS"], {
+      cwd: projectRoot, encoding: "utf8", env: scannerEnv,
+    });
+    const scanReport = JSON.parse(await readFile(
+      join(projectRoot, ".androidcommondoc", "secret-scan-report.json"), "utf8",
+    ));
+    const scanEvidence = JSON.stringify({ prePr: prePr.stderr || prePr.stdout, scanReport });
+    expect(prePr.status, scanEvidence).toBe(scenario.reason === "OK" ? 0 : 1);
+    expect(scanReport.reason_code, scanEvidence).toBe(scenario.reason);
+    expect(scanReport.head).toBe(head);
+    const qgAttempt = prePr.stdout.trim().split(/\s+/)[2];
+    expect(qgAttempt).toMatch(/qg-attempts/);
+    if (scenario.reason !== "OK") {
+      const attempt = JSON.parse(await readFile(join(projectRoot, qgAttempt), "utf8"));
+      expect(attempt.verdict).toBe("FAIL");
+      expect(attempt.checks.secret_scan).toBe("FAIL");
+      const mintRejected = spawnSync(process.execPath, [launcher, "run", "runtime-consumer-qg", "--project-root", projectRoot,
+        "--", "mint", "--slug", "runtime", "--qg-attempt", qgAttempt], { cwd: projectRoot, encoding: "utf8" });
+      expect(mintRejected.status).not.toBe(0);
+      await expect(readFile(join(projectRoot, ".androidcommondoc", "push-proof.json"), "utf8"))
+        .rejects.toThrow();
+      return;
+    }
     const mint = spawnSync(process.execPath, [launcher, "run", "runtime-consumer-qg", "--project-root", projectRoot,
-      "--", "mint", "--slug", "runtime"], { cwd: projectRoot, encoding: "utf8" });
+      "--", "mint", "--slug", "runtime", "--qg-attempt", qgAttempt], { cwd: projectRoot, encoding: "utf8" });
     expect(mint.status, mint.stderr || mint.stdout).toBe(0);
     expect(mint.stdout).toContain("RUNTIME_CONSUMER_QG_MINTED");
     const verify = spawnSync(process.execPath, [launcher, "run", "runtime-consumer-qg", "--project-root", projectRoot,
@@ -1095,6 +1162,23 @@ describe("source-referenced runtime installation", () => {
       "--", "verify", "--slug", "runtime", "--head", head], { cwd: projectRoot, encoding: "utf8" });
     expect(rejected.status).not.toBe(0);
     expect(rejected.stderr).toContain("pre-pr-stamp-not-current");
+  });
+
+  it("scanner fixture accepts the same directory's shell spelling but rejects a foreign root or changed flags", async () => {
+    const scanner = await writeScannerFixture(projectRoot, { output: "", exit: 0 });
+    const env = { ...process.env, SCANNER_EXPECTED_ROOT: await realpath(projectRoot) };
+    // pwd -P is also Git Bash's /c/... spelling of Node's C:\\... root.
+    const shellRoot = spawnSync("bash", ["-c", 'cd "$1" && pwd -P', "fixture", projectRoot], {
+      encoding: "utf8", env,
+    });
+    expect(shellRoot.status, shellRoot.stderr).toBe(0);
+    const scan = (root: string, jsonFlag = "--json") => spawnSync("bash", [
+      scanner, "filesystem", root, "--only-verified", jsonFlag, "--no-update",
+    ], { encoding: "utf8", env });
+    const sameDirectory = scan(`${shellRoot.stdout.trim()}/.`);
+    expect(sameDirectory.status, sameDirectory.stderr).toBe(0);
+    expect(scan(REAL_L0_ROOT).status).toBe(64);
+    expect(scan(shellRoot.stdout.trim(), "--not-json").status).toBe(64);
   });
 
   it("upgrades an in-place runtime role when its bytes match the previously recorded checksum", async () => {

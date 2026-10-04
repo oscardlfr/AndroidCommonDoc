@@ -60,11 +60,8 @@ run_hook() {
 }
 
 # ── BL-W43-02: inline bypass and prose-reference behavior ───────────────────
-# Regression coverage for the substring-gate recursive-bootstrap pattern.
-# kmp-test-runner-gate uses command.includes() which fires on prose references
-# (e.g., PR body text) as well as real invocations. The inline marker
-# [KMP_TEST_RUNNER_BYPASS] is the escape hatch for prose-reference contexts.
-# BL-W42 PR5 was the canonical incident. NO hook logic changed in W43-02.
+# Executable intent is blocked. Quoted PR bodies and evidence are data, so
+# they do not need an inline bypass marker.
 
 @test "BL-W43-02: PASS: inline [KMP_TEST_RUNNER_BYPASS] marker bypasses block" {
   make_input './gradlew test # [KMP_TEST_RUNNER_BYPASS]'
@@ -72,16 +69,28 @@ run_hook() {
   [ "$status" -eq 0 ]
 }
 
-@test "BL-W43-02: BLOCK: gh pr create body with gradlew test (no bypass — by design)" {
+@test "BL-W43-02: PASS: gh pr create body with gradlew test is quoted data" {
   make_input "gh pr create --title 'foo' --body 'run ./gradlew test to verify'"
   run_hook
-  [ "$status" -eq 2 ]
+  [ "$status" -eq 0 ]
 }
 
 @test "BL-W43-02: PASS: gh pr create body with gradlew test + inline marker" {
   make_input "gh pr create --title 'foo' --body 'run ./gradlew test to verify # [KMP_TEST_RUNNER_BYPASS]'"
   run_hook
   [ "$status" -eq 0 ]
+}
+
+@test "PASS: verdict evidence mentioning no raw gradle test tasks is quoted data" {
+  make_input "printf '%s\\n' 'All checks passed with no raw gradle test tasks.' | node .claude/runtime/l0-toolkit-launcher.cjs run verdict-write --wave demo --role arch-testing --verdict APPROVE"
+  run_hook
+  [ "$status" -eq 0 ]
+}
+
+@test "BLOCK: quoted prose followed by a real gradle test invocation" {
+  make_input "printf '%s\\n' 'no raw gradle test tasks'; ./gradlew :core:jvmTest"
+  run_hook
+  [ "$status" -eq 2 ]
 }
 
 # ── PR2 cli-audit-pr2: expanded block coverage ───────────────────────────────

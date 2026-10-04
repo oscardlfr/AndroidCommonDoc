@@ -45,8 +45,8 @@ Public entrypoints never shell-launch a runtime CLI. Runtime-specific delegation
      Load-bearing contract: disk artifacts in .planning/wave-{slug}/
 
    Phase 1 — Planning (planner subagent):
-     planner consults context-provider, writes plan to .planning/wave-{slug}/PLAN.md (disk artifact)
-     orchestrator reads plan from disk, planner dismissed
+     one planner actor writes Pass A, is resumed for the context-backed Pass B, and finalizes .planning/wave-{slug}/PLAN.md
+     orchestrator reads the final plan from disk, then retires the planner
 
    Phase 2 — Execution (concurrent Agent subagents, optional background peers):
      Architects detect → orchestrator dispatches specialists → architects cross-verify

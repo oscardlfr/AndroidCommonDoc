@@ -68,7 +68,7 @@ process.stdin.on('end', () => {
   if (toolName === 'Agent') {
     const subagentType = data.tool_input?.subagent_type;
     if (subagentType === 'planner') {
-      // BL-W48 team-model migration: the planner is a single-use subagent now.
+      // BL-W48 team-model migration: the planner is an Agent subagent now.
       // A bare Agent(subagent_type="planner") (no team_name — deprecated/ignored)
       // is the canonical spawn. Clear the plan-mode sentinel so ExitPlanMode is
       // unblocked; do NOT demand team_name/name (that forced the broken path).
@@ -95,7 +95,7 @@ process.stdin.on('end', () => {
         reason: [
           '[plan-mode-spawn-planner] ExitPlanMode blocked: planner subagent was not spawned during plan mode.',
           'Per docs/agents/main-agent-orchestration-guide.md Phase 1, non-trivial plans require:',
-          '  Agent(subagent_type="planner")   (no team_name — the canonical single-use spawn)',
+          '  Agent(subagent_type="planner")   (no team_name — the wave\'s single fresh planner spawn)',
           'Spawn the planner first (it will write .planning/wave-<slug>/PLAN.md), then ExitPlanMode.',
           'For genuinely trivial tasks (1-line typo fix etc.), set CLAUDE_SKIP_PLANNER=1 before EnterPlanMode.',
         ].join('\n')

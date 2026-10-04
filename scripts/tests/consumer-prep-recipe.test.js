@@ -32,8 +32,8 @@ function wave(fixture, slug) {
   return dir;
 }
 
-test('the documented PREP recipe creates an immutable verdict request in a consumer with a distinct toolkit', () => {
-  const fixture = installConsumerFixture('L2');
+for (const layer of ['L1', 'L2']) test(`the documented standalone PREP recipe publishes request-bound verdicts in ${layer} with a distinct toolkit`, () => {
+  const fixture = installConsumerFixture(layer);
   try {
     assert.notStrictEqual(fixture.consumerRoot, fixture.toolkitRoot);
     const dir = wave(fixture, 'prep-recipe');
@@ -47,6 +47,18 @@ test('the documented PREP recipe creates an immutable verdict request in a consu
       const digest = line.slice(line.lastIndexOf(' ') + 1);
       assert.match(digest, /^[0-9a-f]{64}$/);
       assert.ok(requestPath.startsWith(dir + path.sep) && fs.existsSync(requestPath), 'the request lives under the consumer wave: ' + requestPath);
+      // Exercise the same standalone launcher argv shown to the architect,
+      // without stdin, including the cwd-relative CLI variant of a request.
+      const published = launcher(fixture, 'verdict-write', [
+        '--role', role, '--phase', 'prep', '--slug', 'prep-recipe',
+        '--request', role === 'arch-testing' ? path.relative(fixture.consumerRoot, requestPath) : requestPath,
+        '--request-sha256', digest, '--decision', 'approve', '--rationale', 'Reviewed the canonical plan',
+      ]);
+      assert.strictEqual(published.status, 0, role + ': ' + published.stdout + published.stderr);
+      const verdict = JSON.parse(fs.readFileSync(path.join(dir, role + '-verdict-prep.json'), 'utf8'));
+      assert.strictEqual(verdict.rationale, 'Reviewed the canonical plan');
+      assert.strictEqual(verdict.request_ref.path, 'verdict-requests/' + path.basename(requestPath));
+      assert.strictEqual(verdict.request_ref.sha256, digest);
     }
     const refused = launcher(fixture, 'verdict-request-write', ['--role', 'toolkit-specialist', '--phase', 'prep', '--slug', 'prep-recipe']);
     assert.notStrictEqual(refused.status, 0, 'only arch-* roles get a request');
@@ -60,15 +72,16 @@ test('tl-session-start documents the exact consumer launcher forms from PREP to 
     `${LAUNCHER} wave-control --project-root "$PWD" -- init --slug <slug>`,
     `${LAUNCHER} verdict-request-write --project-root "$PWD" -- --role <arch-*> --phase prep --slug <slug>`,
     `${LAUNCHER} verdict-write --project-root "$PWD" --`,
-    `${LAUNCHER} wave-control --project-root "$PWD" -- transition --slug <slug> --to EXECUTE --verdict <arch-*>=<verdict-path>`,
-    `${LAUNCHER} wave-control --project-root "$PWD" -- transition --slug <slug> --to VERIFY_FINAL --rebind-head true`,
+    `${LAUNCHER} wave-control --project-root "$PWD" -- transition --slug <slug> --to EXECUTE --expected-revision <revision> --verdict <arch-*>=<verdict-path>`,
+    `${LAUNCHER} wave-control --project-root "$PWD" -- preverify --slug <slug> --expected-revision <revision>`,
+    `${LAUNCHER} wave-control --project-root "$PWD" -- transition --slug <slug> --to VERIFY_FINAL --expected-revision <revision> --rebind-head true --preverify-receipt <path-from-preverify>`,
     `${LAUNCHER} verdict-request-write --project-root "$PWD" -- --role <arch-*> --phase verify-final --slug <slug>`,
-    '--phase verify-final --slug <slug> --request <absolute-request-path> --request-sha256 <sha256> --decision approve --evidence-text "<concise evidence>"',
-    `${LAUNCHER} wave-control --project-root "$PWD" -- transition --slug <slug> --to QG --verdict <arch-*>=<verdict-path>`,
-    `${LAUNCHER} runtime-consumer-qg --project-root "$PWD" -- pre-pr --slug <slug> --project-gate PASS|FAIL`,
-    `${LAUNCHER} runtime-consumer-qg --project-root "$PWD" -- mint --slug <slug>`,
+    '--phase verify-final --slug <slug> --request <absolute-request-path> --request-sha256 <sha256> --decision approve --rationale "<concise rationale>" --evidence-text "<concise evidence>" --evidence-file <absolute-preverify-receipt>',
+    `${LAUNCHER} wave-control --project-root "$PWD" -- transition --slug <slug> --to QG --expected-revision <revision> --verdict <arch-*>=<verdict-path>`,
+    `${LAUNCHER} runtime-consumer-qg --project-root "$PWD" -- pre-pr --slug <slug> --expected-revision <revision> --project-gate PASS|FAIL`,
+    `${LAUNCHER} runtime-consumer-qg --project-root "$PWD" -- mint --slug <slug> --qg-attempt <PASS-attempt-path>`,
     `${LAUNCHER} runtime-consumer-qg --project-root "$PWD" -- verify --slug <slug>`,
-    `${LAUNCHER} wave-control --project-root "$PWD" -- transition --slug <slug> --to COMPLETE`,
+    `${LAUNCHER} wave-control --project-root "$PWD" -- transition --slug <slug> --to COMPLETE --expected-revision <revision> --qg-attempt <PASS-attempt-path>`,
   ];
   let cursor = -1;
   for (const form of forms) {

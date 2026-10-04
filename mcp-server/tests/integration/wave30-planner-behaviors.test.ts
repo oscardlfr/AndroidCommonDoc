@@ -30,6 +30,11 @@ const files = [
   },
 ];
 
+const tlSessionStart = fs.readFileSync(
+  path.join(ROOT, "docs/agents/tl-session-start.md"),
+  "utf-8",
+);
+
 function extractFrontmatter(raw: string): Record<string, unknown> | null {
   const m = raw.match(/^---\n([\s\S]*?)\n---/);
   if (!m) return null;
@@ -52,14 +57,16 @@ describe("planner template enforces T-BUG-015 Search Dispatch Protocol", () => {
       const frontmatter = extractFrontmatter(raw);
       const body = extractBody(raw);
 
-      it('has template_version "1.22.6"', () => {
+      it('has template_version "1.22.7"', () => {
         // BL-W48 team-model migration: bumped 1.17.0 → 1.18.0 (session-team removal),
         // then 1.18.0 → 1.22.0 (single-use reframe + portable instruction authority).
         expect(frontmatter).not.toBeNull();
         // Consumer runtime portability adds the launcher boundary; 1.22.2 makes the Pass A draft orchestratable.
         // 1.22.5 documents the exact final PLAN shape.
         // 1.22.6 lets runtime-rendered commands run verbatim despite the launcher rule.
-        expect(frontmatter?.template_version).toBe("1.22.6");
+        // 1.22.7 keeps one stable planner actor across Pass A and Pass B.
+        // 1.22.8 makes test-only routing and specialist shift-left evidence explicit.
+        expect(frontmatter?.template_version).toBe("1.22.8");
       });
 
       it("body contains T-BUG-015", () => {
@@ -94,6 +101,34 @@ describe("planner template enforces T-BUG-015 Search Dispatch Protocol", () => {
         // accidentally re-introduce the retired relay pattern.
         expect(body).not.toContain('SendMessage(to="team-lead"');
       });
+
+      it("uses one stable planner actor for both passes", () => {
+        expect(body).toContain('Orchestrator resumes the Pass A actor: SendMessage(to="planner", ...)');
+        expect(body).toContain("There is exactly one fresh planner spawn per wave");
+        expect(body).toContain("PLANNER-RESUME-LOST");
+        expect(body).not.toContain('Orchestrator re-dispatches you: Agent(subagent_type="planner")');
+        expect(body).not.toContain("dispatches, twice");
+      });
     });
   }
+});
+
+describe("two-pass planner lifecycle", () => {
+  it("spawns one planner and resumes that exact actor for Pass B", () => {
+    expect(tlSessionStart).toContain(
+      'create the wave\'s only planner actor with `Agent(name="planner", subagent_type="planner", prompt="...")`',
+    );
+    expect(tlSessionStart).toContain(
+      'resume the exact Pass A actor with `SendMessage(to="planner", ...)`',
+    );
+    expect(tlSessionStart).toContain("PLANNER-RESUME-LOST");
+  });
+
+  it("never creates a second planner principal for Pass B", () => {
+    expect(tlSessionStart).not.toContain(
+      'same `Agent(subagent_type="planner", ...)` shape as Pass A',
+    );
+    expect(tlSessionStart).not.toContain("Pass B is the same subagent_type, spawned again");
+    expect(tlSessionStart).toContain("must never inherit the first planner's write authority");
+  });
 });

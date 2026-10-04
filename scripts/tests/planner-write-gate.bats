@@ -36,6 +36,12 @@ teardown_file() {
   rm -rf "$tmp_dir"
 }
 
+@test "gate rejects planner-N presentation names without a durable planner binding" {
+  run bash -c "echo '{\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\".planning/wave-foo/PLAN.md\"},\"agent_type\":\"planner-2\"}' | CLAUDE_WAVE_SLUG=foo node '$HOOK'"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"may NOT write"* ]]
+}
+
 # ── Case 3: ALLOW — Write on non-matching path → exit 0 ─────────────────────
 
 @test "gate allows Write on non-.planning path" {

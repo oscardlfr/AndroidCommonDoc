@@ -651,6 +651,49 @@ test('BRIDGE-BORNFAIL names the failing born-provenance step instead of one bare
     'the win32 born-provenance branch must attribute every rejection');
 });
 
+test('BORN-READINESS-01 retries only the initial empty Darwin ps snapshot before full correlation', {
+  skip: process.platform !== 'darwin' ? 'Darwin ps readiness contract' : false,
+}, async () => {
+  const { EventEmitter: TestEmitter } = require('node:events');
+  const { createOwnedChildProvenance } = require('../lib/runtime-bridge-codex/owned-child-provenance.cjs');
+  const birth = 'Thu Oct  2 18:00:00 2026';
+  const expectedExecutable = fs.realpathSync(process.execPath);
+  let birthReads = 0;
+  const spawnProbe = (_command, args) => {
+    const child = new TestEmitter();
+    child.stdout = new TestEmitter();
+    child.kill = () => true;
+    let text = '';
+    if (args[1] === 'lstart=') {
+      birthReads += 1;
+      text = birthReads === 1 ? '' : birth;
+    } else if (args[1] === 'pgid=') text = String(process.pid);
+    else if (args[1] === 'comm=') text = process.execPath;
+    setImmediate(() => {
+      if (text) child.stdout.emit('data', Buffer.from(text + '\n'));
+      child.emit('exit', 0);
+    });
+    return child;
+  };
+  const provenance = createOwnedChildProvenance({
+    fs,
+    path,
+    spawn: spawnProbe,
+    resolvedPsPath: () => '/bin/ps',
+    observeWindowsProcessIdentity: () => ({ status: 'UNAVAILABLE' }),
+    observeLinuxProcessBirth: () => ({ status: 'UNAVAILABLE' }),
+    getIsolatedPathPosix: () => '/usr/bin:/bin:/usr/sbin:/sbin',
+  });
+  const observers = new Set();
+  const result = await provenance.observeOwnedChildBornProvenance(
+    process.pid, expectedExecutable, Date.now() + 1000, observers,
+  );
+  assert.equal(result.ok, true, JSON.stringify(result));
+  assert.equal(result.birthToken, birth);
+  assert.equal(birthReads, 3, 'one empty readiness probe, one successful retry, one final correlation read');
+  assert.equal(observers.size, 0);
+});
+
 test('BRIDGE-INITFAIL preserves the initialize sub-reason instead of one bare signal', () => {
   // Live P5 regression: session-run reported only APP_SERVER_INITIALIZE_FAILED while the
   // outer result carried reason 'cleanup-failed', so the actual initialize outcome -- a

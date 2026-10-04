@@ -28,6 +28,7 @@ const RESULT_STATUSES = Object.freeze([
   'UNAVAILABLE',
   'FAILED',
 ]);
+const NATIVE_TOOL_RESULT_ENVELOPE_BUDGET_BYTES = 9300;
 
 const SUPPORT_ROLES = Object.freeze([
   'arch-platform',
@@ -165,7 +166,7 @@ function selectionAllowed(selection) {
 
 function makeEnvelope(entrypoint, status, detail, selection, actions = [], result = null) {
   const safeStatus = RESULT_STATUSES.includes(status) ? status : 'FAILED';
-  return {
+  const envelope = {
     actions: Array.isArray(actions) ? actions : [],
     detail,
     entrypoint,
@@ -174,6 +175,25 @@ function makeEnvelope(entrypoint, status, detail, selection, actions = [], resul
     selection,
     status: safeStatus,
   };
+  if (entrypoint === 'init-session'
+      && safeStatus === 'ACTION_REQUIRED'
+      && detail === 'support-plane-action-required') {
+    const envelopeBytes = Buffer.byteLength(JSON.stringify(envelope), 'utf8');
+    if (envelopeBytes > NATIVE_TOOL_RESULT_ENVELOPE_BUDGET_BYTES) {
+      return {
+        actions: [],
+        detail: 'support-plane-envelope-too-large:'
+          + `bytes=${envelopeBytes}:max=${NATIVE_TOOL_RESULT_ENVELOPE_BUDGET_BYTES}:`
+          + `actions=${envelope.actions.length}:shorten-project-or-toolkit-paths`,
+        entrypoint,
+        result: null,
+        schema: 'runtime/collaboration-entrypoint-result/v1',
+        selection,
+        status: 'FAILED',
+      };
+    }
+  }
+  return envelope;
 }
 
 function resolveSelection(entrypoint, ports) {
@@ -907,6 +927,13 @@ if (process.env.NODE_ENV === 'test'
     && process.env.RUNTIME_COLLABORATION_ENTRYPOINTS_TEST_CAPABILITY === 'p3-entrypoints-v1') {
   module.exports.__TEST_ONLY__createTrustedHostContext = createTrustedHostContext;
   module.exports.__TEST_ONLY__createProductionPorts = createProductionPorts;
+  Object.defineProperties(module.exports, {
+    __TEST_ONLY__makeEnvelope: { value: makeEnvelope, enumerable: false },
+    __TEST_ONLY__nativeToolResultEnvelopeBudgetBytes: {
+      value: NATIVE_TOOL_RESULT_ENVELOPE_BUDGET_BYTES,
+      enumerable: false,
+    },
+  });
 }
 
 if (require.main === module) main(process.argv.slice(2));

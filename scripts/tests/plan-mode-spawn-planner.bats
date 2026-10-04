@@ -1,7 +1,7 @@
 #!/usr/bin/env bats
 # Tests for .claude/hooks/plan-mode-spawn-planner.js (BL-W48 team-model migration).
 #
-# BL-W48 change: the planner is now a single-use subagent (not a TeamCreate-peer).
+# BL-W48 change: the planner is now an Agent subagent (not a TeamCreate-peer).
 # A bare Agent(subagent_type="planner") without team_name is the canonical spawn
 # and CLEARS the sentinel (unblocking ExitPlanMode). The team_name/name fields are
 # deprecated/ignored — supplying them still works but is no longer required.
@@ -118,14 +118,15 @@ teardown() {
   [[ -z "$output" ]] || [[ "$output" != *'"decision":"block"'* ]]
 }
 
-# ── Case 7 (REQUIRED-2): Multiple planner spawns are idempotent ─────────────
+# ── Case 7 (REQUIRED-2): Duplicate PostToolUse delivery is idempotent ────
 
-@test "multiple bare planner Agent spawns are idempotent — ExitPlanMode still succeeds" {
+@test "duplicate planner PostToolUse delivery is idempotent — ExitPlanMode still succeeds" {
   # PostToolUse EnterPlanMode
   run bash -c "echo '{\"tool_name\":\"EnterPlanMode\",\"tool_input\":{},\"cwd\":\"$WIN_PROJECT_ROOT\"}' | node '$HOOK'"
   # First bare planner spawn (BL-W48 canonical) — deletes sentinel
   run bash -c "echo '{\"hook_event_name\":\"PostToolUse\",\"tool_name\":\"Agent\",\"tool_input\":{\"subagent_type\":\"planner\"},\"cwd\":\"$WIN_PROJECT_ROOT\"}' | node '$HOOK'"
-  # Second planner spawn — sentinel already gone, must not re-create it
+  # Replay the same PostToolUse event — sentinel already gone, must not re-create it.
+  # The orchestration contract separately forbids a second fresh planner spawn.
   run bash -c "echo '{\"hook_event_name\":\"PostToolUse\",\"tool_name\":\"Agent\",\"tool_input\":{\"subagent_type\":\"planner\"},\"cwd\":\"$WIN_PROJECT_ROOT\"}' | node '$HOOK'"
   # ExitPlanMode must succeed
   run bash -c "echo '{\"tool_name\":\"ExitPlanMode\",\"tool_input\":{},\"cwd\":\"$WIN_PROJECT_ROOT\"}' | node '$HOOK'"

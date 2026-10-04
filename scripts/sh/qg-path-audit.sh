@@ -10,7 +10,7 @@
 #
 # Checks:
 #   1. Read CLASS sentinel from <wave-dir>/CLASS
-#   2. Read PLAN.md ##/### Wave Class → **Class**: <value>
+#   2. Parse PLAN.md Wave Class through the canonical Node contract
 #   3. FAIL exit 1 if CLASS sentinel != PLAN.md class
 #   4. Extract ### Path-Manifest / ### Path Manifest file list from PLAN.md
 #   5. Run: git diff --name-only <base>..HEAD (forward-slash)
@@ -31,6 +31,8 @@
 # set -euo pipefail safety: all grep captures guarded with || true (Decision B2).
 
 set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # ── Arg parsing ──────────────────────────────────────────────────────────────
 
@@ -87,37 +89,18 @@ if [[ ! "$CLASS_SENTINEL" =~ ^[A-Za-z0-9_-]+$ ]]; then
   exit 2
 fi
 
-# ── Step 2: Read PLAN.md Wave Class ──────────────────────────────────────────
-# Anchor: section starts on the FIRST line matching exactly:
-#   ^#{2,3}[[:space:]]+Wave[[:space:]]+Class[[:space:]]*$
-# Boundary: any markdown heading (H1-H6) ends the section (mirrors Step 4's
-# Path-Manifest anchoring below). Take the first **Class**: line found INSIDE
-# that window — NOT the first **Class**: anywhere in PLAN.md (a decoy bold
-# marker in prose elsewhere must never resolve this).
+# ── Step 2: Parse PLAN.md Wave Class ─────────────────────────────────────────
+# Headings, fences, declarations, punctuation and accepted class names belong
+# exclusively to scripts/lib/wave-plan-class.cjs. This shell adapter consumes
+# only the parser's closed class-token output.
 
-PLAN_CLASS=""
-IN_CLASS_SECTION=0
-while IFS= read -r line; do
-  if [[ "$line" =~ ^#{2,3}[[:space:]]+Wave[[:space:]]+Class[[:space:]]*$ ]]; then
-    IN_CLASS_SECTION=1
-    continue
-  fi
-  if [[ $IN_CLASS_SECTION -eq 1 ]]; then
-    if [[ "$line" =~ ^#{1,6}[[:space:]] ]]; then
-      break
-    fi
-    if [[ "$line" =~ \*\*Class\*\*: ]]; then
-      class_text="$(echo "$line" | sed 's/.*\*\*Class\*\*:[[:space:]]*//' | tr -d '\r')"
-      if [[ "$class_text" =~ ^([A-Za-z0-9_-]+)([[:space:]]|\(|$) ]]; then
-        PLAN_CLASS="${BASH_REMATCH[1]}"
-      fi
-      break
-    fi
-  fi
-done < "$PLAN_FILE"
-
-if [[ -z "$PLAN_CLASS" ]]; then
-  echo "[qg-path-audit] ERROR: could not extract **Class**: from PLAN.md" >&2
+CLASS_PARSER="$SCRIPT_DIR/../tools/wave-plan-class.cjs"
+if [[ ! -f "$CLASS_PARSER" ]]; then
+  echo "[qg-path-audit] ERROR: canonical Wave Class parser not found: $CLASS_PARSER" >&2
+  exit 2
+fi
+if ! PLAN_CLASS="$(node "$CLASS_PARSER" --plan "$PLAN_FILE")"; then
+  echo "[qg-path-audit] ERROR: canonical Wave Class parse failed" >&2
   exit 2
 fi
 

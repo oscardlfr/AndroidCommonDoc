@@ -156,6 +156,14 @@ Write integration tests for every repository:
 - Use `FakeNetworkDataSource` and `FakeLocalDataSource` â€” NOT Mockito mocks
 - Use `IN_MEMORY` database for DAO tests via `TestDatabaseFactory`
 
+## Pre-Commit Shift-Left Gate (MANDATORY)
+
+Before any commit, classify the changed paths and run every applicable cheap check using **only an operation ID already exposed by** `node .claude/runtime/l0-toolkit-launcher.cjs`. The existing bounded set is: `test-changed` for changed source/tests; `lint-resources` for Android resources; `verify-kmp` for KMP package/source-set structure; `check-agent-parity` for agent-template mirrors; `qg-registry-integrity` for an L0 registry/manifest; `version-sync` for version-bearing files; and `audit-docs` / `readme-audit` for their documentation scopes. An ID is applicable only when its documented scope and current layer match the changed paths.
+
+Invoke checks in the canonical shape `node .claude/runtime/l0-toolkit-launcher.cjs run <existing-id> --project-root "$PWD" -- <documented-args>`. Never call the underlying script, Gradle task, npm command, formatter, linter or validator directly for this shift-left gate, and never invent an operation ID. If a required cheap format/syntax/lint/static/manifest check has no installed launcher ID, report `RUNTIME-CONTRACT-GAP: <check>` and stop before commit.
+
+Record `SHIFT-LEFT-EVIDENCE` in `READY-FOR-REVIEW`: changed-path class, each operation ID, exact argv, exit code and concise outcome; record why each otherwise plausible ID was not applicable. A failed applicable check, missing evidence, or runtime-contract gap forbids the commit.
+
 ## Done Criteria
 
 - Repository implementation passes unit + integration tests

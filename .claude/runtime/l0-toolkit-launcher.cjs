@@ -311,7 +311,7 @@ const OPERATION_SUMMARIES = Object.freeze({
   'readme-audit': 'Audit the README counts against the repository.',
   'run-app': 'Build and run the application.',
   'runtime-consult': 'Consultation requester operations: consult, record-delivery, await-result, accept-result.',
-  'runtime-consumer-qg': 'Consumer quality gate: pre-pr (record the stamp), mint (publish the proof), verify.',
+  'runtime-consumer-qg': 'Quality gate: resolve the active QG wave; consumers also pre-pr, mint and verify.',
   'sbom-analyze': 'Analyze the software bill of materials.',
   'sbom-scan': 'Scan the software bill of materials for known vulnerabilities.',
   'scan-secrets': 'Scan the project for secrets (the /pre-pr scan).',

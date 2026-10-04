@@ -5,6 +5,24 @@ const fs = require('fs');
 const path = require('path');
 const test = require('node:test');
 
+test('resume registry lock preserves fail-closed results when root or lock resolution throws', () => {
+  const { createClaudeResumeRegistryLock } = require('../lib/runtime-role-lifecycle/claude-resume-registry-lock.cjs');
+  for (const failingDependency of ['registryRepoDir', 'withRegistryLock']) {
+    let workRan = false;
+    const lock = createClaudeResumeRegistryLock({
+      path,
+      registryRepoDir: () => {
+        if (failingDependency === 'registryRepoDir') throw new Error('root unavailable');
+        return '/test-registry';
+      },
+      withRegistryLock: () => { throw new Error('lock unavailable'); },
+    });
+    assert.deepStrictEqual(lock.withClaudeResumeHandleRegistryLock('/project', () => { workRan = true; }),
+      { ok: false, reason: 'INVALID' });
+    assert.strictEqual(workRan, false);
+  }
+});
+
 const repoRoot = path.resolve(__dirname, '..', '..');
 const facadePath = path.join(repoRoot, 'scripts', 'lib', 'runtime-role-lifecycle.cjs');
 const moduleDir = path.join(repoRoot, 'scripts', 'lib', 'runtime-role-lifecycle');
@@ -34,6 +52,7 @@ const modulePaths = Object.freeze({
   observations: path.join(moduleDir, 'claude-id01-observations.cjs'),
   peer: path.join(moduleDir, 'claude-peer-binding.cjs'),
   resumeRecord: path.join(moduleDir, 'claude-resume-record.cjs'),
+  resumeRegistryLock: path.join(moduleDir, 'claude-resume-registry-lock.cjs'),
   livenessProbe: path.join(moduleDir, 'claude-liveness-probe.cjs'),
   resumeDelivery: path.join(moduleDir, 'claude-resume-delivery.cjs'),
   resumeLifecycle: path.join(moduleDir, 'claude-resume-lifecycle.cjs'),
@@ -105,6 +124,7 @@ const factories = Object.freeze({
   observations: require(modulePaths.observations).createClaudeId01Observations,
   peer: require(modulePaths.peer).createClaudePeerBinding,
   resumeRecord: require(modulePaths.resumeRecord).createClaudeResumeRecord,
+  resumeRegistryLock: require(modulePaths.resumeRegistryLock).createClaudeResumeRegistryLock,
   livenessProbe: require(modulePaths.livenessProbe).createClaudeLivenessProbe,
   resumeDelivery: require(modulePaths.resumeDelivery).createClaudeResumeDelivery,
   resumeLifecycle: require(modulePaths.resumeLifecycle).createClaudeResumeLifecycle,

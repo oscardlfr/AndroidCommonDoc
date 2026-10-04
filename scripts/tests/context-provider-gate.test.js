@@ -24,6 +24,7 @@ const rll = require(path.resolve(__dirname, '../lib/runtime-role-lifecycle.cjs')
 const rc = require(path.resolve(__dirname, '../lib/runtime-consultation.cjs'));
 const rbc = require(path.resolve(__dirname, '../lib/runtime-bridge-codex.cjs'));
 const runtimeProjectContext = require(path.resolve(__dirname, '../lib/runtime-project-context.cjs'));
+const actorAuthorization = require(path.resolve(__dirname, '../lib/context-provider-actor-authorization.cjs'));
 const {
   primeClaudeId01V2ActorProof,
   claudeId01V2SessionEvidenceFor,
@@ -85,6 +86,8 @@ function archResponseFlagPath(sessionId, agentType) {
   return path.join(os.tmpdir(), `claude-arch-responded-${sessionId}-${sanitize(agentType)}.flag`);
 }
 
+const mediatedAuthorizationFixtures = new Map();
+
 function writeSessionFlag(sessionId) {
   fs.writeFileSync(sessionFlagPath(sessionId), new Date().toISOString());
 }
@@ -99,6 +102,7 @@ function writeArchResponseFlag(sessionId, agentType) {
 
 function clearArchResponseFlag(sessionId, agentType) {
   try { fs.unlinkSync(archResponseFlagPath(sessionId, agentType)); } catch {}
+  mediatedAuthorizationFixtures.delete(sessionId + '\0' + agentType);
 }
 
 function writeJsonSessionFlag(sessionId, payload) {
@@ -245,7 +249,7 @@ assertPreToolUseDeny(f9, 'F9 BL-W35-06: specialist blocked when only session CP 
 clearSessionFlag('s9');
 console.log('F9 specialist blocked without arch-response flag (BL-W35-06): PASS');
 
-// F10: BL-W35-06 -- specialist allowed when arch-response flag set
+// F10: retired role-keyed flags no longer authorize a specialist.
 writeArchResponseFlag('s10', 'test-specialist');
 const f10 = runHook({
   tool_name: 'Grep',
@@ -254,11 +258,11 @@ const f10 = runHook({
   agent_type: 'test-specialist',
   agent_id: 'test-specialist'
 });
-assertPreToolUsePassthrough(f10, 'F10');
+assertPreToolUseDeny(f10, 'F10');
 clearArchResponseFlag('s10', 'test-specialist');
-console.log('F10 specialist allowed with arch-response flag (BL-W35-06): PASS');
+console.log('F10 legacy role-keyed arch-response flag denied: PASS');
 
-// F11: BL-W35-06 -- arch-response flag with hyphen in agent_type passes sanitize() correctly
+// F11: sanitizing a presentation name no longer creates authority.
 const specialistWithHyphen = 'data-layer-specialist';
 writeArchResponseFlag('s11', specialistWithHyphen);
 const f11 = runHook({
@@ -268,9 +272,9 @@ const f11 = runHook({
   agent_type: specialistWithHyphen,
   agent_id: specialistWithHyphen
 });
-assertPreToolUsePassthrough(f11, 'F11');
+assertPreToolUseDeny(f11, 'F11');
 clearArchResponseFlag('s11', specialistWithHyphen);
-console.log('F11 arch-response flag with hyphenated agent_type (BL-W35-06): PASS');
+console.log('F11 hyphenated legacy presentation flag denied: PASS');
 
 // F12: NEW — block reason does not reference hardcoded context-provider-2
 // agent_type required: L5 made empty agent_type = main-exempt (exit 0); peer needs agent_type.
@@ -611,13 +615,9 @@ function writeConsultResult(proj, opts) {
 }
 
 function writeArchResponseFlagWithInstance(sessionId, agentType, architectRole, architectInstanceId) {
-  fs.writeFileSync(archResponseFlagPath(sessionId, agentType), JSON.stringify({
-    written_by: 'context-provider-consulted',
-    agent_id: architectInstanceId,
-    architect_role: architectRole,
-    session_id: sessionId,
-    ts: new Date().toISOString(),
-  }));
+  mediatedAuthorizationFixtures.set(sessionId + '\0' + agentType, {
+    architectRole, architectInstanceId,
+  });
 }
 
 function runSpecialistPostPlan(proj, sessionId, agentType) {
@@ -634,6 +634,22 @@ function runSpecialistPostPlan(proj, sessionId, agentType) {
   // through PP13/PP15 through PP18, none of which build a real chain via
   // buildCanonicalAcceptedConsultation).
   primeClaudeId01Trace(proj, agentType, sessionId, agentType);
+  const plan = rll.discoverPlan(proj);
+  const targetIdentity = { ok: true, provider: 'claude-hook', runtime_session_key: sessionId };
+  const targetBinding = rll.createRequesterBinding(
+    proj, targetIdentity, agentType, agentType,
+    rll.computeWorktreeId(proj), plan.planDigest, 3600,
+  );
+  const fixture = mediatedAuthorizationFixtures.get(sessionId + '\0' + agentType);
+  if (fixture && targetBinding.ok) {
+    const issuer = actorAuthorization.resolveStableActor(proj, {
+      sessionId, agentId: fixture.architectInstanceId,
+    });
+    const target = actorAuthorization.resolveStableActor(proj, {
+      sessionId, agentId: agentType,
+    });
+    if (issuer.ok && target.ok) actorAuthorization.publishResolvedAuthorization(proj, issuer, target);
+  }
   return runHook({
     tool_name: 'Grep',
     tool_input: { pattern: 'test', path: '/project/docs/di/di-patterns-modules.md' },
@@ -1308,11 +1324,8 @@ function validateCanonicalArtifactAsCaller(proj, planDigest, sessionId, agentTyp
   }
 }
 
-// PP15 PASS (positive control / pre-PLAN legacy compatibility): with NO
-// PLAN.md seeded at all (this file's own F1-F14 baseline), the arch-response
-// flag ALONE still suffices -- proves PP1-PP14's tightened requirement is
-// genuinely POST-PLAN-gated, never a blanket tightening of the pre-existing
-// legacy behavior.
+// PP15: pre-PLAN role-keyed flags are retired too. Without a PLAN there is no
+// stable wave/plan scope in which to mint a durable actor authorization.
 {
   const proj = makeTempProject();
   try {
@@ -1324,8 +1337,8 @@ function validateCanonicalArtifactAsCaller(proj, planDigest, sessionId, agentTyp
       agent_type: 'test-specialist',
       agent_id: 'test-specialist',
     }, { CLAUDE_PROJECT_DIR: proj, CLAUDE_WAVE_SLUG: '' });
-    assertPreToolUsePassthrough(r, 'PP15');
-    console.log('PP15 pre-PLAN legacy compatibility (no PLAN.md -> flag alone still suffices) verified: PASS');
+    assertPreToolUseDeny(r, 'PP15');
+    console.log('PP15 pre-PLAN role-keyed flag denied (no stable wave/PLAN scope): PASS');
   } finally {
     clearArchResponseFlag('pp15', 'test-specialist');
     fs.rmSync(proj, { recursive: true, force: true });
@@ -5425,6 +5438,12 @@ const HARNESS_SUFFIX_NEGATIVE_TABLE = [
       // SIM-1: CLAUDE-ID-01 traces.
       primeClaudeId01Trace(root, 'arch-testing', SESSION, 'arch-testing');
       primeClaudeId01Trace(root, 'planner', SESSION, 'planner');
+      const plannerPlan = rll.discoverPlan(root);
+      const plannerBinding = rll.createRequesterBinding(
+        root, { ok: true, provider: 'claude-hook', runtime_session_key: SESSION },
+        'planner', 'planner', rll.computeWorktreeId(root), plannerPlan.planDigest, 3600,
+      );
+      assert.strictEqual(plannerBinding.ok, true, 'CHAIN-1 planner stable actor binding must mint: ' + JSON.stringify(plannerBinding));
       // 1. arch-testing consults through the launcher form (real context-provider-gate hook, real CLI).
       const consultArgv = ['--coordination-root', coord, '--question', 'Which rules apply to a README-only change?'];
       let hook = runNonMainBash(launcherConsultCommand(root, 'consult', consultArgv), root, 'arch-testing', SESSION);
@@ -5483,6 +5502,7 @@ const HARNESS_SUFFIX_NEGATIVE_TABLE = [
       const sent = runHookFile(CONSULTED_HOOK_FILE, {
         hook_event_name: 'PostToolUse', tool_name: 'SendMessage', tool_input: { to: 'planner', message: resultFile },
         session_id: SESSION, agent_type: 'arch-testing', agent_id: 'arch-testing',
+        tool_response: { success: true, resumedAgentId: 'planner' },
       }, root);
       assert.strictEqual(sent.exit, 0);
 

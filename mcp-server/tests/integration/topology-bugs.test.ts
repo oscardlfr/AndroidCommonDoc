@@ -700,25 +700,25 @@ describe("T-BUG-020: context-provider has task-assignment refusal guard", () => 
   });
 });
 
-// T-BUG-021: 15 it() assertions (4 gate + 1 consulted + 5x2 templates)
-// ── T-BUG-021: CP gate per-agent-type arch-response flag (BL-W35-06) ─────────
+// T-BUG-021: durable actor-bound architect handoff (BL-W35-06 successor)
+// ────────────────────────────────────────────────────────────────────────────
 
-describe("T-BUG-021: context-provider-gate has per-specialist arch-response flag check", () => {
+describe("T-BUG-021: context-provider-gate has durable actor-bound handoff authorization", () => {
   const GATE_HOOK = path.join(ROOT, ".claude/hooks/context-provider-gate.js");
   const CONSULTED_HOOK = path.join(ROOT, ".claude/hooks/context-provider-consulted.js");
+  const AUTHORIZATION_LIB = path.join(ROOT, "scripts/lib/context-provider-actor-authorization.cjs");
 
   it("context-provider-gate.js references BL-W35-06 fix tag", () => {
     const content = fs.readFileSync(GATE_HOOK, "utf-8");
     expect(content).toMatch(/BL-W35-06/);
   });
 
-  it("the shared MEDIATED_RECIPIENT_ROLES list names all 5 specialists and the planner, and both hooks use it", () => {
+  it("the restrictive presentation-name classifier still names all 5 specialists and the planner", () => {
     const shared = fs.readFileSync(path.join(path.dirname(GATE_HOOK), "hook-control-plane-utils.js"), "utf-8");
     for (const role of ["test-specialist", "toolkit-specialist", "ui-specialist", "domain-model-specialist", "data-layer-specialist", "planner"]) {
       expect(shared).toContain(`'${role}'`);
     }
     expect(fs.readFileSync(GATE_HOOK, "utf-8")).toMatch(/MEDIATED_RECIPIENT_ROLES/);
-    expect(fs.readFileSync(CONSULTED_HOOK, "utf-8")).toMatch(/MEDIATED_RECIPIENT_ROLES/);
     expect(fs.readFileSync(GATE_HOOK, "utf-8")).not.toMatch(/const SPECIALIST_NAMES = \[/);
     expect(fs.readFileSync(CONSULTED_HOOK, "utf-8")).not.toMatch(/const SPECIALIST_NAMES = \[/);
   });
@@ -728,16 +728,30 @@ describe("T-BUG-021: context-provider-gate has per-specialist arch-response flag
     expect(content).toMatch(/CLAUDE_CP_GATE_DISABLED/);
   });
 
-  it("context-provider-gate.js has claude-arch-responded flag pattern", () => {
+  it("context-provider-gate.js resolves and activates exact durable actor authorization", () => {
     const content = fs.readFileSync(GATE_HOOK, "utf-8");
-    expect(content).toMatch(/claude-arch-responded/);
+    expect(content).toMatch(/context-provider-actor-authorization\.cjs/);
+    expect(content).toMatch(/resolveStableActor/);
+    expect(content).toMatch(/activateOrReadAuthorization/);
+    expect(content).not.toMatch(/claude-arch-responded/);
   });
 
-  it("context-provider-consulted.js has ARCH_SENDER_PREFIXES + MEDIATED_RECIPIENT_ROLES write logic", () => {
+  it("context-provider-consulted.js records handoff from the resumed actor id, never role-name flags", () => {
     const content = fs.readFileSync(CONSULTED_HOOK, "utf-8");
-    expect(content).toMatch(/ARCH_SENDER_PREFIXES/);
-    expect(content).toMatch(/MEDIATED_RECIPIENT_ROLES/);
-    expect(content).toMatch(/claude-arch-responded/);
+    const authorization = fs.readFileSync(AUTHORIZATION_LIB, "utf-8");
+    expect(content).toMatch(/context-provider-actor-authorization\.cjs/);
+    expect(content).toMatch(/recordMediatedAuthorization/);
+    expect(authorization).toMatch(/resumedAgentId/);
+    expect(content).not.toMatch(/ARCH_SENDER_PREFIXES/);
+    expect(content).not.toMatch(/claude-arch-responded/);
+  });
+
+  it("authorization is keyed by session plus stable agent id and rejects presentation names", () => {
+    const content = fs.readFileSync(AUTHORIZATION_LIB, "utf-8");
+    expect(content).toMatch(/session_id \+ agent_id/);
+    expect(content).toMatch(/target_session_id/);
+    expect(content).toMatch(/target_agent_id/);
+    expect(content).toMatch(/Presentation names \(`SendMessage\.to`\)[\s\S]{0,160}absent from the authority key/);
   });
 
   const SPECIALIST_TEMPLATES = [

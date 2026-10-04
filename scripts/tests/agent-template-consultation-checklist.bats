@@ -2,6 +2,17 @@
 
 REPO_ROOT="$BATS_TEST_DIRNAME/../.."
 
+@test "architect verdict examples supply explicit rationale for both standalone phases" {
+  for role in arch-platform arch-testing arch-integration; do
+    local template="$REPO_ROOT/setup/agent-templates/$role.md"
+    run grep -c -- '--rationale "<concise rationale>"' "$template"
+    [ "$status" -eq 0 ] || return 1
+    [ "$output" -eq 2 ] || return 1
+    run grep -F 'CLI paths are absolute or relative to the invocation working directory' "$template"
+    [ "$status" -eq 0 ] || return 1
+  done
+}
+
 @test "tl-session-start.md names the main conversation agent as orchestrator" {
   run grep -c "main conversation agent is the orchestrator" "$REPO_ROOT/docs/agents/tl-session-start.md"
   [ "$status" -eq 0 ]

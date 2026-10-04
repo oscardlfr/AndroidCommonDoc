@@ -61,7 +61,7 @@ The orchestrator's dispatch is source-of-truth. `scope_doc_path` is the static r
 Before investigating or speccing work for a specialist:
 1. Consult context-provider through the runtime consultation transaction. Run it yourself, as this subagent: the requester binding is minted from your agent type, so the main orchestrator can never run it. Every token is single-quoted and `<ROOT>` is your absolute working directory:
    `'node' '.claude/runtime/l0-toolkit-launcher.cjs' 'run' 'runtime-consult' '--project-root' '<ROOT>' '--' 'consult' '--coordination-root' '<ROOT>/.planning/coordination' '--question' '<question for {area}: existing docs/patterns and the rules that apply; one line, no newline>'`
-   It prints one JSON line. When `activation_action.kind` is `claude-sendmessage`, `SendMessage` its `message` VERBATIM to `activation_action.target_name`. Then run the same launcher form with `'await-result' '--coordination-root' '<ROOT>/.planning/coordination' '--request' '<artifact_ref>' '--timeout' '300'`, then `'accept-result' '--coordination-root' '<ROOT>/.planning/coordination' '--request' '<artifact_ref>'`, and read the result file named in the last envelope.
+   It prints one JSON line. When `activation_action.kind` is `claude-sendmessage`, `SendMessage` its `message` VERBATIM to `activation_action.target_name`. Then run the same launcher form with `'await-result' '--coordination-root' '<ROOT>/.planning/coordination' '--request' '<artifact_ref>' '--timeout' '900'`, then `'accept-result' '--coordination-root' '<ROOT>/.planning/coordination' '--request' '<artifact_ref>'`, and read the result file named in the last envelope. The 900-second requester deadline matches the runtime bootstrap and leaves headroom for a worker that renews its live lease beyond five minutes.
 2. Include the accepted context-provider answer in your verdict's fix request so the specialist starts with full context.
 
 **Skip only if**: context-provider already answered this exact query earlier in the same session.
@@ -330,16 +330,18 @@ After completing review:
    ```bash
    node .claude/runtime/l0-toolkit-launcher.cjs run verdict-write --project-root "$PWD" -- --role arch-testing --phase prep \
      --request <request.json> --request-sha256 <sha256> --decision <approve|escalate> \
+     --rationale "<concise rationale>" \
      [--reason-code <closed-enum>] [--evidence-text "<concise evidence>"]
 
    node .claude/runtime/l0-toolkit-launcher.cjs run verdict-write --project-root "$PWD" -- --role arch-testing --phase verify-final \
      --request <request.json> --request-sha256 <sha256> --decision approve \
+     --rationale "<concise rationale>" \
      --evidence-text "<concise evidence: HEAD, what you verified, commands and results>"
    ```
 
    `--phase` takes exactly `prep` or `verify-final`. A VERIFY_FINAL approve requires evidence: with `--evidence-text` the writer stores the text in the wave directory as `arch-testing-verify-final-evidence.md` and binds its digest, so you never create a file; `--evidence-file <absolute path inside .planning/wave-<slug>/>` remains for evidence that already exists there. Escalate with `--decision escalate --reason-code <closed-enum>`.
 
-   Write/Edit are denied; `write-verdict.sh` is the only sanctioned verdict-write path (L1 canal, wave bl-w47-hook-surgery).
+   Supply `--rationale` in both phases (1..8192 UTF-8 bytes); evidence does not replace rationale. CLI paths are absolute or relative to the invocation working directory and must remain inside the active wave. Preserve the exact request path/digest from dispatch. Use one standalone launcher call, not a pipe. Write/Edit are denied; `write-verdict.sh` is the only sanctioned verdict-write path (L1 canal, wave bl-w47-hook-surgery).
 
 2. The verdict on disk is the load-bearing signal. When running live you may DM the orchestrator: `SendMessage(to="orchestrator", message="APPROVE")` or `SendMessage(to="orchestrator", message="ESCALATE: <1-sentence reason>")`.
    NEVER include the full verdict block in the DM — the orchestrator reads the file.
